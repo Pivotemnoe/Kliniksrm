@@ -53,12 +53,26 @@ Core modules:
 - notifications
 - backups
 
-## Stage 3 backend baseline
+## Employee Access Levels
+
+- `director`: full access, including employee creation, role assignment, clinic settings, audit log and backups.
+- `administrator`: operational clinic access: queue, appointments, owners, animals, visits, billing, payments and document printing. No clinic schema/settings or role management.
+- `doctor`: medical workflow access: appointments, owners/patients read access, patient updates, visits, recommendations and document printing. No employee, role or clinic settings management.
+- `assistant`: limited clinical read access.
+- `cashier`: billing/payment access.
+- `stock`: warehouse access.
+
+## Stage 4 backend baseline
 
 The backend baseline lives in `apps/api` and exposes:
 
 - `GET /api/health`;
+- `POST /api/auth/login`;
+- `GET /api/auth/me`;
+- `POST /api/auth/logout`;
 - `GET /api/v1/meta`;
+- `GET /api/v1/audit-logs`;
+- employee and role management endpoints;
 - `GET /api/v1/owners`;
 - `POST /api/v1/owners`;
 - `GET /api/v1/owners/:ownerId`;
@@ -99,3 +113,5 @@ The first deploy can be a single-server Docker Compose setup. This is simpler to
 - 2FA for owner/admin roles later
 
 The cookie should store only a session identifier or token reference. Session data should stay on the server in Redis or PostgreSQL.
+
+Current implementation uses PostgreSQL-backed server sessions. The browser receives only a random session token in an HttpOnly SameSite cookie.

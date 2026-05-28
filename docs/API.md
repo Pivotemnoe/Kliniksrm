@@ -21,15 +21,26 @@ docker compose up -d api
 docker compose logs -f api
 ```
 
-## Stage 3 endpoints
+## Stage 4 endpoints
 
 - `GET /api/health`
+- `POST /api/auth/login`
+- `GET /api/auth/me`
+- `POST /api/auth/logout`
 - `GET /api/v1/meta`
+- `GET /api/v1/audit-logs`
+- `GET /api/v1/employees`
+- `POST /api/v1/employees`
+- `GET /api/v1/employees/:employeeId`
+- `PATCH /api/v1/employees/:employeeId`
+- `GET /api/v1/roles`
 - `GET /api/v1/owners`
 - `POST /api/v1/owners`
 - `GET /api/v1/owners/:ownerId`
 - `GET /api/v1/owners/:ownerId/animals`
 - `POST /api/v1/owners/:ownerId/animals`
+
+All endpoints except `GET /api/health` and `POST /api/auth/login` require an authenticated active employee session.
 
 ## Database
 
@@ -52,6 +63,16 @@ Seed creates:
 - default rooms;
 - one warehouse;
 - hospital boxes;
-- MVP roles and permissions.
+- MVP roles and permissions;
+- bootstrap director employee in local development.
 
 The API container runs `prisma migrate deploy` before startup. In local Docker Compose, seed runs on start while `SEED_ON_START=true`.
+
+## Local bootstrap director
+
+In local development, seed creates a director-level employee:
+
+- login: `+70000000001`
+- password: `ChangeMe123!`
+
+For production, set `BOOTSTRAP_DIRECTOR_PASSWORD` explicitly and replace the default password immediately. The director is the only role intended to assign employee roles and access levels.

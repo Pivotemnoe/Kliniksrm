@@ -1,12 +1,16 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { AnimalSex } from '@prisma/client';
+import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateAnimalDto } from './dto/create-animal.dto';
 import { CreateOwnerDto } from './dto/create-owner.dto';
 
 @Injectable()
 export class OwnersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
+  ) {}
 
   async listOwners() {
     return this.prisma.owner.findMany({
@@ -20,8 +24,8 @@ export class OwnersService {
     });
   }
 
-  async createOwner(dto: CreateOwnerDto) {
-    return this.prisma.owner.create({
+  async createOwner(dto: CreateOwnerDto, actorId: string) {
+    const owner = await this.prisma.owner.create({
       data: {
         fullName: dto.fullName,
         phone: dto.phone,
@@ -30,6 +34,15 @@ export class OwnersService {
         comment: dto.comment,
       },
     });
+
+    await this.auditService.log({
+      actorId,
+      action: 'owner.create',
+      entityType: 'Owner',
+      entityId: owner.id,
+    });
+
+    return owner;
   }
 
   async getOwner(ownerId: string) {
@@ -61,10 +74,10 @@ export class OwnersService {
     });
   }
 
-  async createAnimal(dto: CreateAnimalDto & { ownerId: string }) {
+  async createAnimal(dto: CreateAnimalDto & { ownerId: string }, actorId: string) {
     await this.ensureOwnerExists(dto.ownerId);
 
-    return this.prisma.animal.create({
+    const animal = await this.prisma.animal.create({
       data: {
         ownerId: dto.ownerId,
         nickname: dto.nickname,
@@ -75,6 +88,16 @@ export class OwnersService {
         microchip: dto.microchip,
       },
     });
+
+    await this.auditService.log({
+      actorId,
+      action: 'animal.create',
+      entityType: 'Animal',
+      entityId: animal.id,
+      metadata: { ownerId: dto.ownerId },
+    });
+
+    return animal;
   }
 
   private async ensureOwnerExists(ownerId: string) {

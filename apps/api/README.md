@@ -14,3 +14,11 @@ Planned stack:
 
 The first production backend should be a modular monolith.
 
+Stage 4 adds:
+
+- PostgreSQL-backed employee sessions;
+- HttpOnly SameSite session cookie;
+- `director`, `administrator`, `doctor`, `assistant`, `cashier`, `stock` roles;
+- permission guards for protected endpoints;
+- employee management endpoints;
+- audit log for login and important mutations.

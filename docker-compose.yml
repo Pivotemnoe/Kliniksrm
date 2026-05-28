@@ -23,6 +23,7 @@ services:
       S3_SECRET_KEY: ${S3_SECRET_KEY:-clinic-crm-password}
       SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-clinic_crm_session}
       SESSION_SECRET: ${SESSION_SECRET:-change-me}
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-12}
       SEED_ON_START: ${SEED_ON_START:-true}
     ports:
       - "127.0.0.1:${API_PORT:-4000}:4000"

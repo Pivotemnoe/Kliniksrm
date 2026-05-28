@@ -3,6 +3,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { SESSION_COOKIE_NAME } from './modules/auth/session-cookie';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -25,7 +26,7 @@ async function bootstrap() {
     .setTitle('Clinic CRM API')
     .setDescription('Backend API for the veterinary clinic CRM.')
     .setVersion('0.1.0')
-    .addCookieAuth('clinic_crm_session')
+    .addCookieAuth(SESSION_COOKIE_NAME)
     .build();
 
   const document = SwaggerModule.createDocument(app, swaggerConfig);
