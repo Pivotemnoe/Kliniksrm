@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AnimalsModule } from './modules/animals/animals.module';
 import { AppointmentsModule } from './modules/appointments/appointments.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { BillingModule } from './modules/billing/billing.module';
 import { EmployeesModule } from './modules/employees/employees.module';
 import { HealthModule } from './modules/health/health.module';
 import { MetaModule } from './modules/meta/meta.module';
@@ -24,6 +25,7 @@ import { PrismaModule } from './prisma/prisma.module';
     QueueModule,
     AppointmentsModule,
     VisitsModule,
+    BillingModule,
   ],
 })
 export class AppModule {}

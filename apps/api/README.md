@@ -47,3 +47,12 @@ Stage 7 adds clinical visit API:
 - examination sheet with weight and temperature fields;
 - diagnosis and recommendation endpoints;
 - service lines on the visit bill with automatic visit total recalculation.
+
+Stage 8 adds billing and payment API:
+
+- bill list and bill card;
+- manual bills and visit-linked bills;
+- bill item create, update and delete with automatic total recalculation;
+- payment acceptance with overpayment protection;
+- refund recording as negative payment rows;
+- bill status recalculation across unpaid, partial and paid states.

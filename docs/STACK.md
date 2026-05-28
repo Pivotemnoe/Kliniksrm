@@ -85,6 +85,7 @@ The backend baseline lives in `apps/api` and exposes:
 - queue list, create, card, update and status actions;
 - appointment list, create, card, update and status actions;
 - visit list, creation from appointment/queue/direct patient card, examination sheet, diagnoses, recommendations and visit service lines;
+- bill list, manual/visit bill cards, bill item management, payment acceptance and refund recording;
 - Swagger UI at `/api/docs`.
 
 The first Prisma schema lives in `prisma/schema.prisma`.

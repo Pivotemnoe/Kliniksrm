@@ -82,6 +82,17 @@ docker compose logs -f api
 - `POST /api/v1/visits/:visitId/services`
 - `PATCH /api/v1/visits/:visitId/services/:billItemId`
 - `DELETE /api/v1/visits/:visitId/services/:billItemId`
+- `GET /api/v1/bills`
+- `POST /api/v1/bills`
+- `GET /api/v1/bills/:billId`
+- `POST /api/v1/bills/:billId/cancel`
+- `POST /api/v1/bills/:billId/reopen`
+- `POST /api/v1/bills/:billId/items`
+- `PATCH /api/v1/bills/:billId/items/:billItemId`
+- `DELETE /api/v1/bills/:billId/items/:billItemId`
+- `GET /api/v1/bills/:billId/payments`
+- `POST /api/v1/bills/:billId/payments`
+- `POST /api/v1/bills/:billId/payments/:paymentId/refund`
 
 All endpoints except `GET /api/health` and `POST /api/auth/login` require an authenticated active employee session.
 
@@ -90,6 +101,8 @@ Owners, animals, queue and appointments support search and pagination through `s
 Queue entries can be created without a doctor and without an existing owner card by passing a primary owner name or phone. Appointments require an existing owner and animal, but employee and room are optional so the clinic can accept записи "в клинику" before assigning a specific doctor.
 
 Visits can be opened from an appointment, from a queue entry linked to an existing owner and animal, or directly by owner and animal. A visit stores the examination sheet, diagnoses, recommendations and service lines. Service lines create or update the visit bill and keep `Visit.totalAmount` synchronized with the bill total.
+
+Bills support manual creation and visit-linked billing. Bill items can reference services/products or use a manual title and price. Payment acceptance is separated from bill editing through `payments.manage`; bill status is recalculated as `UNPAID`, `PARTIAL` or `PAID`, overpayment is rejected, and refunds are recorded as negative payment rows.
 
 ## Database
 
