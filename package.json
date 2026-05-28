@@ -1,10 +1,25 @@
 {
-  "name": "clinic-crm-prototype",
+  "name": "clinic-crm",
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "start": "node server.mjs",
-    "check": "node --check public/app.js && node --check server.mjs"
+    "prototype:check": "node --check public/app.js && node --check server.mjs",
+    "api:build": "npm --workspace @clinic-crm/api run build",
+    "api:dev": "npm --workspace @clinic-crm/api run dev",
+    "db:generate": "npm --workspace @clinic-crm/api run db:generate",
+    "db:migrate": "npm --workspace @clinic-crm/api run db:migrate",
+    "db:seed": "npm --workspace @clinic-crm/api run db:seed",
+    "infra:up": "docker compose up -d postgres redis minio",
+    "infra:down": "docker compose down",
+    "check": "npm run prototype:check && npm run api:build"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

@@ -53,6 +53,21 @@ Core modules:
 - notifications
 - backups
 
+## Stage 3 backend baseline
+
+The backend baseline lives in `apps/api` and exposes:
+
+- `GET /api/health`;
+- `GET /api/v1/meta`;
+- `GET /api/v1/owners`;
+- `POST /api/v1/owners`;
+- `GET /api/v1/owners/:ownerId`;
+- `GET /api/v1/owners/:ownerId/animals`;
+- `POST /api/v1/owners/:ownerId/animals`;
+- Swagger UI at `/api/docs`.
+
+The first Prisma schema lives in `prisma/schema.prisma`.
+
 ## Files
 
 - MinIO locally
@@ -84,4 +99,3 @@ The first deploy can be a single-server Docker Compose setup. This is simpler to
 - 2FA for owner/admin roles later
 
 The cookie should store only a session identifier or token reference. Session data should stay on the server in Redis or PostgreSQL.
-

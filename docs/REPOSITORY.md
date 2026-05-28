@@ -43,10 +43,11 @@ clinic-crm/
 
 The production directories are created now. Each empty implementation area has a small README until real code is added.
 
-The root `docker-compose.yml` starts local infrastructure services:
+The root `docker-compose.yml` starts local services:
 
+- API;
 - PostgreSQL;
 - Redis;
 - MinIO.
 
-API, web and worker containers should be added after their production apps are scaffolded.
+The web and worker containers should be added after their production apps are scaffolded.
