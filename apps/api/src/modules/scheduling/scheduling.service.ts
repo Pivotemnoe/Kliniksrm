@@ -115,4 +115,17 @@ export class SchedulingService {
 
     return room;
   }
+
+  async ensureHospitalBoxExists(hospitalBoxId: string) {
+    const hospitalBox = await this.prisma.hospitalBox.findUnique({
+      where: { id: hospitalBoxId },
+      select: { id: true, officeId: true },
+    });
+
+    if (!hospitalBox) {
+      throw new NotFoundException('Hospital box not found');
+    }
+
+    return hospitalBox;
+  }
 }

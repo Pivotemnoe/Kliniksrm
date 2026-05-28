@@ -67,12 +67,29 @@ docker compose logs -f api
 - `POST /api/v1/appointments/:appointmentId/start`
 - `POST /api/v1/appointments/:appointmentId/complete`
 - `POST /api/v1/appointments/:appointmentId/cancel`
+- `GET /api/v1/visits`
+- `POST /api/v1/visits`
+- `GET /api/v1/visits/:visitId`
+- `PATCH /api/v1/visits/:visitId`
+- `POST /api/v1/visits/:visitId/start`
+- `POST /api/v1/visits/:visitId/complete`
+- `POST /api/v1/visits/:visitId/cancel`
+- `PUT /api/v1/visits/:visitId/exam`
+- `PUT /api/v1/visits/:visitId/recommendation`
+- `POST /api/v1/visits/:visitId/diagnoses`
+- `PATCH /api/v1/visits/:visitId/diagnoses/:diagnosisId`
+- `DELETE /api/v1/visits/:visitId/diagnoses/:diagnosisId`
+- `POST /api/v1/visits/:visitId/services`
+- `PATCH /api/v1/visits/:visitId/services/:billItemId`
+- `DELETE /api/v1/visits/:visitId/services/:billItemId`
 
 All endpoints except `GET /api/health` and `POST /api/auth/login` require an authenticated active employee session.
 
 Owners, animals, queue and appointments support search and pagination through `search`, `limit` and `offset` query parameters. Animal lists can also be filtered by `ownerId`.
 
 Queue entries can be created without a doctor and without an existing owner card by passing a primary owner name or phone. Appointments require an existing owner and animal, but employee and room are optional so the clinic can accept записи "в клинику" before assigning a specific doctor.
+
+Visits can be opened from an appointment, from a queue entry linked to an existing owner and animal, or directly by owner and animal. A visit stores the examination sheet, diagnoses, recommendations and service lines. Service lines create or update the visit bill and keep `Visit.totalAmount` synchronized with the bill total.
 
 ## Database
 

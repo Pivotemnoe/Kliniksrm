@@ -8,6 +8,7 @@ import { MetaModule } from './modules/meta/meta.module';
 import { OwnersModule } from './modules/owners/owners.module';
 import { QueueModule } from './modules/queue/queue.module';
 import { SchedulingModule } from './modules/scheduling/scheduling.module';
+import { VisitsModule } from './modules/visits/visits.module';
 import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
@@ -22,6 +23,7 @@ import { PrismaModule } from './prisma/prisma.module';
     SchedulingModule,
     QueueModule,
     AppointmentsModule,
+    VisitsModule,
   ],
 })
 export class AppModule {}

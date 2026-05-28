@@ -39,3 +39,11 @@ Stage 6 adds queue and appointment API:
 - appointment creation for existing owner and patient without mandatory doctor assignment;
 - appointment status flow: planned, arrived, in progress, completed, cancelled;
 - audit events for queue and appointment mutations.
+
+Stage 7 adds clinical visit API:
+
+- visit creation from appointment, queue entry or direct owner/patient pair;
+- visit status flow: draft, in progress, completed, cancelled;
+- examination sheet with weight and temperature fields;
+- diagnosis and recommendation endpoints;
+- service lines on the visit bill with automatic visit total recalculation.
