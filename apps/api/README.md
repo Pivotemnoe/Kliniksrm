@@ -30,3 +30,12 @@ Stage 5 adds owner and patient core API:
 - patient search, card and update;
 - patient weight history;
 - vaccination history.
+
+Stage 6 adds queue and appointment API:
+
+- scheduling resources for offices, rooms and employees;
+- queue creation without mandatory doctor assignment;
+- queue status flow: waiting, in progress, completed, cancelled;
+- appointment creation for existing owner and patient without mandatory doctor assignment;
+- appointment status flow: planned, arrived, in progress, completed, cancelled;
+- audit events for queue and appointment mutations.

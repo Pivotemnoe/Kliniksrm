@@ -62,7 +62,7 @@ Core modules:
 - `cashier`: billing/payment access.
 - `stock`: warehouse access.
 
-## Stage 4 backend baseline
+## Current backend baseline
 
 The backend baseline lives in `apps/api` and exposes:
 
@@ -81,6 +81,9 @@ The backend baseline lives in `apps/api` and exposes:
 - patient weight and vaccination endpoints;
 - `GET /api/v1/owners/:ownerId/animals`;
 - `POST /api/v1/owners/:ownerId/animals`;
+- scheduling resources for offices, rooms and employees;
+- queue list, create, card, update and status actions;
+- appointment list, create, card, update and status actions;
 - Swagger UI at `/api/docs`.
 
 The first Prisma schema lives in `prisma/schema.prisma`.
