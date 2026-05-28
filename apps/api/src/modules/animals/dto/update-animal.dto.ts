@@ -1,32 +1,22 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { AnimalSex } from '@prisma/client';
 import {
   IsBoolean,
   IsDateString,
   IsEnum,
   IsOptional,
   IsString,
-  IsUUID,
   MaxLength,
   MinLength,
 } from 'class-validator';
 
-export enum AnimalSexDto {
-  Male = 'MALE',
-  Female = 'FEMALE',
-  Unknown = 'UNKNOWN',
-}
-
-export class CreateAnimalDto {
+export class UpdateAnimalDto {
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUUID()
-  ownerId?: string;
-
-  @ApiProperty()
   @IsString()
   @MinLength(1)
   @MaxLength(120)
-  nickname!: string;
+  nickname?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -40,10 +30,10 @@ export class CreateAnimalDto {
   @MaxLength(120)
   breed?: string;
 
-  @ApiPropertyOptional({ enum: AnimalSexDto })
+  @ApiPropertyOptional({ enum: AnimalSex })
   @IsOptional()
-  @IsEnum(AnimalSexDto)
-  sex?: AnimalSexDto;
+  @IsEnum(AnimalSex)
+  sex?: AnimalSex;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -90,3 +80,4 @@ export class CreateAnimalDto {
   @MaxLength(80)
   status?: string;
 }
+

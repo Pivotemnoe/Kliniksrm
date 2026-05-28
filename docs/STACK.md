@@ -76,6 +76,9 @@ The backend baseline lives in `apps/api` and exposes:
 - `GET /api/v1/owners`;
 - `POST /api/v1/owners`;
 - `GET /api/v1/owners/:ownerId`;
+- owner update and trusted people endpoints;
+- patient list/card/update endpoints;
+- patient weight and vaccination endpoints;
 - `GET /api/v1/owners/:ownerId/animals`;
 - `POST /api/v1/owners/:ownerId/animals`;
 - Swagger UI at `/api/docs`.

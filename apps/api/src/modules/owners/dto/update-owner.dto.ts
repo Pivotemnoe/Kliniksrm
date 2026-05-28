@@ -1,24 +1,25 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEmail, IsNumber, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
 
-export class CreateOwnerDto {
-  @ApiProperty()
-  @IsString()
-  @MinLength(2)
-  @MaxLength(200)
-  fullName!: string;
-
+export class UpdateOwnerDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  @MaxLength(32)
-  phone?: string;
+  @MinLength(2)
+  @MaxLength(200)
+  fullName?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   @MaxLength(200)
   organizationName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  phone?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -70,3 +71,4 @@ export class CreateOwnerDto {
   @Max(100)
   servicesDiscount?: number;
 }
+

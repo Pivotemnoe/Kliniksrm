@@ -37,10 +37,24 @@ docker compose logs -f api
 - `GET /api/v1/owners`
 - `POST /api/v1/owners`
 - `GET /api/v1/owners/:ownerId`
+- `PATCH /api/v1/owners/:ownerId`
 - `GET /api/v1/owners/:ownerId/animals`
 - `POST /api/v1/owners/:ownerId/animals`
+- `GET /api/v1/owners/:ownerId/trusted-people`
+- `POST /api/v1/owners/:ownerId/trusted-people`
+- `PATCH /api/v1/owners/:ownerId/trusted-people/:trustedPersonId`
+- `GET /api/v1/animals`
+- `GET /api/v1/animals/:animalId`
+- `PATCH /api/v1/animals/:animalId`
+- `GET /api/v1/animals/:animalId/weights`
+- `POST /api/v1/animals/:animalId/weights`
+- `GET /api/v1/animals/:animalId/vaccinations`
+- `POST /api/v1/animals/:animalId/vaccinations`
+- `PATCH /api/v1/animals/:animalId/vaccinations/:vaccinationId`
 
 All endpoints except `GET /api/health` and `POST /api/auth/login` require an authenticated active employee session.
+
+Owners and animals support search and pagination through `search`, `limit` and `offset` query parameters. Animal lists can also be filtered by `ownerId`.
 
 ## Database
 
