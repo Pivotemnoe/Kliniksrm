@@ -1,0 +1,87 @@
+# Production Stack
+
+## Frontend
+
+- React
+- Vite
+- TypeScript
+- Ant Design
+- TanStack Query
+- React Hook Form
+- Zod
+- TanStack Table for complex tables only
+
+Ant Design is the default UI library because the product is a dense operational CRM: tables, forms, modals, drawers, tabs, uploads and date controls are core UI elements.
+
+TanStack Query is used for server state: owners, animals, appointments, visits, bills, stock, documents and settings.
+
+React Hook Form and Zod are used together for large forms and shared validation rules.
+
+TanStack Table should be used selectively for tables that need advanced behavior: complex filters, custom cells, pinned columns, bulk actions or deep sorting.
+
+## Backend
+
+- NestJS
+- TypeScript
+- Prisma
+- PostgreSQL
+- Redis
+- BullMQ
+- OpenAPI/Swagger
+
+The backend should start as a modular monolith. The first version should not use microservices.
+
+Core modules:
+
+- auth
+- users
+- employees
+- roles
+- audit
+- owners
+- animals
+- queue
+- appointments
+- visits
+- billing
+- payments
+- stock
+- supplies
+- documents
+- files
+- settings
+- notifications
+- backups
+
+## Files
+
+- MinIO locally
+- S3-compatible storage in production
+
+Files must not be served as public static assets by default. Access should go through backend authorization or signed links.
+
+## Infrastructure
+
+- Docker Compose
+- Nginx
+- PostgreSQL
+- Redis
+- MinIO
+- API container
+- Web container
+- Worker container for BullMQ jobs
+
+The first deploy can be a single-server Docker Compose setup. This is simpler to support and enough for the first production version.
+
+## Security
+
+- HttpOnly cookies
+- Secure and SameSite cookie flags in production
+- Server-side sessions
+- RBAC
+- Audit log
+- Backups
+- 2FA for owner/admin roles later
+
+The cookie should store only a session identifier or token reference. Session data should stay on the server in Redis or PostgreSQL.
+
