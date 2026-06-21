@@ -162,12 +162,36 @@ function Test-Truthy($Value) {
   return @("1", "true", "yes", "y", "on") -contains $Value.ToString().Trim().ToLowerInvariant()
 }
 
+function Backup-CurrentDatabase {
+  docker container inspect clinic-crm-postgres *> $null
+  if ($LASTEXITCODE -ne 0) {
+    Write-Host "Контейнер PostgreSQL не найден. Пропускаю backup перед обновлением."
+    return
+  }
+
+  $dbUser = Get-EnvValue "POSTGRES_USER" "clinic_crm"
+  $dbName = Get-EnvValue "POSTGRES_DB" "clinic_crm"
+  $backupDir = Join-Path $RootDir "backups"
+  $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+  $backupFile = Join-Path $backupDir "pre-startup-update-$timestamp.sql"
+
+  New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
+
+  Write-Host "Создаю backup базы перед обновлением программы..."
+  Write-Host "  $backupFile"
+  & docker exec clinic-crm-postgres pg_dump -U $dbUser -d $dbName > $backupFile
+  if ($LASTEXITCODE -ne 0) {
+    Remove-Item -Force -ErrorAction SilentlyContinue $backupFile
+    throw "Не удалось создать backup базы. Обновление при запуске остановлено, чтобы не рисковать данными клиники."
+  }
+}
+
 function Try-UseRemoteImages {
   if ($Build -or $NoImageUpdate) {
     return $false
   }
 
-  $autoPull = Test-Truthy (Get-EnvValue "TEMICHEVVET_AUTO_PULL_IMAGES" "false")
+  $autoPull = Test-Truthy (Get-EnvValue "TEMICHEVVET_AUTO_PULL_IMAGES" "true")
   if (!$autoPull -and !$UpdateImages) {
     return $false
   }
@@ -180,6 +204,7 @@ function Try-UseRemoteImages {
   }
 
   Write-Host "Checking updated TemichevVet Docker images..."
+  Backup-CurrentDatabase
 
   docker pull $remoteApi
   $apiPullOk = $LASTEXITCODE -eq 0

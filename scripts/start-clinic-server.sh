@@ -154,13 +154,40 @@ is_truthy() {
   esac
 }
 
+backup_current_database() {
+  if ! docker container inspect clinic-crm-postgres >/dev/null 2>&1; then
+    echo "Existing PostgreSQL container was not found. Skipping pre-update backup."
+    return
+  fi
+
+  local db_user
+  local db_name
+  local backup_dir
+  local backup_file
+
+  db_user="$(load_env_value POSTGRES_USER clinic_crm)"
+  db_name="$(load_env_value POSTGRES_DB clinic_crm)"
+  backup_dir="$ROOT_DIR/backups"
+  backup_file="$backup_dir/pre-startup-update-$(date +%Y%m%d-%H%M%S).sql"
+
+  mkdir -p "$backup_dir"
+
+  echo "Creating database backup before program update..."
+  echo "  $backup_file"
+  if ! docker exec clinic-crm-postgres pg_dump -U "$db_user" -d "$db_name" > "$backup_file"; then
+    rm -f "$backup_file"
+    echo "Could not create database backup. Startup update stopped so clinic data is not put at risk." >&2
+    exit 1
+  fi
+}
+
 try_use_remote_images() {
   if [[ "$FORCE_BUILD" == "true" || "$SKIP_IMAGE_UPDATE" == "true" ]]; then
     return 1
   fi
 
   local auto_pull
-  auto_pull="$(load_env_value TEMICHEVVET_AUTO_PULL_IMAGES false)"
+  auto_pull="$(load_env_value TEMICHEVVET_AUTO_PULL_IMAGES true)"
   if [[ "$UPDATE_IMAGES" != "true" ]] && ! is_truthy "$auto_pull"; then
     return 1
   fi
@@ -175,6 +202,7 @@ try_use_remote_images() {
   fi
 
   echo "Проверяю обновлённые Docker-образы TemichevVet..."
+  backup_current_database
 
   if docker pull "$remote_api" && docker pull "$remote_web"; then
     set_env_value "TEMICHEVVET_API_IMAGE" "$remote_api"

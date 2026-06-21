@@ -54,17 +54,17 @@ if ([string]::IsNullOrWhiteSpace($ApiImage) -or [string]::IsNullOrWhiteSpace($We
 
 Set-EnvValue "TEMICHEVVET_REMOTE_API_IMAGE" $ApiImage
 Set-EnvValue "TEMICHEVVET_REMOTE_WEB_IMAGE" $WebImage
-Set-EnvValue "TEMICHEVVET_AUTO_PULL_IMAGES" "false"
+Set-EnvValue "TEMICHEVVET_AUTO_PULL_IMAGES" "true"
 
 Write-Host ""
-Write-Host "GitHub updates are configured."
-Write-Host "API image:"
+Write-Host "Обновления через GitHub настроены."
+Write-Host "API-образ:"
 Write-Host "  $ApiImage"
-Write-Host "Web image:"
+Write-Host "Web-образ:"
 Write-Host "  $WebImage"
 Write-Host ""
-Write-Host "Regular launch will not update automatically."
-Write-Host "Use the internet update button when you want to install a new version."
+Write-Host "Обычный запуск будет проверять эти образы и обновлять программу при доступном интернете."
+Write-Host "Кнопку интернет-обновления можно использовать для ручной проверки новой версии."
 Write-Host ""
-Write-Host "If GitHub Container Registry packages are private, run once on this computer:"
+Write-Host "Если пакеты GitHub Container Registry приватные, один раз выполните на этом компьютере:"
 Write-Host "  docker login ghcr.io"

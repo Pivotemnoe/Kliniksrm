@@ -120,7 +120,7 @@ if ($LASTEXITCODE -ne 0) {
 
 Set-EnvValue "TEMICHEVVET_API_IMAGE" $remoteApi
 Set-EnvValue "TEMICHEVVET_WEB_IMAGE" $remoteWeb
-Set-EnvValue "TEMICHEVVET_AUTO_PULL_IMAGES" "false"
+Set-EnvValue "TEMICHEVVET_AUTO_PULL_IMAGES" "true"
 
 $arguments = @("-ForceRecreate", "-NoImageUpdate")
 if (!$NoOpen) {

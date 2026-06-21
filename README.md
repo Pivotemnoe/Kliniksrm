@@ -212,10 +212,12 @@ TEMICHEVVET_WEB_IMAGE=temichevvet-web:local
 ```dotenv
 TEMICHEVVET_REMOTE_API_IMAGE=ghcr.io/pivotemnoe/kliniksrm-api:stable
 TEMICHEVVET_REMOTE_WEB_IMAGE=ghcr.io/pivotemnoe/kliniksrm-web:stable
-TEMICHEVVET_AUTO_PULL_IMAGES=false
+TEMICHEVVET_AUTO_PULL_IMAGES=true
 ```
 
-Обычный запуск CRM не обновляет программу сам. На Windows ручное обновление запускается кнопкой `Обновить TemichevVet через интернет`: она сначала создаёт backup базы в `backups/`, затем скачивает свежие `api` и `web` образы и перезапускает контейнеры.
+Обычный запуск CRM проверяет свежие Docker-образы программы и обновляет `api`/`web`, если интернет и реестр доступны. Перед интернет-обновлением создаётся backup базы в `backups/`. Данные клиники хранятся в Docker volumes и не удаляются.
+
+На Windows также есть ручная кнопка `Обновить TemichevVet через интернет`: она принудительно создаёт backup базы, скачивает свежие `api` и `web` образы и перезапускает контейнеры.
 
 Для ручного обновления из терминала:
 

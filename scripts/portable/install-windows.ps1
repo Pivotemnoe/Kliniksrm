@@ -346,7 +346,7 @@ Install-PortableAssets
 
 Set-InstalledEnvDefault "TEMICHEVVET_REMOTE_API_IMAGE" "ghcr.io/pivotemnoe/kliniksrm-api:stable"
 Set-InstalledEnvDefault "TEMICHEVVET_REMOTE_WEB_IMAGE" "ghcr.io/pivotemnoe/kliniksrm-web:stable"
-Set-InstalledEnvValue "TEMICHEVVET_AUTO_PULL_IMAGES" "false"
+Set-InstalledEnvValue "TEMICHEVVET_AUTO_PULL_IMAGES" "true"
 
 if (Test-Path $ImagesTar) {
   Write-Host "Загружаю Docker-образы с флешки..."
