@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common
 import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { AuthEmployee } from '../auth/auth.types';
 import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
+import { Public } from '../auth/decorators/public.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { AnimalsService } from './animals.service';
 import { CreateVaccinationDto } from './dto/create-vaccination.dto';
@@ -20,6 +21,13 @@ export class AnimalsController {
   @ApiOkResponse({ description: 'Patient list.' })
   listAnimals(@Query() query: ListAnimalsQueryDto) {
     return this.animalsService.listAnimals(query);
+  }
+
+  @Get('catalog')
+  @Public()
+  @ApiOkResponse({ description: 'Species and breed catalog.' })
+  listCatalog() {
+    return this.animalsService.listCatalog();
   }
 
   @Get(':animalId')
@@ -84,4 +92,3 @@ export class AnimalsController {
     return this.animalsService.updateVaccination(animalId, vaccinationId, dto, actor.id);
   }
 }
-

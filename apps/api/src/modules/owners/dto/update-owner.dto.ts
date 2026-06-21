@@ -1,5 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEmail, IsNumber, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { NotificationChannel } from '@prisma/client';
+import { IsBoolean, IsEmail, IsEnum, IsNumber, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
 
 export class UpdateOwnerDto {
   @ApiPropertyOptional()
@@ -57,6 +58,43 @@ export class UpdateOwnerDto {
   @MaxLength(1000)
   comment?: string;
 
+  @ApiPropertyOptional({ enum: NotificationChannel })
+  @IsOptional()
+  @IsEnum(NotificationChannel)
+  preferredNotificationChannel?: NotificationChannel | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  telegramChatId?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  maxUserId?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  allowSms?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  allowTelegram?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  allowMax?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  allowEmail?: boolean;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()
@@ -71,4 +109,3 @@ export class UpdateOwnerDto {
   @Max(100)
   servicesDiscount?: number;
 }
-

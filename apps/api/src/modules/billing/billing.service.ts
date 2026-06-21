@@ -1,7 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { BillSource, PaymentStatus, Prisma } from '@prisma/client';
+import { BillSource, PaymentStatus, PaymentType, Prisma } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
 import { AuditService } from '../audit/audit.service';
+import { FinanceService } from '../finance/finance.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { AddBillItemDto } from './dto/add-bill-item.dto';
@@ -9,6 +10,7 @@ import { CreateBillDto } from './dto/create-bill.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { ListBillsQueryDto } from './dto/list-bills-query.dto';
 import { RefundPaymentDto } from './dto/refund-payment.dto';
+import { UpdateBillDto } from './dto/update-bill.dto';
 import { UpdateBillItemDto } from './dto/update-bill-item.dto';
 
 @Injectable()
@@ -17,9 +19,14 @@ export class BillingService {
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
     private readonly schedulingService: SchedulingService,
+    private readonly financeService: FinanceService,
   ) {}
 
   async listBills(query: ListBillsQueryDto) {
+    if (query.debtOnly === 'true') {
+      return this.listBillAlerts(query);
+    }
+
     const { limit, offset } = parsePagination(query);
     const search = query.search?.trim();
     const where: Prisma.BillWhereInput = {
@@ -62,8 +69,60 @@ export class BillingService {
     return { items, total, limit, offset };
   }
 
+  async listBillAlerts(query: ListBillsQueryDto) {
+    const { limit, offset } = parsePagination(query);
+    const search = query.search?.trim();
+    const where: Prisma.BillWhereInput = {
+      status: { in: [PaymentStatus.UNPAID, PaymentStatus.PARTIAL] },
+      ...(query.source ? { source: query.source } : {}),
+      ...(query.ownerId ? { ownerId: query.ownerId } : {}),
+      ...(query.animalId ? { animalId: query.animalId } : {}),
+      ...(query.visitId ? { visitId: query.visitId } : {}),
+      ...(query.dateFrom || query.dateTo
+        ? {
+            createdAt: {
+              ...(query.dateFrom ? { gte: new Date(query.dateFrom) } : {}),
+              ...(query.dateTo ? { lte: new Date(query.dateTo) } : {}),
+            },
+          }
+        : {}),
+      ...(search
+        ? {
+            OR: [
+              { owner: { fullName: { contains: search, mode: 'insensitive' } } },
+              { owner: { phone: { contains: search, mode: 'insensitive' } } },
+              { animal: { nickname: { contains: search, mode: 'insensitive' } } },
+              { items: { some: { title: { contains: search, mode: 'insensitive' } } } },
+            ],
+          }
+        : {}),
+    };
+
+    const bills = await this.prisma.bill.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      include: billListInclude,
+    });
+    const alerts = bills.filter((bill) => decimal(bill.totalAmount).minus(bill.paidAmount).greaterThan(0));
+    const totalDebt = alerts.reduce((sum, bill) => sum.plus(decimal(bill.totalAmount).minus(bill.paidAmount)), decimal(0));
+    const now = new Date();
+    const overdueAlerts = alerts.filter((bill) => bill.dueAt && bill.dueAt < now);
+    const overdueDebt = overdueAlerts.reduce((sum, bill) => sum.plus(decimal(bill.totalAmount).minus(bill.paidAmount)), decimal(0));
+
+    return {
+      items: alerts.slice(offset, offset + limit),
+      total: alerts.length,
+      totalDebt,
+      overdueTotal: overdueAlerts.length,
+      overdueDebt,
+      limit,
+      offset,
+    };
+  }
+
   async createBill(dto: CreateBillDto, actorId: string) {
     const data = await this.resolveBillCreationData(dto);
+    const dueAt = dto.dueAt ? new Date(dto.dueAt) : await this.financeService.getDefaultBillDueAt();
 
     const bill = await this.prisma.bill.create({
       data: {
@@ -72,6 +131,7 @@ export class BillingService {
         visitId: data.visitId,
         source: data.visitId ? BillSource.VISIT : BillSource.MANUAL,
         status: PaymentStatus.UNPAID,
+        dueAt,
       },
       include: billInclude,
     });
@@ -81,7 +141,7 @@ export class BillingService {
       action: 'bill.create',
       entityType: 'Bill',
       entityId: bill.id,
-      metadata: { ownerId: bill.ownerId, animalId: bill.animalId, visitId: bill.visitId, source: bill.source },
+      metadata: { ownerId: bill.ownerId, animalId: bill.animalId, visitId: bill.visitId, source: bill.source, dueAt: bill.dueAt },
     });
 
     return bill;
@@ -96,6 +156,28 @@ export class BillingService {
     if (!bill) {
       throw new NotFoundException('Bill not found');
     }
+
+    return bill;
+  }
+
+  async updateBill(billId: string, dto: UpdateBillDto, actorId: string) {
+    await this.getExistingBill(billId);
+
+    const bill = await this.prisma.bill.update({
+      where: { id: billId },
+      data: {
+        ...(dto.dueAt !== undefined ? { dueAt: dto.dueAt ? new Date(dto.dueAt) : null } : {}),
+      },
+      include: billInclude,
+    });
+
+    await this.auditService.log({
+      actorId,
+      action: 'bill.update',
+      entityType: 'Bill',
+      entityId: billId,
+      metadata: { changedFields: Object.keys(dto), dueAt: bill.dueAt },
+    });
 
     return bill;
   }
@@ -248,12 +330,18 @@ export class BillingService {
         employee: {
           select: { id: true, fullName: true, position: true },
         },
+        paymentMethod: true,
+        cashbox: {
+          include: { office: { select: { id: true, name: true } } },
+        },
       },
     });
   }
 
   async createPayment(billId: string, dto: CreatePaymentDto, actorId: string) {
     const amount = decimal(dto.amount);
+    const paymentSettings = await this.financeService.resolvePaymentSettings(dto.paymentMethodId, dto.cashboxId);
+    const paymentType = paymentSettings.type ?? dto.type;
 
     const payment = await this.prisma.$transaction(async (tx) => {
       const bill = await this.ensureBillCanBePaid(tx, billId);
@@ -263,11 +351,17 @@ export class BillingService {
         throw new BadRequestException('Payment amount is greater than bill debt');
       }
 
+      if (paymentType === PaymentType.DEPOSIT) {
+        await this.withdrawOwnerDeposit(tx, bill, amount, billId);
+      }
+
       const createdPayment = await tx.payment.create({
         data: {
           billId,
           employeeId: actorId,
-          type: dto.type,
+          paymentMethodId: paymentSettings.paymentMethodId,
+          cashboxId: paymentSettings.cashboxId,
+          type: paymentType,
           amount,
           paidAt: dto.paidAt ? new Date(dto.paidAt) : undefined,
           comment: dto.comment,
@@ -284,7 +378,7 @@ export class BillingService {
       action: 'payment.create',
       entityType: 'Payment',
       entityId: payment.id,
-      metadata: { billId, amount: payment.amount, type: payment.type },
+      metadata: { billId, amount: payment.amount, type: payment.type, paymentMethodId: payment.paymentMethodId, cashboxId: payment.cashboxId },
     });
 
     return payment;
@@ -315,11 +409,17 @@ export class BillingService {
         data: {
           billId,
           employeeId: actorId,
+          paymentMethodId: payment.paymentMethodId,
+          cashboxId: payment.cashboxId,
           type: payment.type,
           amount: refundAmount.negated(),
           comment: dto.comment ?? `Refund for payment ${payment.id}`,
         },
       });
+
+      if (payment.type === PaymentType.DEPOSIT) {
+        await this.restoreOwnerDeposit(tx, bill, refundAmount, billId);
+      }
 
       await this.recalculateBillTotals(tx, billId);
 
@@ -474,7 +574,7 @@ export class BillingService {
   private async getBillForUpdate(tx: Prisma.TransactionClient, billId: string) {
     const bill = await tx.bill.findUnique({
       where: { id: billId },
-      select: { id: true, status: true, totalAmount: true, paidAmount: true, visitId: true },
+      select: { id: true, ownerId: true, status: true, totalAmount: true, paidAmount: true, visitId: true },
     });
 
     if (!bill) {
@@ -487,7 +587,7 @@ export class BillingService {
   private async getExistingBill(billId: string) {
     const bill = await this.prisma.bill.findUnique({
       where: { id: billId },
-      select: { id: true, status: true, totalAmount: true, paidAmount: true, visitId: true },
+      select: { id: true, ownerId: true, status: true, totalAmount: true, paidAmount: true, visitId: true },
     });
 
     if (!bill) {
@@ -495,6 +595,69 @@ export class BillingService {
     }
 
     return bill;
+  }
+
+  private async withdrawOwnerDeposit(
+    tx: Prisma.TransactionClient,
+    bill: { ownerId: string | null },
+    amount: Prisma.Decimal,
+    billId: string,
+  ) {
+    if (!bill.ownerId) {
+      throw new BadRequestException('Оплата депозитом доступна только для счёта с владельцем');
+    }
+
+    const owner = await tx.owner.findUnique({
+      where: { id: bill.ownerId },
+      select: { id: true, balance: true },
+    });
+
+    if (!owner) {
+      throw new NotFoundException('Owner not found');
+    }
+
+    if (decimal(owner.balance).lessThan(amount)) {
+      throw new BadRequestException('Недостаточно средств на балансе владельца');
+    }
+
+    await tx.owner.update({
+      where: { id: owner.id },
+      data: { balance: { decrement: amount } },
+    });
+
+    await tx.ownerBalanceOperation.create({
+      data: {
+        ownerId: owner.id,
+        type: PaymentType.DEPOSIT,
+        amount: amount.negated(),
+        comment: `Оплата счёта ${billId.slice(0, 8)} с депозита`,
+      },
+    });
+  }
+
+  private async restoreOwnerDeposit(
+    tx: Prisma.TransactionClient,
+    bill: { ownerId: string | null },
+    amount: Prisma.Decimal,
+    billId: string,
+  ) {
+    if (!bill.ownerId) {
+      throw new BadRequestException('Нельзя вернуть депозитную оплату без владельца счёта');
+    }
+
+    await tx.owner.update({
+      where: { id: bill.ownerId },
+      data: { balance: { increment: amount } },
+    });
+
+    await tx.ownerBalanceOperation.create({
+      data: {
+        ownerId: bill.ownerId,
+        type: PaymentType.DEPOSIT,
+        amount,
+        comment: `Возврат оплаты счёта ${billId.slice(0, 8)} на депозит`,
+      },
+    });
   }
 
   private async getBillItem(tx: Prisma.TransactionClient, billId: string, billItemId: string) {
@@ -550,6 +713,10 @@ const billInclude = {
     include: {
       employee: {
         select: { id: true, fullName: true, position: true },
+      },
+      paymentMethod: true,
+      cashbox: {
+        include: { office: { select: { id: true, name: true } } },
       },
     },
   },

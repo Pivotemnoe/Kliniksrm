@@ -23,8 +23,8 @@ async function bootstrap() {
   );
 
   const swaggerConfig = new DocumentBuilder()
-    .setTitle('Clinic CRM API')
-    .setDescription('Backend API for the veterinary clinic CRM.')
+    .setTitle('TemichevVet CRM API')
+    .setDescription('Backend API для CRM ветеринарной клиники.')
     .setVersion('0.1.0')
     .addCookieAuth(SESSION_COOKIE_NAME)
     .build();

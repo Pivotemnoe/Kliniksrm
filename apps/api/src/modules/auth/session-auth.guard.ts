@@ -29,7 +29,7 @@ export class SessionAuthGuard implements CanActivate {
     const token = parseCookie(request.headers.cookie, SESSION_COOKIE_NAME);
 
     if (!token) {
-      throw new UnauthorizedException('Authentication required');
+      throw new UnauthorizedException('Требуется вход в систему');
     }
 
     const sessionId = this.authService.hashSessionToken(token);
@@ -51,6 +51,9 @@ export class SessionAuthGuard implements CanActivate {
                     },
                   },
                 },
+                permissionOverrides: {
+                  include: { permission: true },
+                },
               },
             },
           },
@@ -63,11 +66,11 @@ export class SessionAuthGuard implements CanActivate {
         await this.prisma.session.deleteMany({ where: { id: session.id } });
       }
 
-      throw new UnauthorizedException('Session expired');
+      throw new UnauthorizedException('Сессия истекла');
     }
 
     if (!session.user.employee || session.user.employee.status !== EmployeeStatus.ACTIVE) {
-      throw new UnauthorizedException('Employee is blocked or missing');
+      throw new UnauthorizedException('Сотрудник заблокирован или не найден');
     }
 
     request.auth = {
@@ -76,7 +79,8 @@ export class SessionAuthGuard implements CanActivate {
       employee: this.authService.serializeEmployee(session.user.employee),
     };
 
+    await this.authService.touchSession(session.id);
+
     return true;
   }
 }
-

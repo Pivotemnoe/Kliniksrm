@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { QueueStatus, QueueUrgency } from '@prisma/client';
-import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsDateString, IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class ListQueueQueryDto {
   @ApiPropertyOptional({ enum: QueueStatus })
@@ -28,5 +28,14 @@ export class ListQueueQueryDto {
   @IsOptional()
   @IsString()
   offset?: string;
-}
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  dateFrom?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  dateTo?: string;
+}

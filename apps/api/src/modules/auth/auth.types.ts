@@ -4,6 +4,7 @@ export type AuthEmployee = {
   fullName: string;
   phone: string | null;
   position: string | null;
+  defaultRoute: string | null;
   status: string;
   roles: string[];
   permissions: string[];
@@ -46,4 +47,3 @@ export type CookieResponse = {
     },
   ) => void;
 };
-

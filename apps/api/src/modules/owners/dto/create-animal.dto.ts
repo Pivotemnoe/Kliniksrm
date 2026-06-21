@@ -28,17 +28,17 @@ export class CreateAnimalDto {
   @MaxLength(120)
   nickname!: string;
 
-  @ApiPropertyOptional()
-  @IsOptional()
+  @ApiProperty()
   @IsString()
+  @MinLength(1)
   @MaxLength(80)
-  species?: string;
+  species!: string;
 
-  @ApiPropertyOptional()
-  @IsOptional()
+  @ApiProperty()
   @IsString()
+  @MinLength(1)
   @MaxLength(120)
-  breed?: string;
+  breed!: string;
 
   @ApiPropertyOptional({ enum: AnimalSexDto })
   @IsOptional()

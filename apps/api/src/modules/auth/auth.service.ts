@@ -1,12 +1,15 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { EmployeeStatus } from '@prisma/client';
 import { createHash, randomBytes } from 'node:crypto';
+import { formatNormalizedRussianPhone, normalizePhoneForLookup } from '../../common/phone';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { PasswordService } from './password.service';
 
 const SESSION_TTL_HOURS = Number(process.env.SESSION_TTL_HOURS ?? 12);
+const SESSION_IDLE_TIMEOUT_MINUTES = Number(process.env.SESSION_IDLE_TIMEOUT_MINUTES ?? 15);
 
 @Injectable()
 export class AuthService {
@@ -19,10 +22,21 @@ export class AuthService {
   async login(dto: LoginDto, ipAddress?: string | null, userAgent?: string | null) {
     const login = dto.login.trim();
     const normalizedEmail = login.includes('@') ? login.toLowerCase() : undefined;
+    const normalizedPhone = normalizeLoginPhoneForLookup(login);
+    const phoneCandidates = new Set<string>([login]);
+
+    if (normalizedPhone) {
+      phoneCandidates.add(formatNormalizedRussianPhone(normalizedPhone)!);
+      phoneCandidates.add(`+${normalizedPhone}`);
+    }
 
     const user = await this.prisma.user.findFirst({
       where: {
-        OR: [{ phone: login }, ...(normalizedEmail ? [{ email: normalizedEmail }] : [])],
+        OR: [
+          ...[...phoneCandidates].map((phone) => ({ phone })),
+          ...(normalizedPhone ? [{ phoneNormalized: normalizedPhone }] : []),
+          ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
+        ],
       },
       include: {
         employee: {
@@ -38,6 +52,9 @@ export class AuthService {
                 },
               },
             },
+            permissionOverrides: {
+              include: { permission: true },
+            },
           },
         },
       },
@@ -51,7 +68,7 @@ export class AuthService {
         ipAddress,
       });
 
-      throw new UnauthorizedException('Invalid login or password');
+      throw new UnauthorizedException('Неверный логин или пароль');
     }
 
     if (!user.employee || user.employee.status !== EmployeeStatus.ACTIVE) {
@@ -63,12 +80,13 @@ export class AuthService {
         ipAddress,
       });
 
-      throw new UnauthorizedException('Employee is blocked or not linked to this user');
+      throw new UnauthorizedException('Сотрудник заблокирован или не связан с пользователем');
     }
 
     const token = randomBytes(48).toString('base64url');
     const sessionId = this.hashSessionToken(token);
-    const expiresAt = new Date(Date.now() + SESSION_TTL_HOURS * 60 * 60 * 1000);
+    const expiresAt = this.getIdleSessionExpiresAt();
+    const cookieExpiresAt = new Date(Date.now() + SESSION_TTL_HOURS * 60 * 60 * 1000);
 
     await this.prisma.session.create({
       data: {
@@ -91,8 +109,16 @@ export class AuthService {
     return {
       token,
       expiresAt,
+      cookieExpiresAt,
       employee: this.serializeEmployee(user.employee),
     };
+  }
+
+  async touchSession(sessionId: string) {
+    await this.prisma.session.updateMany({
+      where: { id: sessionId },
+      data: { expiresAt: this.getIdleSessionExpiresAt() },
+    });
   }
 
   async logout(sessionId: string, actorId: string, ipAddress?: string | null) {
@@ -107,8 +133,62 @@ export class AuthService {
     });
   }
 
+  async changePassword({
+    userId,
+    sessionId,
+    actorId,
+    dto,
+    ipAddress,
+  }: {
+    userId: string;
+    sessionId: string;
+    actorId: string;
+    dto: ChangePasswordDto;
+    ipAddress?: string | null;
+  }) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, passwordHash: true },
+    });
+
+    if (!user || !(await this.passwordService.verifyPassword(dto.currentPassword, user.passwordHash))) {
+      throw new BadRequestException('Текущий пароль указан неверно');
+    }
+
+    if (dto.currentPassword === dto.newPassword) {
+      throw new BadRequestException('Новый пароль должен отличаться от текущего');
+    }
+
+    const passwordHash = await this.passwordService.hashPassword(dto.newPassword);
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: { passwordHash },
+      }),
+      this.prisma.session.deleteMany({
+        where: {
+          userId,
+          id: { not: sessionId },
+        },
+      }),
+    ]);
+
+    await this.auditService.log({
+      actorId,
+      action: 'auth.password_change',
+      entityType: 'User',
+      entityId: userId,
+      ipAddress,
+    });
+  }
+
   hashSessionToken(token: string) {
     return createHash('sha256').update(token).digest('hex');
+  }
+
+  private getIdleSessionExpiresAt() {
+    return new Date(Date.now() + SESSION_IDLE_TIMEOUT_MINUTES * 60 * 1000);
   }
 
   serializeEmployee(employee: {
@@ -117,6 +197,7 @@ export class AuthService {
     fullName: string;
     phone: string | null;
     position: string | null;
+    defaultRoute: string | null;
     status: string;
     roles: Array<{
       role: {
@@ -126,6 +207,12 @@ export class AuthService {
             code: string;
           };
         }>;
+      };
+    }>;
+    permissionOverrides?: Array<{
+      effect: string;
+      permission: {
+        code: string;
       };
     }>;
   }) {
@@ -138,12 +225,21 @@ export class AuthService {
       return role.code;
     });
 
+    for (const override of employee.permissionOverrides ?? []) {
+      if (override.effect === 'DENY') {
+        permissions.delete(override.permission.code);
+      } else {
+        permissions.add(override.permission.code);
+      }
+    }
+
     return {
       id: employee.id,
       userId: employee.userId ?? '',
       fullName: employee.fullName,
       phone: employee.phone,
       position: employee.position,
+      defaultRoute: employee.defaultRoute,
       status: employee.status,
       roles,
       permissions: [...permissions].sort(),
@@ -151,3 +247,10 @@ export class AuthService {
   }
 }
 
+function normalizeLoginPhoneForLookup(value: string) {
+  try {
+    return normalizePhoneForLookup(value);
+  } catch {
+    return null;
+  }
+}

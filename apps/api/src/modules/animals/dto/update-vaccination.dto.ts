@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsBoolean, IsDateString, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 export class UpdateVaccinationDto {
   @ApiPropertyOptional()
@@ -13,17 +13,59 @@ export class UpdateVaccinationDto {
   @IsOptional()
   @IsString()
   @MaxLength(80)
-  status?: string;
+  status?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsDateString()
-  expiresAt?: string;
+  vaccinatedAt?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  expiresAt?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  vaccineBatch?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  vaccineSeries?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  vaccineExpiresAt?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  smsReminder?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   @MaxLength(1000)
-  notes?: string;
-}
+  notes?: string | null;
 
+  @ApiPropertyOptional({ description: 'Create, update or cancel a revaccination task.' })
+  @IsOptional()
+  @IsBoolean()
+  createRevaccinationTask?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  revaccinationAssigneeId?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  revaccinationAssigneeRoleCode?: string | null;
+}

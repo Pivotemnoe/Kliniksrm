@@ -27,6 +27,7 @@ docker compose logs -f api
 - `POST /api/auth/login`
 - `GET /api/auth/me`
 - `POST /api/auth/logout`
+- `PATCH /api/auth/password`
 - `GET /api/v1/meta`
 - `GET /api/v1/audit-logs`
 - `GET /api/v1/employees`
@@ -34,6 +35,22 @@ docker compose logs -f api
 - `GET /api/v1/employees/:employeeId`
 - `PATCH /api/v1/employees/:employeeId`
 - `GET /api/v1/roles`
+- `GET /api/v1/tasks`
+- `POST /api/v1/tasks`
+- `GET /api/v1/tasks/:taskId`
+- `PATCH /api/v1/tasks/:taskId`
+- `POST /api/v1/tasks/:taskId/done`
+- `POST /api/v1/tasks/:taskId/cancel`
+- `POST /api/v1/tasks/:taskId/reopen`
+- `POST /api/v1/tasks/:taskId/archive`
+- `GET /api/v1/notifications/outbox`
+- `POST /api/v1/notifications/outbox`
+- `POST /api/v1/notifications/outbox/:notificationId/retry`
+- `POST /api/v1/notifications/outbox/:notificationId/cancel`
+- `GET /api/v1/notifications/templates`
+- `POST /api/v1/notifications/templates`
+- `GET /api/v1/notifications/owners/:ownerId/portal-access`
+- `PATCH /api/v1/notifications/owners/:ownerId/portal-access`
 - `GET /api/v1/owners`
 - `POST /api/v1/owners`
 - `GET /api/v1/owners/:ownerId`
@@ -51,8 +68,34 @@ docker compose logs -f api
 - `GET /api/v1/animals/:animalId/vaccinations`
 - `POST /api/v1/animals/:animalId/vaccinations`
 - `PATCH /api/v1/animals/:animalId/vaccinations/:vaccinationId`
+
+Vaccination payload supports Vetaf-like fields:
+
+- `title`, `status`, `vaccinatedAt`, `expiresAt`, `vaccineBatch`, `vaccineSeries`, `vaccineExpiresAt`, `smsReminder`, `notes`.
+- `expiresAt` is used as the revaccination date.
+- When `expiresAt` is set and `createRevaccinationTask` is not `false`, backend creates or updates one linked `Task` with `taskType=revaccination`.
+- The revaccination task can be assigned by `revaccinationAssigneeId` or `revaccinationAssigneeRoleCode`; both cannot be used together.
+- If revaccination date is cleared or `createRevaccinationTask=false`, an open linked revaccination task is cancelled, not deleted.
+
+## Notifications and client portal foundation
+
+Notifications are local-first. CRM writes outgoing messages to `NotificationOutbox` in PostgreSQL. A future worker will send queued messages to external channels such as Telegram, MAX, SMS, email or push. If internet is unavailable, the message remains local with `QUEUED` or `FAILED` status and can be retried later.
+
+Current channels: `INTERNAL`, `TELEGRAM`, `MAX`, `SMS`, `EMAIL`, `PUSH`.
+
+Current outbox statuses: `QUEUED`, `SENDING`, `SENT`, `FAILED`, `CANCELLED`.
+
+Owner cards can store communication preferences:
+
+- `preferredNotificationChannel`
+- `telegramChatId`
+- `maxUserId`
+- `allowSms`, `allowTelegram`, `allowMax`, `allowEmail`
+
+Client portal access is stored separately in `ClientPortalAccess`. Staff can disable, enable, invite or block access. Invite tokens are returned only once from the API and stored in the database as SHA-256 hash.
 - `GET /api/v1/scheduling/resources`
 - `GET /api/v1/queue`
+- `GET /api/v1/queue/screen`
 - `POST /api/v1/queue`
 - `GET /api/v1/queue/:queueEntryId`
 - `PATCH /api/v1/queue/:queueEntryId`
@@ -93,16 +136,33 @@ docker compose logs -f api
 - `GET /api/v1/bills/:billId/payments`
 - `POST /api/v1/bills/:billId/payments`
 - `POST /api/v1/bills/:billId/payments/:paymentId/refund`
+- `GET /api/v1/sales`
+- `POST /api/v1/sales`
+- `GET /api/v1/sales/:saleId`
 
-All endpoints except `GET /api/health` and `POST /api/auth/login` require an authenticated active employee session.
+All endpoints except `GET /api/health`, `POST /api/auth/login` and `GET /api/v1/queue/screen` require an authenticated active employee session.
 
-Owners, animals, queue and appointments support search and pagination through `search`, `limit` and `offset` query parameters. Animal lists can also be filtered by `ownerId`.
+Сотрудников создаёт директорский доступ через `POST /api/v1/employees`: у сотрудника обязательно должен быть телефон или email для входа, временный пароль и хотя бы одна роль. Назначение и изменение ролей выполняется через `PATCH /api/v1/employees/:employeeId`; endpoint требует одновременно `employees.manage` и `roles.manage`. Backend запрещает директору заблокировать самого себя и снять с себя права управления сотрудниками и ролями.
 
-Queue entries can be created without a doctor and without an existing owner card by passing a primary owner name or phone. Appointments require an existing owner and animal, but employee and room are optional so the clinic can accept записи "в клинику" before assigning a specific doctor.
+Сотрудник меняет собственный пароль через `PATCH /api/auth/password`, передавая текущий пароль и новый пароль. После успешной смены текущая сессия остаётся активной, остальные сессии этого сотрудника закрываются, событие пишется в audit log как `auth.password_change`. Сессии хранятся на сервере через HttpOnly cookie и закрываются при бездействии, по умолчанию через 15 минут (`SESSION_IDLE_TIMEOUT_MINUTES`).
+
+Задачи доступны через `GET /api/v1/tasks` с фильтрами `search`, `status`, `dueFrom`, `dueTo`, `ownerId`, `animalId`, `assigneeId`, `assigneeRoleCode`, `limit`, `offset`. Задачу можно назначить конкретному сотруднику через `assigneeId` или роли через `assigneeRoleCode`, но не обоим одновременно. Статусы: `OPEN`, `DONE`, `CANCELLED`, `ARCHIVED`; действия пишутся в audit log как `task.create`, `task.update`, `task.done`, `task.cancel`, `task.reopen`, `task.archive`.
+
+Владельцы, пациенты, очередь и записи поддерживают поиск и пагинацию через `search`, `limit` и `offset`. Список пациентов также можно фильтровать по `ownerId`.
+
+Очередь можно создать без врача и без существующей карточки владельца, передав первичные данные клиента и пациента. Запись на приём требует существующего владельца и пациента, но сотрудник и кабинет необязательны, поэтому клиника может принять запись "в клинику" до назначения конкретного врача. Интерфейс создания записи может сначала создать владельца и пациента, а затем создать запись с полученными `ownerId` и `animalId`; API записи при этом остаётся строгим.
+
+Из карточки записи frontend может поставить клиента в электронную очередь: если запись ещё `PLANNED`, она сначала переводится в `ARRIVED`, затем создаётся `QueueEntry` с тем же владельцем, пациентом, сотрудником, кабинетом и филиалом.
+
+Публичный экран очереди возвращает только безопасные для второго монитора поля: фамилию клиента, кличку пациента, вид животного для иконки, кабинет, публичное имя сотрудника, срочность, статус очереди, время последнего вызова и количество вызовов. Он не отдаёт телефон, комментарии, карточку владельца, карточку пациента или медицинские данные. Повторный `POST /api/v1/queue/:queueEntryId/start` для уже вызванного клиента обновляет время последнего вызова, увеличивает счётчик и создаёт audit-событие `queue.call`. Очередь можно завершить только через 10 секунд после последнего вызова клиента, чтобы клиент достаточно долго оставался видимым на втором мониторе.
 
 Visits can be opened from an appointment, from a queue entry linked to an existing owner and animal, or directly by owner and animal. A visit stores the examination sheet, diagnoses, recommendations and service lines. Service lines create or update the visit bill and keep `Visit.totalAmount` synchronized with the bill total.
 
-Bills support manual creation and visit-linked billing. Bill items can reference services/products or use a manual title and price. Payment acceptance is separated from bill editing through `payments.manage`; bill status is recalculated as `UNPAID`, `PARTIAL` or `PAID`, overpayment is rejected, and refunds are recorded as negative payment rows.
+Bills support manual creation, visit-linked billing and sale-linked billing. Bill items can reference services/products or use a manual title and price. Payment acceptance is separated from bill editing through `payments.manage`; bill status is recalculated as `UNPAID`, `PARTIAL` or `PAID`, overpayment is rejected, and refunds are recorded as negative payment rows.
+
+Sales are separate retail transactions outside a clinical visit. `POST /api/v1/sales` creates a sale and its linked bill with `source=SALE`; payment is then accepted through the bill payment endpoints. Stock write-off from sales is intentionally not automatic yet because batch selection rules must be defined first.
+
+Use `npm run api:e2e` for repeatable local verification of RBAC, status flows, E2E workflows and audit log coverage.
 
 ## Database
 

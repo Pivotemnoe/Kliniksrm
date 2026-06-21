@@ -40,6 +40,12 @@ export class UpdateEmployeeDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(120)
+  defaultRoute?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   @MinLength(8)
   @MaxLength(200)
   password?: string;
@@ -55,5 +61,22 @@ export class UpdateEmployeeDto {
   @ArrayNotEmpty()
   @IsString({ each: true })
   roleCodes?: string[];
-}
 
+  @ApiPropertyOptional({ example: ['documents.manage'] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  permissionGrants?: string[];
+
+  @ApiPropertyOptional({ example: ['stock.manage'] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  permissionDenials?: string[];
+
+  @ApiPropertyOptional({ example: ['warehouse-id'] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  warehouseIds?: string[];
+}

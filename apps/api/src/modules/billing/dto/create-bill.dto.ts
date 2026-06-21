@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsUUID } from 'class-validator';
+import { IsDateString, IsOptional, IsUUID } from 'class-validator';
 
 export class CreateBillDto {
   @ApiPropertyOptional()
@@ -16,4 +16,9 @@ export class CreateBillDto {
   @IsOptional()
   @IsUUID()
   visitId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  dueAt?: string;
 }

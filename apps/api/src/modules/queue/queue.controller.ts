@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common
 import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { AuthEmployee } from '../auth/auth.types';
 import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
+import { Public } from '../auth/decorators/public.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { CreateQueueEntryDto } from './dto/create-queue-entry.dto';
 import { ListQueueQueryDto } from './dto/list-queue-query.dto';
@@ -18,6 +19,13 @@ export class QueueController {
   @ApiOkResponse({ description: 'Clinic queue list.' })
   listQueue(@Query() query: ListQueueQueryDto) {
     return this.queueService.listQueue(query);
+  }
+
+  @Get('screen')
+  @Public()
+  @ApiOkResponse({ description: 'Public queue screen without private client data.' })
+  getQueueScreen() {
+    return this.queueService.getQueueScreen();
   }
 
   @Post()
@@ -46,15 +54,15 @@ export class QueueController {
   }
 
   @Post(':queueEntryId/start')
-  @RequirePermissions('queue.manage')
+  @RequirePermissions('queue.call')
   @ApiOkResponse({ description: 'Queue entry moved to in-progress.' })
   startQueueEntry(@Param('queueEntryId') queueEntryId: string, @CurrentEmployee() actor: AuthEmployee) {
     return this.queueService.startQueueEntry(queueEntryId, actor.id);
   }
 
   @Post(':queueEntryId/complete')
-  @RequirePermissions('queue.manage')
-  @ApiOkResponse({ description: 'Queue entry completed.' })
+  @RequirePermissions('queue.call')
+  @ApiOkResponse({ description: 'Пациент направлен на приём из очереди.' })
   completeQueueEntry(@Param('queueEntryId') queueEntryId: string, @CurrentEmployee() actor: AuthEmployee) {
     return this.queueService.completeQueueEntry(queueEntryId, actor.id);
   }
@@ -66,4 +74,3 @@ export class QueueController {
     return this.queueService.cancelQueueEntry(queueEntryId, actor.id);
   }
 }
-

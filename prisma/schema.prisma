@@ -53,6 +53,44 @@ enum TaskStatus {
   ARCHIVED
 }
 
+enum NotificationChannel {
+  INTERNAL
+  TELEGRAM
+  MAX
+  SMS
+  EMAIL
+  PUSH
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENDING
+  SENT
+  FAILED
+  CANCELLED
+}
+
+enum ClientPortalStatus {
+  DISABLED
+  ENABLED
+  INVITED
+  BLOCKED
+}
+
+enum LaboratoryOrderStatus {
+  ORDERED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum LaboratoryOrderItemStatus {
+  ORDERED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
 enum PaymentStatus {
   UNPAID
   PARTIAL
@@ -73,6 +111,14 @@ enum BillSource {
   VISIT
   SALE
   MANUAL
+}
+
+enum OnlineRequestStatus {
+  NEW
+  IN_REVIEW
+  ACCEPTED
+  CANCELLED
+  ARCHIVED
 }
 
 enum StockMovementType {
@@ -105,35 +151,62 @@ enum JobStatus {
   CANCELLED
 }
 
+enum NewsPriority {
+  INFO
+  IMPORTANT
+  CRITICAL
+}
+
+enum PermissionEffect {
+  GRANT
+  DENY
+}
+
+enum MedicalPhraseSource {
+  SYSTEM
+  EMPLOYEE
+  DIAGNOSIS_TEMPLATE
+}
+
 model User {
-  id           String    @id @default(uuid())
-  email        String?   @unique
-  phone        String?   @unique @db.VarChar(32)
-  passwordHash String
-  employee     Employee?
-  sessions     Session[]
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id              String    @id @default(uuid())
+  email           String?   @unique
+  phone           String?   @unique @db.VarChar(32)
+  phoneNormalized String?   @db.VarChar(16)
+  passwordHash    String
+  employee        Employee?
+  sessions        Session[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([phoneNormalized])
 }
 
 model Employee {
-  id             String        @id @default(uuid())
-  userId         String?       @unique
-  user           User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
-  fullName       String
-  phone          String?       @db.VarChar(32)
-  position       String?
-  status         EmployeeStatus @default(ACTIVE)
-  roles          EmployeeRole[]
-  queueEntries   QueueEntry[]
-  appointments   Appointment[]
-  visits         Visit[]
-  assignedTasks  Task[]        @relation("TaskAssignee")
-  createdTasks   Task[]        @relation("TaskCreator")
-  auditLogs      AuditLog[]    @relation("AuditActor")
-  payments       Payment[]
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  id                   String                       @id @default(uuid())
+  userId               String?                      @unique
+  user                 User?                        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  fullName             String
+  phone                String?                      @db.VarChar(32)
+  position             String?
+  defaultRoute         String?
+  status               EmployeeStatus               @default(ACTIVE)
+  roles                EmployeeRole[]
+  permissionOverrides  EmployeePermissionOverride[]
+  warehouseAccesses    EmployeeWarehouseAccess[]
+  queueEntries         QueueEntry[]
+  appointments         Appointment[]
+  visits               Visit[]
+  assignedTasks        Task[]                       @relation("TaskAssignee")
+  createdTasks         Task[]                       @relation("TaskCreator")
+  createdNotifications NotificationOutbox[]         @relation("NotificationCreator")
+  createdNewsPosts     NewsPost[]                   @relation("NewsPostCreator")
+  newsReads            NewsPostRead[]
+  auditLogs            AuditLog[]                   @relation("AuditActor")
+  payments             Payment[]
+  medicalPhrases       MedicalPhrase[]
+  createdAt            DateTime                     @default(now())
+  updatedAt            DateTime                     @updatedAt
 
   @@index([fullName])
   @@index([phone])
@@ -151,13 +224,14 @@ model Role {
 }
 
 model Permission {
-  id          String           @id @default(uuid())
-  code        String           @unique
-  title       String
-  description String?
-  roles       RolePermission[]
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  id                String                       @id @default(uuid())
+  code              String                       @unique
+  title             String
+  description       String?
+  roles             RolePermission[]
+  employeeOverrides EmployeePermissionOverride[]
+  createdAt         DateTime                     @default(now())
+  updatedAt         DateTime                     @updatedAt
 }
 
 model EmployeeRole {
@@ -176,6 +250,19 @@ model RolePermission {
   permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
   @@id([roleId, permissionId])
+}
+
+model EmployeePermissionOverride {
+  employeeId   String
+  permissionId String
+  effect       PermissionEffect
+  employee     Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  permission   Permission       @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@id([employeeId, permissionId])
+  @@index([permissionId])
 }
 
 model Session {
@@ -208,21 +295,22 @@ model AuditLog {
 }
 
 model Organization {
-  id          String         @id @default(uuid())
-  displayName String
-  legalName   String?
-  orgType     String?
-  inn         String?
-  kpp         String?
-  legalAddress String?
-  postalAddress String?
-  bankName    String?
-  bik         String?
-  account     String?
-  corrAccount String?
-  offices     ClinicOffice[]
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  id                 String         @id @default(uuid())
+  displayName        String
+  legalName          String?
+  orgType            String?
+  inn                String?
+  kpp                String?
+  legalAddress       String?
+  postalAddress      String?
+  bankName           String?
+  bik                String?
+  account            String?
+  corrAccount        String?
+  defaultBillDueDays Int?
+  offices            ClinicOffice[]
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
 }
 
 model ClinicOffice {
@@ -233,9 +321,11 @@ model ClinicOffice {
   phone          String?       @db.VarChar(32)
   timezone       String        @default("Europe/Moscow")
   address        String?
+  workingHours   Json?
   rooms          Room[]
   warehouses     Warehouse[]
   hospitalBoxes  HospitalBox[]
+  cashboxes      Cashbox[]
   owners         Owner[]
   appointments   Appointment[]
   queueEntries   QueueEntry[]
@@ -244,31 +334,43 @@ model ClinicOffice {
 }
 
 model Room {
-  id        String       @id @default(uuid())
-  officeId  String
-  office    ClinicOffice @relation(fields: [officeId], references: [id], onDelete: Cascade)
-  name      String
+  id           String        @id @default(uuid())
+  officeId     String
+  office       ClinicOffice  @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  name         String
   queueEntries QueueEntry[]
   appointments Appointment[]
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
   @@unique([officeId, name])
 }
 
 model Warehouse {
-  id                String          @id @default(uuid())
+  id                String                    @id @default(uuid())
   officeId          String
-  office            ClinicOffice    @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  office            ClinicOffice              @relation(fields: [officeId], references: [id], onDelete: Cascade)
   name              String
+  employeeAccesses  EmployeeWarehouseAccess[]
   batches           StockBatch[]
   supplyItems       SupplyInvoiceItem[]
-  stockMovements    StockMovement[] @relation("MovementWarehouse")
-  incomingMovements StockMovement[] @relation("MovementToWarehouse")
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  stockMovements    StockMovement[]           @relation("MovementWarehouse")
+  incomingMovements StockMovement[]           @relation("MovementToWarehouse")
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
 
   @@unique([officeId, name])
+}
+
+model EmployeeWarehouseAccess {
+  employeeId  String
+  warehouseId String
+  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+
+  @@id([employeeId, warehouseId])
+  @@index([warehouseId])
 }
 
 model HospitalBox {
@@ -283,37 +385,100 @@ model HospitalBox {
   @@unique([officeId, name])
 }
 
+model PaymentMethod {
+  id        String      @id @default(uuid())
+  title     String
+  type      PaymentType
+  isActive  Boolean     @default(true)
+  sortOrder Int         @default(0)
+  payments  Payment[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@unique([title])
+  @@index([isActive, sortOrder])
+}
+
+model Cashbox {
+  id           String        @id @default(uuid())
+  officeId     String?
+  office       ClinicOffice? @relation(fields: [officeId], references: [id], onDelete: SetNull)
+  title        String
+  fiscalNumber String?
+  isActive     Boolean       @default(true)
+  payments     Payment[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@unique([officeId, title])
+  @@index([isActive])
+}
+
 model Owner {
-  id                String                  @id @default(uuid())
-  officeId          String?
-  office            ClinicOffice?            @relation(fields: [officeId], references: [id], onDelete: SetNull)
-  fullName          String
-  organizationName  String?
-  phone             String?                 @db.VarChar(32)
-  extraPhone        String?                 @db.VarChar(32)
-  email             String?
-  address           String?
-  source            String?
-  passportData      String?
-  comment           String?
-  goodsDiscount     Decimal                 @default(0) @db.Decimal(5, 2)
-  servicesDiscount  Decimal                 @default(0) @db.Decimal(5, 2)
-  balance           Decimal                 @default(0) @db.Decimal(12, 2)
-  animals           Animal[]
-  trustedPeople     TrustedPerson[]
-  queueEntries      QueueEntry[]
-  appointments      Appointment[]
-  visits            Visit[]
-  tasks             Task[]
-  bills             Bill[]
-  sales             Sale[]
-  balanceOperations OwnerBalanceOperation[]
-  createdAt         DateTime                @default(now())
-  updatedAt         DateTime                @updatedAt
+  id                           String                     @id @default(uuid())
+  officeId                     String?
+  office                       ClinicOffice?              @relation(fields: [officeId], references: [id], onDelete: SetNull)
+  fullName                     String
+  fullNameNormalized           String?                    @db.VarChar(240)
+  organizationName             String?
+  phone                        String?                    @db.VarChar(32)
+  phoneNormalized              String?                    @db.VarChar(16)
+  extraPhone                   String?                    @db.VarChar(32)
+  email                        String?
+  address                      String?
+  source                       String?
+  passportData                 String?
+  comment                      String?
+  preferredNotificationChannel NotificationChannel?
+  telegramChatId               String?
+  maxUserId                    String?
+  allowSms                     Boolean                    @default(false)
+  allowTelegram                Boolean                    @default(false)
+  allowMax                     Boolean                    @default(false)
+  allowEmail                   Boolean                    @default(false)
+  portalAccess                 ClientPortalAccess?
+  goodsDiscount                Decimal                    @default(0) @db.Decimal(5, 2)
+  servicesDiscount             Decimal                    @default(0) @db.Decimal(5, 2)
+  balance                      Decimal                    @default(0) @db.Decimal(12, 2)
+  animals                      Animal[]
+  trustedPeople                TrustedPerson[]
+  queueEntries                 QueueEntry[]
+  appointments                 Appointment[]
+  visits                       Visit[]
+  tasks                        Task[]
+  bills                        Bill[]
+  sales                        Sale[]
+  balanceOperations            OwnerBalanceOperation[]
+  notifications                NotificationOutbox[]
+  onlineRequests               OnlineAppointmentRequest[]
+  createdAt                    DateTime                   @default(now())
+  updatedAt                    DateTime                   @updatedAt
 
   @@index([fullName])
   @@index([phone])
+  @@index([phoneNormalized])
+  @@index([fullNameNormalized, phoneNormalized])
   @@index([email])
+}
+
+model ClientPortalAccess {
+  id                 String             @id @default(uuid())
+  ownerId            String             @unique
+  owner              Owner              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  status             ClientPortalStatus @default(DISABLED)
+  inviteTokenHash    String?
+  inviteExpiresAt    DateTime?
+  invitedAt          DateTime?
+  lastLoginAt        DateTime?
+  loginCodeHash      String?
+  loginCodeExpiresAt DateTime?
+  loginCodeAttempts  Int                @default(0)
+  blockedReason      String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@index([status])
+  @@index([loginCodeExpiresAt])
 }
 
 model TrustedPerson {
@@ -329,110 +494,154 @@ model TrustedPerson {
 }
 
 model Animal {
-  id            String               @id @default(uuid())
-  ownerId       String
-  owner         Owner                @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  nickname      String
-  species       String?
-  breed         String?
-  sex           AnimalSex            @default(UNKNOWN)
-  birthDate     DateTime?
-  color         String?
-  microchip     String?
-  mark          String?
-  comment       String?
-  isSterilized  Boolean              @default(false)
-  isFavorite    Boolean              @default(false)
-  status        String?
-  weights       AnimalWeightRecord[]
-  vaccinations  Vaccination[]
-  queueEntries  QueueEntry[]
-  appointments  Appointment[]
-  visits        Visit[]
-  tasks         Task[]
-  bills         Bill[]
-  sales         Sale[]
-  createdAt     DateTime             @default(now())
-  updatedAt     DateTime             @updatedAt
+  id             String                     @id @default(uuid())
+  ownerId        String
+  owner          Owner                      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  nickname       String
+  species        String?
+  breed          String?
+  sex            AnimalSex                  @default(UNKNOWN)
+  birthDate      DateTime?
+  color          String?
+  microchip      String?
+  mark           String?
+  comment        String?
+  isSterilized   Boolean                    @default(false)
+  isFavorite     Boolean                    @default(false)
+  status         String?
+  weights        AnimalWeightRecord[]
+  vaccinations   Vaccination[]
+  queueEntries   QueueEntry[]
+  appointments   Appointment[]
+  visits         Visit[]
+  tasks          Task[]
+  bills          Bill[]
+  sales          Sale[]
+  notifications  NotificationOutbox[]
+  onlineRequests OnlineAppointmentRequest[]
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
 
   @@index([ownerId])
   @@index([nickname])
   @@index([microchip])
 }
 
+model AnimalSpecies {
+  id        String        @id @default(uuid())
+  code      String        @unique
+  title     String        @unique
+  sortOrder Int           @default(0)
+  breeds    AnimalBreed[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([sortOrder])
+}
+
+model AnimalBreed {
+  id        String        @id @default(uuid())
+  speciesId String
+  species   AnimalSpecies @relation(fields: [speciesId], references: [id], onDelete: Cascade)
+  title     String
+  sortOrder Int           @default(0)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@unique([speciesId, title])
+  @@index([speciesId, sortOrder])
+  @@index([title])
+}
+
 model AnimalWeightRecord {
-  id        String   @id @default(uuid())
-  animalId  String
-  animal    Animal   @relation(fields: [animalId], references: [id], onDelete: Cascade)
-  weightKg  Decimal  @db.Decimal(7, 3)
+  id         String   @id @default(uuid())
+  animalId   String
+  animal     Animal   @relation(fields: [animalId], references: [id], onDelete: Cascade)
+  weightKg   Decimal  @db.Decimal(7, 3)
   measuredAt DateTime @default(now())
-  createdAt DateTime @default(now())
+  createdAt  DateTime @default(now())
 
   @@index([animalId, measuredAt])
 }
 
 model Vaccination {
-  id        String   @id @default(uuid())
-  animalId  String
-  animal    Animal   @relation(fields: [animalId], references: [id], onDelete: Cascade)
-  title     String
-  status    String?
-  expiresAt DateTime?
-  notes     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                String    @id @default(uuid())
+  animalId          String
+  animal            Animal    @relation(fields: [animalId], references: [id], onDelete: Cascade)
+  title             String
+  status            String?
+  vaccinatedAt      DateTime?
+  expiresAt         DateTime?
+  vaccineBatch      String?
+  vaccineSeries     String?
+  vaccineExpiresAt  DateTime?
+  smsReminder       Boolean   @default(false)
+  notes             String?
+  revaccinationTask Task?     @relation("VaccinationRevaccinationTask")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   @@index([animalId])
+  @@index([vaccinatedAt])
   @@index([expiresAt])
 }
 
 model QueueEntry {
-  id          String       @id @default(uuid())
-  officeId    String?
-  office      ClinicOffice? @relation(fields: [officeId], references: [id], onDelete: SetNull)
-  ownerId     String?
-  owner       Owner?       @relation(fields: [ownerId], references: [id], onDelete: SetNull)
-  animalId    String?
-  animal      Animal?      @relation(fields: [animalId], references: [id], onDelete: SetNull)
-  employeeId  String?
-  employee    Employee?    @relation(fields: [employeeId], references: [id], onDelete: SetNull)
-  roomId      String?
-  room        Room?        @relation(fields: [roomId], references: [id], onDelete: SetNull)
-  ownerName   String?
-  phone       String?      @db.VarChar(32)
-  urgency     QueueUrgency @default(PLANNED)
-  status      QueueStatus  @default(WAITING)
-  comment     String?
-  visit       Visit?
-  createdAt   DateTime     @default(now())
-  startedAt   DateTime?
-  completedAt DateTime?
-  updatedAt   DateTime     @updatedAt
+  id             String        @id @default(uuid())
+  officeId       String?
+  office         ClinicOffice? @relation(fields: [officeId], references: [id], onDelete: SetNull)
+  ownerId        String?
+  owner          Owner?        @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  animalId       String?
+  animal         Animal?       @relation(fields: [animalId], references: [id], onDelete: SetNull)
+  employeeId     String?
+  employee       Employee?     @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  roomId         String?
+  room           Room?         @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  ownerName      String?
+  phone          String?       @db.VarChar(32)
+  ownerAddress   String?
+  animalNickname String?
+  animalSpecies  String?
+  animalBreed    String?
+  animalSex      AnimalSex?
+  urgency        QueueUrgency  @default(PLANNED)
+  status         QueueStatus   @default(WAITING)
+  comment        String?
+  visit          Visit?
+  createdAt      DateTime      @default(now())
+  startedAt      DateTime?
+  lastCalledAt   DateTime?
+  callCount      Int           @default(0)
+  completedAt    DateTime?
+  updatedAt      DateTime      @updatedAt
 
   @@index([status, createdAt])
+  @@index([status, lastCalledAt])
   @@index([ownerId])
   @@index([animalId])
 }
 
 model Appointment {
-  id          String            @id @default(uuid())
-  officeId    String?
-  office      ClinicOffice?      @relation(fields: [officeId], references: [id], onDelete: SetNull)
-  ownerId     String
-  owner       Owner             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  animalId    String
-  animal      Animal            @relation(fields: [animalId], references: [id], onDelete: Cascade)
-  employeeId  String?
-  employee    Employee?         @relation(fields: [employeeId], references: [id], onDelete: SetNull)
-  roomId      String?
-  room        Room?             @relation(fields: [roomId], references: [id], onDelete: SetNull)
-  startsAt    DateTime
-  endsAt      DateTime?
-  status      AppointmentStatus @default(PLANNED)
-  comment     String?
-  visit       Visit?
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  id            String                    @id @default(uuid())
+  officeId      String?
+  office        ClinicOffice?             @relation(fields: [officeId], references: [id], onDelete: SetNull)
+  ownerId       String
+  owner         Owner                     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  animalId      String
+  animal        Animal                    @relation(fields: [animalId], references: [id], onDelete: Cascade)
+  employeeId    String?
+  employee      Employee?                 @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  roomId        String?
+  room          Room?                     @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  startsAt      DateTime
+  endsAt        DateTime?
+  status        AppointmentStatus         @default(PLANNED)
+  comment       String?
+  visit         Visit?
+  onlineRequest OnlineAppointmentRequest?
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
 
   @@index([startsAt])
   @@index([employeeId, startsAt])
@@ -440,33 +649,62 @@ model Appointment {
   @@index([animalId])
 }
 
+model OnlineAppointmentRequest {
+  id              String              @id @default(uuid())
+  status          OnlineRequestStatus @default(NEW)
+  source          String              @default("PUBLIC_FORM")
+  ownerName       String
+  phone           String              @db.VarChar(32)
+  email           String?
+  animalNickname  String
+  animalSpecies   String?
+  animalBreed     String?
+  preferredAt     DateTime?
+  comment         String?
+  internalComment String?
+  ownerId         String?
+  owner           Owner?              @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  animalId        String?
+  animal          Animal?             @relation(fields: [animalId], references: [id], onDelete: SetNull)
+  appointmentId   String?             @unique
+  appointment     Appointment?        @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([status, createdAt])
+  @@index([phone])
+  @@index([ownerId])
+  @@index([animalId])
+}
+
 model Visit {
-  id            String               @id @default(uuid())
-  ownerId       String
-  owner         Owner                @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  animalId      String
-  animal        Animal               @relation(fields: [animalId], references: [id], onDelete: Cascade)
-  employeeId    String?
-  employee      Employee?            @relation(fields: [employeeId], references: [id], onDelete: SetNull)
-  appointmentId String?              @unique
-  appointment   Appointment?         @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
-  queueEntryId  String?              @unique
-  queueEntry    QueueEntry?          @relation(fields: [queueEntryId], references: [id], onDelete: SetNull)
-  hospitalBoxId String?
-  hospitalBox   HospitalBox?         @relation(fields: [hospitalBoxId], references: [id], onDelete: SetNull)
-  status        VisitStatus          @default(DRAFT)
-  startedAt     DateTime             @default(now())
-  completedAt   DateTime?
-  totalAmount   Decimal              @default(0) @db.Decimal(12, 2)
-  exam          VisitExam?
-  diagnoses     VisitDiagnosis[]
-  recommendation VisitRecommendation?
-  documents     VisitDocument[]
-  files         FileObject[]
-  bill          Bill?
-  stockMovements StockMovement[]
-  createdAt     DateTime             @default(now())
-  updatedAt     DateTime             @updatedAt
+  id               String               @id @default(uuid())
+  ownerId          String
+  owner            Owner                @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  animalId         String
+  animal           Animal               @relation(fields: [animalId], references: [id], onDelete: Cascade)
+  employeeId       String?
+  employee         Employee?            @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  appointmentId    String?              @unique
+  appointment      Appointment?         @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  queueEntryId     String?              @unique
+  queueEntry       QueueEntry?          @relation(fields: [queueEntryId], references: [id], onDelete: SetNull)
+  hospitalBoxId    String?
+  hospitalBox      HospitalBox?         @relation(fields: [hospitalBoxId], references: [id], onDelete: SetNull)
+  status           VisitStatus          @default(DRAFT)
+  startedAt        DateTime             @default(now())
+  completedAt      DateTime?
+  totalAmount      Decimal              @default(0) @db.Decimal(12, 2)
+  exam             VisitExam?
+  diagnoses        VisitDiagnosis[]
+  recommendation   VisitRecommendation?
+  documents        VisitDocument[]
+  files            FileObject[]
+  bill             Bill?
+  laboratoryOrders LaboratoryOrder[]
+  stockMovements   StockMovement[]
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
 
   @@index([ownerId])
   @@index([animalId])
@@ -491,15 +729,15 @@ model VisitExam {
 }
 
 model VisitDiagnosis {
-  id          String   @id @default(uuid())
-  visitId     String
-  visit       Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  id            String   @id @default(uuid())
+  visitId       String
+  visit         Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
   diagnosisType String?
-  title       String
-  description String?
-  status      String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  title         String
+  description   String?
+  status        String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@index([visitId])
 }
@@ -514,44 +752,135 @@ model VisitRecommendation {
   updatedAt     DateTime @updatedAt
 }
 
+model MedicalPhrase {
+  id         String              @id @default(uuid())
+  field      String
+  category   String?
+  title      String
+  text       String
+  textHash   String
+  species    String?
+  diagnosis  String?
+  source     MedicalPhraseSource @default(SYSTEM)
+  scopeKey   String              @default("system")
+  employeeId String?
+  employee   Employee?           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  isActive   Boolean             @default(true)
+  usageCount Int                 @default(0)
+  lastUsedAt DateTime?
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  @@unique([field, scopeKey, textHash])
+  @@index([field, isActive])
+  @@index([field, usageCount])
+  @@index([employeeId, field])
+  @@index([diagnosis])
+  @@index([species])
+}
+
 model VisitDocument {
-  id          String             @id @default(uuid())
-  visitId     String
-  visit       Visit              @relation(fields: [visitId], references: [id], onDelete: Cascade)
-  templateId  String?
-  template    DocumentTemplate?  @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  title       String
-  body        String?
-  status      DocumentStatus     @default(DRAFT)
+  id                String             @id @default(uuid())
+  visitId           String
+  visit             Visit              @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  templateId        String?
+  template          DocumentTemplate?  @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  title             String
+  body              String?
+  status            DocumentStatus     @default(DRAFT)
   generatedDocument GeneratedDocument?
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 
   @@index([visitId])
 }
 
+model NewsPost {
+  id                String         @id @default(uuid())
+  title             String
+  body              String
+  priority          NewsPriority   @default(INFO)
+  isPinned          Boolean        @default(false)
+  audienceRoleCodes String[]       @default([])
+  createdById       String?
+  createdBy         Employee?      @relation("NewsPostCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  reads             NewsPostRead[]
+  publishedAt       DateTime       @default(now())
+  archivedAt        DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@index([priority])
+  @@index([isPinned, publishedAt])
+  @@index([archivedAt])
+}
+
+model NewsPostRead {
+  newsPostId String
+  employeeId String
+  newsPost   NewsPost @relation(fields: [newsPostId], references: [id], onDelete: Cascade)
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  readAt     DateTime @default(now())
+
+  @@id([newsPostId, employeeId])
+  @@index([employeeId, readAt])
+}
+
 model Task {
-  id          String      @id @default(uuid())
-  ownerId     String?
-  owner       Owner?      @relation(fields: [ownerId], references: [id], onDelete: SetNull)
-  animalId    String?
-  animal      Animal?     @relation(fields: [animalId], references: [id], onDelete: SetNull)
-  assigneeId  String?
-  assignee    Employee?   @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
-  creatorId   String?
-  creator     Employee?   @relation("TaskCreator", fields: [creatorId], references: [id], onDelete: SetNull)
-  taskType    String?
-  title       String
-  comment     String?
-  status      TaskStatus  @default(OPEN)
-  dueAt       DateTime?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id                  String       @id @default(uuid())
+  ownerId             String?
+  owner               Owner?       @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  animalId            String?
+  animal              Animal?      @relation(fields: [animalId], references: [id], onDelete: SetNull)
+  assigneeId          String?
+  assignee            Employee?    @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  assigneeRoleCode    String?
+  creatorId           String?
+  creator             Employee?    @relation("TaskCreator", fields: [creatorId], references: [id], onDelete: SetNull)
+  sourceVaccinationId String?      @unique
+  sourceVaccination   Vaccination? @relation("VaccinationRevaccinationTask", fields: [sourceVaccinationId], references: [id], onDelete: SetNull)
+  taskType            String?
+  title               String
+  comment             String?
+  status              TaskStatus   @default(OPEN)
+  dueAt               DateTime?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
 
   @@index([status, dueAt])
   @@index([ownerId])
   @@index([animalId])
   @@index([assigneeId])
+  @@index([assigneeRoleCode])
+}
+
+model NotificationOutbox {
+  id          String                @id @default(uuid())
+  ownerId     String?
+  owner       Owner?                @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  animalId    String?
+  animal      Animal?               @relation(fields: [animalId], references: [id], onDelete: SetNull)
+  templateId  String?
+  template    NotificationTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  createdById String?
+  createdBy   Employee?             @relation("NotificationCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  channel     NotificationChannel
+  recipient   String
+  subject     String?
+  body        String
+  status      NotificationStatus    @default(QUEUED)
+  attempts    Int                   @default(0)
+  scheduledAt DateTime              @default(now())
+  sentAt      DateTime?
+  lastError   String?
+  metadata    Json?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  @@index([status, scheduledAt])
+  @@index([channel])
+  @@index([ownerId])
+  @@index([animalId])
 }
 
 model ProductCategory {
@@ -563,28 +892,28 @@ model ProductCategory {
 }
 
 model Product {
-  id                String          @id @default(uuid())
-  categoryId        String?
-  category          ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  title             String
-  sku               String?
-  gtin              String?
-  barcode           String?
-  vatRate           Decimal?        @db.Decimal(5, 2)
-  retailPrice       Decimal         @default(0) @db.Decimal(12, 2)
-  stockUnit         String?
-  writeOffUnit      String?
-  packageQuantity   Decimal?        @db.Decimal(12, 3)
-  minStock          Decimal?        @db.Decimal(12, 3)
-  shelfLifeDays     Int?
-  description       String?
-  batches           StockBatch[]
-  stockMovements    StockMovement[]
-  supplyItems       SupplyInvoiceItem[]
-  billItems         BillItem[]
-  saleItems         SaleItem[]
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  id              String              @id @default(uuid())
+  categoryId      String?
+  category        ProductCategory?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  title           String
+  sku             String?
+  gtin            String?
+  barcode         String?
+  vatRate         Decimal?            @db.Decimal(5, 2)
+  retailPrice     Decimal             @default(0) @db.Decimal(12, 2)
+  stockUnit       String?
+  writeOffUnit    String?
+  packageQuantity Decimal?            @db.Decimal(12, 3)
+  minStock        Decimal?            @db.Decimal(12, 3)
+  shelfLifeDays   Int?
+  description     String?
+  batches         StockBatch[]
+  stockMovements  StockMovement[]
+  supplyItems     SupplyInvoiceItem[]
+  billItems       BillItem[]
+  saleItems       SaleItem[]
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
 
   @@index([title])
   @@index([barcode])
@@ -599,20 +928,130 @@ model ServiceCategory {
 }
 
 model Service {
-  id          String           @id @default(uuid())
-  categoryId  String?
-  category    ServiceCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  title       String
-  price       Decimal          @default(0) @db.Decimal(12, 2)
-  priceType   String           @default("FIXED")
-  vatRate     Decimal?         @db.Decimal(5, 2)
-  description String?
-  billItems   BillItem[]
-  saleItems   SaleItem[]
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  id                 String              @id @default(uuid())
+  categoryId         String?
+  category           ServiceCategory?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  title              String
+  price              Decimal             @default(0) @db.Decimal(12, 2)
+  priceType          String              @default("FIXED")
+  vatRate            Decimal?            @db.Decimal(5, 2)
+  description        String?
+  billItems          BillItem[]
+  saleItems          SaleItem[]
+  laboratoryTests    LaboratoryTest[]
+  laboratoryProfiles LaboratoryProfile[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 
   @@index([title])
+}
+
+model LaboratoryTest {
+  id             String                  @id @default(uuid())
+  serviceId      String?
+  service        Service?                @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  code           String?
+  title          String
+  groupName      String?
+  material       String?
+  method         String?
+  unit           String?
+  referenceRange String?
+  species        String[]                @default([])
+  description    String?
+  isActive       Boolean                 @default(true)
+  profileLinks   LaboratoryProfileTest[]
+  orderItems     LaboratoryOrderItem[]
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+
+  @@index([title])
+  @@index([code])
+  @@index([groupName])
+  @@index([serviceId])
+  @@index([isActive])
+}
+
+model LaboratoryProfile {
+  id          String                  @id @default(uuid())
+  serviceId   String?
+  service     Service?                @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  code        String?
+  title       String
+  description String?
+  species     String[]                @default([])
+  isActive    Boolean                 @default(true)
+  tests       LaboratoryProfileTest[]
+  orderItems  LaboratoryOrderItem[]
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+
+  @@index([title])
+  @@index([code])
+  @@index([serviceId])
+  @@index([isActive])
+}
+
+model LaboratoryProfileTest {
+  profileId String
+  testId    String
+  sortOrder Int               @default(0)
+  profile   LaboratoryProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  test      LaboratoryTest    @relation(fields: [testId], references: [id], onDelete: Cascade)
+  createdAt DateTime          @default(now())
+
+  @@id([profileId, testId])
+  @@index([testId])
+  @@index([profileId, sortOrder])
+}
+
+model LaboratoryOrder {
+  id          String                @id @default(uuid())
+  visitId     String
+  visit       Visit                 @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  status      LaboratoryOrderStatus @default(ORDERED)
+  comment     String?
+  createdById String?
+  completedAt DateTime?
+  items       LaboratoryOrderItem[]
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  @@index([visitId])
+  @@index([status, createdAt])
+  @@index([createdById])
+}
+
+model LaboratoryOrderItem {
+  id             String                    @id @default(uuid())
+  orderId        String
+  order          LaboratoryOrder           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  testId         String?
+  test           LaboratoryTest?           @relation(fields: [testId], references: [id], onDelete: SetNull)
+  profileId      String?
+  profile        LaboratoryProfile?        @relation(fields: [profileId], references: [id], onDelete: SetNull)
+  billItemId     String?
+  billItem       BillItem?                 @relation(fields: [billItemId], references: [id], onDelete: SetNull)
+  status         LaboratoryOrderItemStatus @default(ORDERED)
+  title          String
+  code           String?
+  groupName      String?
+  material       String?
+  method         String?
+  unit           String?
+  referenceRange String?
+  resultValue    String?
+  resultText     String?
+  comment        String?
+  completedAt    DateTime?
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+
+  @@index([orderId])
+  @@index([testId])
+  @@index([profileId])
+  @@index([billItemId])
+  @@index([status])
 }
 
 model Supplier {
@@ -659,6 +1098,8 @@ model StockMovement {
   id            String            @id @default(uuid())
   productId     String
   product       Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  billItemId    String?
+  billItem      BillItem?         @relation(fields: [billItemId], references: [id], onDelete: SetNull)
   stockBatchId  String?
   stockBatch    StockBatch?       @relation(fields: [stockBatchId], references: [id], onDelete: SetNull)
   warehouseId   String?
@@ -675,6 +1116,7 @@ model StockMovement {
   createdAt     DateTime          @default(now())
 
   @@index([productId])
+  @@index([billItemId])
   @@index([warehouseId])
   @@index([type])
   @@index([createdAt])
@@ -699,16 +1141,16 @@ model SupplyInvoiceItem {
   id              String        @id @default(uuid())
   supplyInvoiceId String
   supplyInvoice   SupplyInvoice @relation(fields: [supplyInvoiceId], references: [id], onDelete: Cascade)
-  productId        String
-  product          Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
-  warehouseId      String
-  warehouse        Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
-  quantity         Decimal       @db.Decimal(12, 3)
-  purchasePrice    Decimal       @db.Decimal(12, 2)
-  discountAmount   Decimal       @default(0) @db.Decimal(12, 2)
-  expiresAt        DateTime?
-  series           String?
-  createdAt        DateTime      @default(now())
+  productId       String
+  product         Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  warehouseId     String
+  warehouse       Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  quantity        Decimal       @db.Decimal(12, 3)
+  purchasePrice   Decimal       @db.Decimal(12, 2)
+  discountAmount  Decimal       @default(0) @db.Decimal(12, 2)
+  expiresAt       DateTime?
+  series          String?
+  createdAt       DateTime      @default(now())
 
   @@index([supplyInvoiceId])
   @@index([productId])
@@ -728,6 +1170,7 @@ model Bill {
   status      PaymentStatus @default(UNPAID)
   totalAmount Decimal       @default(0) @db.Decimal(12, 2)
   paidAmount  Decimal       @default(0) @db.Decimal(12, 2)
+  dueAt       DateTime?
   items       BillItem[]
   payments    Payment[]
   createdAt   DateTime      @default(now())
@@ -736,40 +1179,49 @@ model Bill {
   @@index([ownerId])
   @@index([animalId])
   @@index([status])
+  @@index([dueAt])
   @@index([createdAt])
 }
 
 model BillItem {
-  id          String   @id @default(uuid())
-  billId      String
-  bill        Bill     @relation(fields: [billId], references: [id], onDelete: Cascade)
-  productId   String?
-  product     Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
-  serviceId   String?
-  service     Service? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
-  title       String
-  quantity    Decimal  @default(1) @db.Decimal(12, 3)
-  unitPrice   Decimal  @default(0) @db.Decimal(12, 2)
-  discount    Decimal  @default(0) @db.Decimal(12, 2)
-  totalAmount Decimal  @default(0) @db.Decimal(12, 2)
-  createdAt   DateTime @default(now())
+  id                   String                @id @default(uuid())
+  billId               String
+  bill                 Bill                  @relation(fields: [billId], references: [id], onDelete: Cascade)
+  productId            String?
+  product              Product?              @relation(fields: [productId], references: [id], onDelete: SetNull)
+  serviceId            String?
+  service              Service?              @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  title                String
+  quantity             Decimal               @default(1) @db.Decimal(12, 3)
+  unitPrice            Decimal               @default(0) @db.Decimal(12, 2)
+  discount             Decimal               @default(0) @db.Decimal(12, 2)
+  totalAmount          Decimal               @default(0) @db.Decimal(12, 2)
+  laboratoryOrderItems LaboratoryOrderItem[]
+  stockMovements       StockMovement[]
+  createdAt            DateTime              @default(now())
 
   @@index([billId])
 }
 
 model Payment {
-  id          String      @id @default(uuid())
-  billId      String
-  bill        Bill        @relation(fields: [billId], references: [id], onDelete: Cascade)
-  employeeId  String?
-  employee    Employee?   @relation(fields: [employeeId], references: [id], onDelete: SetNull)
-  type        PaymentType
-  amount      Decimal     @db.Decimal(12, 2)
-  paidAt      DateTime    @default(now())
-  comment     String?
-  createdAt   DateTime    @default(now())
+  id              String         @id @default(uuid())
+  billId          String
+  bill            Bill           @relation(fields: [billId], references: [id], onDelete: Cascade)
+  employeeId      String?
+  employee        Employee?      @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  paymentMethodId String?
+  paymentMethod   PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
+  cashboxId       String?
+  cashbox         Cashbox?       @relation(fields: [cashboxId], references: [id], onDelete: SetNull)
+  type            PaymentType
+  amount          Decimal        @db.Decimal(12, 2)
+  paidAt          DateTime       @default(now())
+  comment         String?
+  createdAt       DateTime       @default(now())
 
   @@index([billId])
+  @@index([paymentMethodId])
+  @@index([cashboxId])
   @@index([paidAt])
 }
 
@@ -787,17 +1239,17 @@ model OwnerBalanceOperation {
 }
 
 model Sale {
-  id            String          @id @default(uuid())
-  ownerId       String?
-  owner         Owner?          @relation(fields: [ownerId], references: [id], onDelete: SetNull)
-  animalId      String?
-  animal        Animal?         @relation(fields: [animalId], references: [id], onDelete: SetNull)
-  totalAmount   Decimal         @default(0) @db.Decimal(12, 2)
-  items         SaleItem[]
-  bill          Bill?
+  id             String          @id @default(uuid())
+  ownerId        String?
+  owner          Owner?          @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  animalId       String?
+  animal         Animal?         @relation(fields: [animalId], references: [id], onDelete: SetNull)
+  totalAmount    Decimal         @default(0) @db.Decimal(12, 2)
+  items          SaleItem[]
+  bill           Bill?
   stockMovements StockMovement[]
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
   @@index([ownerId])
   @@index([animalId])
@@ -831,16 +1283,16 @@ model DocumentTemplateCategory {
 }
 
 model DocumentTemplate {
-  id          String                    @id @default(uuid())
-  categoryId  String?
-  category    DocumentTemplateCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  title       String
-  body        String?
-  variables   Json?
-  visitDocuments VisitDocument[]
+  id                 String                    @id @default(uuid())
+  categoryId         String?
+  category           DocumentTemplateCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  title              String
+  body               String?
+  variables          Json?
+  visitDocuments     VisitDocument[]
   generatedDocuments GeneratedDocument[]
-  createdAt   DateTime                  @default(now())
-  updatedAt   DateTime                  @updatedAt
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
 
   @@index([title])
 }
@@ -860,16 +1312,20 @@ model GeneratedDocument {
 }
 
 model NotificationTemplate {
-  id        String   @id @default(uuid())
+  id        String               @id @default(uuid())
   channel   String
   eventCode String
   title     String
+  subject   String?
   body      String
   variables Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  isActive  Boolean              @default(true)
+  messages  NotificationOutbox[]
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
 
   @@unique([channel, eventCode])
+  @@index([isActive])
 }
 
 model TemplateVariable {
@@ -882,30 +1338,30 @@ model TemplateVariable {
 }
 
 model FileObject {
-  id           String         @id @default(uuid())
-  visitId      String?
-  visit        Visit?         @relation(fields: [visitId], references: [id], onDelete: SetNull)
-  storageKey   String         @unique
-  originalName String
-  mimeType     String?
-  sizeBytes    Int?
-  visibility   FileVisibility @default(PRIVATE)
+  id                 String              @id @default(uuid())
+  visitId            String?
+  visit              Visit?              @relation(fields: [visitId], references: [id], onDelete: SetNull)
+  storageKey         String              @unique
+  originalName       String
+  mimeType           String?
+  sizeBytes          Int?
+  visibility         FileVisibility      @default(PRIVATE)
   generatedDocuments GeneratedDocument[]
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 
   @@index([visitId])
 }
 
 model BackupJob {
-  id        String    @id @default(uuid())
-  status    JobStatus @default(PENDING)
+  id         String    @id @default(uuid())
+  status     JobStatus @default(PENDING)
   storageKey String?
-  startedAt DateTime?
+  startedAt  DateTime?
   finishedAt DateTime?
-  error     String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  error      String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 }
 
 model BackgroundJob {

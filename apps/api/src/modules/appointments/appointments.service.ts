@@ -296,6 +296,9 @@ const appointmentInclude = {
   room: {
     select: { id: true, name: true },
   },
+  visit: {
+    select: { id: true, status: true, startedAt: true, totalAmount: true },
+  },
 } satisfies Prisma.AppointmentInclude;
 
 type ExistingAppointment = Prisma.AppointmentGetPayload<{

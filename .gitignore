@@ -25,9 +25,13 @@ pnpm-debug.log*
 storage/
 uploads/
 tmp/
+backups/
+
+# Large offline installers stay local and are copied to the flash drive when present.
+installers/*.exe
+!installers/temichevvet.ico
 
 # OS / editor
 .DS_Store
 .idea/
 .vscode/
-

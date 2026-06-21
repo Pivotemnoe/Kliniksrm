@@ -34,6 +34,12 @@ export class CreateEmployeeDto {
   @MaxLength(120)
   position?: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  defaultRoute?: string;
+
   @ApiProperty()
   @IsString()
   @MinLength(8)
@@ -45,5 +51,22 @@ export class CreateEmployeeDto {
   @ArrayNotEmpty()
   @IsString({ each: true })
   roleCodes!: string[];
-}
 
+  @ApiPropertyOptional({ example: ['documents.manage'] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  permissionGrants?: string[];
+
+  @ApiPropertyOptional({ example: ['stock.manage'] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  permissionDenials?: string[];
+
+  @ApiPropertyOptional({ example: ['warehouse-id'] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  warehouseIds?: string[];
+}

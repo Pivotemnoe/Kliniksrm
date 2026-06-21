@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEmail, IsNumber, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { NotificationChannel } from '@prisma/client';
+import { IsBoolean, IsEmail, IsEnum, IsNumber, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
 
 export class CreateOwnerDto {
   @ApiProperty()
@@ -55,6 +56,43 @@ export class CreateOwnerDto {
   @IsString()
   @MaxLength(1000)
   comment?: string;
+
+  @ApiPropertyOptional({ enum: NotificationChannel })
+  @IsOptional()
+  @IsEnum(NotificationChannel)
+  preferredNotificationChannel?: NotificationChannel;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  telegramChatId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  maxUserId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  allowSms?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  allowTelegram?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  allowMax?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  allowEmail?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()

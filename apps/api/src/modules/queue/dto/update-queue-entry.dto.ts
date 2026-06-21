@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { QueueStatus, QueueUrgency } from '@prisma/client';
-import { IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { AnimalSex, QueueStatus, QueueUrgency } from '@prisma/client';
+import { IsEnum, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
 
 export class UpdateQueueEntryDto {
   @ApiPropertyOptional()
@@ -39,6 +39,37 @@ export class UpdateQueueEntryDto {
   @IsString()
   @MaxLength(32)
   phone?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  ownerAddress?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  animalNickname?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
+  animalSpecies?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  animalBreed?: string;
+
+  @ApiPropertyOptional({ enum: AnimalSex })
+  @IsOptional()
+  @IsEnum(AnimalSex)
+  animalSex?: AnimalSex;
 
   @ApiPropertyOptional({ enum: QueueUrgency })
   @IsOptional()

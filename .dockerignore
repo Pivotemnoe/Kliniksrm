@@ -15,5 +15,6 @@ public
 storage
 uploads
 tmp
+backups
 *.log
-
+installers/*.exe

@@ -8,6 +8,7 @@ import { CreateBillDto } from './dto/create-bill.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { ListBillsQueryDto } from './dto/list-bills-query.dto';
 import { RefundPaymentDto } from './dto/refund-payment.dto';
+import { UpdateBillDto } from './dto/update-bill.dto';
 import { UpdateBillItemDto } from './dto/update-bill-item.dto';
 import { BillingService } from './billing.service';
 
@@ -23,6 +24,13 @@ export class BillingController {
     return this.billingService.listBills(query);
   }
 
+  @Get('alerts')
+  @RequirePermissions('billing.read')
+  @ApiOkResponse({ description: 'Bills with unpaid debt.' })
+  listBillAlerts(@Query() query: ListBillsQueryDto) {
+    return this.billingService.listBillAlerts(query);
+  }
+
   @Post()
   @RequirePermissions('billing.manage')
   @ApiCreatedResponse({ description: 'Manual bill created.' })
@@ -35,6 +43,13 @@ export class BillingController {
   @ApiOkResponse({ description: 'Bill card.' })
   getBill(@Param('billId') billId: string) {
     return this.billingService.getBill(billId);
+  }
+
+  @Patch(':billId')
+  @RequirePermissions('billing.manage')
+  @ApiOkResponse({ description: 'Bill updated.' })
+  updateBill(@Param('billId') billId: string, @Body() dto: UpdateBillDto, @CurrentEmployee() actor: AuthEmployee) {
+    return this.billingService.updateBill(billId, dto, actor.id);
   }
 
   @Post(':billId/cancel')

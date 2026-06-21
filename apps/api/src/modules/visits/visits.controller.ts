@@ -4,10 +4,12 @@ import { AuthEmployee } from '../auth/auth.types';
 import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { AddVisitServiceDto } from './dto/add-visit-service.dto';
+import { CreateVisitLaboratoryOrderDto } from './dto/create-visit-laboratory-order.dto';
 import { CreateVisitDiagnosisDto } from './dto/create-visit-diagnosis.dto';
 import { CreateVisitDto } from './dto/create-visit.dto';
 import { ListVisitsQueryDto } from './dto/list-visits-query.dto';
 import { UpdateVisitDiagnosisDto } from './dto/update-visit-diagnosis.dto';
+import { UpdateVisitLaboratoryItemDto } from './dto/update-visit-laboratory-item.dto';
 import { UpdateVisitServiceDto } from './dto/update-visit-service.dto';
 import { UpdateVisitDto } from './dto/update-visit.dto';
 import { UpsertVisitExamDto } from './dto/upsert-visit-exam.dto';
@@ -44,35 +46,35 @@ export class VisitsController {
   @RequirePermissions('visits.manage')
   @ApiOkResponse({ description: 'Clinical visit updated.' })
   updateVisit(@Param('visitId') visitId: string, @Body() dto: UpdateVisitDto, @CurrentEmployee() actor: AuthEmployee) {
-    return this.visitsService.updateVisit(visitId, dto, actor.id);
+    return this.visitsService.updateVisit(visitId, dto, actor);
   }
 
   @Post(':visitId/start')
   @RequirePermissions('visits.manage')
   @ApiOkResponse({ description: 'Clinical visit moved to in-progress.' })
   startVisit(@Param('visitId') visitId: string, @CurrentEmployee() actor: AuthEmployee) {
-    return this.visitsService.startVisit(visitId, actor.id);
+    return this.visitsService.startVisit(visitId, actor);
   }
 
   @Post(':visitId/complete')
   @RequirePermissions('visits.manage')
   @ApiOkResponse({ description: 'Clinical visit completed.' })
   completeVisit(@Param('visitId') visitId: string, @CurrentEmployee() actor: AuthEmployee) {
-    return this.visitsService.completeVisit(visitId, actor.id);
+    return this.visitsService.completeVisit(visitId, actor);
   }
 
   @Post(':visitId/cancel')
   @RequirePermissions('visits.manage')
   @ApiOkResponse({ description: 'Clinical visit cancelled.' })
   cancelVisit(@Param('visitId') visitId: string, @CurrentEmployee() actor: AuthEmployee) {
-    return this.visitsService.cancelVisit(visitId, actor.id);
+    return this.visitsService.cancelVisit(visitId, actor);
   }
 
   @Put(':visitId/exam')
   @RequirePermissions('visits.manage')
   @ApiOkResponse({ description: 'Visit examination sheet saved.' })
   upsertExam(@Param('visitId') visitId: string, @Body() dto: UpsertVisitExamDto, @CurrentEmployee() actor: AuthEmployee) {
-    return this.visitsService.upsertExam(visitId, dto, actor.id);
+    return this.visitsService.upsertExam(visitId, dto, actor);
   }
 
   @Put(':visitId/recommendation')
@@ -83,7 +85,7 @@ export class VisitsController {
     @Body() dto: UpsertVisitRecommendationDto,
     @CurrentEmployee() actor: AuthEmployee,
   ) {
-    return this.visitsService.upsertRecommendation(visitId, dto, actor.id);
+    return this.visitsService.upsertRecommendation(visitId, dto, actor);
   }
 
   @Post(':visitId/diagnoses')
@@ -94,7 +96,7 @@ export class VisitsController {
     @Body() dto: CreateVisitDiagnosisDto,
     @CurrentEmployee() actor: AuthEmployee,
   ) {
-    return this.visitsService.createDiagnosis(visitId, dto, actor.id);
+    return this.visitsService.createDiagnosis(visitId, dto, actor);
   }
 
   @Patch(':visitId/diagnoses/:diagnosisId')
@@ -106,7 +108,7 @@ export class VisitsController {
     @Body() dto: UpdateVisitDiagnosisDto,
     @CurrentEmployee() actor: AuthEmployee,
   ) {
-    return this.visitsService.updateDiagnosis(visitId, diagnosisId, dto, actor.id);
+    return this.visitsService.updateDiagnosis(visitId, diagnosisId, dto, actor);
   }
 
   @Delete(':visitId/diagnoses/:diagnosisId')
@@ -117,14 +119,14 @@ export class VisitsController {
     @Param('diagnosisId') diagnosisId: string,
     @CurrentEmployee() actor: AuthEmployee,
   ) {
-    return this.visitsService.deleteDiagnosis(visitId, diagnosisId, actor.id);
+    return this.visitsService.deleteDiagnosis(visitId, diagnosisId, actor);
   }
 
   @Post(':visitId/services')
   @RequirePermissions('visits.manage')
   @ApiCreatedResponse({ description: 'Service added to visit bill.' })
   addService(@Param('visitId') visitId: string, @Body() dto: AddVisitServiceDto, @CurrentEmployee() actor: AuthEmployee) {
-    return this.visitsService.addService(visitId, dto, actor.id);
+    return this.visitsService.addService(visitId, dto, actor);
   }
 
   @Patch(':visitId/services/:billItemId')
@@ -136,7 +138,7 @@ export class VisitsController {
     @Body() dto: UpdateVisitServiceDto,
     @CurrentEmployee() actor: AuthEmployee,
   ) {
-    return this.visitsService.updateService(visitId, billItemId, dto, actor.id);
+    return this.visitsService.updateService(visitId, billItemId, dto, actor);
   }
 
   @Delete(':visitId/services/:billItemId')
@@ -147,6 +149,37 @@ export class VisitsController {
     @Param('billItemId') billItemId: string,
     @CurrentEmployee() actor: AuthEmployee,
   ) {
-    return this.visitsService.deleteService(visitId, billItemId, actor.id);
+    return this.visitsService.deleteService(visitId, billItemId, actor);
+  }
+
+  @Post(':visitId/laboratory-orders')
+  @RequirePermissions('visits.manage')
+  @ApiCreatedResponse({ description: 'Laboratory order added to visit.' })
+  createLaboratoryOrder(
+    @Param('visitId') visitId: string,
+    @Body() dto: CreateVisitLaboratoryOrderDto,
+    @CurrentEmployee() actor: AuthEmployee,
+  ) {
+    return this.visitsService.createLaboratoryOrder(visitId, dto, actor);
+  }
+
+  @Patch(':visitId/laboratory-orders/:orderId/items/:itemId')
+  @RequirePermissions('visits.manage')
+  @ApiOkResponse({ description: 'Laboratory order item result updated.' })
+  updateLaboratoryOrderItem(
+    @Param('visitId') visitId: string,
+    @Param('orderId') orderId: string,
+    @Param('itemId') itemId: string,
+    @Body() dto: UpdateVisitLaboratoryItemDto,
+    @CurrentEmployee() actor: AuthEmployee,
+  ) {
+    return this.visitsService.updateLaboratoryOrderItem(visitId, orderId, itemId, dto, actor);
+  }
+
+  @Post(':visitId/laboratory-orders/:orderId/cancel')
+  @RequirePermissions('visits.manage')
+  @ApiOkResponse({ description: 'Laboratory order cancelled.' })
+  cancelLaboratoryOrder(@Param('visitId') visitId: string, @Param('orderId') orderId: string, @CurrentEmployee() actor: AuthEmployee) {
+    return this.visitsService.cancelLaboratoryOrder(visitId, orderId, actor);
   }
 }

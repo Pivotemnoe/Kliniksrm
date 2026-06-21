@@ -9,6 +9,11 @@ export class AddVisitServiceDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsUUID()
+  productId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
   @MaxLength(500)
   title?: string;

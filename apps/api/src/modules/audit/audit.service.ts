@@ -41,7 +41,7 @@ export class AuditService {
           },
         },
       },
-      take: 100,
+      take: 300,
     });
   }
 }

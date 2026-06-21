@@ -21,12 +21,14 @@ export class UpdateAnimalDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MinLength(1)
   @MaxLength(80)
   species?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MinLength(1)
   @MaxLength(120)
   breed?: string;
 
@@ -80,4 +82,3 @@ export class UpdateAnimalDto {
   @MaxLength(80)
   status?: string;
 }
-
