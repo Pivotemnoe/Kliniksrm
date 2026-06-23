@@ -12,6 +12,7 @@ $SourceDir = Join-Path $PortableRoot "CRM"
 $InstallDir = Join-Path $Env:USERPROFILE "TemichevVet"
 $ImagesTar = Join-Path $PortableRoot "docker-images\temichevvet-images.tar"
 $InstalledEnvFile = Join-Path $InstallDir ".env"
+$PortableVersionFile = Join-Path $PortableRoot "VERSION.txt"
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
@@ -205,6 +206,23 @@ function New-GithubUpdatesCommand {
   Set-Content -Path $CommandPath -Value $content -Encoding ASCII
 }
 
+function New-VersionCheckCommand {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$CommandPath
+  )
+
+  $content = @(
+    "@echo off",
+    "chcp 65001 >nul",
+    "setlocal",
+    "powershell -NoProfile -ExecutionPolicy Bypass -File ""%USERPROFILE%\TemichevVet\scripts\show-clinic-version.ps1"" %*",
+    "echo.",
+    "pause"
+  )
+  Set-Content -Path $CommandPath -Value $content -Encoding ASCII
+}
+
 function Install-PortableAssets {
   $sourceIcon = Join-Path $PortableRoot "installers\temichevvet.ico"
   if (!(Test-Path $sourceIcon)) {
@@ -224,6 +242,7 @@ function Install-LauncherShortcuts {
 
   $internetUpdater = Join-Path $InstallDir "Обновить TemichevVet через интернет.cmd"
   $githubConfigurator = Join-Path $InstallDir "Настроить обновления GitHub.cmd"
+  $versionChecker = Join-Path $InstallDir "Проверить версию TemichevVet.cmd"
   $desktop = [Environment]::GetFolderPath("Desktop")
   $startMenu = [Environment]::GetFolderPath("Programs")
   $startMenuDir = Join-Path $startMenu "TemichevVet"
@@ -231,6 +250,7 @@ function Install-LauncherShortcuts {
 
   New-InternetUpdateCommand $internetUpdater
   New-GithubUpdatesCommand $githubConfigurator
+  New-VersionCheckCommand $versionChecker
 
   try {
     New-LauncherShortcut (Join-Path $desktop "TemichevVet.lnk") $launcher
@@ -251,6 +271,14 @@ function Install-LauncherShortcuts {
       (Join-Path $startMenuDir "Настроить обновления GitHub.lnk") `
       $githubConfigurator `
       "Настроить адреса Docker-образов TemichevVet"
+    New-LauncherShortcut `
+      (Join-Path $desktop "Проверить версию TemichevVet.lnk") `
+      $versionChecker `
+      "Показать установленную сборку TemichevVet"
+    New-LauncherShortcut `
+      (Join-Path $startMenuDir "Проверить версию TemichevVet.lnk") `
+      $versionChecker `
+      "Показать установленную сборку TemichevVet"
   } catch {
     Write-Host "Could not create Windows .lnk shortcut. Creating .cmd launcher instead."
   }
@@ -261,6 +289,8 @@ function Install-LauncherShortcuts {
   Copy-Item -Force -Path $internetUpdater -Destination (Join-Path $startMenuDir "Обновить TemichevVet через интернет.cmd")
   Copy-Item -Force -Path $githubConfigurator -Destination (Join-Path $desktop "Настроить обновления GitHub.cmd")
   Copy-Item -Force -Path $githubConfigurator -Destination (Join-Path $startMenuDir "Настроить обновления GitHub.cmd")
+  Copy-Item -Force -Path $versionChecker -Destination (Join-Path $desktop "Проверить версию TemichevVet.cmd")
+  Copy-Item -Force -Path $versionChecker -Destination (Join-Path $startMenuDir "Проверить версию TemichevVet.cmd")
   Write-Host "Created launchers: Desktop and Start menu."
 }
 
@@ -343,6 +373,10 @@ if (!$SkipCopy) {
 }
 
 Install-PortableAssets
+
+if (Test-Path $PortableVersionFile) {
+  Copy-Item -Force -Path $PortableVersionFile -Destination (Join-Path $InstallDir "VERSION.txt")
+}
 
 Set-InstalledEnvDefault "TEMICHEVVET_REMOTE_API_IMAGE" "ghcr.io/pivotemnoe/kliniksrm-api:stable"
 Set-InstalledEnvDefault "TEMICHEVVET_REMOTE_WEB_IMAGE" "ghcr.io/pivotemnoe/kliniksrm-web:stable"

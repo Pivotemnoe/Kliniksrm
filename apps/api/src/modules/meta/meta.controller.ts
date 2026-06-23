@@ -37,6 +37,9 @@ export class MetaController {
     return {
       name: 'TemichevVet CRM API',
       version: '0.1.0',
+      revision: process.env.TEMICHEVVET_GIT_COMMIT || 'local',
+      buildDate: process.env.TEMICHEVVET_BUILD_DATE || null,
+      imageSource: process.env.TEMICHEVVET_IMAGE_SOURCE || null,
       modules,
     };
   }

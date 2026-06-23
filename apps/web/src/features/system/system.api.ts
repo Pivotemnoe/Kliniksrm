@@ -10,6 +10,9 @@ export type HealthResponse = {
 export type MetaResponse = {
   name: string;
   version: string;
+  revision?: string;
+  buildDate?: string | null;
+  imageSource?: string | null;
   modules: string[];
 };
 

@@ -37,8 +37,13 @@ export function SystemStatus() {
             DB {healthQuery.data?.database ?? '...'}
           </Tag>
           <Tag color="blue">{metaQuery.data?.version ? `v${metaQuery.data.version}` : 'meta ...'}</Tag>
+          {metaQuery.data?.revision ? <Tag color="purple">commit {metaQuery.data.revision.slice(0, 12)}</Tag> : null}
+          {metaQuery.data?.buildDate ? <Tag>{metaQuery.data.buildDate}</Tag> : null}
           <Tag>{metaQuery.data?.modules.length ?? 0} модулей</Tag>
         </Space>
+        {metaQuery.data?.imageSource ? (
+          <Typography.Text type="secondary">Источник сборки: {metaQuery.data.imageSource}</Typography.Text>
+        ) : null}
       </Space>
     </div>
   );

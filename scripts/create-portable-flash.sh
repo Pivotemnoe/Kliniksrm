@@ -82,6 +82,11 @@ fi
 PORTABLE_DIR="$DESTINATION/TemichevVet-Portable"
 TMP_DIR="$DESTINATION/TemichevVet-Portable.tmp"
 BACKUP_DIR="$DESTINATION/TemichevVet-Portable.old-$(date +%Y%m%d-%H%M%S)"
+BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+GIT_COMMIT="local"
+if command -v git >/dev/null 2>&1 && git -C "$ROOT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  GIT_COMMIT="$(git -C "$ROOT_DIR" rev-parse HEAD 2>/dev/null || echo local)"
+fi
 
 if ! command -v rsync >/dev/null 2>&1; then
   echo "Не найдена команда rsync." >&2
@@ -135,6 +140,7 @@ cp "$ROOT_DIR/scripts/portable/start-windows.bat" "$TMP_DIR/Установить
 cp "$ROOT_DIR/scripts/portable/update-windows.bat" "$TMP_DIR/Обновить TemichevVet - Windows.bat"
 cp "$ROOT_DIR/scripts/portable/update-online-windows.bat" "$TMP_DIR/Обновить TemichevVet через интернет - Windows.bat"
 cp "$ROOT_DIR/scripts/portable/configure-github-updates-windows.bat" "$TMP_DIR/Настроить обновления GitHub - Windows.bat"
+cp "$ROOT_DIR/scripts/portable/check-version-windows.bat" "$TMP_DIR/Проверить версию TemichevVet - Windows.bat"
 cp "$ROOT_DIR/scripts/portable/start-workstation-windows.bat" "$TMP_DIR/Подключить рабочее место - Windows.bat"
 cp "$ROOT_DIR/scripts/portable/start-mac.command" "$TMP_DIR/Установить TemichevVet - Mac.command"
 cp "$ROOT_DIR/scripts/portable/update-mac.command" "$TMP_DIR/Обновить TemichevVet - Mac.command"
@@ -143,11 +149,9 @@ cp "$ROOT_DIR/scripts/portable/update-linux.sh" "$TMP_DIR/Обновить Temic
 
 {
   echo "TemichevVet Portable"
-  echo "created_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo "created_at=$BUILD_DATE"
   echo "platform=$PLATFORM"
-  if command -v git >/dev/null 2>&1 && git -C "$ROOT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    echo "git_commit=$(git -C "$ROOT_DIR" rev-parse --short HEAD 2>/dev/null || true)"
-  fi
+  echo "git_commit=$GIT_COMMIT"
 } > "$TMP_DIR/VERSION.txt"
 
 if [[ -d "$ROOT_DIR/installers" ]]; then
@@ -181,8 +185,16 @@ if [[ "$INCLUDE_IMAGES" == "true" ]]; then
     echo "Использую уже готовые локальные Docker-образы api и web для платформы $PLATFORM..."
   else
     echo "Собираю Docker-образы api и web для платформы $PLATFORM..."
-    DOCKER_DEFAULT_PLATFORM="$PLATFORM" docker buildx build --platform "$PLATFORM" --load --pull=false -t temichevvet-api:local -f apps/api/Dockerfile .
-    DOCKER_DEFAULT_PLATFORM="$PLATFORM" docker buildx build --platform "$PLATFORM" --load --pull=false -t temichevvet-web:local -f apps/web/Dockerfile .
+    DOCKER_DEFAULT_PLATFORM="$PLATFORM" docker buildx build --platform "$PLATFORM" --load --pull=false \
+      --build-arg "TEMICHEVVET_GIT_COMMIT=$GIT_COMMIT" \
+      --build-arg "TEMICHEVVET_BUILD_DATE=$BUILD_DATE" \
+      --build-arg "TEMICHEVVET_IMAGE_SOURCE=portable-flash" \
+      -t temichevvet-api:local -f apps/api/Dockerfile .
+    DOCKER_DEFAULT_PLATFORM="$PLATFORM" docker buildx build --platform "$PLATFORM" --load --pull=false \
+      --build-arg "TEMICHEVVET_GIT_COMMIT=$GIT_COMMIT" \
+      --build-arg "TEMICHEVVET_BUILD_DATE=$BUILD_DATE" \
+      --build-arg "TEMICHEVVET_IMAGE_SOURCE=portable-flash" \
+      -t temichevvet-web:local -f apps/web/Dockerfile .
   fi
 
   IMAGES="$(docker compose config --images | tr '\n' ' ')"
@@ -233,6 +245,7 @@ echo "  Установить TemichevVet - Windows.bat"
 echo "  Обновить TemichevVet - Windows.bat"
 echo "  Обновить TemichevVet через интернет - Windows.bat"
 echo "  Настроить обновления GitHub - Windows.bat"
+echo "  Проверить версию TemichevVet - Windows.bat"
 echo "  Подключить рабочее место - Windows.bat"
 echo "  Установить TemichevVet - Mac.command"
 echo "  Обновить TemichevVet - Mac.command"

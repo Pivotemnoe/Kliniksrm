@@ -23,6 +23,15 @@ RUN npm --workspace @clinic-crm/web run build
 
 FROM nginx:1.27-alpine AS runtime
 
+ARG TEMICHEVVET_GIT_COMMIT=local
+ARG TEMICHEVVET_BUILD_DATE=unknown
+ARG TEMICHEVVET_IMAGE_SOURCE=local
+
+LABEL org.opencontainers.image.title="TemichevVet CRM Web"
+LABEL org.opencontainers.image.revision=$TEMICHEVVET_GIT_COMMIT
+LABEL org.opencontainers.image.created=$TEMICHEVVET_BUILD_DATE
+LABEL org.opencontainers.image.source=$TEMICHEVVET_IMAGE_SOURCE
+
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
 
