@@ -1,4 +1,4 @@
-import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
+import { OrderedListOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Button, Input, Select, Space, Table, Tag, Typography } from 'antd';
 import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
@@ -12,6 +12,8 @@ import { formatDateTime } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
 import { getAppointment } from '../appointments/appointments.api';
 import { getQueueEntry } from '../queue/queue.api';
+import { createQueueEntryFromForm } from '../queue/createQueueEntryFromForm';
+import { QueueFormDrawer, QueueFormSubmitInput } from '../queue/QueueFormDrawer';
 import { createVisit, listVisits } from './visits.api';
 import { VisitFormDrawer } from './VisitFormDrawer';
 import { CreateVisitInput, VisitListItem, VisitStatus, visitStatusColors, visitStatusLabels } from './types';
@@ -25,10 +27,13 @@ export function VisitsPage() {
   const { message } = App.useApp();
   const { data: auth } = useCurrentEmployee();
   const canManage = hasPermission(auth?.employee, 'visits.manage');
+  const canManageQueue = hasPermission(auth?.employee, 'queue.manage');
+  const canCreateQueue = canManageQueue || canManage;
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<VisitStatus | undefined>();
   const [offset, setOffset] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
+  const [createQueueOpen, setCreateQueueOpen] = useState(false);
   const appointmentId = searchParams.get('appointmentId') ?? undefined;
   const queueEntryId = searchParams.get('queueEntryId') ?? undefined;
   const initialOwnerId = searchParams.get('ownerId') ?? undefined;
@@ -60,6 +65,16 @@ export function VisitsPage() {
       setSearchParams({});
       message.success('Приём создан');
       navigate(`/visits/${visit.id}`);
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
+  const createQueueMutation = useMutation({
+    mutationFn: (values: QueueFormSubmitInput) => createQueueEntryFromForm(values),
+    onSuccess: async (queueEntry) => {
+      await queryClient.invalidateQueries({ queryKey: ['queue'] });
+      setCreateQueueOpen(false);
+      message.success('Пациент добавлен в очередь');
+      navigate(`/queue/${queueEntry.id}`);
     },
     onError: (error) => message.error(getErrorMessage(error)),
   });
@@ -130,10 +145,19 @@ export function VisitsPage() {
       <PageHeader
         title="Приёмы"
         extra={
-          canManage ? (
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-              Добавить приём
-            </Button>
+          canManage || canCreateQueue ? (
+            <Space wrap>
+              {canCreateQueue ? (
+                <Button icon={<OrderedListOutlined />} onClick={() => setCreateQueueOpen(true)}>
+                  Добавить в очередь
+                </Button>
+              ) : null}
+              {canManage ? (
+                <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+                  Добавить на приём
+                </Button>
+              ) : null}
+            </Space>
           ) : null
         }
       />
@@ -191,6 +215,14 @@ export function VisitsPage() {
         onSubmit={(values) => createMutation.mutate(values)}
         isSubmitting={createMutation.isPending}
         submitError={createMutation.error ?? appointmentQuery.error ?? queueQuery.error}
+      />
+      <QueueFormDrawer
+        open={createQueueOpen}
+        title="Добавить в очередь"
+        onClose={() => setCreateQueueOpen(false)}
+        onSubmit={(values) => createQueueMutation.mutate(values)}
+        isSubmitting={createQueueMutation.isPending}
+        submitError={createQueueMutation.error}
       />
     </div>
   );

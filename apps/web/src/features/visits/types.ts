@@ -31,6 +31,7 @@ export type VisitListItem = {
   animal?: Pick<Animal, 'id' | 'nickname' | 'species' | 'breed' | 'sex' | 'status'> | null;
   employee?: Pick<SchedulingEmployee, 'id' | 'fullName' | 'position'> | null;
   bill?: Pick<VisitBill, 'id' | 'status' | 'totalAmount' | 'paidAmount'> | null;
+  exam?: Pick<VisitExam, 'purpose' | 'weightKg' | 'temperatureC'> | null;
   _count?: {
     diagnoses: number;
     documents: number;

@@ -10,9 +10,9 @@ import { useCurrentEmployee } from '../../auth/useAuth';
 import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDateTime } from '../../shared/utils/date';
-import { createOwner, createOwnerAnimal } from '../owners/owners.api';
 import { createVisit } from '../visits/visits.api';
-import { completeQueueEntry, createQueueEntry, listQueue, startQueueEntry } from './queue.api';
+import { completeQueueEntry, listQueue, startQueueEntry } from './queue.api';
+import { createQueueEntryFromForm } from './createQueueEntryFromForm';
 import { QueueFormDrawer, QueueFormSubmitInput } from './QueueFormDrawer';
 import {
   QueueEntry,
@@ -47,28 +47,7 @@ export function QueuePage() {
     queryFn: () => listQueue({ search, status, urgency, limit: pageSize, offset, ...dateRange }),
   });
   const createMutation = useMutation({
-    mutationFn: async (values: QueueFormSubmitInput) => {
-      if (!values.createCards) {
-        return createQueueEntry(values);
-      }
-
-      const owner = await createOwner(values.createCards.owner);
-      const animal = await createOwnerAnimal(owner.id, values.createCards.animal);
-      const { createCards, ...queueInput } = values;
-
-      return createQueueEntry({
-        ...queueInput,
-        ownerId: owner.id,
-        animalId: animal.id,
-        ownerName: undefined,
-        phone: undefined,
-        ownerAddress: undefined,
-        animalNickname: undefined,
-        animalSpecies: undefined,
-        animalBreed: undefined,
-        animalSex: undefined,
-      });
-    },
+    mutationFn: (values: QueueFormSubmitInput) => createQueueEntryFromForm(values),
     onSuccess: async (queueEntry) => {
       await queryClient.invalidateQueries({ queryKey: ['queue'] });
       setCreateOpen(false);

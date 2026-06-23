@@ -1,7 +1,7 @@
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AuthenticatedRequest } from './auth.types';
-import { REQUIRED_PERMISSIONS_KEY } from './decorators/require-permissions.decorator';
+import { REQUIRED_ANY_PERMISSIONS_KEY, REQUIRED_PERMISSIONS_KEY } from './decorators/require-permissions.decorator';
 
 @Injectable()
 export class PermissionsGuard implements CanActivate {
@@ -12,8 +12,12 @@ export class PermissionsGuard implements CanActivate {
       context.getHandler(),
       context.getClass(),
     ]);
+    const requiredAnyPermissions = this.reflector.getAllAndOverride<string[]>(REQUIRED_ANY_PERMISSIONS_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
 
-    if (!requiredPermissions?.length) {
+    if (!requiredPermissions?.length && !requiredAnyPermissions?.length) {
       return true;
     }
 
@@ -25,7 +29,10 @@ export class PermissionsGuard implements CanActivate {
       throw new ForbiddenException(`Missing permissions: ${missingPermissions.join(', ')}`);
     }
 
+    if (requiredAnyPermissions?.length && !requiredAnyPermissions.some((permission) => employeePermissions.has(permission))) {
+      throw new ForbiddenException(`Missing one of permissions: ${requiredAnyPermissions.join(', ')}`);
+    }
+
     return true;
   }
 }
-

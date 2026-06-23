@@ -135,7 +135,7 @@ export function VisitFormDrawer({
         <Space>
           <Button onClick={onClose}>Отмена</Button>
           <Button type="primary" loading={isSubmitting} disabled={sourceBlocked} onClick={handleSubmit(submit)}>
-            Создать
+            {sourceContext ? 'Создать приём' : 'Добавить на приём'}
           </Button>
         </Space>
       }

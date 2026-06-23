@@ -1166,6 +1166,9 @@ const visitListInclude = {
   bill: {
     select: { id: true, status: true, totalAmount: true, paidAmount: true },
   },
+  exam: {
+    select: { purpose: true, weightKg: true, temperatureC: true },
+  },
   _count: {
     select: { diagnoses: true, documents: true, files: true },
   },

@@ -3,7 +3,7 @@ import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { AuthEmployee } from '../auth/auth.types';
 import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
 import { Public } from '../auth/decorators/public.decorator';
-import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { RequireAnyPermissions, RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { CreateQueueEntryDto } from './dto/create-queue-entry.dto';
 import { ListQueueQueryDto } from './dto/list-queue-query.dto';
 import { UpdateQueueEntryDto } from './dto/update-queue-entry.dto';
@@ -29,7 +29,7 @@ export class QueueController {
   }
 
   @Post()
-  @RequirePermissions('queue.manage')
+  @RequireAnyPermissions('queue.manage', 'visits.manage')
   @ApiCreatedResponse({ description: 'Queue entry created.' })
   createQueueEntry(@Body() dto: CreateQueueEntryDto, @CurrentEmployee() actor: AuthEmployee) {
     return this.queueService.createQueueEntry(dto, actor.id);

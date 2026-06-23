@@ -1,8 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
-import { Button, Descriptions, Divider, Drawer, Empty, Space, Table, Tag, Typography } from 'antd';
-import { ColumnsType } from 'antd/es/table';
+import { Button, Descriptions, Divider, Empty, Space, Table, Tag, Typography } from 'antd';
 import type { ReactNode } from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';
 import { formatDateTime } from '../../shared/utils/date';
@@ -12,65 +11,31 @@ import { Visit, VisitListItem, visitStatusColors, visitStatusLabels } from './ty
 
 export function VisitHistoryTab({ visit }: { visit: Visit }) {
   const navigate = useNavigate();
-  const [selectedVisitId, setSelectedVisitId] = useState<string | null>(null);
+  const [selectedVisitId, setSelectedVisitId] = useState(visit.id);
   const historyQuery = useQuery({
     queryKey: ['visits', 'animal-history', visit.animalId],
-    queryFn: () => listVisits({ animalId: visit.animalId, limit: 30, offset: 0 }),
+    queryFn: () => listVisits({ animalId: visit.animalId, limit: 50, offset: 0 }),
   });
   const selectedVisitQuery = useQuery({
     queryKey: ['visits', selectedVisitId],
-    queryFn: () => getVisit(selectedVisitId!),
-    enabled: Boolean(selectedVisitId),
+    queryFn: () => getVisit(selectedVisitId),
+    enabled: Boolean(selectedVisitId) && selectedVisitId !== visit.id,
   });
-  const columns = useMemo<ColumnsType<VisitListItem>>(
-    () => [
-      {
-        title: 'Дата',
-        dataIndex: 'startedAt',
-        key: 'startedAt',
-        width: 180,
-        render: formatDateTime,
-      },
-      {
-        title: 'Статус',
-        dataIndex: 'status',
-        key: 'status',
-        width: 150,
-        render: (value: VisitListItem['status'], record) => (
-          <Tag color={visitStatusColors[value]}>{record.id === visit.id ? 'Текущий · ' : ''}{visitStatusLabels[value]}</Tag>
-        ),
-      },
-      {
-        title: 'Врач',
-        key: 'employee',
-        render: (_, record) => record.employee?.fullName ?? '—',
-      },
-      {
-        title: 'Итог',
-        dataIndex: 'totalAmount',
-        key: 'totalAmount',
-        width: 140,
-        render: formatMoney,
-      },
-      {
-        title: 'Записи',
-        key: 'counts',
-        width: 180,
-        render: (_, record) => `Диагнозы: ${record._count?.diagnoses ?? 0}, документы: ${record._count?.documents ?? 0}`,
-      },
-      {
-        title: '',
-        key: 'action',
-        width: 100,
-        render: (_, record) => (
-          <Button size="small" type="link" onClick={() => setSelectedVisitId(record.id)}>
-            Смотреть
-          </Button>
-        ),
-      },
-    ],
-    [visit.id],
-  );
+
+  useEffect(() => {
+    setSelectedVisitId(visit.id);
+  }, [visit.id]);
+
+  const historyItems = useMemo<VisitListItem[]>(() => {
+    const items = historyQuery.data?.items ?? [];
+    const merged = items.some((item) => item.id === visit.id) ? items : [visit, ...items];
+
+    return [...merged].sort((left, right) => new Date(right.startedAt).getTime() - new Date(left.startedAt).getTime());
+  }, [historyQuery.data?.items, visit]);
+  const selectedSummary = historyItems.find((item) => item.id === selectedVisitId) ?? null;
+  const selectedVisit = selectedVisitId === visit.id ? visit : selectedVisitQuery.data;
+  const selectedIsLoading = selectedVisitId !== visit.id && selectedVisitQuery.isLoading;
+  const selectedError = selectedVisitId !== visit.id ? selectedVisitQuery.error : null;
 
   return (
     <div className="visit-tab-panel">
@@ -78,73 +43,101 @@ export function VisitHistoryTab({ visit }: { visit: Visit }) {
         <div>
           <Typography.Title level={4}>История болезни</Typography.Title>
           <Typography.Text type="secondary">
-            Все приёмы пациента {visit.animal.nickname} в клинике, включая текущий.
+            Все приёмы пациента {visit.animal.nickname}. Слева выберите визит, справа отображается подробный лист.
           </Typography.Text>
         </div>
       </div>
       {historyQuery.isError ? <Typography.Text type="danger">{getErrorMessage(historyQuery.error)}</Typography.Text> : null}
-      <Table<VisitListItem>
-        rowKey="id"
-        className="dense-table"
-        columns={columns}
-        dataSource={historyQuery.data?.items ?? []}
-        loading={historyQuery.isLoading}
-        pagination={false}
-        locale={{ emptyText: 'История приёмов пока пустая' }}
-        onRow={(record) => ({ onDoubleClick: () => setSelectedVisitId(record.id) })}
-      />
-      <HistoryDrawer
-        currentVisitId={visit.id}
-        open={Boolean(selectedVisitId)}
-        visit={selectedVisitQuery.data}
-        isLoading={selectedVisitQuery.isLoading}
-        error={selectedVisitQuery.error}
-        onClose={() => setSelectedVisitId(null)}
-        onNavigate={(visitId) => {
-          setSelectedVisitId(null);
-          navigate(`/visits/${visitId}`);
-        }}
-      />
+      <div className="visit-history-layout">
+        <aside className="visit-history-list" aria-label="Список приёмов пациента">
+          {historyQuery.isLoading ? <Typography.Text type="secondary">Загрузка истории...</Typography.Text> : null}
+          {!historyQuery.isLoading && !historyItems.length ? <Empty description="История приёмов пока пустая" /> : null}
+          {historyItems.map((item) => (
+            <VisitHistoryListItem
+              key={item.id}
+              record={item}
+              active={item.id === selectedVisitId}
+              current={item.id === visit.id}
+              onSelect={() => setSelectedVisitId(item.id)}
+            />
+          ))}
+        </aside>
+        <section className="visit-history-detail">
+          {selectedIsLoading ? <Typography.Text type="secondary">Загрузка приёма...</Typography.Text> : null}
+          {selectedError ? <Typography.Text type="danger">{getErrorMessage(selectedError)}</Typography.Text> : null}
+          {selectedVisit ? (
+            <>
+              <VisitHistoryHeader
+                visit={selectedVisit}
+                currentVisitId={visit.id}
+                onOpenCard={(visitId) => navigate(`/visits/${visitId}`)}
+              />
+              <HistoryDetails visit={selectedVisit} />
+            </>
+          ) : !selectedIsLoading && !selectedError && selectedSummary ? (
+            <Empty description="Подробности приёма не найдены" />
+          ) : null}
+        </section>
+      </div>
     </div>
   );
 }
 
-function HistoryDrawer({
-  currentVisitId,
-  open,
-  visit,
-  isLoading,
-  error,
-  onClose,
-  onNavigate,
+function VisitHistoryListItem({
+  record,
+  active,
+  current,
+  onSelect,
 }: {
-  currentVisitId: string;
-  open: boolean;
-  visit?: Visit;
-  isLoading: boolean;
-  error: unknown;
-  onClose: () => void;
-  onNavigate: (visitId: string) => void;
+  record: VisitListItem;
+  active: boolean;
+  current: boolean;
+  onSelect: () => void;
 }) {
   return (
-    <Drawer
-      title={visit ? `Приём от ${formatDateTime(visit.startedAt)}` : 'Приём'}
-      width={760}
-      open={open}
-      onClose={onClose}
-      destroyOnHidden
-      extra={
-        visit ? (
-          <Button type="primary" onClick={() => onNavigate(visit.id)} disabled={visit.id === currentVisitId}>
-            {visit.id === currentVisitId ? 'Текущий приём' : 'Открыть карточку'}
-          </Button>
-        ) : null
-      }
-    >
-      {isLoading ? <Typography.Text type="secondary">Загрузка приёма...</Typography.Text> : null}
-      {error ? <Typography.Text type="danger">{getErrorMessage(error)}</Typography.Text> : null}
-      {visit ? <HistoryDetails visit={visit} /> : !isLoading && !error ? <Empty description="Приём не найден" /> : null}
-    </Drawer>
+    <button className={`visit-history-item${active ? ' is-active' : ''}`} type="button" onClick={onSelect}>
+      <span className="visit-history-item-title">{getVisitListTitle(record, current)}</span>
+      <span className="visit-history-item-date">{formatDateTime(record.startedAt)}</span>
+      <span className="visit-history-item-meta">{record.employee?.fullName ?? 'Врач не указан'}</span>
+      <span className="visit-history-item-footer">
+        <Tag color={visitStatusColors[record.status]}>{visitStatusLabels[record.status]}</Tag>
+        <span>{formatRecordCounts(record)}</span>
+      </span>
+    </button>
+  );
+}
+
+function VisitHistoryHeader({
+  visit,
+  currentVisitId,
+  onOpenCard,
+}: {
+  visit: Visit;
+  currentVisitId: string;
+  onOpenCard: (visitId: string) => void;
+}) {
+  return (
+    <div className="visit-history-detail-header">
+      <div>
+        <Typography.Title level={4}>{getVisitTitle(visit)}</Typography.Title>
+        <Typography.Text type="secondary">
+          {formatDateTime(visit.startedAt)} · {getVisitSourceLabel(visit)} · {visit.employee?.fullName ?? 'врач не указан'}
+        </Typography.Text>
+      </div>
+      <Button type="primary" onClick={() => onOpenCard(visit.id)} disabled={visit.id === currentVisitId}>
+        {visit.id === currentVisitId ? 'Текущий приём' : 'Открыть карточку'}
+      </Button>
+      <Descriptions bordered size="small" column={{ xs: 1, md: 3 }} className="visit-history-summary">
+        <Descriptions.Item label="Статус">
+          <Tag color={visitStatusColors[visit.status]}>{visitStatusLabels[visit.status]}</Tag>
+        </Descriptions.Item>
+        <Descriptions.Item label="Вес">{visit.exam?.weightKg ? `${visit.exam.weightKg} кг` : '—'}</Descriptions.Item>
+        <Descriptions.Item label="Температура">{visit.exam?.temperatureC ? `${visit.exam.temperatureC} °C` : '—'}</Descriptions.Item>
+        <Descriptions.Item label="Сумма">{formatMoney(visit.totalAmount)}</Descriptions.Item>
+        <Descriptions.Item label="Оплачено">{visit.bill ? formatMoney(visit.bill.paidAmount) : '—'}</Descriptions.Item>
+        <Descriptions.Item label="Завершён">{formatDateTime(visit.completedAt)}</Descriptions.Item>
+      </Descriptions>
+    </div>
   );
 }
 
@@ -154,23 +147,14 @@ function HistoryDetails({ visit }: { visit: Visit }) {
 
   return (
     <Space direction="vertical" size={18} className="full-width">
-      <Descriptions bordered column={1}>
-        <Descriptions.Item label="Статус">
-          <Tag color={visitStatusColors[visit.status]}>{visitStatusLabels[visit.status]}</Tag>
-        </Descriptions.Item>
-        <Descriptions.Item label="Врач">{visit.employee?.fullName ?? '—'}</Descriptions.Item>
-        <Descriptions.Item label="Сумма">{formatMoney(visit.totalAmount)}</Descriptions.Item>
-      </Descriptions>
-
       <HistorySection title="Лист осмотра">
         <Descriptions bordered column={1}>
-          <Descriptions.Item label="Вес">{visit.exam?.weightKg ? `${visit.exam.weightKg} кг` : '—'}</Descriptions.Item>
-          <Descriptions.Item label="Температура">{visit.exam?.temperatureC ? `${visit.exam.temperatureC} °C` : '—'}</Descriptions.Item>
-          <Descriptions.Item label="Жалобы">{visit.exam?.purpose || '—'}</Descriptions.Item>
+          <Descriptions.Item label="Цель визита">{visit.exam?.purpose || '—'}</Descriptions.Item>
           <Descriptions.Item label="Анамнез">{visit.exam?.anamnesis || '—'}</Descriptions.Item>
           <Descriptions.Item label="Осмотр">{visit.exam?.examination || '—'}</Descriptions.Item>
           <Descriptions.Item label="Симптомы">{visit.exam?.symptoms || '—'}</Descriptions.Item>
           <Descriptions.Item label="Манипуляции">{visit.exam?.manipulations || '—'}</Descriptions.Item>
+          <Descriptions.Item label="Комментарий">{visit.exam?.comment || '—'}</Descriptions.Item>
         </Descriptions>
       </HistorySection>
 
@@ -245,4 +229,38 @@ function HistorySection({ title, children }: { title: string; children: ReactNod
       {children}
     </section>
   );
+}
+
+function getVisitListTitle(record: VisitListItem, current: boolean) {
+  if (record.exam?.purpose) {
+    return record.exam.purpose;
+  }
+
+  return current ? 'Текущий приём' : getVisitSourceLabel(record);
+}
+
+function getVisitTitle(visit: Visit) {
+  return visit.exam?.purpose || visit.diagnoses[0]?.title || getVisitSourceLabel(visit);
+}
+
+function getVisitSourceLabel(record: Pick<VisitListItem, 'appointmentId' | 'queueEntryId'>) {
+  if (record.appointmentId) {
+    return 'Запись на приём';
+  }
+
+  if (record.queueEntryId) {
+    return 'Электронная очередь';
+  }
+
+  return 'Прямой приём';
+}
+
+function formatRecordCounts(record: VisitListItem) {
+  const parts = [
+    record._count?.diagnoses ? `${record._count.diagnoses} диагн.` : null,
+    record._count?.documents ? `${record._count.documents} док.` : null,
+    record.exam?.weightKg ? `${record.exam.weightKg} кг` : null,
+  ].filter(Boolean);
+
+  return parts.length ? parts.join(' · ') : 'без записей';
 }
