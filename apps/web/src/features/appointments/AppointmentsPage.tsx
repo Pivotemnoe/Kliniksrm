@@ -1,4 +1,4 @@
-import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
+import { LeftOutlined, PlusOutlined, RightOutlined, SearchOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Button, Input, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
 import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
@@ -35,9 +35,15 @@ export function AppointmentsPage() {
   const [offset, setOffset] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
   const dateBounds = getDayBounds(date);
+  const weekDays = useMemo(() => getWeekDays(date), [date]);
+  const weekBounds = useMemo(() => getRangeBounds(weekDays[0].value, weekDays[6].value), [weekDays]);
   const appointmentsQuery = useQuery({
     queryKey: ['appointments', { search, status, date, limit: pageSize, offset }],
     queryFn: () => listAppointments({ search, status, ...dateBounds, limit: pageSize, offset }),
+  });
+  const weeklyAppointmentsQuery = useQuery({
+    queryKey: ['appointments-week', { search, status, from: weekBounds.dateFrom, to: weekBounds.dateTo }],
+    queryFn: () => listAppointments({ search, status, ...weekBounds, limit: 100, offset: 0 }),
   });
   const createMutation = useMutation({
     mutationFn: async (values: AppointmentFormSubmit) => {
@@ -128,7 +134,7 @@ export function AppointmentsPage() {
         }
       />
       <div className="date-ribbon">
-        {getDateRibbon(date).map((item) => (
+        {weekDays.map((item) => (
           <button
             key={item.value}
             type="button"
@@ -144,6 +150,28 @@ export function AppointmentsPage() {
           </button>
         ))}
       </div>
+      <AppointmentsWeekBoard
+        days={weekDays}
+        selectedDate={date}
+        appointments={weeklyAppointmentsQuery.data?.items ?? []}
+        loading={weeklyAppointmentsQuery.isLoading}
+        total={weeklyAppointmentsQuery.data?.total}
+        canManage={canManage}
+        onSelectDate={(value) => {
+          setDate(value);
+          setOffset(0);
+        }}
+        onMoveWeek={(direction) => {
+          setDate(shiftDate(date, direction * 7));
+          setOffset(0);
+        }}
+        onToday={() => {
+          setDate(toDateInput(new Date()));
+          setOffset(0);
+        }}
+        onCreate={() => setCreateOpen(true)}
+        onOpen={(appointmentId) => navigate(`/schedule/${appointmentId}`)}
+      />
       <div className="list-panel">
         <Tabs
           items={[
@@ -242,10 +270,118 @@ function toDateInput(value: Date) {
   return `${year}-${month}-${day}`;
 }
 
-function getDateRibbon(currentDate: string) {
+function AppointmentsWeekBoard({
+  days,
+  selectedDate,
+  appointments,
+  loading,
+  total,
+  canManage,
+  onSelectDate,
+  onMoveWeek,
+  onToday,
+  onCreate,
+  onOpen,
+}: {
+  days: WeekDay[];
+  selectedDate: string;
+  appointments: Appointment[];
+  loading: boolean;
+  total?: number;
+  canManage: boolean;
+  onSelectDate: (date: string) => void;
+  onMoveWeek: (direction: -1 | 1) => void;
+  onToday: () => void;
+  onCreate: () => void;
+  onOpen: (appointmentId: string) => void;
+}) {
+  const appointmentsByDay = useMemo(() => groupAppointmentsByDay(appointments), [appointments]);
+  const visibleCount = appointments.length;
+
+  return (
+    <section className="schedule-app-panel">
+      <div className="schedule-app-toolbar">
+        <div>
+          <Typography.Title level={4}>Неделя записей</Typography.Title>
+          <Typography.Text type="secondary">
+            {formatCompactDate(days[0].value)} - {formatCompactDate(days[6].value)}
+            {typeof total === 'number' ? ` · ${total} записей` : ''}
+            {typeof total === 'number' && total > visibleCount ? ` · показаны первые ${visibleCount}` : ''}
+          </Typography.Text>
+        </div>
+        <Space wrap>
+          <Button icon={<LeftOutlined />} onClick={() => onMoveWeek(-1)} aria-label="Предыдущая неделя" />
+          <Button onClick={onToday}>Сегодня</Button>
+          <Button icon={<RightOutlined />} onClick={() => onMoveWeek(1)} aria-label="Следующая неделя" />
+          {canManage ? (
+            <Button type="primary" icon={<PlusOutlined />} onClick={onCreate}>
+              Записать
+            </Button>
+          ) : null}
+        </Space>
+      </div>
+      <div className="schedule-week-grid">
+        {days.map((day) => {
+          const dayAppointments = appointmentsByDay.get(day.value) ?? [];
+          const isSelected = day.value === selectedDate;
+
+          return (
+            <section key={day.value} className={`schedule-day-card${isSelected ? ' is-active' : ''}`}>
+              <button type="button" className="schedule-day-head" onClick={() => onSelectDate(day.value)}>
+                <span>
+                  {day.weekday}
+                  {day.isToday ? <Tag color="green">Сегодня</Tag> : null}
+                </span>
+                <strong>{day.day}</strong>
+                <small>{day.month}</small>
+              </button>
+              <div className="schedule-day-body">
+                {loading ? <span className="schedule-empty">Загрузка</span> : null}
+                {!loading && !dayAppointments.length ? <span className="schedule-empty">Свободно</span> : null}
+                {!loading
+                  ? dayAppointments.slice(0, 4).map((appointment) => (
+                      <button
+                        key={appointment.id}
+                        type="button"
+                        className="schedule-appointment-pill"
+                        onClick={() => onOpen(appointment.id)}
+                      >
+                        <span className="schedule-appointment-time">{formatTime(appointment.startsAt)}</span>
+                        <span className="schedule-appointment-title">{appointment.animal?.nickname ?? 'Пациент'}</span>
+                        <span className="schedule-appointment-meta">{appointment.employee?.fullName ?? appointment.room?.name ?? 'Не назначено'}</span>
+                        <Tag color={appointmentStatusColors[appointment.status]}>{appointmentStatusLabels[appointment.status]}</Tag>
+                      </button>
+                    ))
+                  : null}
+                {!loading && dayAppointments.length > 4 ? (
+                  <button type="button" className="schedule-more-button" onClick={() => onSelectDate(day.value)}>
+                    Ещё {dayAppointments.length - 4}
+                  </button>
+                ) : null}
+              </div>
+            </section>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+type WeekDay = {
+  value: string;
+  weekday: string;
+  day: string;
+  month: string;
+  isToday: boolean;
+};
+
+function getWeekDays(currentDate: string): WeekDay[] {
   const base = currentDate ? new Date(`${currentDate}T00:00:00`) : new Date();
   const start = new Date(base);
-  start.setDate(base.getDate() - 3);
+  const day = start.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  start.setDate(base.getDate() + mondayOffset);
+  const today = toDateInput(new Date());
 
   return Array.from({ length: 7 }, (_, index) => {
     const value = new Date(start);
@@ -256,6 +392,47 @@ function getDateRibbon(currentDate: string) {
       weekday: value.toLocaleDateString('ru-RU', { weekday: 'short' }),
       day: value.toLocaleDateString('ru-RU', { day: 'numeric' }),
       month: value.toLocaleDateString('ru-RU', { month: 'short' }),
+      isToday: toDateInput(value) === today,
     };
   });
+}
+
+function getRangeBounds(dateFrom: string, dateTo: string) {
+  const start = new Date(`${dateFrom}T00:00:00`);
+  const end = new Date(`${dateTo}T23:59:59.999`);
+
+  return {
+    dateFrom: start.toISOString(),
+    dateTo: end.toISOString(),
+  };
+}
+
+function groupAppointmentsByDay(appointments: Appointment[]) {
+  const groups = new Map<string, Appointment[]>();
+
+  for (const appointment of appointments) {
+    const key = toDateInput(new Date(appointment.startsAt));
+    const group = groups.get(key);
+    if (group) {
+      group.push(appointment);
+    } else {
+      groups.set(key, [appointment]);
+    }
+  }
+
+  return groups;
+}
+
+function shiftDate(date: string, days: number) {
+  const value = date ? new Date(`${date}T00:00:00`) : new Date();
+  value.setDate(value.getDate() + days);
+  return toDateInput(value);
+}
+
+function formatTime(value: string | null | undefined) {
+  return value ? new Date(value).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '--:--';
+}
+
+function formatCompactDate(value: string) {
+  return new Date(`${value}T00:00:00`).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
 }

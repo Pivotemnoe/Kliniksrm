@@ -458,6 +458,111 @@ body {
   margin-bottom: 14px;
 }
 
+.dashboard-app-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.dashboard-action-tile {
+  --tile-color: #2a9d8f;
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 12px;
+  min-height: 112px;
+  padding: 14px;
+  border: 1px solid #dfe3e8;
+  border-left: 4px solid var(--tile-color);
+  border-radius: 8px;
+  background: #ffffff;
+  color: #202226;
+  cursor: pointer;
+  text-align: left;
+}
+
+.dashboard-action-tile:hover {
+  border-color: #c8d2dc;
+  border-left-color: var(--tile-color);
+  background: #fbfcfd;
+}
+
+.dashboard-action-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid #dfe3e8;
+  border-radius: 8px;
+  color: var(--tile-color);
+  background: #ffffff;
+  font-size: 20px;
+}
+
+.dashboard-action-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.dashboard-action-copy span {
+  color: #5d6673;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.dashboard-action-copy strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 28px;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-action-copy small {
+  min-width: 0;
+  overflow: hidden;
+  color: #6b7280;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-action-queue {
+  --tile-color: #2a9d8f;
+}
+
+.dashboard-action-schedule {
+  --tile-color: #2563eb;
+}
+
+.dashboard-action-visits {
+  --tile-color: #4f7c35;
+}
+
+.dashboard-action-money {
+  --tile-color: #a16207;
+}
+
+.dashboard-action-hospital {
+  --tile-color: #0e7490;
+}
+
+.dashboard-action-stock {
+  --tile-color: #b45309;
+}
+
+.dashboard-action-requests {
+  --tile-color: #c2410c;
+}
+
+.dashboard-action-lab {
+  --tile-color: #6d5d9d;
+}
+
 .metric-tile {
   min-height: 104px;
   padding: 16px;
@@ -606,6 +711,202 @@ body {
 .date-ribbon span {
   font-size: 12px;
   opacity: 0.72;
+}
+
+.schedule-app-panel,
+.shift-week-panel {
+  overflow: hidden;
+  margin-bottom: 14px;
+  border: 1px solid #dfe3e8;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.schedule-app-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #edf0f3;
+  background: #fbfcfd;
+}
+
+.schedule-app-toolbar h4.ant-typography {
+  margin: 0 0 2px;
+}
+
+.schedule-week-grid,
+.shift-week-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(168px, 1fr));
+  gap: 10px;
+  overflow-x: auto;
+  padding: 14px;
+}
+
+.schedule-day-card,
+.shift-day-card {
+  display: flex;
+  min-height: 270px;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #dfe3e8;
+  border-radius: 8px;
+  background: #f8fafb;
+}
+
+.shift-day-card {
+  min-height: 300px;
+}
+
+.schedule-day-card.is-active,
+.shift-day-card.is-active {
+  border-color: #2a9d8f;
+  background: #f4fbfa;
+}
+
+.schedule-day-head,
+.shift-day-head {
+  display: grid;
+  width: 100%;
+  gap: 2px;
+  padding: 12px;
+  border: 0;
+  border-bottom: 1px solid #edf0f3;
+  background: #ffffff;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.schedule-day-head:hover,
+.shift-day-head:hover {
+  background: #f3f7f8;
+}
+
+.schedule-day-head span,
+.shift-day-head span {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  color: #68717d;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.schedule-day-head strong,
+.shift-day-head strong {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.schedule-day-head small,
+.shift-day-head small {
+  color: #68717d;
+  font-size: 12px;
+}
+
+.schedule-day-body,
+.shift-day-body {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-height: 0;
+  padding: 10px;
+}
+
+.schedule-appointment-pill,
+.shift-chip {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  min-height: 82px;
+  padding: 9px 10px;
+  border: 1px solid #dfe3e8;
+  border-radius: 7px;
+  background: #ffffff;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.schedule-appointment-pill:hover,
+.shift-chip:hover {
+  border-color: #b9c8d3;
+  background: #fbfcfd;
+}
+
+.schedule-appointment-time,
+.shift-chip-time {
+  color: #2a9d8f;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.schedule-appointment-title,
+.shift-chip-name {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.schedule-appointment-meta,
+.shift-chip-meta {
+  min-width: 0;
+  overflow: hidden;
+  color: #6b7280;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shift-chip.is-disabled {
+  opacity: 0.62;
+}
+
+.schedule-empty {
+  display: inline-flex;
+  min-height: 46px;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed #cfd7df;
+  border-radius: 7px;
+  color: #7d858f;
+  font-size: 13px;
+}
+
+.schedule-more-button,
+.shift-add-button {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid #dfe3e8;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #2a9d8f;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.schedule-more-button:hover,
+.shift-add-button:hover {
+  border-color: #2a9d8f;
+  background: #f4fbfa;
+}
+
+.shift-table-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.shift-table-title h5.ant-typography {
+  margin: 0;
 }
 
 .workbench {
@@ -1412,6 +1713,11 @@ body {
   .date-ribbon {
     grid-template-columns: repeat(4, minmax(86px, 1fr));
   }
+
+  .schedule-week-grid,
+  .shift-week-grid {
+    grid-template-columns: repeat(7, minmax(176px, 176px));
+  }
 }
 
 @media (max-width: 900px) {
@@ -1529,6 +1835,15 @@ body {
   .list-panel-header {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .schedule-app-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dashboard-action-copy strong {
+    font-size: 24px;
   }
 
   .toolbar-row {

@@ -9,8 +9,8 @@ import {
   WalletOutlined,
 } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Button, Col, List, Row, Space, Statistic, Tag, Typography } from 'antd';
-import { useMemo } from 'react';
+import { Alert, Button, List, Space, Tag, Typography } from 'antd';
+import { type ReactNode, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';
 import { PageHeader } from '../../shared/ui/PageHeader';
@@ -32,6 +32,8 @@ export function DashboardPage() {
   });
   const summary = dashboardQuery.data;
   const todayVisits = summary?.visits.todayItems ?? summary?.visits.items ?? [];
+  const stockAlerts = (summary?.stock.lowStockProducts ?? 0) + (summary?.stock.expiringBatches ?? 0);
+  const requestAlerts = (summary?.onlineRequests.newRequests ?? 0) + (summary?.onlineRequests.inReview ?? 0);
 
   return (
     <div className="page">
@@ -53,48 +55,80 @@ export function DashboardPage() {
         }
       />
       {dashboardQuery.isError ? <Alert type="error" showIcon message={getErrorMessage(dashboardQuery.error)} className="form-alert" /> : null}
-      <Row gutter={[12, 12]} className="dashboard-metrics">
-        <Col xs={12} md={8} xl={6}>
-          <div className="metric-tile">
-            <Statistic title="Ожидают в очереди" value={summary?.queue.waiting ?? 0} loading={dashboardQuery.isLoading} prefix={<OrderedListOutlined />} />
-          </div>
-        </Col>
-        <Col xs={12} md={8} xl={6}>
-          <div className="metric-tile">
-            <Statistic title="Записи сегодня" value={summary?.appointments.today ?? 0} loading={dashboardQuery.isLoading} prefix={<CalendarOutlined />} />
-          </div>
-        </Col>
-        <Col xs={12} md={8} xl={6}>
-          <div className="metric-tile">
-            <Statistic title="Приёмы сегодня" value={summary?.visits.totalToday ?? 0} loading={dashboardQuery.isLoading} prefix={<FileDoneOutlined />} />
-          </div>
-        </Col>
-        <Col xs={12} md={8} xl={6}>
-          <div className="metric-tile">
-            <Statistic title="Оплаты сегодня" value={summary?.finance.paymentsTodayAmount ?? 0} loading={dashboardQuery.isLoading} formatter={(value) => formatMoney(Number(value))} prefix={<WalletOutlined />} />
-          </div>
-        </Col>
-        <Col xs={12} md={8} xl={6}>
-          <div className="metric-tile">
-            <Statistic title="Стационар" value={summary?.hospital.activePatients ?? 0} loading={dashboardQuery.isLoading} prefix={<MedicineBoxOutlined />} />
-          </div>
-        </Col>
-        <Col xs={12} md={8} xl={6}>
-          <div className="metric-tile">
-            <Statistic title="Склад: остатки" value={summary?.stock.lowStockProducts ?? 0} loading={dashboardQuery.isLoading} prefix={<ShopOutlined />} />
-          </div>
-        </Col>
-        <Col xs={12} md={8} xl={6}>
-          <div className="metric-tile">
-            <Statistic title="Онлайн-заявки" value={summary?.onlineRequests.newRequests ?? 0} loading={dashboardQuery.isLoading} prefix={<PlusOutlined />} />
-          </div>
-        </Col>
-        <Col xs={12} md={8} xl={6}>
-          <div className="metric-tile">
-            <Statistic title="Лаборатория ждёт" value={summary?.laboratory.pending ?? 0} loading={dashboardQuery.isLoading} prefix={<ExperimentOutlined />} />
-          </div>
-        </Col>
-      </Row>
+      <div className="dashboard-app-strip">
+        <DashboardActionTile
+          title="Очередь"
+          value={summary?.queue.waiting ?? 0}
+          hint={`В работе ${summary?.queue.inProgress ?? 0}`}
+          icon={<OrderedListOutlined />}
+          loading={dashboardQuery.isLoading}
+          variant="queue"
+          onClick={() => navigate('/queue')}
+        />
+        <DashboardActionTile
+          title="Расписание"
+          value={summary?.appointments.today ?? 0}
+          hint={`Пришли ${summary?.appointments.arrived ?? 0} · в работе ${summary?.appointments.inProgress ?? 0}`}
+          icon={<CalendarOutlined />}
+          loading={dashboardQuery.isLoading}
+          variant="schedule"
+          onClick={() => navigate('/schedule')}
+        />
+        <DashboardActionTile
+          title="Приёмы"
+          value={summary?.visits.totalToday ?? 0}
+          hint={`Активных ${summary?.visits.active ?? 0}`}
+          icon={<FileDoneOutlined />}
+          loading={dashboardQuery.isLoading}
+          variant="visits"
+          onClick={() => navigate('/visits')}
+        />
+        <DashboardActionTile
+          title="Оплаты"
+          value={formatMoney(summary?.finance.paymentsTodayAmount ?? 0)}
+          hint={`Неоплаченных ${summary?.finance.unpaidBills ?? 0}`}
+          icon={<WalletOutlined />}
+          loading={dashboardQuery.isLoading}
+          variant="money"
+          onClick={() => navigate('/billing')}
+        />
+        <DashboardActionTile
+          title="Стационар"
+          value={summary?.hospital.activePatients ?? 0}
+          hint={`Поступили ${summary?.hospital.admittedToday ?? 0} · выписаны ${summary?.hospital.dischargedToday ?? 0}`}
+          icon={<MedicineBoxOutlined />}
+          loading={dashboardQuery.isLoading}
+          variant="hospital"
+          onClick={() => navigate('/hospital')}
+        />
+        <DashboardActionTile
+          title="Склад"
+          value={stockAlerts}
+          hint={`Остатки ${summary?.stock.lowStockProducts ?? 0} · сроки ${summary?.stock.expiringBatches ?? 0}`}
+          icon={<ShopOutlined />}
+          loading={dashboardQuery.isLoading}
+          variant="stock"
+          onClick={() => navigate('/stock')}
+        />
+        <DashboardActionTile
+          title="Заявки"
+          value={requestAlerts}
+          hint={`Новые ${summary?.onlineRequests.newRequests ?? 0} · в разборе ${summary?.onlineRequests.inReview ?? 0}`}
+          icon={<PlusOutlined />}
+          loading={dashboardQuery.isLoading}
+          variant="requests"
+          onClick={() => navigate('/online-requests')}
+        />
+        <DashboardActionTile
+          title="Лаборатория"
+          value={summary?.laboratory.pending ?? 0}
+          hint={`Сегодня назначено ${summary?.laboratory.orderedToday ?? 0}`}
+          icon={<ExperimentOutlined />}
+          loading={dashboardQuery.isLoading}
+          variant="lab"
+          onClick={() => navigate('/settings/laboratories')}
+        />
+      </div>
       <div className="dashboard-grid dashboard-grid-expanded">
         <section className="list-panel">
           <div className="list-panel-header">
@@ -314,6 +348,35 @@ function getQueueTitle(item: DashboardQueueItem) {
   const animal = item.animal?.nickname ?? item.animalNickname ?? 'Пациент';
   const owner = item.owner?.fullName ?? item.ownerName ?? 'Клиент без карточки';
   return `${animal} · ${owner}`;
+}
+
+function DashboardActionTile({
+  title,
+  value,
+  hint,
+  icon,
+  loading,
+  variant,
+  onClick,
+}: {
+  title: string;
+  value: string | number;
+  hint: string;
+  icon: ReactNode;
+  loading: boolean;
+  variant: string;
+  onClick: () => void;
+}) {
+  return (
+    <button type="button" className={`dashboard-action-tile dashboard-action-${variant}`} onClick={onClick}>
+      <span className="dashboard-action-icon">{icon}</span>
+      <span className="dashboard-action-copy">
+        <span>{title}</span>
+        <strong>{loading ? '...' : value}</strong>
+        <small>{hint}</small>
+      </span>
+    </button>
+  );
 }
 
 function toDateInput(value: Date) {
