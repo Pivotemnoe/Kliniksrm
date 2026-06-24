@@ -1,6 +1,6 @@
-import { SearchOutlined } from '@ant-design/icons';
+import { DownloadOutlined, SearchOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Input, Select, Space, Table, Tag, Typography } from 'antd';
+import { Alert, App, Button, Input, Select, Space, Table, Tag, Typography } from 'antd';
 import { ColumnsType } from 'antd/es/table';
 import { useMemo, useState } from 'react';
 import { getErrorMessage } from '../../api/errors';
@@ -8,10 +8,11 @@ import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDateTime } from '../../shared/utils/date';
-import { listAuditLogs } from './audit.api';
+import { exportAuditReport, listAuditLogs } from './audit.api';
 import { AuditLogItem } from './types';
 
 export function AuditLogsPage() {
+  const { message } = App.useApp();
   const { data: auth } = useCurrentEmployee();
   const canReadAudit = hasPermission(auth?.employee, 'audit.read');
   const [search, setSearch] = useState('');
@@ -106,6 +107,26 @@ export function AuditLogsPage() {
     [],
   );
 
+  async function handleExportReport() {
+    try {
+      const to = new Date();
+      const from = new Date(to.getTime() - 24 * 60 * 60 * 1000);
+      const report = await exportAuditReport({ from: from.toISOString(), to: to.toISOString(), limit: 10000 });
+      const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `temichevvet-audit-${formatFileDate(to)}.json`;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      message.success('JSON-отчёт скачан');
+    } catch (error) {
+      message.error(getErrorMessage(error));
+    }
+  }
+
   return (
     <div className="page">
       <PageHeader title="Журнал аудита" description="Последние действия сотрудников и системные события CRM." />
@@ -140,7 +161,12 @@ export function AuditLogsPage() {
               onChange={setEntityType}
             />
           </Space>
-          <Typography.Text type="secondary">Показано {filteredItems.length} из {items.length}</Typography.Text>
+          <Space wrap>
+            <Button icon={<DownloadOutlined />} onClick={handleExportReport} disabled={!canReadAudit}>
+              Скачать JSON за 24 часа
+            </Button>
+            <Typography.Text type="secondary">Показано {filteredItems.length} из {items.length}</Typography.Text>
+          </Space>
         </div>
         <div className="list-panel-body">
           <Table<AuditLogItem>
@@ -156,6 +182,10 @@ export function AuditLogsPage() {
       </div>
     </div>
   );
+}
+
+function formatFileDate(date: Date) {
+  return date.toISOString().replace(/[:.]/g, '-');
 }
 
 const actionLabels: Record<string, string> = {
@@ -187,6 +217,9 @@ const actionLabels: Record<string, string> = {
   'news.update': 'Новость изменена',
   'news.archive': 'Новость отправлена в архив',
   'news.read': 'Новость прочитана',
+  'ui.page_view': 'Открыт раздел',
+  'ui.heartbeat': 'Активность в интерфейсе',
+  'ui.frontend_error': 'Ошибка интерфейса',
 };
 
 const entityLabels: Record<string, string> = {
@@ -209,6 +242,7 @@ const entityLabels: Record<string, string> = {
   Room: 'Кабинет',
   HospitalBox: 'Бокс стационара',
   Warehouse: 'Склад',
+  UserActivity: 'Активность',
 };
 
 function buildOptions(values: string[]) {

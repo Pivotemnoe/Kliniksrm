@@ -24,6 +24,7 @@ import { getEmployeeDefaultRoute } from '../shared/routes/defaultRoutes';
 import { formatMoney } from '../shared/utils/money';
 import { GlobalSearch } from './GlobalSearch';
 import { getSelectedMenuKey, menuItems } from './menu';
+import { useActivityTracking } from './useActivityTracking';
 
 const { Header, Sider, Content } = Layout;
 
@@ -42,6 +43,7 @@ export function CrmLayout() {
   const { data } = useCurrentEmployee();
   const logoutMutation = useLogoutMutation();
   const employee = data?.employee;
+  useActivityTracking(Boolean(employee));
   const selectedKey = useMemo(() => getSelectedMenuKey(location.pathname), [location.pathname]);
   const primaryRole = employee?.roles[0];
   const primaryRoleLabel = primaryRole ? roleLabels[primaryRole] ?? primaryRole : 'Сотрудник';
