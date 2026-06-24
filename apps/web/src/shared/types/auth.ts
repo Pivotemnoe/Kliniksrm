@@ -5,6 +5,7 @@ export type Employee = {
   phone: string | null;
   position: string | null;
   defaultRoute: string | null;
+  restrictLoginToShifts: boolean;
   status: string;
   roles: string[];
   permissions: string[];

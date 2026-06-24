@@ -24,6 +24,7 @@ export type Employee = {
   phone: string | null;
   position: string | null;
   defaultRoute: string | null;
+  restrictLoginToShifts: boolean;
   status: EmployeeStatus;
   user: {
     id: string;
@@ -56,6 +57,7 @@ export type CreateEmployeeInput = {
   email?: string;
   position?: string;
   defaultRoute?: string | null;
+  restrictLoginToShifts?: boolean;
   password: string;
   roleCodes: string[];
   permissionGrants?: string[];
@@ -69,6 +71,7 @@ export type UpdateEmployeeInput = {
   email?: string;
   position?: string;
   defaultRoute?: string | null;
+  restrictLoginToShifts?: boolean;
   password?: string;
   status: EmployeeStatus;
   roleCodes: string[];

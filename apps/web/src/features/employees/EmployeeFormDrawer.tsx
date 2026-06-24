@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Alert, Button, Form, Input, Modal, Select, Space, Tag, Typography } from 'antd';
+import { Alert, Button, Checkbox, Form, Input, Modal, Select, Space, Tag, Typography } from 'antd';
 import { useMemo } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
@@ -22,6 +22,7 @@ const employeeSchema = z
     email: optionalEmail(),
     position: optionalString(120),
     defaultRoute: z.string().optional().nullable(),
+    restrictLoginToShifts: z.boolean().default(false),
     password: optionalString(200).refine((value) => !value || value.length >= 8, 'Минимум 8 символов'),
     status: z.enum(['ACTIVE', 'BLOCKED']),
     roleCodes: z.array(z.string()).min(1, 'Выберите хотя бы одну роль'),
@@ -188,6 +189,22 @@ export function EmployeeFormDrawer({
         />
         <Controller
           control={control}
+          name="restrictLoginToShifts"
+          render={({ field }) => (
+            <Form.Item>
+              <Checkbox checked={field.value} onChange={(event) => field.onChange(event.target.checked)}>
+                Вход только во время активной смены
+              </Checkbox>
+              <div>
+                <Typography.Text type="secondary">
+                  Если включено, сотрудник не сможет войти и продолжить работу без смены в расписании.
+                </Typography.Text>
+              </div>
+            </Form.Item>
+          )}
+        />
+        <Controller
+          control={control}
           name="roleCodes"
           render={({ field }) => (
             <Form.Item label="Роли доступа" validateStatus={errors.roleCodes ? 'error' : undefined} help={errors.roleCodes?.message}>
@@ -342,6 +359,7 @@ function getDefaultValues(employee?: Employee | null): EmployeeFormInput {
     email: nullToEmpty(employee?.user?.email),
     position: nullToEmpty(employee?.position),
     defaultRoute: employee?.defaultRoute ?? '',
+    restrictLoginToShifts: employee?.restrictLoginToShifts ?? false,
     password: '',
     status: (employee?.status ?? 'ACTIVE') as EmployeeStatus,
     roleCodes: employee?.roles.map((role) => role.code) ?? [],
@@ -358,6 +376,7 @@ export function toUpdateEmployeeInput(values: EmployeeFormValues): UpdateEmploye
     email: values.email,
     position: values.position,
     defaultRoute: values.defaultRoute || null,
+    restrictLoginToShifts: values.restrictLoginToShifts,
     password: values.password,
     status: values.status,
     roleCodes: values.roleCodes,

@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ArrayNotEmpty,
   IsArray,
+  IsBoolean,
   IsEmail,
   IsOptional,
   IsString,
@@ -39,6 +40,11 @@ export class CreateEmployeeDto {
   @IsString()
   @MaxLength(120)
   defaultRoute?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  restrictLoginToShifts?: boolean;
 
   @ApiProperty()
   @IsString()

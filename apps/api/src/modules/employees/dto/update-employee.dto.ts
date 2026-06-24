@@ -3,6 +3,7 @@ import { EmployeeStatus } from '@prisma/client';
 import {
   ArrayNotEmpty,
   IsArray,
+  IsBoolean,
   IsEmail,
   IsEnum,
   IsOptional,
@@ -42,6 +43,11 @@ export class UpdateEmployeeDto {
   @IsString()
   @MaxLength(120)
   defaultRoute?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  restrictLoginToShifts?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()

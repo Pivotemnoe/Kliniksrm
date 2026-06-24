@@ -1,6 +1,6 @@
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Input, Select, Space, Table, Tag, Typography } from 'antd';
+import { App, Button, Input, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
 import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -13,6 +13,7 @@ import { formatDateTime, getDayBounds } from '../../shared/utils/date';
 import { createOwner, createOwnerAnimal } from '../owners/owners.api';
 import { createAppointment, listAppointments } from './appointments.api';
 import { AppointmentFormDrawer, AppointmentFormSubmit } from './AppointmentFormDrawer';
+import { EmployeeShiftsPanel } from './EmployeeShiftsPanel';
 import {
   Appointment,
   AppointmentStatus,
@@ -144,62 +145,83 @@ export function AppointmentsPage() {
         ))}
       </div>
       <div className="list-panel">
-        <div className="list-panel-header">
-          <Input.Search
-            allowClear
-            enterButton={<SearchOutlined />}
-            placeholder="Поиск по клиенту, пациенту или комментарию"
-            className="search-input"
-            onSearch={(value) => {
-              setSearch(value.trim());
-              setOffset(0);
-            }}
-          />
-          <Space wrap>
-            <Input
-              type="date"
-              className="date-filter"
-              value={date}
-              onChange={(event) => {
-                setDate(event.target.value);
-                setOffset(0);
-              }}
-            />
-            <Select
-              allowClear
-              placeholder="Статус"
-              className="status-filter"
-              value={status}
-              onChange={(value) => {
-                setStatus(value);
-                setOffset(0);
-              }}
-              options={Object.entries(appointmentStatusLabels).map(([value, label]) => ({ value, label }))}
-            />
-          </Space>
-        </div>
-        <div className="list-panel-body">
-        <Space direction="vertical" size={16} className="full-width">
-          {appointmentsQuery.isError ? (
-            <Typography.Text type="danger">{getErrorMessage(appointmentsQuery.error)}</Typography.Text>
-          ) : null}
-          <Table<Appointment>
-            rowKey="id"
-            columns={columns}
-            dataSource={appointmentsQuery.data?.items ?? []}
-            loading={appointmentsQuery.isLoading}
-            onRow={(record) => ({ onDoubleClick: () => navigate(`/schedule/${record.id}`) })}
-            pagination={{
-              current: offset / pageSize + 1,
-              pageSize,
-              total: appointmentsQuery.data?.total ?? 0,
-              showSizeChanger: false,
-            }}
-            onChange={handleTableChange}
-            className="dense-table"
-          />
-        </Space>
-        </div>
+        <Tabs
+          items={[
+            {
+              key: 'appointments',
+              label: 'Записи на приём',
+              children: (
+                <>
+                  <div className="list-panel-header">
+                    <Input.Search
+                      allowClear
+                      enterButton={<SearchOutlined />}
+                      placeholder="Поиск по клиенту, пациенту или комментарию"
+                      className="search-input"
+                      onSearch={(value) => {
+                        setSearch(value.trim());
+                        setOffset(0);
+                      }}
+                    />
+                    <Space wrap>
+                      <Input
+                        type="date"
+                        className="date-filter"
+                        value={date}
+                        onChange={(event) => {
+                          setDate(event.target.value);
+                          setOffset(0);
+                        }}
+                      />
+                      <Select
+                        allowClear
+                        placeholder="Статус"
+                        className="status-filter"
+                        value={status}
+                        onChange={(value) => {
+                          setStatus(value);
+                          setOffset(0);
+                        }}
+                        options={Object.entries(appointmentStatusLabels).map(([value, label]) => ({ value, label }))}
+                      />
+                    </Space>
+                  </div>
+                  <div className="list-panel-body">
+                    <Space direction="vertical" size={16} className="full-width">
+                      {appointmentsQuery.isError ? (
+                        <Typography.Text type="danger">{getErrorMessage(appointmentsQuery.error)}</Typography.Text>
+                      ) : null}
+                      <Table<Appointment>
+                        rowKey="id"
+                        columns={columns}
+                        dataSource={appointmentsQuery.data?.items ?? []}
+                        loading={appointmentsQuery.isLoading}
+                        onRow={(record) => ({ onDoubleClick: () => navigate(`/schedule/${record.id}`) })}
+                        pagination={{
+                          current: offset / pageSize + 1,
+                          pageSize,
+                          total: appointmentsQuery.data?.total ?? 0,
+                          showSizeChanger: false,
+                        }}
+                        onChange={handleTableChange}
+                        className="dense-table"
+                      />
+                    </Space>
+                  </div>
+                </>
+              ),
+            },
+            {
+              key: 'employee-shifts',
+              label: 'Смены сотрудников',
+              children: (
+                <div className="list-panel-body">
+                  <EmployeeShiftsPanel canManage={canManage} />
+                </div>
+              ),
+            },
+          ]}
+        />
       </div>
       <AppointmentFormDrawer
         open={createOpen}

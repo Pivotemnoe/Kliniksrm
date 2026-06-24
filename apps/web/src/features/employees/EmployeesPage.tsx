@@ -77,6 +77,13 @@ export function EmployeesPage() {
         key: 'defaultRoute',
         render: (value: string | null) => getDefaultRouteLabel(value),
       },
+      {
+        title: 'Вход по сменам',
+        dataIndex: 'restrictLoginToShifts',
+        key: 'restrictLoginToShifts',
+        width: 150,
+        render: (value: boolean) => (value ? <Tag color="orange">Только в смену</Tag> : <Tag>Не ограничен</Tag>),
+      },
       { title: 'Телефон', dataIndex: 'phone', key: 'phone', render: (value: string | null, record) => value || record.user?.phone || '—' },
       { title: 'Email', key: 'email', render: (_, record) => record.user?.email || '—' },
       {
@@ -163,6 +170,7 @@ export function EmployeesPage() {
       email: normalizedValues.email,
       position: normalizedValues.position,
       defaultRoute: normalizedValues.defaultRoute,
+      restrictLoginToShifts: normalizedValues.restrictLoginToShifts,
       password: normalizedValues.password,
       roleCodes: normalizedValues.roleCodes,
       permissionGrants: normalizedValues.permissionGrants,

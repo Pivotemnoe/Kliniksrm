@@ -83,6 +83,8 @@ export class AuthService {
       throw new UnauthorizedException('Сотрудник заблокирован или не связан с пользователем');
     }
 
+    await this.assertEmployeeCanUseCrm(user.employee, 'auth.login_outside_shift', ipAddress);
+
     const token = randomBytes(48).toString('base64url');
     const sessionId = this.hashSessionToken(token);
     const expiresAt = this.getIdleSessionExpiresAt();
@@ -131,6 +133,42 @@ export class AuthService {
       entityId: sessionId,
       ipAddress,
     });
+  }
+
+  async assertEmployeeCanUseCrm(
+    employee: { id: string; restrictLoginToShifts?: boolean | null },
+    action: string,
+    ipAddress?: string | null,
+  ) {
+    if (!employee.restrictLoginToShifts) {
+      return;
+    }
+
+    const now = new Date();
+    const activeShift = await this.prisma.employeeShift.findFirst({
+      where: {
+        employeeId: employee.id,
+        isActive: true,
+        startsAt: { lte: now },
+        endsAt: { gt: now },
+      },
+      select: { id: true, startsAt: true, endsAt: true },
+    });
+
+    if (activeShift) {
+      return;
+    }
+
+    await this.auditService.log({
+      actorId: employee.id,
+      action,
+      entityType: 'Employee',
+      entityId: employee.id,
+      ipAddress,
+      metadata: { reason: 'no_active_shift' },
+    });
+
+    throw new UnauthorizedException('Сейчас у сотрудника нет активной смены. Вход разрешён только в назначенное рабочее время.');
   }
 
   async changePassword({
@@ -198,6 +236,7 @@ export class AuthService {
     phone: string | null;
     position: string | null;
     defaultRoute: string | null;
+    restrictLoginToShifts?: boolean | null;
     status: string;
     roles: Array<{
       role: {
@@ -240,6 +279,7 @@ export class AuthService {
       phone: employee.phone,
       position: employee.position,
       defaultRoute: employee.defaultRoute,
+      restrictLoginToShifts: Boolean(employee.restrictLoginToShifts),
       status: employee.status,
       roles,
       permissions: [...permissions].sort(),

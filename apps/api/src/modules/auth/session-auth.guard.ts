@@ -73,6 +73,13 @@ export class SessionAuthGuard implements CanActivate {
       throw new UnauthorizedException('Сотрудник заблокирован или не найден');
     }
 
+    try {
+      await this.authService.assertEmployeeCanUseCrm(session.user.employee, 'auth.session_outside_shift', getIpAddress(request));
+    } catch (error) {
+      await this.prisma.session.deleteMany({ where: { id: session.id } });
+      throw error;
+    }
+
     request.auth = {
       sessionId: session.id,
       userId: session.userId,
@@ -83,4 +90,14 @@ export class SessionAuthGuard implements CanActivate {
 
     return true;
   }
+}
+
+function getIpAddress(request: AuthenticatedRequest) {
+  const forwardedFor = request.headers['x-forwarded-for'];
+
+  if (typeof forwardedFor === 'string') {
+    return forwardedFor.split(',')[0]?.trim() ?? null;
+  }
+
+  return request.ip ?? request.socket?.remoteAddress ?? null;
 }

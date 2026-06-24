@@ -111,6 +111,7 @@ export class EmployeesService {
             phone,
             position: dto.position,
             defaultRoute: normalizeDefaultRoute(dto.defaultRoute),
+            restrictLoginToShifts: dto.restrictLoginToShifts ?? false,
             status: EmployeeStatus.ACTIVE,
             roles: {
               create: roles.map((role) => ({
@@ -169,6 +170,13 @@ export class EmployeesService {
 
     if (employeeId === actorId && dto.status === EmployeeStatus.BLOCKED) {
       throw new BadRequestException('Нельзя заблокировать собственную активную учётную запись');
+    }
+
+    if (employeeId === actorId && dto.restrictLoginToShifts === true && !employee.restrictLoginToShifts) {
+      const hasActiveShift = await this.hasActiveShiftNow(employeeId);
+      if (!hasActiveShift) {
+        throw new BadRequestException('Нельзя включить себе вход только по сменам без активной смены на текущее время');
+      }
     }
 
     const userId = employee.userId;
@@ -252,6 +260,7 @@ export class EmployeesService {
             ...(dto.phone !== undefined ? { phone } : {}),
             ...(dto.position !== undefined ? { position: dto.position ?? null } : {}),
             ...(dto.defaultRoute !== undefined ? { defaultRoute: normalizeDefaultRoute(dto.defaultRoute) } : {}),
+            ...(dto.restrictLoginToShifts !== undefined ? { restrictLoginToShifts: dto.restrictLoginToShifts } : {}),
             ...(dto.status !== undefined ? { status: dto.status } : {}),
           },
           include: employeeInclude,
@@ -396,6 +405,21 @@ export class EmployeesService {
     const owner = existing.employee?.fullName ? ` у сотрудника "${existing.employee.fullName}"` : '';
     throw new ConflictException(`Телефон ${existing.phone ?? formatNormalizedRussianPhone(phoneNormalized)} уже используется${owner}`);
   }
+
+  private async hasActiveShiftNow(employeeId: string) {
+    const now = new Date();
+    const shift = await this.prisma.employeeShift.findFirst({
+      where: {
+        employeeId,
+        isActive: true,
+        startsAt: { lte: now },
+        endsAt: { gt: now },
+      },
+      select: { id: true },
+    });
+
+    return Boolean(shift);
+  }
 }
 
 const employeeInclude = {
@@ -445,6 +469,7 @@ function serializeEmployee(employee: Prisma.EmployeeGetPayload<{ include: typeof
     phone: employee.phone,
     position: employee.position,
     defaultRoute: employee.defaultRoute,
+    restrictLoginToShifts: employee.restrictLoginToShifts,
     status: employee.status,
     user: employee.user,
     roles: employee.roles.map(({ role }) => ({

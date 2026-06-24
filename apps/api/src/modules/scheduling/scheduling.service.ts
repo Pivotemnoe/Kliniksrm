@@ -2,8 +2,11 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { EmployeeStatus, Prisma } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CreateEmployeeShiftDto } from './dto/create-employee-shift.dto';
 import { CreateSchedulingResourceDto } from './dto/create-scheduling-resource.dto';
+import { ListEmployeeShiftsQueryDto } from './dto/list-employee-shifts-query.dto';
 import { UpdateClinicOfficeDto } from './dto/update-clinic-office.dto';
+import { UpdateEmployeeShiftDto } from './dto/update-employee-shift.dto';
 import { UpdateSchedulingResourceDto } from './dto/update-scheduling-resource.dto';
 
 @Injectable()
@@ -40,6 +43,7 @@ export class SchedulingService {
           fullName: true,
           position: true,
           phone: true,
+          restrictLoginToShifts: true,
         },
       }),
     ]);
@@ -92,6 +96,111 @@ export class SchedulingService {
     } catch (error) {
       handleUniqueError(error, 'Филиал с таким названием уже есть');
     }
+  }
+
+  async listEmployeeShifts(query: ListEmployeeShiftsQueryDto) {
+    const from = query.from ? parseDate(query.from, 'Укажите корректное начало периода') : startOfToday();
+    const to = query.to ? parseDate(query.to, 'Укажите корректное окончание периода') : addDays(from, 14);
+
+    if (from >= to) {
+      throw new BadRequestException('Окончание периода должно быть позже начала');
+    }
+
+    return this.prisma.employeeShift.findMany({
+      where: {
+        ...(query.employeeId ? { employeeId: query.employeeId } : {}),
+        startsAt: { lt: to },
+        endsAt: { gt: from },
+      },
+      orderBy: [{ startsAt: 'asc' }, { employee: { fullName: 'asc' } }],
+      include: employeeShiftInclude,
+    });
+  }
+
+  async createEmployeeShift(dto: CreateEmployeeShiftDto, actorId: string) {
+    await this.ensureEmployeeActive(dto.employeeId);
+    const startsAt = parseDate(dto.startsAt, 'Укажите корректное начало смены');
+    const endsAt = parseDate(dto.endsAt, 'Укажите корректное окончание смены');
+    validateShiftRange(startsAt, endsAt);
+    await this.ensureNoShiftOverlap(dto.employeeId, startsAt, endsAt);
+
+    const shift = await this.prisma.employeeShift.create({
+      data: {
+        employeeId: dto.employeeId,
+        startsAt,
+        endsAt,
+        comment: emptyToNull(dto.comment),
+        isActive: dto.isActive ?? true,
+      },
+      include: employeeShiftInclude,
+    });
+
+    await this.auditService.log({
+      actorId,
+      action: 'scheduling.employee_shift.create',
+      entityType: 'EmployeeShift',
+      entityId: shift.id,
+      metadata: { employeeId: shift.employeeId, startsAt: shift.startsAt.toISOString(), endsAt: shift.endsAt.toISOString() },
+    });
+
+    return shift;
+  }
+
+  async updateEmployeeShift(shiftId: string, dto: UpdateEmployeeShiftDto, actorId: string) {
+    const existing = await this.getEmployeeShiftOrThrow(shiftId);
+    const employeeId = dto.employeeId ?? existing.employeeId;
+    if (dto.employeeId) {
+      await this.ensureEmployeeActive(dto.employeeId);
+    }
+
+    const startsAt = dto.startsAt ? parseDate(dto.startsAt, 'Укажите корректное начало смены') : existing.startsAt;
+    const endsAt = dto.endsAt ? parseDate(dto.endsAt, 'Укажите корректное окончание смены') : existing.endsAt;
+    const nextIsActive = dto.isActive ?? existing.isActive;
+    validateShiftRange(startsAt, endsAt);
+    if (nextIsActive) {
+      await this.ensureNoShiftOverlap(employeeId, startsAt, endsAt, shiftId);
+    }
+
+    const shift = await this.prisma.employeeShift.update({
+      where: { id: shiftId },
+      data: {
+        ...(dto.employeeId !== undefined ? { employeeId } : {}),
+        ...(dto.startsAt !== undefined ? { startsAt } : {}),
+        ...(dto.endsAt !== undefined ? { endsAt } : {}),
+        ...(dto.comment !== undefined ? { comment: emptyToNull(dto.comment) } : {}),
+        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+      },
+      include: employeeShiftInclude,
+    });
+
+    await this.auditService.log({
+      actorId,
+      action: 'scheduling.employee_shift.update',
+      entityType: 'EmployeeShift',
+      entityId: shift.id,
+      metadata: { changedFields: Object.keys(dto), employeeId: shift.employeeId },
+    });
+
+    return shift;
+  }
+
+  async disableEmployeeShift(shiftId: string, actorId: string) {
+    await this.getEmployeeShiftOrThrow(shiftId);
+    const shift = await this.prisma.employeeShift.update({
+      where: { id: shiftId },
+      data: { isActive: false },
+      include: employeeShiftInclude,
+    });
+
+    await this.auditService.log({
+      actorId,
+      action: 'scheduling.employee_shift.disable',
+      entityType: 'EmployeeShift',
+      entityId: shift.id,
+      metadata: { employeeId: shift.employeeId },
+    });
+
+    return shift;
   }
 
   async createRoom(dto: CreateSchedulingResourceDto, actorId: string) {
@@ -357,7 +466,50 @@ export class SchedulingService {
 
     return warehouse;
   }
+
+  private async getEmployeeShiftOrThrow(shiftId: string) {
+    const shift = await this.prisma.employeeShift.findUnique({
+      where: { id: shiftId },
+    });
+
+    if (!shift) {
+      throw new NotFoundException('Смена сотрудника не найдена');
+    }
+
+    return shift;
+  }
+
+  private async ensureNoShiftOverlap(employeeId: string, startsAt: Date, endsAt: Date, ignoreShiftId?: string) {
+    const overlap = await this.prisma.employeeShift.findFirst({
+      where: {
+        employeeId,
+        isActive: true,
+        ...(ignoreShiftId ? { id: { not: ignoreShiftId } } : {}),
+        startsAt: { lt: endsAt },
+        endsAt: { gt: startsAt },
+      },
+      select: { id: true, startsAt: true, endsAt: true },
+    });
+
+    if (overlap) {
+      throw new BadRequestException(
+        `У сотрудника уже есть активная смена в это время: ${overlap.startsAt.toLocaleString('ru-RU')} - ${overlap.endsAt.toLocaleString('ru-RU')}`,
+      );
+    }
+  }
 }
+
+const employeeShiftInclude = {
+  employee: {
+    select: {
+      id: true,
+      fullName: true,
+      position: true,
+      phone: true,
+      restrictLoginToShifts: true,
+    },
+  },
+} satisfies Prisma.EmployeeShiftInclude;
 
 function requiredName(value: string, message: string) {
   const normalized = value.trim();
@@ -372,6 +524,33 @@ function requiredName(value: string, message: string) {
 function emptyToNull(value?: string | null) {
   const normalized = value?.trim();
   return normalized ? normalized : null;
+}
+
+function parseDate(value: string, message: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new BadRequestException(message);
+  }
+
+  return date;
+}
+
+function validateShiftRange(startsAt: Date, endsAt: Date) {
+  if (startsAt >= endsAt) {
+    throw new BadRequestException('Окончание смены должно быть позже начала');
+  }
+}
+
+function startOfToday() {
+  const value = new Date();
+  value.setHours(0, 0, 0, 0);
+  return value;
+}
+
+function addDays(value: Date, days: number) {
+  const result = new Date(value);
+  result.setDate(result.getDate() + days);
+  return result;
 }
 
 function handleUniqueError(error: unknown, message: string): never {

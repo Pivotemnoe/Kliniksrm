@@ -1,5 +1,14 @@
 import { apiRequest } from '../../api/client';
-import { SchedulingResourcePayload, SchedulingResources, SchedulingSettings, UpdateClinicOfficePayload } from './types';
+import { buildQuery } from '../../shared/utils/query';
+import {
+  EmployeeShift,
+  EmployeeShiftPayload,
+  EmployeeShiftQuery,
+  SchedulingResourcePayload,
+  SchedulingResources,
+  SchedulingSettings,
+  UpdateClinicOfficePayload,
+} from './types';
 
 export function getSchedulingResources() {
   return apiRequest<SchedulingResources>('/v1/scheduling/resources');
@@ -11,6 +20,22 @@ export function getSchedulingSettings() {
 
 export function updateClinicOffice(officeId: string, payload: UpdateClinicOfficePayload) {
   return apiRequest(`/v1/scheduling/offices/${officeId}`, { method: 'PATCH', body: payload });
+}
+
+export function listEmployeeShifts(query: EmployeeShiftQuery = {}) {
+  return apiRequest<EmployeeShift[]>(`/v1/scheduling/employee-shifts${buildQuery(query)}`);
+}
+
+export function createEmployeeShift(payload: EmployeeShiftPayload) {
+  return apiRequest<EmployeeShift>('/v1/scheduling/employee-shifts', { method: 'POST', body: payload });
+}
+
+export function updateEmployeeShift(shiftId: string, payload: Partial<EmployeeShiftPayload>) {
+  return apiRequest<EmployeeShift>(`/v1/scheduling/employee-shifts/${shiftId}`, { method: 'PATCH', body: payload });
+}
+
+export function disableEmployeeShift(shiftId: string) {
+  return apiRequest<EmployeeShift>(`/v1/scheduling/employee-shifts/${shiftId}`, { method: 'DELETE' });
 }
 
 export function createRoom(payload: SchedulingResourcePayload) {

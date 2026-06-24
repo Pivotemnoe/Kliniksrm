@@ -59,6 +59,7 @@ const demoEmployee: AuthResponse['employee'] = {
   phone: null,
   position: 'Директор',
   defaultRoute: '/dashboard',
+  restrictLoginToShifts: false,
   status: 'ACTIVE',
   roles: ['director'],
   permissions: ['*'],

@@ -30,6 +30,7 @@ export type SchedulingEmployee = {
   fullName: string;
   position: string | null;
   phone: string | null;
+  restrictLoginToShifts: boolean;
 };
 
 export type SchedulingResources = {
@@ -72,4 +73,30 @@ export type UpdateClinicOfficePayload = {
 export type SchedulingResourcePayload = {
   officeId?: string;
   name: string;
+};
+
+export type EmployeeShift = {
+  id: string;
+  employeeId: string;
+  employee: SchedulingEmployee;
+  startsAt: string;
+  endsAt: string;
+  comment: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type EmployeeShiftQuery = {
+  employeeId?: string;
+  from?: string;
+  to?: string;
+};
+
+export type EmployeeShiftPayload = {
+  employeeId: string;
+  startsAt: string;
+  endsAt: string;
+  comment?: string | null;
+  isActive?: boolean;
 };
