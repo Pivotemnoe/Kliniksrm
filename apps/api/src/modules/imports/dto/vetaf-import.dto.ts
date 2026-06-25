@@ -17,7 +17,7 @@ export class VetafImportDto {
   kind!: VetafImportKind;
 
   @IsArray()
-  @ArrayMaxSize(5000)
+  @ArrayMaxSize(500)
   @ValidateNested({ each: true })
   @Type(() => VetafImportRowDto)
   rows!: VetafImportRowDto[];

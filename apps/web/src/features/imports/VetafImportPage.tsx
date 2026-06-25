@@ -17,6 +17,8 @@ const kindOptions = [
   { label: 'Товары и остатки', value: 'stock' },
 ] satisfies Array<{ label: string; value: VetafImportKind }>;
 
+const importBatchSize = 250;
+
 export function VetafImportPage() {
   const { message } = App.useApp();
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -24,18 +26,21 @@ export function VetafImportPage() {
   const [parsedFile, setParsedFile] = useState<ParsedFile | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
   const [result, setResult] = useState<VetafImportResult | null>(null);
+  const [progress, setProgress] = useState<{ processed: number; total: number; mode: 'preview' | 'commit' } | null>(null);
   const previewMutation = useMutation({
-    mutationFn: () => previewVetafImport(kind, parsedFile?.rows ?? []),
+    mutationFn: () => runBatchedImport(kind, parsedFile?.rows ?? [], 'preview', setProgress),
     onSuccess: setResult,
     onError: (error) => message.error(getErrorMessage(error)),
+    onSettled: () => setProgress(null),
   });
   const commitMutation = useMutation({
-    mutationFn: () => commitVetafImport(kind, parsedFile?.rows ?? []),
+    mutationFn: () => runBatchedImport(kind, parsedFile?.rows ?? [], 'commit', setProgress),
     onSuccess: (nextResult) => {
       setResult(nextResult);
       message.success('Импорт выполнен');
     },
     onError: (error) => message.error(getErrorMessage(error)),
+    onSettled: () => setProgress(null),
   });
   const sampleColumns = useMemo(() => buildSampleColumns(result), [result]);
 
@@ -97,6 +102,7 @@ export function VetafImportPage() {
                 type="info"
                 showIcon
                 message={`${parsedFile.fileName}: ${parsedFile.rows.length} строк`}
+                description={progress ? `${progress.mode === 'preview' ? 'Проверка' : 'Импорт'}: обработано ${progress.processed} из ${progress.total} строк` : undefined}
                 action={
                   <Space>
                     <Button icon={<FileSearchOutlined />} loading={previewMutation.isPending} onClick={() => previewMutation.mutate()}>
@@ -130,7 +136,7 @@ export function VetafImportPage() {
             ) : null}
 
             <Typography.Text type="secondary">
-              Для клиентов нужны колонки: владелец, телефон, кличка. Для товаров: наименование, остаток, цена, склад.
+              Для клиентов нужны колонки: владелец, телефон, кличка. Для товаров: наименование, остаток, цена, склад. Большие файлы отправляются на сервер пакетами по {importBatchSize} строк.
             </Typography.Text>
           </Space>
         </div>
@@ -209,6 +215,68 @@ function sampleColumnTitle(key: string) {
     price: 'Цена',
   };
   return titles[key] ?? key;
+}
+
+async function runBatchedImport(
+  kind: VetafImportKind,
+  rows: VetafImportRow[],
+  mode: 'preview' | 'commit',
+  setProgress: (progress: { processed: number; total: number; mode: 'preview' | 'commit' }) => void,
+) {
+  if (!rows.length) {
+    throw new Error('Нет строк для импорта');
+  }
+
+  const results: VetafImportResult[] = [];
+  for (let index = 0; index < rows.length; index += importBatchSize) {
+    const batch = rows.slice(index, index + importBatchSize);
+    const result = mode === 'preview' ? await previewVetafImport(kind, batch) : await commitVetafImport(kind, batch);
+    results.push(result);
+    setProgress({ processed: Math.min(index + batch.length, rows.length), total: rows.length, mode });
+  }
+
+  return mergeImportResults(kind, mode, results);
+}
+
+function mergeImportResults(kind: VetafImportKind, mode: 'preview' | 'commit', results: VetafImportResult[]): VetafImportResult {
+  return results.reduce<VetafImportResult>(
+    (merged, result) => ({
+      kind,
+      mode,
+      summary: {
+        totalRows: merged.summary.totalRows + result.summary.totalRows,
+        validRows: merged.summary.validRows + result.summary.validRows,
+        errorRows: merged.summary.errorRows + result.summary.errorRows,
+        ownersCreated: merged.summary.ownersCreated + result.summary.ownersCreated,
+        ownersUpdated: merged.summary.ownersUpdated + result.summary.ownersUpdated,
+        animalsCreated: merged.summary.animalsCreated + result.summary.animalsCreated,
+        productsCreated: merged.summary.productsCreated + result.summary.productsCreated,
+        productsUpdated: merged.summary.productsUpdated + result.summary.productsUpdated,
+        stockBatchesCreated: merged.summary.stockBatchesCreated + result.summary.stockBatchesCreated,
+        skippedRows: merged.summary.skippedRows + result.summary.skippedRows,
+      },
+      issues: [...merged.issues, ...result.issues],
+      samples: [...merged.samples, ...result.samples].slice(0, 20),
+    }),
+    {
+      kind,
+      mode,
+      summary: {
+        totalRows: 0,
+        validRows: 0,
+        errorRows: 0,
+        ownersCreated: 0,
+        ownersUpdated: 0,
+        animalsCreated: 0,
+        productsCreated: 0,
+        productsUpdated: 0,
+        stockBatchesCreated: 0,
+        skippedRows: 0,
+      },
+      issues: [],
+      samples: [],
+    },
+  );
 }
 
 function parseDelimitedTable(text: string): VetafImportRow[] {
