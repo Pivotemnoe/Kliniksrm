@@ -11,7 +11,7 @@ import { getSchedulingResources } from '../scheduling/scheduling.api';
 import { nullToEmpty, optionalString } from '../../shared/utils/forms';
 import { AddressAutocomplete } from '../../shared/ui/AddressAutocomplete';
 import { RussianPhoneInput } from '../../shared/ui/RussianPhoneInput';
-import { normalizeAnimalBirthDateInput } from '../../shared/utils/animalBirthDate';
+import { isAnimalBirthDateInputValid, normalizeAnimalBirthDateInput } from '../../shared/utils/animalBirthDate';
 import { AnimalCatalogFields } from '../animals/AnimalCatalogFields';
 import { AnimalMutationInput, AnimalSex } from '../animals/types';
 import { Owner, OwnerMutationInput } from '../owners/types';
@@ -32,7 +32,7 @@ const queueSchema = z
     animalSpecies: optionalString(80),
     animalBreed: optionalString(120),
     animalSex: z.enum(['MALE', 'FEMALE', 'UNKNOWN']),
-    birthDate: optionalString(),
+    birthDate: optionalString().refine(isAnimalBirthDateInputValid, 'Введите дату: ГГГГ, ММ.ГГГГ или ДД.ММ.ГГГГ'),
     color: optionalString(120),
     microchip: optionalString(120),
     mark: optionalString(120),
@@ -543,9 +543,9 @@ function PrimaryCardsStep({ control, setValue }: { control: any; setValue: any }
               <Form.Item
                 label="Дата рождения"
                 validateStatus={fieldState.error ? 'error' : undefined}
-                help={fieldState.error?.message ?? 'Можно ввести только год, например 2020'}
+                help={fieldState.error?.message ?? 'Можно указать год, месяц и год или полную дату'}
               >
-                <Input placeholder="ГГГГ или ДД.ММ.ГГГГ" {...field} />
+                <Input placeholder="ГГГГ, ММ.ГГГГ или ДД.ММ.ГГГГ" {...field} />
               </Form.Item>
             )}
           />

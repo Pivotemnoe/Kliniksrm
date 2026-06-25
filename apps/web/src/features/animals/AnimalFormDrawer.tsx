@@ -3,7 +3,7 @@ import { Alert, Button, Checkbox, Drawer, Form, Input, Select, Space } from 'ant
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
-import { formatAnimalBirthDateInput, normalizeAnimalBirthDateInput } from '../../shared/utils/animalBirthDate';
+import { formatAnimalBirthDateInput, isAnimalBirthDateInputValid, normalizeAnimalBirthDateInput } from '../../shared/utils/animalBirthDate';
 import { nullToEmpty, optionalString } from '../../shared/utils/forms';
 import { AnimalCatalogFields } from './AnimalCatalogFields';
 import { Animal, AnimalMutationInput, AnimalSex } from './types';
@@ -13,7 +13,7 @@ const animalSchema = z.object({
   species: z.string().trim().min(1, 'Выберите вид').max(120),
   breed: z.string().trim().min(1, 'Выберите породу').max(200),
   sex: z.enum(['MALE', 'FEMALE', 'UNKNOWN']),
-  birthDate: optionalString(),
+  birthDate: optionalString().refine(isAnimalBirthDateInputValid, 'Введите дату: ГГГГ, ММ.ГГГГ или ДД.ММ.ГГГГ'),
   color: optionalString(120),
   microchip: optionalString(120),
   mark: optionalString(120),
@@ -109,9 +109,9 @@ export function AnimalFormDrawer({
               <Form.Item
                 label="Дата рождения"
                 validateStatus={fieldState.error ? 'error' : undefined}
-                help={fieldState.error?.message ?? 'Можно ввести только год, например 2020'}
+                help={fieldState.error?.message ?? 'Можно указать год, месяц и год или полную дату'}
               >
-                <Input placeholder="ГГГГ или ДД.ММ.ГГГГ" {...field} />
+                <Input placeholder="ГГГГ, ММ.ГГГГ или ДД.ММ.ГГГГ" {...field} />
               </Form.Item>
             )}
           />

@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { EmployeeStatus, Prisma } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CreateClinicOfficeDto } from './dto/create-clinic-office.dto';
 import { CreateEmployeeShiftDto } from './dto/create-employee-shift.dto';
 import { CreateSchedulingResourceDto } from './dto/create-scheduling-resource.dto';
 import { ListEmployeeShiftsQueryDto } from './dto/list-employee-shifts-query.dto';
@@ -62,6 +63,43 @@ export class SchedulingService {
     });
 
     return { offices };
+  }
+
+  async createOffice(dto: CreateClinicOfficeDto, actorId: string) {
+    const organization = await this.prisma.organization.findFirst({
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+
+    if (!organization) {
+      throw new BadRequestException('Организация не настроена');
+    }
+
+    const office = await this.prisma.clinicOffice.create({
+      data: {
+        organizationId: organization.id,
+        name: requiredName(dto.name, 'Укажите название филиала'),
+        phone: emptyToNull(dto.phone),
+        timezone: requiredName(dto.timezone ?? 'Europe/Moscow', 'Укажите часовой пояс'),
+        address: emptyToNull(dto.address),
+        ...(dto.workingHours !== undefined ? { workingHours: dto.workingHours as Prisma.InputJsonValue } : {}),
+      },
+      include: {
+        rooms: { orderBy: { name: 'asc' } },
+        hospitalBoxes: { orderBy: { name: 'asc' } },
+        warehouses: { orderBy: { name: 'asc' } },
+      },
+    });
+
+    await this.auditService.log({
+      actorId,
+      action: 'scheduling.office.create',
+      entityType: 'ClinicOffice',
+      entityId: office.id,
+      metadata: { name: office.name },
+    });
+
+    return office;
   }
 
   async updateOffice(officeId: string, dto: UpdateClinicOfficeDto, actorId: string) {

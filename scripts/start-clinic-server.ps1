@@ -9,7 +9,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$Utf8NoBom = New-Object System.Text.UTF8Encoding -ArgumentList $false
+[Console]::InputEncoding = $Utf8NoBom
+[Console]::OutputEncoding = $Utf8NoBom
+$OutputEncoding = $Utf8NoBom
 
 function Show-Usage {
   Write-Host "Start local TemichevVet server."
@@ -186,6 +189,32 @@ function Backup-CurrentDatabase {
   }
 }
 
+function Invoke-DockerPullWithRetry {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Image,
+    [Parameter(Mandatory = $true)]
+    [string]$Label,
+    [int]$Attempts = 2
+  )
+
+  for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+    Write-Host "Скачиваю Docker-образ $Label ($attempt/$Attempts)..."
+    Write-Host "  $Image"
+    docker pull $Image
+    if ($LASTEXITCODE -eq 0) {
+      return $true
+    }
+
+    if ($attempt -lt $Attempts) {
+      Write-Host "Скачивание не удалось. Жду перед повторной попыткой..."
+      Start-Sleep -Seconds (5 * $attempt)
+    }
+  }
+
+  return $false
+}
+
 function Try-UseRemoteImages {
   if ($Build -or $NoImageUpdate) {
     return $false
@@ -206,10 +235,8 @@ function Try-UseRemoteImages {
   Write-Host "Checking updated TemichevVet Docker images..."
   Backup-CurrentDatabase
 
-  docker pull $remoteApi
-  $apiPullOk = $LASTEXITCODE -eq 0
-  docker pull $remoteWeb
-  $webPullOk = $LASTEXITCODE -eq 0
+  $apiPullOk = Invoke-DockerPullWithRetry -Image $remoteApi -Label "API"
+  $webPullOk = Invoke-DockerPullWithRetry -Image $remoteWeb -Label "web"
 
   if ($apiPullOk -and $webPullOk) {
     Set-EnvValue "TEMICHEVVET_API_IMAGE" $remoteApi
@@ -218,7 +245,9 @@ function Try-UseRemoteImages {
     return $true
   }
 
-  Write-Host "Could not update Docker images from registry. Continuing with already loaded local images."
+  Write-Host "Не удалось обновить Docker-образы из интернета."
+  Write-Host "Если в ошибке написано TLS handshake timeout, проверьте доступ к ghcr.io и pkg-containers.githubusercontent.com."
+  Write-Host "Запускаю уже загруженную локальную версию."
   return $false
 }
 

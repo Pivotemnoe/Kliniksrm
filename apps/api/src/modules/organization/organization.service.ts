@@ -16,7 +16,7 @@ export class OrganizationService {
       include: {
         offices: {
           orderBy: { name: 'asc' },
-          select: { id: true, name: true, address: true, phone: true },
+          select: { id: true, name: true, address: true, phone: true, timezone: true },
         },
       },
     });
@@ -49,7 +49,7 @@ export class OrganizationService {
       include: {
         offices: {
           orderBy: { name: 'asc' },
-          select: { id: true, name: true, address: true, phone: true },
+          select: { id: true, name: true, address: true, phone: true, timezone: true },
         },
       },
     });

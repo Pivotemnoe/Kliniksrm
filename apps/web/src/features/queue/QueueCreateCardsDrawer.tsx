@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
 import { AddressAutocomplete } from '../../shared/ui/AddressAutocomplete';
 import { RussianPhoneInput } from '../../shared/ui/RussianPhoneInput';
-import { normalizeAnimalBirthDateInput } from '../../shared/utils/animalBirthDate';
+import { isAnimalBirthDateInputValid, normalizeAnimalBirthDateInput } from '../../shared/utils/animalBirthDate';
 import { nullToEmpty, optionalString } from '../../shared/utils/forms';
 import { AnimalCatalogFields } from '../animals/AnimalCatalogFields';
 import { AnimalMutationInput, AnimalSex } from '../animals/types';
@@ -20,7 +20,7 @@ const createCardsSchema = z.object({
   animalSpecies: z.string().trim().min(1, 'Выберите вид').max(80),
   animalBreed: z.string().trim().min(1, 'Выберите породу').max(120),
   animalSex: z.enum(['MALE', 'FEMALE', 'UNKNOWN']),
-  birthDate: optionalString(),
+  birthDate: optionalString().refine(isAnimalBirthDateInputValid, 'Введите дату: ГГГГ, ММ.ГГГГ или ДД.ММ.ГГГГ'),
   color: optionalString(120),
   microchip: optionalString(120),
   mark: optionalString(120),
@@ -171,9 +171,9 @@ export function QueueCreateCardsDrawer({
               <Form.Item
                 label="Дата рождения"
                 validateStatus={fieldState.error ? 'error' : undefined}
-                help={fieldState.error?.message ?? 'Можно ввести только год, например 2020'}
+                help={fieldState.error?.message ?? 'Можно указать год, месяц и год или полную дату'}
               >
-                <Input placeholder="ГГГГ или ДД.ММ.ГГГГ" {...field} />
+                <Input placeholder="ГГГГ, ММ.ГГГГ или ДД.ММ.ГГГГ" {...field} />
               </Form.Item>
             )}
           />

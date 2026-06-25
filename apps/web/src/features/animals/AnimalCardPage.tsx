@@ -250,14 +250,52 @@ function getAgeLabel(value?: string | null) {
   }
 
   const birthDate = new Date(value);
-  const now = new Date();
-  let years = now.getFullYear() - birthDate.getFullYear();
-  const monthDelta = now.getMonth() - birthDate.getMonth();
-  if (monthDelta < 0 || (monthDelta === 0 && now.getDate() < birthDate.getDate())) {
-    years -= 1;
+  if (Number.isNaN(birthDate.getTime())) {
+    return '—';
   }
 
-  return years >= 0 ? `${years} ${years === 1 ? 'год' : years >= 2 && years <= 4 ? 'года' : 'лет'}` : '—';
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  birthDate.setHours(0, 0, 0, 0);
+
+  if (birthDate > now) {
+    return '—';
+  }
+
+  let years = now.getFullYear() - birthDate.getFullYear();
+  let months = now.getMonth() - birthDate.getMonth();
+  let days = now.getDate() - birthDate.getDate();
+
+  if (days < 0) {
+    months -= 1;
+    days += new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+  }
+
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+
+  if (years > 0) {
+    return [formatAgePart(years, 'год', 'года', 'лет'), months > 0 ? formatAgePart(months, 'месяц', 'месяца', 'месяцев') : null]
+      .filter(Boolean)
+      .join(' ');
+  }
+
+  if (months > 0) {
+    return [formatAgePart(months, 'месяц', 'месяца', 'месяцев'), days > 0 ? formatAgePart(days, 'день', 'дня', 'дней') : null]
+      .filter(Boolean)
+      .join(' ');
+  }
+
+  return formatAgePart(days, 'день', 'дня', 'дней');
+}
+
+function formatAgePart(value: number, one: string, few: string, many: string) {
+  const lastDigit = value % 10;
+  const lastTwoDigits = value % 100;
+  const label = lastDigit === 1 && lastTwoDigits !== 11 ? one : lastDigit >= 2 && lastDigit <= 4 && (lastTwoDigits < 12 || lastTwoDigits > 14) ? few : many;
+  return `${value} ${label}`;
 }
 
 function getLatestVaccination(vaccinations?: Vaccination[]) {

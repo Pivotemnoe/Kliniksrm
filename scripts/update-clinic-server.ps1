@@ -5,7 +5,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$Utf8NoBom = New-Object System.Text.UTF8Encoding -ArgumentList $false
+[Console]::InputEncoding = $Utf8NoBom
+[Console]::OutputEncoding = $Utf8NoBom
+$OutputEncoding = $Utf8NoBom
 
 $RootDir = Resolve-Path (Join-Path $PSScriptRoot "..")
 $EnvFile = Join-Path $RootDir ".env"
@@ -83,6 +86,40 @@ function Backup-CurrentDatabase {
   }
 }
 
+function Invoke-DockerPullWithRetry {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Image,
+    [Parameter(Mandatory = $true)]
+    [string]$Label,
+    [int]$Attempts = 3
+  )
+
+  for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+    Write-Host "Скачиваю Docker-образ $Label ($attempt/$Attempts)..."
+    Write-Host "  $Image"
+    docker pull $Image
+    if ($LASTEXITCODE -eq 0) {
+      return $true
+    }
+
+    if ($attempt -lt $Attempts) {
+      Write-Host "Скачивание не удалось. Жду перед повторной попыткой..."
+      Start-Sleep -Seconds (5 * $attempt)
+    }
+  }
+
+  return $false
+}
+
+function Show-DockerPullHelp($Label) {
+  Write-Host ""
+  Write-Host "Не удалось скачать образ $Label через интернет."
+  Write-Host "Если в ошибке написано TLS handshake timeout, проверьте доступ к ghcr.io и pkg-containers.githubusercontent.com, потом запустите обновление ещё раз."
+  Write-Host "Если в ошибке написано denied или unauthorized, выполните: docker login ghcr.io"
+  Write-Host "Backup базы клиники уже создан перед этой попыткой обновления."
+}
+
 if (!(Test-Path $StarterScript)) {
   throw "CRM starter was not found: $StarterScript"
 }
@@ -105,17 +142,15 @@ if ([string]::IsNullOrWhiteSpace($remoteApi) -or [string]::IsNullOrWhiteSpace($r
 
 Backup-CurrentDatabase
 
-Write-Host "Pulling updated Docker images..."
-Write-Host "  $remoteApi"
-docker pull $remoteApi
-if ($LASTEXITCODE -ne 0) {
-  throw "Could not pull API image. If the GitHub package is private, run: docker login ghcr.io"
+Write-Host "Скачиваю обновлённые Docker-образы..."
+if (!(Invoke-DockerPullWithRetry -Image $remoteApi -Label "API")) {
+  Show-DockerPullHelp "API"
+  exit 1
 }
 
-Write-Host "  $remoteWeb"
-docker pull $remoteWeb
-if ($LASTEXITCODE -ne 0) {
-  throw "Could not pull web image. If the GitHub package is private, run: docker login ghcr.io"
+if (!(Invoke-DockerPullWithRetry -Image $remoteWeb -Label "web")) {
+  Show-DockerPullHelp "web"
+  exit 1
 }
 
 Set-EnvValue "TEMICHEVVET_API_IMAGE" $remoteApi

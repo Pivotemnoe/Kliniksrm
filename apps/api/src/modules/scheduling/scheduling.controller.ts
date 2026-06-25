@@ -4,6 +4,7 @@ import { AuthEmployee } from '../auth/auth.types';
 import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { CreateEmployeeShiftDto } from './dto/create-employee-shift.dto';
+import { CreateClinicOfficeDto } from './dto/create-clinic-office.dto';
 import { CreateSchedulingResourceDto } from './dto/create-scheduling-resource.dto';
 import { ListEmployeeShiftsQueryDto } from './dto/list-employee-shifts-query.dto';
 import { UpdateClinicOfficeDto } from './dto/update-clinic-office.dto';
@@ -28,6 +29,13 @@ export class SchedulingController {
   @ApiOkResponse({ description: 'Clinic office resources for settings.' })
   getSettingsResources() {
     return this.schedulingService.getSettingsResources();
+  }
+
+  @Post('offices')
+  @RequirePermissions('settings.manage')
+  @ApiCreatedResponse({ description: 'Clinic office created.' })
+  createOffice(@Body() dto: CreateClinicOfficeDto, @CurrentEmployee() actor: AuthEmployee) {
+    return this.schedulingService.createOffice(dto, actor.id);
   }
 
   @Patch('offices/:officeId')

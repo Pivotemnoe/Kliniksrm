@@ -70,6 +70,10 @@ export type UpdateClinicOfficePayload = {
   workingHours?: OfficeWorkingHours;
 };
 
+export type CreateClinicOfficePayload = UpdateClinicOfficePayload & {
+  name: string;
+};
+
 export type SchedulingResourcePayload = {
   officeId?: string;
   name: string;

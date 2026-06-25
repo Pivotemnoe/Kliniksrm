@@ -39,7 +39,7 @@ export class UpdateAnimalDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsDateString()
+  @IsDateString({}, { message: 'Дата рождения должна быть в формате ГГГГ-ММ-ДД' })
   birthDate?: string;
 
   @ApiPropertyOptional()

@@ -3,6 +3,7 @@ export type OrganizationOffice = {
   name: string;
   phone: string | null;
   address: string | null;
+  timezone: string;
 };
 
 export type OrganizationSettings = {
