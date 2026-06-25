@@ -8,6 +8,7 @@ FORCE_BUILD="false"
 UPDATE_IMAGES="false"
 SKIP_IMAGE_UPDATE="false"
 OPEN_BROWSER="false"
+DOCKER_PLATFORM="${DOCKER_DEFAULT_PLATFORM:-}"
 
 usage() {
   cat <<'USAGE'
@@ -65,6 +66,56 @@ require_command() {
     echo "Не найдена команда: $command_name" >&2
     echo "Установите Docker Desktop и повторите запуск." >&2
     exit 1
+  fi
+}
+
+ensure_docker_running() {
+  if docker version >/dev/null 2>&1; then
+    return
+  fi
+
+  if [[ "$(uname -s)" == "Darwin" ]] && command -v open >/dev/null 2>&1; then
+    echo "Docker установлен, но сейчас не запущен. Пробую открыть Docker Desktop..."
+    open -a Docker >/dev/null 2>&1 || true
+
+    for _ in $(seq 1 60); do
+      if docker version >/dev/null 2>&1; then
+        return
+      fi
+      sleep 2
+    done
+  fi
+
+  echo "Docker Desktop не отвечает." >&2
+  echo "Откройте Docker Desktop, дождитесь статуса Running и повторите запуск." >&2
+  exit 1
+}
+
+detect_docker_platform() {
+  if [[ -n "$DOCKER_PLATFORM" ]]; then
+    return
+  fi
+
+  if [[ "$(uname -s)" == "Darwin" && "$(uname -m)" == "arm64" ]]; then
+    DOCKER_PLATFORM="linux/amd64"
+  fi
+}
+
+docker_pull_image() {
+  local image="$1"
+
+  if [[ -n "$DOCKER_PLATFORM" ]]; then
+    docker pull --platform "$DOCKER_PLATFORM" "$image"
+  else
+    docker pull "$image"
+  fi
+}
+
+docker_compose() {
+  if [[ -n "$DOCKER_PLATFORM" ]]; then
+    DOCKER_DEFAULT_PLATFORM="$DOCKER_PLATFORM" docker compose "$@"
+  else
+    docker compose "$@"
   fi
 }
 
@@ -194,8 +245,8 @@ try_use_remote_images() {
 
   local remote_api
   local remote_web
-  remote_api="$(load_env_value TEMICHEVVET_REMOTE_API_IMAGE '')"
-  remote_web="$(load_env_value TEMICHEVVET_REMOTE_WEB_IMAGE '')"
+  remote_api="$(load_env_value TEMICHEVVET_REMOTE_API_IMAGE 'ghcr.io/pivotemnoe/kliniksrm-api:stable')"
+  remote_web="$(load_env_value TEMICHEVVET_REMOTE_WEB_IMAGE 'ghcr.io/pivotemnoe/kliniksrm-web:stable')"
 
   if [[ -z "$remote_api" || -z "$remote_web" ]]; then
     return 1
@@ -204,7 +255,11 @@ try_use_remote_images() {
   echo "Проверяю обновлённые Docker-образы TemichevVet..."
   backup_current_database
 
-  if docker pull "$remote_api" && docker pull "$remote_web"; then
+  if [[ -n "$DOCKER_PLATFORM" ]]; then
+    echo "Docker platform: $DOCKER_PLATFORM"
+  fi
+
+  if docker_pull_image "$remote_api" && docker_pull_image "$remote_web"; then
     set_env_value "TEMICHEVVET_API_IMAGE" "$remote_api"
     set_env_value "TEMICHEVVET_WEB_IMAGE" "$remote_web"
     echo "Будут использованы обновлённые Docker-образы из реестра."
@@ -217,6 +272,8 @@ try_use_remote_images() {
 
 require_command docker
 require_command curl
+ensure_docker_running
+detect_docker_platform
 
 cd "$ROOT_DIR"
 
@@ -241,7 +298,7 @@ API_HOST_PORT="$(load_env_value API_HOST_PORT 4000)"
 DIRECTOR_PHONE="$(load_env_value BOOTSTRAP_DIRECTOR_PHONE '+70000000001')"
 
 if [[ "$FORCE_BUILD" == "true" ]]; then
-  docker compose build api web
+  docker_compose build api web
 else
   try_use_remote_images || true
 fi
@@ -253,14 +310,14 @@ if [[ "$FORCE_BUILD" != "true" ]] && has_docker_image "$API_IMAGE" && has_docker
   echo "Найдены готовые Docker-образы. Запускаю без пересборки:"
   echo "  api: $API_IMAGE"
   echo "  web: $WEB_IMAGE"
-  docker compose up -d --no-build postgres redis minio api web
+  docker_compose up -d --no-build postgres redis minio api web
 elif [[ "$FORCE_BUILD" != "true" ]] && has_docker_image "temichevvet-api:local" && has_docker_image "temichevvet-web:local"; then
   set_env_value "TEMICHEVVET_API_IMAGE" "temichevvet-api:local"
   set_env_value "TEMICHEVVET_WEB_IMAGE" "temichevvet-web:local"
   echo "Образы из реестра недоступны. Запускаю локальные offline-образы..."
-  docker compose up -d --no-build postgres redis minio api web
+  docker_compose up -d --no-build postgres redis minio api web
 else
-  docker compose up -d postgres redis minio api web
+  docker_compose up -d postgres redis minio api web
 fi
 
 wait_for_url "http://127.0.0.1:${API_HOST_PORT}/api/health" "Backend"

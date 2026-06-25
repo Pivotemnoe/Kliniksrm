@@ -183,7 +183,13 @@ Web-контейнер доступен на `http://127.0.0.1:3000`, отдаё
 npm run clinic:start
 ```
 
-На macOS можно запустить двойным кликом файл `start-temichevvet.command` в корне проекта. Он поднимет локальный сервер и откроет CRM в браузере.
+На macOS можно запустить двойным кликом файл `start-temichevvet.command` в корне проекта. Он проверит свежие Docker-образы программы, поднимет локальный сервер и откроет CRM в браузере.
+
+Чтобы создать или обновить красивый ярлык `TemichevVet CRM.app` на рабочем столе Mac:
+
+```bash
+bash scripts/install-mac-launcher.sh
+```
 
 На Windows можно запустить двойным кликом файл `start-temichevvet-windows.bat` в корне проекта. Он вызывает PowerShell-скрипт `scripts/start-clinic-server.ps1`, поднимает локальный сервер и открывает CRM в браузере.
 
