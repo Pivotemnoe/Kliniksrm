@@ -1,13 +1,18 @@
 import 'reflect-metadata';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { SESSION_COOKIE_NAME } from './modules/auth/session-cookie';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false });
   const appUrl = process.env.APP_URL ?? 'http://127.0.0.1:3000';
+  const bodyLimit = process.env.API_BODY_LIMIT ?? '10mb';
+
+  app.useBodyParser('json', { limit: bodyLimit });
+  app.useBodyParser('urlencoded', { limit: bodyLimit, extended: true });
 
   app.setGlobalPrefix('api');
   app.enableCors({
