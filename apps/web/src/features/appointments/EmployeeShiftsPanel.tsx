@@ -1,4 +1,4 @@
-import { DeleteOutlined, EditOutlined, LeftOutlined, PlusOutlined, RightOutlined } from '@ant-design/icons';
+import { CopyOutlined, DeleteOutlined, EditOutlined, LeftOutlined, PlusOutlined, RightOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, App, Button, Checkbox, Form, Input, Modal, Select, Space, Table, Tag, Typography } from 'antd';
@@ -15,7 +15,7 @@ import {
   listEmployeeShifts,
   updateEmployeeShift,
 } from '../scheduling/scheduling.api';
-import { EmployeeShift } from '../scheduling/types';
+import { EmployeeShift, EmployeeShiftPayload } from '../scheduling/types';
 
 const shiftSchema = z
   .object({
@@ -40,6 +40,11 @@ const shiftSchema = z
 
 type ShiftFormValues = z.output<typeof shiftSchema>;
 type ShiftFormInput = z.input<typeof shiftSchema>;
+type CopyDraft = {
+  title: string;
+  shifts: EmployeeShift[];
+  sourceDate: string;
+};
 
 export function EmployeeShiftsPanel({ canManage }: { canManage: boolean }) {
   const queryClient = useQueryClient();
@@ -48,6 +53,8 @@ export function EmployeeShiftsPanel({ canManage }: { canManage: boolean }) {
   const [employeeId, setEmployeeId] = useState<string>();
   const [modalOpen, setModalOpen] = useState(false);
   const [editingShift, setEditingShift] = useState<EmployeeShift | null>(null);
+  const [copyDraft, setCopyDraft] = useState<CopyDraft | null>(null);
+  const [copyTargetDate, setCopyTargetDate] = useState('');
   const weekDays = useMemo(() => getWeekDays(date), [date]);
   const weekBounds = useMemo(() => getRangeBounds(weekDays[0].value, weekDays[6].value), [weekDays]);
   const resourcesQuery = useQuery({ queryKey: ['scheduling', 'resources'], queryFn: getSchedulingResources });
@@ -90,6 +97,21 @@ export function EmployeeShiftsPanel({ canManage }: { canManage: boolean }) {
     onSuccess: async () => {
       await invalidateShifts(queryClient);
       message.success('Смена отключена');
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
+
+  const copyMutation = useMutation({
+    mutationFn: async ({ shifts, targetDate }: { shifts: EmployeeShift[]; targetDate: string }) => {
+      for (const shift of shifts) {
+        await createEmployeeShift(buildCopiedShiftPayload(shift, targetDate));
+      }
+    },
+    onSuccess: async (_, variables) => {
+      await invalidateShifts(queryClient);
+      setDate(variables.targetDate);
+      message.success(variables.shifts.length > 1 ? 'День смен скопирован' : 'Смена скопирована');
+      closeCopyModal();
     },
     onError: (error) => message.error(getErrorMessage(error)),
   });
@@ -143,6 +165,9 @@ export function EmployeeShiftsPanel({ canManage }: { canManage: boolean }) {
               <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(shift)}>
                 Изменить
               </Button>
+              <Button size="small" icon={<CopyOutlined />} onClick={() => openCopyShift(shift)}>
+                Копировать
+              </Button>
               {shift.isActive ? (
                 <Button size="small" danger icon={<DeleteOutlined />} onClick={() => confirmDisable(shift)}>
                   Отключить
@@ -176,6 +201,37 @@ export function EmployeeShiftsPanel({ canManage }: { canManage: boolean }) {
     setModalOpen(false);
     setEditingShift(null);
     reset(getDefaultShiftValues(date, null, employeeId ?? employees[0]?.id));
+  }
+
+  function openCopyShift(shift: EmployeeShift) {
+    const sourceDate = toDateInput(new Date(shift.startsAt));
+    setCopyDraft({
+      title: `Копировать смену: ${shift.employee.fullName}`,
+      shifts: [shift],
+      sourceDate,
+    });
+    setCopyTargetDate(shiftDate(sourceDate, 1));
+  }
+
+  function openCopyDay(sourceDate: string, shifts: EmployeeShift[]) {
+    const activeShifts = shifts.filter((shift) => shift.isActive);
+    if (!activeShifts.length) {
+      message.warning('В этом дне нет активных смен для копирования');
+      return;
+    }
+
+    setDate(sourceDate);
+    setCopyDraft({
+      title: `Копировать день ${formatCompactDate(sourceDate)}`,
+      shifts: activeShifts,
+      sourceDate,
+    });
+    setCopyTargetDate(shiftDate(sourceDate, 7));
+  }
+
+  function closeCopyModal() {
+    setCopyDraft(null);
+    setCopyTargetDate('');
   }
 
   function confirmDisable(shift: EmployeeShift) {
@@ -231,6 +287,8 @@ export function EmployeeShiftsPanel({ canManage }: { canManage: boolean }) {
         onToday={() => setDate(toDateInput(new Date()))}
         onCreate={openCreateForDate}
         onEdit={openEdit}
+        onCopy={openCopyShift}
+        onCopyDay={openCopyDay}
       />
       {resourcesQuery.isError ? <Alert type="error" showIcon message={getErrorMessage(resourcesQuery.error)} /> : null}
       {shiftsQuery.isError ? <Alert type="error" showIcon message={getErrorMessage(shiftsQuery.error)} /> : null}
@@ -320,6 +378,44 @@ export function EmployeeShiftsPanel({ canManage }: { canManage: boolean }) {
           />
         </Form>
       </Modal>
+      <Modal
+        title={copyDraft?.title ?? 'Копировать смену'}
+        width={520}
+        open={Boolean(copyDraft)}
+        onCancel={closeCopyModal}
+        destroyOnHidden
+        footer={
+          <Space>
+            <Button onClick={closeCopyModal}>Отмена</Button>
+            <Button
+              type="primary"
+              icon={<CopyOutlined />}
+              disabled={!copyDraft || !copyTargetDate}
+              loading={copyMutation.isPending}
+              onClick={() =>
+                copyDraft
+                  ? copyMutation.mutate({ shifts: copyDraft.shifts, targetDate: copyTargetDate })
+                  : undefined
+              }
+            >
+              Скопировать
+            </Button>
+          </Space>
+        }
+      >
+        <Space direction="vertical" size={14} className="full-width">
+          <Typography.Text>
+            {copyDraft
+              ? `Будет создано смен: ${copyDraft.shifts.length}. Исходный день: ${formatCompactDate(copyDraft.sourceDate)}.`
+              : null}
+          </Typography.Text>
+          <Form layout="vertical">
+            <Form.Item label="Куда скопировать">
+              <Input type="date" value={copyTargetDate} onChange={(event) => setCopyTargetDate(event.target.value)} />
+            </Form.Item>
+          </Form>
+        </Space>
+      </Modal>
     </Space>
   );
 }
@@ -332,6 +428,32 @@ function getDefaultShiftValues(date: string, shift: EmployeeShift | null, fallba
     comment: shift?.comment ?? '',
     isActive: shift?.isActive ?? true,
   };
+}
+
+function buildCopiedShiftPayload(shift: EmployeeShift, targetDate: string): EmployeeShiftPayload {
+  return {
+    employeeId: shift.employeeId,
+    startsAt: copyDateTimeToDate(shift.startsAt, targetDate),
+    endsAt: copyDateTimeToDate(shift.endsAt, targetDate, getDaySpan(shift.startsAt, shift.endsAt)),
+    comment: shift.comment,
+    isActive: true,
+  };
+}
+
+function copyDateTimeToDate(value: string, targetDate: string, dayOffset = 0) {
+  const source = new Date(value);
+  const target = new Date(`${targetDate}T00:00:00`);
+  target.setDate(target.getDate() + dayOffset);
+  target.setHours(source.getHours(), source.getMinutes(), source.getSeconds(), source.getMilliseconds());
+  return target.toISOString();
+}
+
+function getDaySpan(startsAt: string, endsAt: string) {
+  const start = new Date(startsAt);
+  const end = new Date(endsAt);
+  start.setHours(0, 0, 0, 0);
+  end.setHours(0, 0, 0, 0);
+  return Math.max(0, Math.round((end.getTime() - start.getTime()) / 86_400_000));
 }
 
 function toDateInput(value: Date) {
@@ -360,6 +482,8 @@ function EmployeeShiftWeekBoard({
   onToday,
   onCreate,
   onEdit,
+  onCopy,
+  onCopyDay,
 }: {
   days: WeekDay[];
   selectedDate: string;
@@ -371,6 +495,8 @@ function EmployeeShiftWeekBoard({
   onToday: () => void;
   onCreate: (date: string) => void;
   onEdit: (shift: EmployeeShift) => void;
+  onCopy: (shift: EmployeeShift) => void;
+  onCopyDay: (date: string, shifts: EmployeeShift[]) => void;
 }) {
   const shiftsByDay = useMemo(() => groupShiftsByDay(days, shifts), [days, shifts]);
 
@@ -408,22 +534,33 @@ function EmployeeShiftWeekBoard({
                 {!loading && !dayShifts.length ? <span className="schedule-empty">Смен нет</span> : null}
                 {!loading
                   ? dayShifts.slice(0, 5).map((shift) => (
-                      <button
-                        key={shift.id}
-                        type="button"
-                        className={`shift-chip${shift.isActive ? '' : ' is-disabled'}`}
-                        onClick={() => (canManage ? onEdit(shift) : onSelectDate(day.value))}
-                      >
-                        <span className="shift-chip-time">{formatShiftTime(shift)}</span>
-                        <span className="shift-chip-name">{shift.employee.fullName}</span>
-                        <span className="shift-chip-meta">{shift.employee.position || 'Должность не указана'}</span>
-                        {shift.employee.restrictLoginToShifts ? <Tag color="orange">Вход по смене</Tag> : null}
-                      </button>
+                      <div key={shift.id} className="shift-chip-wrap">
+                        <button
+                          type="button"
+                          className={`shift-chip${shift.isActive ? '' : ' is-disabled'}`}
+                          onClick={() => (canManage ? onEdit(shift) : onSelectDate(day.value))}
+                        >
+                          <span className="shift-chip-time">{formatShiftTime(shift)}</span>
+                          <span className="shift-chip-name">{shift.employee.fullName}</span>
+                          <span className="shift-chip-meta">{shift.employee.position || 'Должность не указана'}</span>
+                          {shift.employee.restrictLoginToShifts ? <Tag color="orange">Вход по смене</Tag> : null}
+                        </button>
+                        {canManage ? (
+                          <button type="button" className="shift-inline-copy-button" onClick={() => onCopy(shift)}>
+                            <CopyOutlined /> Копировать
+                          </button>
+                        ) : null}
+                      </div>
                     ))
                   : null}
                 {!loading && dayShifts.length > 5 ? (
                   <button type="button" className="schedule-more-button" onClick={() => onSelectDate(day.value)}>
                     Ещё {dayShifts.length - 5}
+                  </button>
+                ) : null}
+                {canManage && dayShifts.some((shift) => shift.isActive) ? (
+                  <button type="button" className="shift-copy-day-button" onClick={() => onCopyDay(day.value, dayShifts)}>
+                    <CopyOutlined /> Копировать день
                   </button>
                 ) : null}
                 {canManage ? (

@@ -818,7 +818,16 @@ body {
   padding: 10px;
 }
 
+.schedule-section-label {
+  color: #68717d;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
 .schedule-appointment-pill,
+.schedule-shift-pill,
 .shift-chip {
   display: grid;
   gap: 3px;
@@ -834,12 +843,14 @@ body {
 }
 
 .schedule-appointment-pill:hover,
+.schedule-shift-pill:hover,
 .shift-chip:hover {
   border-color: #b9c8d3;
   background: #fbfcfd;
 }
 
 .schedule-appointment-time,
+.schedule-shift-time,
 .shift-chip-time {
   color: #2a9d8f;
   font-size: 12px;
@@ -847,6 +858,7 @@ body {
 }
 
 .schedule-appointment-title,
+.schedule-shift-title,
 .shift-chip-name {
   min-width: 0;
   overflow: hidden;
@@ -856,6 +868,7 @@ body {
 }
 
 .schedule-appointment-meta,
+.schedule-shift-meta,
 .shift-chip-meta {
   min-width: 0;
   overflow: hidden;
@@ -869,6 +882,33 @@ body {
   opacity: 0.62;
 }
 
+.shift-chip-wrap {
+  display: grid;
+  gap: 5px;
+}
+
+.shift-inline-copy-button,
+.shift-copy-day-button {
+  display: inline-flex;
+  width: 100%;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid #cfd7df;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #2f6df6;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.shift-inline-copy-button:hover,
+.shift-copy-day-button:hover {
+  border-color: #2f6df6;
+  background: #f5f8ff;
+}
+
 .schedule-empty {
   display: inline-flex;
   min-height: 46px;
@@ -878,6 +918,11 @@ body {
   border-radius: 7px;
   color: #7d858f;
   font-size: 13px;
+}
+
+.schedule-empty.compact {
+  min-height: 36px;
+  padding: 0 12px;
 }
 
 .schedule-more-button,
@@ -907,6 +952,66 @@ body {
 
 .shift-table-title h5.ant-typography {
   margin: 0;
+}
+
+.selected-shifts-panel {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px;
+  border: 1px solid #dfe3e8;
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
+.selected-shifts-panel h5.ant-typography {
+  margin: 0 0 2px;
+}
+
+.selected-shifts-list {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.selected-shift-chip {
+  display: grid;
+  min-width: 180px;
+  max-width: 240px;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid #dfe3e8;
+  border-radius: 7px;
+  background: #ffffff;
+}
+
+.selected-shift-chip strong {
+  color: #2a9d8f;
+  font-size: 12px;
+}
+
+.selected-shift-chip span,
+.selected-shift-chip small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selected-shift-chip span {
+  font-weight: 700;
+}
+
+.selected-shift-chip small {
+  color: #68717d;
+}
+
+.selected-shift-chip.is-disabled,
+.schedule-shift-pill.is-disabled {
+  opacity: 0.62;
 }
 
 .workbench {
@@ -1721,6 +1826,20 @@ body {
 }
 
 @media (max-width: 900px) {
+  .selected-shifts-panel {
+    flex-direction: column;
+  }
+
+  .selected-shifts-list {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .selected-shift-chip {
+    width: 100%;
+    max-width: none;
+  }
+
   .public-online-shell {
     grid-template-columns: 1fr;
   }

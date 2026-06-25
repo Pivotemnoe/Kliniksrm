@@ -11,6 +11,8 @@ import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDateTime, getDayBounds } from '../../shared/utils/date';
 import { createOwner, createOwnerAnimal } from '../owners/owners.api';
+import { listEmployeeShifts } from '../scheduling/scheduling.api';
+import { EmployeeShift } from '../scheduling/types';
 import { createAppointment, listAppointments } from './appointments.api';
 import { AppointmentFormDrawer, AppointmentFormSubmit } from './AppointmentFormDrawer';
 import { EmployeeShiftsPanel } from './EmployeeShiftsPanel';
@@ -45,6 +47,14 @@ export function AppointmentsPage() {
     queryKey: ['appointments-week', { search, status, from: weekBounds.dateFrom, to: weekBounds.dateTo }],
     queryFn: () => listAppointments({ search, status, ...weekBounds, limit: 100, offset: 0 }),
   });
+  const weeklyShiftsQuery = useQuery({
+    queryKey: ['employee-shifts', { from: weekBounds.dateFrom, to: weekBounds.dateTo, schedule: true }],
+    queryFn: () => listEmployeeShifts({ from: weekBounds.dateFrom, to: weekBounds.dateTo }),
+  });
+  const selectedDayShifts = useMemo(
+    () => (weeklyShiftsQuery.data ?? []).filter((shift) => overlapsDay(shift, date)),
+    [date, weeklyShiftsQuery.data],
+  );
   const createMutation = useMutation({
     mutationFn: async (values: AppointmentFormSubmit) => {
       let ownerId = values.appointment.ownerId;
@@ -133,28 +143,12 @@ export function AppointmentsPage() {
           ) : null
         }
       />
-      <div className="date-ribbon">
-        {weekDays.map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            aria-pressed={item.value === date}
-            onClick={() => {
-              setDate(item.value);
-              setOffset(0);
-            }}
-          >
-            <span>{item.weekday}</span>
-            <strong>{item.day}</strong>
-            <span>{item.month}</span>
-          </button>
-        ))}
-      </div>
       <AppointmentsWeekBoard
         days={weekDays}
         selectedDate={date}
         appointments={weeklyAppointmentsQuery.data?.items ?? []}
-        loading={weeklyAppointmentsQuery.isLoading}
+        shifts={weeklyShiftsQuery.data ?? []}
+        loading={weeklyAppointmentsQuery.isLoading || weeklyShiftsQuery.isLoading}
         total={weeklyAppointmentsQuery.data?.total}
         canManage={canManage}
         onSelectDate={(value) => {
@@ -219,6 +213,11 @@ export function AppointmentsPage() {
                       {appointmentsQuery.isError ? (
                         <Typography.Text type="danger">{getErrorMessage(appointmentsQuery.error)}</Typography.Text>
                       ) : null}
+                      <SelectedDayShiftsSummary
+                        date={date}
+                        shifts={selectedDayShifts}
+                        loading={weeklyShiftsQuery.isLoading}
+                      />
                       <Table<Appointment>
                         rowKey="id"
                         columns={columns}
@@ -274,6 +273,7 @@ function AppointmentsWeekBoard({
   days,
   selectedDate,
   appointments,
+  shifts,
   loading,
   total,
   canManage,
@@ -286,6 +286,7 @@ function AppointmentsWeekBoard({
   days: WeekDay[];
   selectedDate: string;
   appointments: Appointment[];
+  shifts: EmployeeShift[];
   loading: boolean;
   total?: number;
   canManage: boolean;
@@ -296,6 +297,7 @@ function AppointmentsWeekBoard({
   onOpen: (appointmentId: string) => void;
 }) {
   const appointmentsByDay = useMemo(() => groupAppointmentsByDay(appointments), [appointments]);
+  const shiftsByDay = useMemo(() => groupShiftsByDay(days, shifts), [days, shifts]);
   const visibleCount = appointments.length;
 
   return (
@@ -323,7 +325,10 @@ function AppointmentsWeekBoard({
       <div className="schedule-week-grid">
         {days.map((day) => {
           const dayAppointments = appointmentsByDay.get(day.value) ?? [];
+          const dayShifts = shiftsByDay.get(day.value) ?? [];
           const isSelected = day.value === selectedDate;
+          const appointmentsToShow = dayAppointments.slice(0, 3);
+          const shiftsToShow = dayShifts.slice(0, 3);
 
           return (
             <section key={day.value} className={`schedule-day-card${isSelected ? ' is-active' : ''}`}>
@@ -337,9 +342,11 @@ function AppointmentsWeekBoard({
               </button>
               <div className="schedule-day-body">
                 {loading ? <span className="schedule-empty">Загрузка</span> : null}
-                {!loading && !dayAppointments.length ? <span className="schedule-empty">Свободно</span> : null}
+                {!loading && !dayAppointments.length && !dayShifts.length ? (
+                  <span className="schedule-empty">Записей и смен нет</span>
+                ) : null}
                 {!loading
-                  ? dayAppointments.slice(0, 4).map((appointment) => (
+                  ? appointmentsToShow.map((appointment) => (
                       <button
                         key={appointment.id}
                         type="button"
@@ -353,15 +360,72 @@ function AppointmentsWeekBoard({
                       </button>
                     ))
                   : null}
-                {!loading && dayAppointments.length > 4 ? (
+                {!loading && dayAppointments.length > appointmentsToShow.length ? (
                   <button type="button" className="schedule-more-button" onClick={() => onSelectDate(day.value)}>
-                    Ещё {dayAppointments.length - 4}
+                    Ещё записей: {dayAppointments.length - appointmentsToShow.length}
+                  </button>
+                ) : null}
+                {!loading && dayShifts.length ? <span className="schedule-section-label">Кто работает</span> : null}
+                {!loading
+                  ? shiftsToShow.map((shift) => (
+                      <button
+                        key={shift.id}
+                        type="button"
+                        className={`schedule-shift-pill${shift.isActive ? '' : ' is-disabled'}`}
+                        onClick={() => onSelectDate(day.value)}
+                      >
+                        <span className="schedule-shift-time">{formatShiftTime(shift)}</span>
+                        <span className="schedule-shift-title">{shift.employee.fullName}</span>
+                        <span className="schedule-shift-meta">{shift.employee.position || 'Должность не указана'}</span>
+                      </button>
+                    ))
+                  : null}
+                {!loading && dayShifts.length > shiftsToShow.length ? (
+                  <button type="button" className="schedule-more-button" onClick={() => onSelectDate(day.value)}>
+                    Ещё смен: {dayShifts.length - shiftsToShow.length}
                   </button>
                 ) : null}
               </div>
             </section>
           );
         })}
+      </div>
+    </section>
+  );
+}
+
+function SelectedDayShiftsSummary({
+  date,
+  shifts,
+  loading,
+}: {
+  date: string;
+  shifts: EmployeeShift[];
+  loading: boolean;
+}) {
+  return (
+    <section className="selected-shifts-panel">
+      <div>
+        <Typography.Title level={5}>Кто работает {formatCompactDate(date)}</Typography.Title>
+        <Typography.Text type="secondary">
+          {loading ? 'Загрузка смен' : shifts.length ? formatShiftCount(shifts.length) : 'Смены не выставлены'}
+        </Typography.Text>
+      </div>
+      <div className="selected-shifts-list">
+        {loading ? <span className="schedule-empty compact">Загрузка</span> : null}
+        {!loading && !shifts.length ? (
+          <span className="schedule-empty compact">На этот день нет смен врачей и сотрудников</span>
+        ) : null}
+        {!loading
+          ? shifts.slice(0, 6).map((shift) => (
+              <span key={shift.id} className={`selected-shift-chip${shift.isActive ? '' : ' is-disabled'}`}>
+                <strong>{formatShiftTime(shift)}</strong>
+                <span>{shift.employee.fullName}</span>
+                <small>{shift.employee.position || 'Должность не указана'}</small>
+              </span>
+            ))
+          : null}
+        {!loading && shifts.length > 6 ? <Tag>Ещё {shifts.length - 6}</Tag> : null}
       </div>
     </section>
   );
@@ -423,10 +487,35 @@ function groupAppointmentsByDay(appointments: Appointment[]) {
   return groups;
 }
 
+function groupShiftsByDay(days: WeekDay[], shifts: EmployeeShift[]) {
+  const groups = new Map<string, EmployeeShift[]>();
+
+  for (const day of days) {
+    groups.set(
+      day.value,
+      shifts
+        .filter((shift) => overlapsDay(shift, day.value))
+        .sort((first, second) => new Date(first.startsAt).getTime() - new Date(second.startsAt).getTime()),
+    );
+  }
+
+  return groups;
+}
+
+function overlapsDay(shift: EmployeeShift, date: string) {
+  const start = new Date(`${date}T00:00:00`);
+  const end = new Date(`${date}T23:59:59.999`);
+  return new Date(shift.startsAt) <= end && new Date(shift.endsAt) >= start;
+}
+
 function shiftDate(date: string, days: number) {
   const value = date ? new Date(`${date}T00:00:00`) : new Date();
   value.setDate(value.getDate() + days);
   return toDateInput(value);
+}
+
+function formatShiftTime(shift: EmployeeShift) {
+  return `${formatTime(shift.startsAt)} - ${formatTime(shift.endsAt)}`;
 }
 
 function formatTime(value: string | null | undefined) {
@@ -435,4 +524,19 @@ function formatTime(value: string | null | undefined) {
 
 function formatCompactDate(value: string) {
   return new Date(`${value}T00:00:00`).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+}
+
+function formatShiftCount(count: number) {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+
+  if (mod10 === 1 && mod100 !== 11) {
+    return `${count} смена`;
+  }
+
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+    return `${count} смены`;
+  }
+
+  return `${count} смен`;
 }
