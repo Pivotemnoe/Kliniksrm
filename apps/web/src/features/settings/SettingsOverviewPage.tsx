@@ -3,6 +3,7 @@ import {
   AuditOutlined,
   DatabaseOutlined,
   DollarOutlined,
+  ExportOutlined,
   ExperimentOutlined,
   FileTextOutlined,
   MessageOutlined,
@@ -24,6 +25,7 @@ type SettingsSection = {
   icon: ReactNode;
   status: 'ready' | 'partial';
   permission?: string;
+  permissions?: string[];
 };
 
 const settingsSections: SettingsSection[] = [
@@ -92,6 +94,14 @@ const settingsSections: SettingsSection[] = [
     permission: 'audit.read',
   },
   {
+    title: 'Импорт ВетаФ',
+    description: 'Перенос владельцев, пациентов, товаров и складских остатков через CSV-файл.',
+    path: '/settings/import',
+    icon: <ExportOutlined />,
+    status: 'partial',
+    permissions: ['owners.manage', 'stock.manage'],
+  },
+  {
     title: 'Система и backup',
     description: 'Состояние backend, автоматические резервные копии и безопасные обновления с флешки.',
     path: '/settings/system',
@@ -113,7 +123,9 @@ export function SettingsOverviewPage() {
   const navigate = useNavigate();
   const { data: auth } = useCurrentEmployee();
   const employee = auth?.employee;
-  const visibleSections = settingsSections.filter((section) => !section.permission || hasPermission(employee, section.permission));
+  const visibleSections = settingsSections.filter(
+    (section) => (!section.permission || hasPermission(employee, section.permission)) && (!section.permissions || section.permissions.some((permission) => hasPermission(employee, permission))),
+  );
 
   return (
     <div className="page">

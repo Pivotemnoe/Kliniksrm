@@ -10,6 +10,7 @@ import { EmployeesModule } from './modules/employees/employees.module';
 import { FinanceModule } from './modules/finance/finance.module';
 import { HealthModule } from './modules/health/health.module';
 import { HospitalModule } from './modules/hospital/hospital.module';
+import { ImportsModule } from './modules/imports/imports.module';
 import { LaboratoryModule } from './modules/laboratory/laboratory.module';
 import { MedicalPhrasesModule } from './modules/medical-phrases/medical-phrases.module';
 import { MetaModule } from './modules/meta/meta.module';
@@ -53,6 +54,7 @@ import { PrismaModule } from './prisma/prisma.module';
     StockModule,
     HospitalModule,
     LaboratoryModule,
+    ImportsModule,
     MedicalPhrasesModule,
   ],
 })

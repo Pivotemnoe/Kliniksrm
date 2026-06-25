@@ -12,6 +12,7 @@ import { FinanceSettingsPage } from '../features/finance/FinanceSettingsPage';
 import { HospitalPage } from '../features/hospital/HospitalPage';
 import { BillCardPage } from '../features/billing/BillCardPage';
 import { BillsPage } from '../features/billing/BillsPage';
+import { VetafImportPage } from '../features/imports/VetafImportPage';
 import { LaboratoryPage } from '../features/laboratory/LaboratoryPage';
 import { NewsPage } from '../features/news/NewsPage';
 import { MessagesPage } from '../features/notifications/MessagesPage';
@@ -114,6 +115,7 @@ export const routes: RouteObject[] = [
           { path: '/settings/finance', element: <FinanceSettingsPage /> },
           { path: '/settings/audit', element: <AuditLogsPage /> },
           { path: '/settings/system', element: <SystemSettingsPage /> },
+          { path: '/settings/import', element: <VetafImportPage /> },
           { path: '/messages', element: <MessagesPage /> },
           { path: '/online-requests', element: <OnlineRequestsPage /> },
         ],
