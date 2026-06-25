@@ -46,7 +46,7 @@ function Get-LabelValue($Labels, $Key) {
 function Show-ContainerVersion($ContainerName) {
   $containerJson = docker container inspect $ContainerName 2>$null
   if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($containerJson)) {
-    Write-Host "$ContainerName: не найден"
+    Write-Host "${ContainerName}: не найден"
     return
   }
 
@@ -59,11 +59,16 @@ function Show-ContainerVersion($ContainerName) {
     $image = ($imageJson | ConvertFrom-Json)[0]
   }
 
-  $revision = Get-LabelValue $image.Config.Labels "org.opencontainers.image.revision"
-  $created = Get-LabelValue $image.Config.Labels "org.opencontainers.image.created"
-  $source = Get-LabelValue $image.Config.Labels "org.opencontainers.image.source"
+  $revision = $null
+  $created = $null
+  $source = $null
+  if ($image) {
+    $revision = Get-LabelValue $image.Config.Labels "org.opencontainers.image.revision"
+    $created = Get-LabelValue $image.Config.Labels "org.opencontainers.image.created"
+    $source = Get-LabelValue $image.Config.Labels "org.opencontainers.image.source"
+  }
   if ([string]::IsNullOrWhiteSpace($created)) {
-    $created = $image.Created
+    $created = if ($image) { $image.Created } else { "не удалось прочитать образ" }
   }
 
   Write-Host "$ContainerName"
@@ -90,11 +95,11 @@ if (Test-Path $VersionFile) {
 }
 
 Write-Section ".env"
-Write-Host "TEMICHEVVET_API_IMAGE=$(Get-EnvValue "TEMICHEVVET_API_IMAGE" "")"
-Write-Host "TEMICHEVVET_WEB_IMAGE=$(Get-EnvValue "TEMICHEVVET_WEB_IMAGE" "")"
-Write-Host "TEMICHEVVET_REMOTE_API_IMAGE=$(Get-EnvValue "TEMICHEVVET_REMOTE_API_IMAGE" "")"
-Write-Host "TEMICHEVVET_REMOTE_WEB_IMAGE=$(Get-EnvValue "TEMICHEVVET_REMOTE_WEB_IMAGE" "")"
-Write-Host "TEMICHEVVET_AUTO_PULL_IMAGES=$(Get-EnvValue "TEMICHEVVET_AUTO_PULL_IMAGES" "")"
+Write-Host ("TEMICHEVVET_API_IMAGE={0}" -f (Get-EnvValue "TEMICHEVVET_API_IMAGE" ""))
+Write-Host ("TEMICHEVVET_WEB_IMAGE={0}" -f (Get-EnvValue "TEMICHEVVET_WEB_IMAGE" ""))
+Write-Host ("TEMICHEVVET_REMOTE_API_IMAGE={0}" -f (Get-EnvValue "TEMICHEVVET_REMOTE_API_IMAGE" ""))
+Write-Host ("TEMICHEVVET_REMOTE_WEB_IMAGE={0}" -f (Get-EnvValue "TEMICHEVVET_REMOTE_WEB_IMAGE" ""))
+Write-Host ("TEMICHEVVET_AUTO_PULL_IMAGES={0}" -f (Get-EnvValue "TEMICHEVVET_AUTO_PULL_IMAGES" ""))
 
 Write-Section "Docker"
 docker version *> $null

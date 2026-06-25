@@ -54,6 +54,7 @@ export type SchedulingSettings = {
 
 export type OfficeWorkingDay = {
   isWorking: boolean;
+  is24Hours?: boolean;
   opensAt: string;
   closesAt: string;
   breakStart?: string | null;

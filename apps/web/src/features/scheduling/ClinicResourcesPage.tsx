@@ -12,6 +12,7 @@ import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import {
+  createClinicOffice,
   createHospitalBox,
   createRoom,
   createWarehouse,
@@ -81,12 +82,17 @@ export function ClinicResourcesPage() {
   const { data: auth } = useCurrentEmployee();
   const canManage = hasPermission(auth?.employee, 'settings.manage');
   const [selectedOfficeId, setSelectedOfficeId] = useState<string>();
+  const [createOfficeOpen, setCreateOfficeOpen] = useState(false);
   const settingsQuery = useQuery({ queryKey: ['scheduling', 'settings'], queryFn: getSchedulingSettings });
   const offices = settingsQuery.data?.offices ?? [];
   const selectedOffice = offices.find((office) => office.id === selectedOfficeId) ?? offices[0];
   const activeTab = getActiveTab(location.pathname);
 
   const { control, handleSubmit, reset } = useForm<OfficeFormValues>({
+    resolver: zodResolver(officeSchema),
+    defaultValues: { name: '', phone: '', timezone: 'Europe/Moscow', address: '' },
+  });
+  const createOfficeForm = useForm<OfficeFormValues>({
     resolver: zodResolver(officeSchema),
     defaultValues: { name: '', phone: '', timezone: 'Europe/Moscow', address: '' },
   });
@@ -119,6 +125,18 @@ export function ClinicResourcesPage() {
     },
     onError: (error) => message.error(getErrorMessage(error)),
   });
+  const createOfficeMutation = useMutation({
+    mutationFn: (values: OfficeFormValues) => createClinicOffice(values),
+    onSuccess: async (office) => {
+      await queryClient.invalidateQueries({ queryKey: ['scheduling', 'settings'] });
+      await queryClient.invalidateQueries({ queryKey: ['scheduling', 'resources'] });
+      setSelectedOfficeId(office.id);
+      setCreateOfficeOpen(false);
+      createOfficeForm.reset({ name: '', phone: '', timezone: 'Europe/Moscow', address: '' });
+      message.success('Филиал добавлен');
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
 
   return (
     <div className="page">
@@ -130,13 +148,27 @@ export function ClinicResourcesPage() {
             <Typography.Text strong>Рабочие ресурсы клиники</Typography.Text>
             <Typography.Text type="secondary">Удаление ресурсов пока выключено, чтобы не повредить связанные записи.</Typography.Text>
           </Space>
-          <Select
-            value={selectedOffice?.id}
-            loading={settingsQuery.isLoading}
-            style={{ width: 260 }}
-            options={offices.map((office) => ({ value: office.id, label: office.name }))}
-            onChange={setSelectedOfficeId}
-          />
+          <Space wrap>
+            <Select
+              value={selectedOffice?.id}
+              loading={settingsQuery.isLoading}
+              style={{ width: 260 }}
+              options={offices.map((office) => ({ value: office.id, label: office.name }))}
+              onChange={setSelectedOfficeId}
+            />
+            {canManage ? (
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                onClick={() => {
+                  createOfficeForm.reset({ name: '', phone: '', timezone: 'Europe/Moscow', address: '' });
+                  setCreateOfficeOpen(true);
+                }}
+              >
+                Добавить филиал
+              </Button>
+            ) : null}
+          </Space>
         </div>
         <Tabs
           activeKey={activeTab}
@@ -251,6 +283,65 @@ export function ClinicResourcesPage() {
           ]}
         />
       </div>
+      <Modal
+        title="Добавить филиал"
+        open={createOfficeOpen}
+        onCancel={() => setCreateOfficeOpen(false)}
+        destroyOnHidden
+        footer={
+          <Space>
+            <Button onClick={() => setCreateOfficeOpen(false)}>Отмена</Button>
+            <Button
+              type="primary"
+              loading={createOfficeMutation.isPending}
+              onClick={createOfficeForm.handleSubmit((values) => createOfficeMutation.mutate(values))}
+            >
+              Добавить
+            </Button>
+          </Space>
+        }
+      >
+        <Form layout="vertical">
+          <div className="form-grid two-columns">
+            <Controller
+              control={createOfficeForm.control}
+              name="name"
+              render={({ field, fieldState }) => (
+                <Form.Item label="Название" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+                  <Input {...field} autoFocus />
+                </Form.Item>
+              )}
+            />
+            <Controller
+              control={createOfficeForm.control}
+              name="phone"
+              render={({ field, fieldState }) => (
+                <Form.Item label="Телефон" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+                  <Input {...field} />
+                </Form.Item>
+              )}
+            />
+            <Controller
+              control={createOfficeForm.control}
+              name="timezone"
+              render={({ field, fieldState }) => (
+                <Form.Item label="Часовой пояс" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+                  <Input {...field} />
+                </Form.Item>
+              )}
+            />
+            <Controller
+              control={createOfficeForm.control}
+              name="address"
+              render={({ field, fieldState }) => (
+                <Form.Item label="Адрес" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+                  <Input {...field} />
+                </Form.Item>
+              )}
+            />
+          </div>
+        </Form>
+      </Modal>
     </div>
   );
 }
@@ -297,6 +388,15 @@ function OfficeScheduleTab({ office, canManage }: { office?: ClinicOfficeSetting
         ),
       },
       {
+        title: '24 часа',
+        dataIndex: 'is24Hours',
+        key: 'is24Hours',
+        width: 120,
+        render: (value: boolean | undefined, row) => (
+          <Checkbox checked={Boolean(value)} disabled={!canManage || !row.isWorking} onChange={(event) => updateScheduleRow(row.key, { is24Hours: event.target.checked })} />
+        ),
+      },
+      {
         title: 'Открытие',
         dataIndex: 'opensAt',
         key: 'opensAt',
@@ -305,7 +405,7 @@ function OfficeScheduleTab({ office, canManage }: { office?: ClinicOfficeSetting
           <Input
             type="time"
             value={value}
-            disabled={!canManage || !row.isWorking}
+            disabled={!canManage || !row.isWorking || row.is24Hours}
             onChange={(event) => updateScheduleRow(row.key, { opensAt: event.target.value })}
           />
         ),
@@ -319,7 +419,7 @@ function OfficeScheduleTab({ office, canManage }: { office?: ClinicOfficeSetting
           <Input
             type="time"
             value={value}
-            disabled={!canManage || !row.isWorking}
+            disabled={!canManage || !row.isWorking || row.is24Hours}
             onChange={(event) => updateScheduleRow(row.key, { closesAt: event.target.value })}
           />
         ),
@@ -333,7 +433,7 @@ function OfficeScheduleTab({ office, canManage }: { office?: ClinicOfficeSetting
           <Input
             type="time"
             value={value ?? ''}
-            disabled={!canManage || !row.isWorking}
+            disabled={!canManage || !row.isWorking || row.is24Hours}
             onChange={(event) => updateScheduleRow(row.key, { breakStart: event.target.value || null })}
           />
         ),
@@ -347,7 +447,7 @@ function OfficeScheduleTab({ office, canManage }: { office?: ClinicOfficeSetting
           <Input
             type="time"
             value={value ?? ''}
-            disabled={!canManage || !row.isWorking}
+            disabled={!canManage || !row.isWorking || row.is24Hours}
             onChange={(event) => updateScheduleRow(row.key, { breakEnd: event.target.value || null })}
           />
         ),
@@ -357,7 +457,27 @@ function OfficeScheduleTab({ office, canManage }: { office?: ClinicOfficeSetting
   );
 
   function updateScheduleRow(dayKey: WeekDayKey, patch: Partial<OfficeScheduleRow>) {
-    setRows((current) => current.map((row) => (row.key === dayKey ? { ...row, ...patch } : row)));
+    setRows((current) =>
+      current.map((row) => {
+        if (row.key !== dayKey) {
+          return row;
+        }
+
+        const next = { ...row, ...patch };
+        if (patch.isWorking === false) {
+          next.is24Hours = false;
+        }
+        if (patch.is24Hours === true) {
+          next.isWorking = true;
+          next.opensAt = '00:00';
+          next.closesAt = '23:59';
+          next.breakStart = null;
+          next.breakEnd = null;
+        }
+
+        return next;
+      }),
+    );
   }
 
   function saveSchedule() {
@@ -570,6 +690,7 @@ function buildScheduleRows(workingHours: OfficeWorkingHours | null): OfficeSched
       title: day.title,
       shortTitle: day.shortTitle,
       isWorking: savedDay?.isWorking ?? fallback.isWorking,
+      is24Hours: savedDay?.is24Hours ?? false,
       opensAt: savedDay?.opensAt ?? fallback.opensAt,
       closesAt: savedDay?.closesAt ?? fallback.closesAt,
       breakStart: savedDay?.breakStart ?? fallback.breakStart ?? null,
@@ -594,6 +715,7 @@ function serializeScheduleRows(rows: OfficeScheduleRow[]): OfficeWorkingHours {
   return rows.reduce<OfficeWorkingHours>((acc, row) => {
     acc[row.key] = {
       isWorking: row.isWorking,
+      is24Hours: row.is24Hours ?? false,
       opensAt: row.opensAt,
       closesAt: row.closesAt,
       breakStart: row.breakStart || null,
@@ -612,6 +734,10 @@ function validateScheduleRows(rows: OfficeScheduleRow[]) {
 
     if (!row.opensAt || !row.closesAt) {
       return `${row.title}: укажите время открытия и закрытия`;
+    }
+
+    if (row.is24Hours) {
+      continue;
     }
 
     if (row.opensAt >= row.closesAt) {

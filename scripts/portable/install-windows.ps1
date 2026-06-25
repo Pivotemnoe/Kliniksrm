@@ -387,10 +387,14 @@ if (Test-Path $ImagesTar) {
   Invoke-Native -Command "docker" -Arguments @("load", "--input", $ImagesTar)
   Assert-DockerImage "temichevvet-api:local"
   Assert-DockerImage "temichevvet-web:local"
+  Set-InstalledEnvValue "TEMICHEVVET_API_IMAGE" "temichevvet-api:local"
+  Set-InstalledEnvValue "TEMICHEVVET_WEB_IMAGE" "temichevvet-web:local"
 } else {
   Write-Host "Готовые Docker-образы на этой флешке не найдены."
-  Write-Host "Первый запуск попробует скачать образы из Docker Hub и может упасть на медленной или заблокированной сети."
+  Write-Host "Первый запуск попробует скачать образы из GitHub Container Registry и может упасть на медленной или заблокированной сети."
   Write-Host "Для установки почти без интернета пересоздайте флешку с режимом --include-images."
+  Set-InstalledEnvValue "TEMICHEVVET_API_IMAGE" (Get-ExistingEnvValue "TEMICHEVVET_REMOTE_API_IMAGE" "ghcr.io/pivotemnoe/kliniksrm-api:stable")
+  Set-InstalledEnvValue "TEMICHEVVET_WEB_IMAGE" (Get-ExistingEnvValue "TEMICHEVVET_REMOTE_WEB_IMAGE" "ghcr.io/pivotemnoe/kliniksrm-web:stable")
 }
 
 Install-LauncherShortcuts
@@ -402,5 +406,9 @@ if (!$NoStart) {
   }
 
   Write-Host "Starting TemichevVet..."
-  cmd /c "`"$launcher`" -ForceRecreate -NoImageUpdate"
+  if (Test-Path $ImagesTar) {
+    cmd /c "`"$launcher`" -ForceRecreate -NoImageUpdate"
+  } else {
+    cmd /c "`"$launcher`" -ForceRecreate -UpdateImages"
+  }
 }

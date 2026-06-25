@@ -2,6 +2,7 @@ import { apiRequest } from '../../api/client';
 import { buildQuery } from '../../shared/utils/query';
 import {
   CreateClinicOfficePayload,
+  ClinicOfficeSettings,
   EmployeeShift,
   EmployeeShiftPayload,
   EmployeeShiftQuery,
@@ -24,7 +25,7 @@ export function updateClinicOffice(officeId: string, payload: UpdateClinicOffice
 }
 
 export function createClinicOffice(payload: CreateClinicOfficePayload) {
-  return apiRequest('/v1/scheduling/offices', { method: 'POST', body: payload });
+  return apiRequest<ClinicOfficeSettings>('/v1/scheduling/offices', { method: 'POST', body: payload });
 }
 
 export function listEmployeeShifts(query: EmployeeShiftQuery = {}) {

@@ -6,6 +6,7 @@ import { useMemo, useState } from 'react';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
+import { EmployeeShiftsPanel } from '../appointments/EmployeeShiftsPanel';
 import { getSchedulingSettings } from '../scheduling/scheduling.api';
 import { getDefaultRouteLabel } from '../../shared/routes/defaultRoutes';
 import { PageHeader } from '../../shared/ui/PageHeader';
@@ -24,6 +25,7 @@ export function EmployeesPage() {
   const currentEmployee = currentEmployeeQuery.data?.employee;
   const canManage =
     hasPermission(currentEmployee, 'employees.manage') && hasPermission(currentEmployee, 'roles.manage');
+  const canManageShifts = hasPermission(currentEmployee, 'appointments.manage');
   const warehouseSettingsQuery = useQuery({
     queryKey: ['scheduling', 'settings', 'employee-warehouses'],
     queryFn: getSchedulingSettings,
@@ -219,6 +221,15 @@ export function EmployeesPage() {
               key: 'roles',
               label: 'Роли и доступы',
               children: <RolesMatrix roles={rolesQuery.data ?? []} loading={rolesQuery.isLoading} />,
+            },
+            {
+              key: 'shifts',
+              label: 'График смен',
+              children: (
+                <div className="list-panel-body">
+                  <EmployeeShiftsPanel canManage={canManageShifts} />
+                </div>
+              ),
             },
           ]}
         />
