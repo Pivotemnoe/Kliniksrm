@@ -152,6 +152,9 @@ export class ImportsService {
           row: row.rowNumber,
           owner: row.ownerName ?? row.phone ?? '',
           phone: row.phone,
+          extraPhone: row.extraPhone,
+          email: row.email,
+          address: row.address,
           animal: row.animalName,
         });
       }
@@ -192,6 +195,9 @@ export class ImportsService {
         row: row.rowNumber,
         owner: row.ownerName ?? row.phone ?? '',
         phone: row.phone,
+        extraPhone: row.extraPhone,
+        email: row.email,
+        address: row.address,
         animal: row.animalName,
       });
     }
@@ -427,8 +433,8 @@ export class ImportsService {
 }
 
 function parseClientRow(row: VetafImportRowDto, issues: ImportIssue[]): ClientRow | null {
-  const ownerName = clean(getField(row.data, ['владелец', 'фио владельца', 'клиент', 'фио клиента', 'owner', 'owner name']));
-  const phoneRaw = clean(getField(row.data, ['телефон', 'телефон владельца', 'мобильный', 'phone']));
+  const ownerName = clean(getField(row.data, ['владелец', 'фио', 'фио владельца', 'клиент', 'фио клиента', 'owner', 'owner name']));
+  const phoneRaw = clean(getField(row.data, ['телефон', 'телефон моб', 'телефон мобильный', 'телефон владельца', 'мобильный', 'phone']));
   const phoneNormalized = safePhone(phoneRaw, row.rowNumber, issues);
   const phone = formatNormalizedRussianPhone(phoneNormalized);
   const animalName = clean(getField(row.data, ['кличка', 'пациент', 'животное', 'питомец', 'animal', 'pet']));
@@ -438,16 +444,12 @@ function parseClientRow(row: VetafImportRowDto, issues: ImportIssue[]): ClientRo
     return null;
   }
 
-  if (!animalName) {
-    issues.push({ rowNumber: row.rowNumber, level: 'warning', field: 'animal', message: 'Пациент не указан, будет импортирован только владелец' });
-  }
-
   return {
     rowNumber: row.rowNumber,
     ownerName: ownerName ? normalizeDisplayName(ownerName) : null,
     phoneNormalized,
     phone,
-    extraPhone: clean(getField(row.data, ['доп телефон', 'дополнительный телефон', 'extra phone'])),
+    extraPhone: clean(getField(row.data, ['доп телефон', 'телефон доп', 'телефон дополнительный', 'дополнительный телефон', 'extra phone'])),
     email: clean(getField(row.data, ['email', 'e-mail', 'почта'])),
     address: clean(getField(row.data, ['адрес', 'address'])),
     animalName,

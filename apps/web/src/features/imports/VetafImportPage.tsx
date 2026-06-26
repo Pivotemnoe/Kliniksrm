@@ -3,6 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { Alert, App, Button, Descriptions, Segmented, Space, Table, Tag, Typography } from 'antd';
 import { ColumnsType } from 'antd/es/table';
 import { useMemo, useRef, useState } from 'react';
+import type { Row } from 'read-excel-file/browser';
 import { getErrorMessage } from '../../api/errors';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { commitVetafImport, previewVetafImport, VetafImportIssue, VetafImportKind, VetafImportResult, VetafImportRow } from './imports.api';
@@ -55,8 +56,7 @@ export function VetafImportPage() {
     }
 
     try {
-      const text = await file.text();
-      const rows = parseDelimitedTable(text);
+      const rows = await parseImportFile(file);
       setParsedFile({ fileName: file.name, rows });
       message.success(`Файл прочитан: ${rows.length} строк`);
     } catch (error) {
@@ -78,7 +78,7 @@ export function VetafImportPage() {
 
   return (
     <div className="page">
-      <PageHeader title="Импорт ВетаФ" description="Перенос клиентской базы, пациентов, товаров и остатков через CSV или TSV файл." />
+      <PageHeader title="Импорт ВетаФ" description="Перенос клиентской базы, пациентов, товаров и остатков через Excel, CSV или TSV файл." />
       <div className="list-panel">
         <div className="list-panel-body">
           <Space direction="vertical" size={16} className="full-width">
@@ -93,7 +93,7 @@ export function VetafImportPage() {
               <Button icon={<ImportOutlined />} onClick={() => inputRef.current?.click()}>
                 Выбрать файл
               </Button>
-              <input ref={inputRef} type="file" accept=".csv,.tsv,.txt" style={{ display: 'none' }} onChange={handleFileChange} />
+              <input ref={inputRef} type="file" accept=".xlsx,.csv,.tsv,.txt" style={{ display: 'none' }} onChange={handleFileChange} />
             </Space>
 
             {parseError ? <Alert type="error" showIcon message={parseError} /> : null}
@@ -136,7 +136,7 @@ export function VetafImportPage() {
             ) : null}
 
             <Typography.Text type="secondary">
-              Для клиентов нужны колонки: владелец, телефон, кличка. Для товаров: наименование, остаток, цена, склад. Большие файлы отправляются на сервер пакетами по {importBatchSize} строк.
+              Для клиентов нужны колонки: владелец или ФИО, телефон. Email, адрес и дополнительный телефон сохраняются в карточке владельца, если они есть в файле. Большие файлы отправляются на сервер пакетами по {importBatchSize} строк.
             </Typography.Text>
           </Space>
         </div>
@@ -209,6 +209,9 @@ function sampleColumnTitle(key: string) {
     row: 'Строка',
     owner: 'Владелец',
     phone: 'Телефон',
+    extraPhone: 'Доп. телефон',
+    email: 'Email',
+    address: 'Адрес',
     animal: 'Пациент',
     product: 'Товар',
     quantity: 'Остаток',
@@ -279,6 +282,113 @@ function mergeImportResults(kind: VetafImportKind, mode: 'preview' | 'commit', r
   );
 }
 
+async function parseImportFile(file: File): Promise<VetafImportRow[]> {
+  if (isExcelFile(file)) {
+    const { readSheet } = await import('read-excel-file/browser');
+    const sheetRows = await readSheet(file);
+    return parseSpreadsheetTable(sheetRows);
+  }
+
+  const text = await file.text();
+  return parseDelimitedTable(text);
+}
+
+function isExcelFile(file: File) {
+  return /\.xlsx$/i.test(file.name) || file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+}
+
+function parseSpreadsheetTable(sheetRows: Row[]): VetafImportRow[] {
+  const table = sheetRows.map((row) => row.map(cellToText));
+  const headerIndex = findHeaderRow(table);
+  const headers = buildHeaders(table[headerIndex]);
+
+  if (!headers.length) {
+    throw new Error('В Excel не найдены заголовки колонок');
+  }
+
+  const rows: VetafImportRow[] = [];
+  for (let rowIndex = headerIndex + 1; rowIndex < table.length; rowIndex += 1) {
+    const row = table[rowIndex] ?? [];
+    const data = Object.fromEntries(headers.map(({ index, title }) => [title, row[index]?.trim() ?? '']));
+    if (Object.values(data).some(Boolean)) {
+      rows.push({ rowNumber: rowIndex + 1, data });
+    }
+  }
+
+  if (!rows.length) {
+    throw new Error('В Excel не найдено строк данных после заголовков');
+  }
+
+  return rows;
+}
+
+function findHeaderRow(rows: string[][]) {
+  const aliases = new Set([
+    'фио',
+    'фиовладельца',
+    'фиоклиента',
+    'владелец',
+    'клиент',
+    'телефон',
+    'телефонмоб',
+    'мобильный',
+    'телефондоп',
+    'email',
+    'адрес',
+    'кличка',
+    'пациент',
+    'животное',
+    'товар',
+    'наименование',
+    'номенклатура',
+    'остаток',
+    'количество',
+  ]);
+
+  let bestIndex = -1;
+  let bestScore = 0;
+  rows.slice(0, 100).forEach((row, index) => {
+    const normalized = row.map(normalizeHeader).filter(Boolean);
+    const score = normalized.filter((cell) => aliases.has(cell)).length;
+    if (score > bestScore) {
+      bestScore = score;
+      bestIndex = index;
+    }
+  });
+
+  if (bestIndex === -1 || bestScore < 2) {
+    throw new Error('Не удалось найти строку с заголовками. Проверьте, что в файле есть ФИО/телефон или наименование/остаток.');
+  }
+
+  return bestIndex;
+}
+
+function buildHeaders(headerRow: string[]) {
+  const used = new Map<string, number>();
+  return headerRow
+    .map((rawTitle, index) => ({ index, title: rawTitle.trim() }))
+    .filter((header) => header.title)
+    .map((header) => {
+      const count = used.get(header.title) ?? 0;
+      used.set(header.title, count + 1);
+      return { ...header, title: count ? `${header.title} ${count + 1}` : header.title };
+    });
+}
+
+function cellToText(value: Row[number]) {
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  if (value instanceof Date) {
+    const day = String(value.getDate()).padStart(2, '0');
+    const month = String(value.getMonth() + 1).padStart(2, '0');
+    return `${day}.${month}.${value.getFullYear()}`;
+  }
+
+  return String(value).trim();
+}
+
 function parseDelimitedTable(text: string): VetafImportRow[] {
   const normalizedText = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
   if (!normalizedText) {
@@ -297,6 +407,10 @@ function parseDelimitedTable(text: string): VetafImportRow[] {
     const data = Object.fromEntries(headers.map((header, cellIndex) => [header, cells[cellIndex]?.trim() ?? '']));
     return { rowNumber: index + 2, data };
   });
+}
+
+function normalizeHeader(value: string) {
+  return value.toLocaleLowerCase('ru-RU').replace(/ё/g, 'е').replace(/[^a-zа-я0-9]+/g, '');
 }
 
 function detectDelimiter(text: string) {
