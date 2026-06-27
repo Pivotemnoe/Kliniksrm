@@ -89,6 +89,10 @@ export function QueuePage() {
     onSuccess: async (result, variables) => {
       await queryClient.invalidateQueries({ queryKey: ['queue'] });
       await queryClient.invalidateQueries({ queryKey: ['visits'] });
+      if (result.action === 'call') {
+        setStatus('IN_PROGRESS');
+        setOffset(0);
+      }
       const successText = {
         call: 'Клиент вызван на приём',
         repeat: 'Вызов повторён',

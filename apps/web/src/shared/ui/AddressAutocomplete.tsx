@@ -141,6 +141,18 @@ const armavirStreets = [
   'пер. Школьный',
 ];
 
+const armavirAreaStreets = unique([
+  ...commonStreets,
+  'ул. Офицерская',
+  'ул. Шоссейная',
+  'ул. Российская',
+  'ул. Краснодарская',
+  'ул. Кавказская',
+  'ул. Кубанская',
+  'ул. Майкопская',
+  'ул. Урупская',
+]);
+
 const localityPresets: LocalityPreset[] = [
   { label: 'Краснодарский край, г. Армавир', aliases: ['армавир', 'г армавир'], streets: armavirStreets },
   { label: 'Краснодарский край, г. Краснодар', aliases: ['краснодар', 'г краснодар'] },
@@ -183,8 +195,16 @@ const localityPresets: LocalityPreset[] = [
   { label: 'Краснодарский край, с. Успенское', aliases: ['с успенское', 'село успенское'] },
   { label: 'Краснодарский край, с. Коноково', aliases: ['коноково'] },
   { label: 'Краснодарский край, с. Вольное', aliases: ['вольное'] },
-  { label: 'Краснодарский край, п. Заветный', aliases: ['заветный'] },
-  { label: 'Краснодарский край, п. Южный', aliases: ['южный'] },
+  {
+    label: 'Краснодарский край, г. Армавир, п. Заветный',
+    aliases: ['заветный', 'п заветный', 'пос заветный', 'поселок заветный', 'посёлок заветный', 'армавир заветный'],
+    streets: armavirAreaStreets,
+  },
+  {
+    label: 'Краснодарский край, г. Армавир, п. Южный',
+    aliases: ['южный', 'п южный', 'пос южный', 'поселок южный', 'посёлок южный', 'армавир южный'],
+    streets: armavirAreaStreets,
+  },
   { label: 'Краснодарский край, п. Мостовской', aliases: ['мостовской'] },
 ];
 
@@ -226,20 +246,35 @@ function buildAddressOptions(value?: string) {
     .map((locality) => locality.label);
   const streetWords = getStreetWords(query, selectedLocality);
   const streets = selectedLocality.streets ?? commonStreets;
+  const houseNumber = getHouseNumber(rawValue);
   const streetMatches = streets
     .filter((street) => !streetWords.length || matchesStreet(street, streetWords))
     .slice(0, streetWords.length ? 14 : 8)
-    .map((street) => `${selectedLocality.label}, ${street}`);
+    .map((street) => formatAddressSuggestion(selectedLocality.label, street, houseNumber));
+  const customStreetSuggestion = buildCustomStreetSuggestion(selectedLocality, streets, streetWords, houseNumber);
+  const streetSuggestions = unique([...streetMatches, ...(customStreetSuggestion ? [customStreetSuggestion] : [])]);
 
   return unique([
     ...defaultOptions.filter((option) => normalizeAddress(option).includes(query)),
-    ...localityMatches,
-    ...streetMatches,
+    ...(streetWords.length ? streetSuggestions : localityMatches),
+    ...(streetWords.length ? localityMatches : streetSuggestions),
   ]).slice(0, 18);
 }
 
 function findSelectedLocality(query: string) {
-  return localityPresets.find((locality) => locality.aliases.some((alias) => query.includes(normalizeAddress(alias))));
+  return localityPresets
+    .map((locality) => {
+      const matchedAliases = locality.aliases
+        .map((alias) => normalizeAddress(alias))
+        .filter((alias) => query.includes(alias));
+      const score = matchedAliases.length
+        ? Math.max(...matchedAliases.map((alias) => alias.length + alias.split(/\s+/).length * 10))
+        : 0;
+
+      return { locality, score };
+    })
+    .filter((item) => item.score > 0)
+    .sort((left, right) => right.score - left.score || right.locality.label.length - left.locality.label.length)[0]?.locality;
 }
 
 function matchesLocality(locality: LocalityPreset, query: string) {
@@ -255,9 +290,17 @@ function getStreetWords(query: string, locality: LocalityPreset) {
     .replace(/\bкраснодарский\b/g, ' ')
     .replace(/\bкрай\b/g, ' ')
     .replace(/\bроссия\b/g, ' ');
-  const withoutLocality = locality.aliases.reduce(
+  const withoutAliases = locality.aliases.reduce(
     (result, alias) => result.replace(new RegExp(`\\b${escapeRegExp(normalizeAddress(alias))}\\b`, 'g'), ' '),
     withoutRegion,
+  );
+  const localityWords = normalizeAddress(locality.label)
+    .replace(/\b(краснодарский|край|россия|г|город|ст|станица|с|село|п|поселок|посёлок)\b/g, ' ')
+    .split(/\s+/)
+    .filter((word) => word.length > 1);
+  const withoutLocality = localityWords.reduce(
+    (result, word) => result.replace(new RegExp(`\\b${escapeRegExp(word)}\\b`, 'g'), ' '),
+    withoutAliases,
   );
 
   return withoutLocality
@@ -270,6 +313,28 @@ function getStreetWords(query: string, locality: LocalityPreset) {
 function matchesStreet(street: string, words: string[]) {
   const streetSearch = normalizeAddress(street).replace(/\b(ул|улица|пер|переулок|пр|проспект|ш|шоссе)\b/g, ' ');
   return words.every((word) => streetSearch.includes(word));
+}
+
+function buildCustomStreetSuggestion(locality: LocalityPreset, streets: string[], streetWords: string[], houseNumber?: string) {
+  if (!streetWords.length || streets.some((street) => matchesStreet(street, streetWords))) {
+    return null;
+  }
+
+  const streetName = streetWords.map(capitalizeWord).join(' ');
+  return formatAddressSuggestion(locality.label, `ул. ${streetName}`, houseNumber);
+}
+
+function formatAddressSuggestion(localityLabel: string, street: string, houseNumber?: string) {
+  return `${localityLabel}, ${street}${houseNumber ? `, ${houseNumber}` : ''}`;
+}
+
+function getHouseNumber(rawValue: string) {
+  const matches = rawValue.match(/\d+[а-яА-Яa-zA-Z]?(?:[/-]\d+[а-яА-Яa-zA-Z]?)?/g);
+  return matches?.[matches.length - 1];
+}
+
+function capitalizeWord(word: string) {
+  return word ? `${word.charAt(0).toLocaleUpperCase('ru-RU')}${word.slice(1)}` : word;
 }
 
 function normalizeAddress(value: string) {

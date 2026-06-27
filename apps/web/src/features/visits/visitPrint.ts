@@ -126,7 +126,6 @@ function openPrintWindow({
       <div class="meta-row"><span>Владелец</span><strong>${escapeHtml(visit.owner.fullName)}</strong></div>
       <div class="meta-row"><span>Телефон</span><strong>${escapeHtml(ownerPhone)}</strong></div>
       <div class="meta-row"><span>Пациент</span><strong>${escapeHtml(animalLine || '—')}</strong></div>
-      <div class="meta-row"><span>Номер приёма</span><strong>${escapeHtml(visit.id.slice(0, 8))}</strong></div>
       <div class="meta-row"><span>Напечатано</span><strong>${escapeHtml(printedAt)}</strong></div>
       <div class="meta-row"><span>Напечатал</span><strong>${escapeHtml(doctor)}</strong></div>
     </section>

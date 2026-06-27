@@ -88,7 +88,6 @@ export function AnimalCardPage() {
             </Button>
           </div>
           <div className="context-section-body context-grid">
-            <ContextRow label="№ пациента" value={animal?.id} />
             <ContextRow label="Вид" value={<AnimalSpeciesLabel species={animal?.species} />} />
             <ContextRow label="Порода" value={animal?.breed} />
             <ContextRow label="Пол" value={animal ? sexLabel[animal.sex] : undefined} />

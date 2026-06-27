@@ -560,7 +560,6 @@ function BillProfile({ bill }: { bill: Bill }) {
       </Card>
       <Card size="small" title="Системная информация">
         <div className="context-grid">
-          <ContextRow label="ID" value={bill.id} />
           <ContextRow label="Создан" value={formatDateTime(bill.createdAt)} />
           <ContextRow label="Срок оплаты" value={formatDate(bill.dueAt)} />
           <ContextRow label="Обновлён" value={formatDateTime(bill.updatedAt)} />

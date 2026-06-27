@@ -123,7 +123,6 @@ export function OwnerCardPage() {
             </Space>
           </div>
           <div className="context-section-body context-grid">
-            <ContextRow label="№ клиента" value={owner?.id} />
             <ContextRow label="Телефон" value={owner?.phone} />
             <ContextRow label="Доп. телефон" value={owner?.extraPhone} />
             <ContextRow

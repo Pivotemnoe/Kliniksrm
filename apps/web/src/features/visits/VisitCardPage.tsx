@@ -87,7 +87,6 @@ export function VisitCardPage() {
             </button>
           </div>
           <div className="context-section-body context-grid">
-            <ContextRow label="№ приёма" value={visit?.id} />
             <ContextRow label="Дата" value={formatDateTime(visit?.startedAt)} />
             <ContextRow
               label="Статус"
@@ -121,7 +120,6 @@ export function VisitCardPage() {
             ) : null}
           </div>
           <div className="context-section-body context-grid">
-            <ContextRow label="№ пациента" value={visit?.animalId} />
             <ContextRow label="Вид" value={<AnimalSpeciesLabel species={visit?.animal.species} />} />
             <ContextRow label="Порода" value={visit?.animal.breed} />
             <ContextRow label="Пол" value={visit ? sexLabel[visit.animal.sex] : undefined} />
