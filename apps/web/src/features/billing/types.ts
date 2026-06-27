@@ -60,6 +60,21 @@ export type BillItem = {
   unitPrice: DecimalValue;
   discount: DecimalValue;
   totalAmount: DecimalValue;
+  stockMovements?: Array<{
+    id: string;
+    quantity: DecimalValue;
+    type: string;
+    createdAt: string;
+    stockBatch?: {
+      id: string;
+      series: string | null;
+      expiresAt: string | null;
+    } | null;
+    warehouse?: {
+      id: string;
+      name: string;
+    } | null;
+  }>;
   createdAt: string;
 };
 

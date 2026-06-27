@@ -93,6 +93,7 @@ const permissionsByRole = {
     'billing.read',
     'billing.manage',
     'payments.manage',
+    'stock.read',
     'notifications.read',
     'documents.print',
   ]),
@@ -506,6 +507,7 @@ async function runRequestedE2eScenarios() {
   await scenarioCancelAppointment();
   await scenarioRefund();
   await scenarioManualBillWithoutVisit();
+  await scenarioManualBillProductStockWriteOff();
 }
 
 async function scenarioAppointmentToQueue() {
@@ -640,6 +642,47 @@ async function scenarioManualBillWithoutVisit() {
   assertEqual(reopenedBill.status, 'UNPAID', 'manual bill reopen');
 }
 
+async function scenarioManualBillProductStockWriteOff() {
+  const { owner } = await createOwnerAnimal('Bill Stock');
+  const product = await createStockProductWithSupply('Bill Stock', 5);
+  const initialProductCard = await request('stock', 'GET', `/api/v1/stock/products/${product.id}`);
+  assertEqual(Number(initialProductCard.stockRest), 5, 'stock product initial rest');
+
+  const bill = await request('cashier', 'POST', '/api/v1/bills', { ownerId: owner.id });
+  const billItem = await request('cashier', 'POST', `/api/v1/bills/${bill.id}/items`, {
+    productId: product.id,
+    quantity: 2,
+    unitPrice: 125,
+  });
+
+  let productCard = await request('stock', 'GET', `/api/v1/stock/products/${product.id}`);
+  assertEqual(Number(productCard.stockRest), 3, 'stock rest after bill product');
+
+  let billCard = await request('cashier', 'GET', `/api/v1/bills/${bill.id}`);
+  const itemFromBill = billCard.items.find((item) => item.id === billItem.id);
+  if (!itemFromBill?.stockMovements?.length) {
+    throw new Error('bill product item has no stock movements');
+  }
+
+  await request('cashier', 'POST', `/api/v1/bills/${bill.id}/cancel`);
+  productCard = await request('stock', 'GET', `/api/v1/stock/products/${product.id}`);
+  assertEqual(Number(productCard.stockRest), 5, 'stock rest after bill cancel');
+
+  await request('cashier', 'POST', `/api/v1/bills/${bill.id}/reopen`);
+  productCard = await request('stock', 'GET', `/api/v1/stock/products/${product.id}`);
+  assertEqual(Number(productCard.stockRest), 3, 'stock rest after bill reopen');
+
+  await request('cashier', 'PATCH', `/api/v1/bills/${bill.id}/items/${billItem.id}`, {
+    quantity: 1,
+  });
+  productCard = await request('stock', 'GET', `/api/v1/stock/products/${product.id}`);
+  assertEqual(Number(productCard.stockRest), 4, 'stock rest after bill product decrease');
+
+  await request('cashier', 'DELETE', `/api/v1/bills/${bill.id}/items/${billItem.id}`);
+  productCard = await request('stock', 'GET', `/api/v1/stock/products/${product.id}`);
+  assertEqual(Number(productCard.stockRest), 5, 'stock rest after bill product delete');
+}
+
 async function assertAuditLog() {
   const logs = await request('director', 'GET', '/api/v1/audit-logs');
   const actions = new Set(logs.map((log) => log.action));
@@ -749,6 +792,38 @@ async function createAppointment(ownerId, animalId, startsAt, label) {
   });
 }
 
+async function createStockProductWithSupply(label, quantity) {
+  const product = await request('stock', 'POST', '/api/v1/stock/products', {
+    title: `${e2eMarker} ${label} product`,
+    categoryTitle: `${e2eMarker} products`,
+    retailPrice: 125,
+    stockUnit: 'шт',
+    minStock: 1,
+  });
+  const resources = await request('stock', 'GET', '/api/v1/stock/resources');
+  const warehouseId = resources.warehouses[0]?.id;
+
+  if (!warehouseId) {
+    throw new Error('No warehouse available for stock e2e scenario');
+  }
+
+  await request('stock', 'POST', '/api/v1/stock/supply-invoices', {
+    supplierTitle: `${e2eMarker} supplier`,
+    number: `${e2eMarker}-${randomDigits(8)}`,
+    items: [
+      {
+        productId: product.id,
+        warehouseId,
+        quantity,
+        purchasePrice: 50,
+        series: `${e2eMarker}-${label}`,
+      },
+    ],
+  });
+
+  return product;
+}
+
 async function cleanupE2eData() {
   const sql = `
     BEGIN;
@@ -770,10 +845,24 @@ async function cleanupE2eData() {
     INSERT INTO e2e_ids SELECT id FROM "BillItem" WHERE title LIKE '${e2eMarker}%' OR "billId" IN (SELECT id FROM e2e_ids);
     INSERT INTO e2e_ids SELECT id FROM "Payment" WHERE "billId" IN (SELECT id FROM e2e_ids) OR comment LIKE '${e2eMarker}%';
     INSERT INTO e2e_ids SELECT id FROM "VisitDiagnosis" WHERE title LIKE '${e2eMarker}%' OR "visitId" IN (SELECT id FROM e2e_ids);
+    INSERT INTO e2e_ids SELECT id FROM "ProductCategory" WHERE title LIKE '${e2eMarker}%';
+    INSERT INTO e2e_ids SELECT id FROM "Product" WHERE title LIKE '${e2eMarker}%' OR "categoryId" IN (SELECT id FROM e2e_ids);
+    INSERT INTO e2e_ids SELECT id FROM "Supplier" WHERE title LIKE '${e2eMarker}%';
+    INSERT INTO e2e_ids SELECT id FROM "SupplyInvoice" WHERE number LIKE '${e2eMarker}%' OR "supplierId" IN (SELECT id FROM e2e_ids);
+    INSERT INTO e2e_ids SELECT id FROM "SupplyInvoiceItem" WHERE "supplyInvoiceId" IN (SELECT id FROM e2e_ids) OR "productId" IN (SELECT id FROM e2e_ids);
+    INSERT INTO e2e_ids SELECT id FROM "StockBatch" WHERE "productId" IN (SELECT id FROM e2e_ids) OR "supplierId" IN (SELECT id FROM e2e_ids);
+    INSERT INTO e2e_ids SELECT id FROM "StockMovement" WHERE "productId" IN (SELECT id FROM e2e_ids) OR "billItemId" IN (SELECT id FROM e2e_ids) OR comment LIKE '%${e2eMarker}%';
     DELETE FROM "AuditLog" WHERE "entityId" IN (SELECT id FROM e2e_ids) OR metadata::text LIKE '%${e2eMarker}%';
+    DELETE FROM "StockMovement" WHERE id IN (SELECT id FROM e2e_ids) OR "productId" IN (SELECT id FROM e2e_ids) OR "billItemId" IN (SELECT id FROM e2e_ids);
     DELETE FROM "Payment" WHERE id IN (SELECT id FROM e2e_ids) OR "billId" IN (SELECT id FROM e2e_ids);
     DELETE FROM "BillItem" WHERE id IN (SELECT id FROM e2e_ids) OR "billId" IN (SELECT id FROM e2e_ids);
     DELETE FROM "Bill" WHERE id IN (SELECT id FROM e2e_ids);
+    DELETE FROM "SupplyInvoiceItem" WHERE id IN (SELECT id FROM e2e_ids) OR "supplyInvoiceId" IN (SELECT id FROM e2e_ids) OR "productId" IN (SELECT id FROM e2e_ids);
+    DELETE FROM "StockBatch" WHERE id IN (SELECT id FROM e2e_ids) OR "productId" IN (SELECT id FROM e2e_ids) OR "supplierId" IN (SELECT id FROM e2e_ids);
+    DELETE FROM "SupplyInvoice" WHERE id IN (SELECT id FROM e2e_ids) OR "supplierId" IN (SELECT id FROM e2e_ids);
+    DELETE FROM "Product" WHERE id IN (SELECT id FROM e2e_ids) OR "categoryId" IN (SELECT id FROM e2e_ids);
+    DELETE FROM "ProductCategory" WHERE id IN (SELECT id FROM e2e_ids);
+    DELETE FROM "Supplier" WHERE id IN (SELECT id FROM e2e_ids);
     DELETE FROM "VisitDocument" WHERE id IN (SELECT id FROM e2e_ids) OR "visitId" IN (SELECT id FROM e2e_ids) OR "templateId" IN (SELECT id FROM e2e_ids);
     DELETE FROM "Visit" WHERE id IN (SELECT id FROM e2e_ids);
     DELETE FROM "Task" WHERE id IN (SELECT id FROM e2e_ids) OR "ownerId" IN (SELECT id FROM e2e_ids) OR "animalId" IN (SELECT id FROM e2e_ids);

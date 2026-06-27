@@ -328,6 +328,18 @@ function BillItemsTab({ bill, canEdit }: { bill: Bill; canEdit: boolean }) {
       { title: 'Скидка', dataIndex: 'discount', key: 'discount', render: formatMoney },
       { title: 'Итого', dataIndex: 'totalAmount', key: 'totalAmount', render: formatMoney },
       {
+        title: 'Склад',
+        key: 'stock',
+        render: (_, record) =>
+          record.productId ? (
+            <Typography.Text type={record.stockMovements?.length ? 'secondary' : 'danger'}>
+              {record.stockMovements?.length ? 'Списано' : 'Нет движения'}
+            </Typography.Text>
+          ) : (
+            '—'
+          ),
+      },
+      {
         title: '',
         key: 'actions',
         width: 118,
@@ -393,6 +405,7 @@ function BillItemsTab({ bill, canEdit }: { bill: Bill; canEdit: boolean }) {
                 <strong>{formatMoney(bill.totalAmount)}</strong>
               </Table.Summary.Cell>
               <Table.Summary.Cell index={5} />
+              <Table.Summary.Cell index={6} />
             </Table.Summary.Row>
           </Table.Summary>
         )}

@@ -138,6 +138,7 @@ const roles = [
       'billing.read',
       'billing.manage',
       'payments.manage',
+      'stock.read',
       'notifications.read',
       'documents.print',
     ],

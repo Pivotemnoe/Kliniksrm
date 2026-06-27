@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { BillSource, PaymentStatus, PaymentType, Prisma } from '@prisma/client';
+import { BillSource, PaymentStatus, PaymentType, Prisma, StockMovementType } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
 import { AuditService } from '../audit/audit.service';
 import { FinanceService } from '../finance/finance.service';
@@ -12,6 +12,8 @@ import { ListBillsQueryDto } from './dto/list-bills-query.dto';
 import { RefundPaymentDto } from './dto/refund-payment.dto';
 import { UpdateBillDto } from './dto/update-bill.dto';
 import { UpdateBillItemDto } from './dto/update-bill-item.dto';
+
+type WarehouseScope = string[] | null;
 
 @Injectable()
 export class BillingService {
@@ -183,16 +185,20 @@ export class BillingService {
   }
 
   async cancelBill(billId: string, actorId: string) {
-    const bill = await this.getExistingBill(billId);
+    const updatedBill = await this.prisma.$transaction(async (tx) => {
+      const bill = await this.getBillForUpdate(tx, billId);
 
-    if (decimal(bill.paidAmount).greaterThan(0)) {
-      throw new BadRequestException('Paid bill cannot be cancelled before refund');
-    }
+      if (decimal(bill.paidAmount).greaterThan(0)) {
+        throw new BadRequestException('Paid bill cannot be cancelled before refund');
+      }
 
-    const updatedBill = await this.prisma.bill.update({
-      where: { id: billId },
-      data: { status: PaymentStatus.CANCELLED },
-      include: billInclude,
+      await this.restoreBillProductItems(tx, bill);
+
+      return tx.bill.update({
+        where: { id: billId },
+        data: { status: PaymentStatus.CANCELLED },
+        include: billInclude,
+      });
     });
 
     await this.auditService.log({
@@ -206,13 +212,15 @@ export class BillingService {
   }
 
   async reopenBill(billId: string, actorId: string) {
-    await this.getExistingBill(billId);
+    const warehouseScope = await this.getWarehouseScope(actorId);
 
     const bill = await this.prisma.$transaction(async (tx) => {
+      const currentBill = await this.getBillForUpdate(tx, billId);
       await tx.bill.update({
         where: { id: billId },
         data: { status: PaymentStatus.UNPAID },
       });
+      await this.ensureBillProductItemsWrittenOff(tx, currentBill, warehouseScope);
       await this.recalculateBillTotals(tx, billId);
       return tx.bill.findUniqueOrThrow({ where: { id: billId }, include: billInclude });
     });
@@ -229,10 +237,11 @@ export class BillingService {
   }
 
   async addBillItem(billId: string, dto: AddBillItemDto, actorId: string) {
+    const warehouseScope = await this.getWarehouseScope(actorId);
     const line = await this.resolveBillItemLine(dto);
 
     const billItem = await this.prisma.$transaction(async (tx) => {
-      await this.ensureBillCanBeEdited(tx, billId);
+      const bill = await this.ensureBillCanBeEdited(tx, billId);
 
       const createdBillItem = await tx.billItem.create({
         data: {
@@ -246,6 +255,10 @@ export class BillingService {
           totalAmount: line.totalAmount,
         },
       });
+
+      if (line.productId) {
+        await this.writeOffBillProduct(tx, bill, createdBillItem.id, line, warehouseScope);
+      }
 
       await this.recalculateBillTotals(tx, billId);
 
@@ -264,10 +277,13 @@ export class BillingService {
   }
 
   async updateBillItem(billId: string, billItemId: string, dto: UpdateBillItemDto, actorId: string) {
+    const warehouseScope = await this.getWarehouseScope(actorId);
     const billItem = await this.prisma.$transaction(async (tx) => {
-      await this.ensureBillCanBeEdited(tx, billId);
+      const bill = await this.ensureBillCanBeEdited(tx, billId);
       const existingBillItem = await this.getBillItem(tx, billId, billItemId);
       const line = calculateBillItemLine({
+        serviceId: existingBillItem.serviceId ?? undefined,
+        productId: existingBillItem.productId ?? undefined,
         title: dto.title ?? existingBillItem.title,
         quantity: dto.quantity ?? decimalToNumber(existingBillItem.quantity),
         unitPrice: dto.unitPrice ?? decimalToNumber(existingBillItem.unitPrice),
@@ -284,6 +300,10 @@ export class BillingService {
           totalAmount: line.totalAmount,
         },
       });
+
+      if (existingBillItem.productId) {
+        await this.syncBillProductWriteOff(tx, bill, billItemId, line, warehouseScope);
+      }
 
       await this.recalculateBillTotals(tx, billId);
 
@@ -305,6 +325,7 @@ export class BillingService {
     await this.prisma.$transaction(async (tx) => {
       await this.ensureBillCanBeEdited(tx, billId);
       await this.getBillItem(tx, billId, billItemId);
+      await this.restoreCurrentBillItemWriteOff(tx, billItemId);
       await tx.billItem.delete({ where: { id: billItemId } });
       await this.recalculateBillTotals(tx, billId);
     });
@@ -574,7 +595,16 @@ export class BillingService {
   private async getBillForUpdate(tx: Prisma.TransactionClient, billId: string) {
     const bill = await tx.bill.findUnique({
       where: { id: billId },
-      select: { id: true, ownerId: true, status: true, totalAmount: true, paidAmount: true, visitId: true },
+      select: {
+        id: true,
+        ownerId: true,
+        status: true,
+        source: true,
+        totalAmount: true,
+        paidAmount: true,
+        visitId: true,
+        saleId: true,
+      },
     });
 
     if (!bill) {
@@ -587,7 +617,16 @@ export class BillingService {
   private async getExistingBill(billId: string) {
     const bill = await this.prisma.bill.findUnique({
       where: { id: billId },
-      select: { id: true, ownerId: true, status: true, totalAmount: true, paidAmount: true, visitId: true },
+      select: {
+        id: true,
+        ownerId: true,
+        status: true,
+        source: true,
+        totalAmount: true,
+        paidAmount: true,
+        visitId: true,
+        saleId: true,
+      },
     });
 
     if (!bill) {
@@ -671,6 +710,240 @@ export class BillingService {
 
     return billItem;
   }
+
+  private async writeOffBillProduct(
+    tx: Prisma.TransactionClient,
+    bill: BillStockContext,
+    billItemId: string,
+    line: BillItemLine,
+    warehouseScope: WarehouseScope,
+  ) {
+    const productId = line.productId;
+    if (!productId || line.quantity.lessThanOrEqualTo(0)) {
+      return;
+    }
+
+    const batches = await tx.stockBatch.findMany({
+      where: {
+        productId,
+        rest: { gt: 0 },
+        ...(warehouseScope ? { warehouseId: { in: warehouseScope } } : {}),
+      },
+      select: { id: true, warehouseId: true, rest: true, expiresAt: true, createdAt: true },
+    });
+    const orderedBatches = batches.sort(compareStockBatches);
+    const available = orderedBatches.reduce((sum, batch) => sum.plus(batch.rest), decimal(0));
+
+    if (available.lessThan(line.quantity)) {
+      throw new BadRequestException(`Недостаточно остатка товара "${line.title}"`);
+    }
+
+    let remaining = line.quantity;
+
+    for (const batch of orderedBatches) {
+      if (remaining.lessThanOrEqualTo(0)) {
+        break;
+      }
+
+      const batchRest = decimal(batch.rest);
+      const quantity = batchRest.lessThan(remaining) ? batchRest : remaining;
+
+      await tx.stockBatch.update({
+        where: { id: batch.id },
+        data: { rest: { decrement: quantity } },
+      });
+
+      await tx.stockMovement.create({
+        data: {
+          productId,
+          billItemId,
+          stockBatchId: batch.id,
+          warehouseId: batch.warehouseId,
+          visitId: bill.visitId,
+          saleId: bill.saleId,
+          type: bill.visitId ? StockMovementType.VISIT_USAGE : StockMovementType.WRITE_OFF,
+          quantity: quantity.negated(),
+          comment: `Списание по счёту ${bill.id.slice(0, 8)}`,
+        },
+      });
+
+      remaining = remaining.minus(quantity);
+    }
+  }
+
+  private async syncBillProductWriteOff(
+    tx: Prisma.TransactionClient,
+    bill: BillStockContext,
+    billItemId: string,
+    line: BillItemLine,
+    warehouseScope: WarehouseScope,
+  ) {
+    if (!line.productId) {
+      return;
+    }
+
+    const deductedQuantity = await this.getBillItemDeductedQuantity(tx, billItemId, line.productId);
+    const delta = line.quantity.minus(deductedQuantity);
+
+    if (delta.greaterThan(0)) {
+      await this.writeOffBillProduct(tx, bill, billItemId, { ...line, quantity: delta }, warehouseScope);
+    } else if (delta.lessThan(0)) {
+      await this.restoreBillProduct(tx, billItemId, line.productId, line.title, delta.abs());
+    }
+  }
+
+  private async ensureBillProductItemsWrittenOff(
+    tx: Prisma.TransactionClient,
+    bill: BillStockContext,
+    warehouseScope: WarehouseScope,
+  ) {
+    const productItems = await tx.billItem.findMany({
+      where: { billId: bill.id, productId: { not: null } },
+      select: { id: true, productId: true, title: true, quantity: true, unitPrice: true, discount: true },
+    });
+
+    for (const item of productItems) {
+      const line = calculateBillItemLine({
+        productId: item.productId ?? undefined,
+        title: item.title,
+        quantity: decimalToNumber(item.quantity),
+        unitPrice: decimalToNumber(item.unitPrice),
+        discount: decimalToNumber(item.discount),
+      });
+      await this.syncBillProductWriteOff(tx, bill, item.id, line, warehouseScope);
+    }
+  }
+
+  private async restoreBillProductItems(tx: Prisma.TransactionClient, bill: BillStockContext) {
+    const productItems = await tx.billItem.findMany({
+      where: { billId: bill.id, productId: { not: null } },
+      select: { id: true, productId: true, title: true },
+    });
+
+    for (const item of productItems) {
+      await this.restoreCurrentBillItemWriteOff(tx, item.id, item.title);
+    }
+  }
+
+  private async restoreCurrentBillItemWriteOff(tx: Prisma.TransactionClient, billItemId: string, title?: string) {
+    const movements = await tx.stockMovement.findMany({
+      where: {
+        billItemId,
+        type: { in: [StockMovementType.VISIT_USAGE, StockMovementType.WRITE_OFF, StockMovementType.CORRECTION] },
+      },
+      distinct: ['productId'],
+      select: { productId: true },
+    });
+
+    for (const movement of movements) {
+      await this.restoreBillProduct(tx, billItemId, movement.productId, title ?? 'товар', await this.getBillItemDeductedQuantity(tx, billItemId, movement.productId));
+    }
+  }
+
+  private async restoreBillProduct(
+    tx: Prisma.TransactionClient,
+    billItemId: string,
+    productId: string,
+    title: string,
+    quantityToRestore: Prisma.Decimal.Value,
+  ) {
+    let remaining = decimal(quantityToRestore);
+    if (remaining.lessThanOrEqualTo(0)) {
+      return;
+    }
+
+    const movements = await tx.stockMovement.findMany({
+      where: {
+        billItemId,
+        productId,
+        stockBatchId: { not: null },
+        type: { in: [StockMovementType.VISIT_USAGE, StockMovementType.WRITE_OFF, StockMovementType.CORRECTION] },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { stockBatchId: true, warehouseId: true, quantity: true, createdAt: true },
+    });
+    const restorableByBatch = new Map<string, { stockBatchId: string; warehouseId: string | null; quantity: Prisma.Decimal; createdAt: Date }>();
+
+    for (const movement of movements) {
+      if (!movement.stockBatchId) {
+        continue;
+      }
+
+      const existing = restorableByBatch.get(movement.stockBatchId) ?? {
+        stockBatchId: movement.stockBatchId,
+        warehouseId: movement.warehouseId,
+        quantity: decimal(0),
+        createdAt: movement.createdAt,
+      };
+      existing.quantity = existing.quantity.minus(movement.quantity);
+      if (movement.createdAt > existing.createdAt) {
+        existing.createdAt = movement.createdAt;
+      }
+      restorableByBatch.set(movement.stockBatchId, existing);
+    }
+
+    const restorable = [...restorableByBatch.values()]
+      .filter((item) => item.quantity.greaterThan(0))
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
+
+    if (!restorable.length) {
+      return;
+    }
+
+    for (const item of restorable) {
+      if (remaining.lessThanOrEqualTo(0)) {
+        break;
+      }
+
+      const quantity = item.quantity.lessThan(remaining) ? item.quantity : remaining;
+
+      await tx.stockBatch.update({
+        where: { id: item.stockBatchId },
+        data: { rest: { increment: quantity } },
+      });
+
+      await tx.stockMovement.create({
+        data: {
+          productId,
+          billItemId,
+          stockBatchId: item.stockBatchId,
+          warehouseId: item.warehouseId,
+          type: StockMovementType.CORRECTION,
+          quantity,
+          comment: `Возврат списания "${title}" по счёту`,
+        },
+      });
+
+      remaining = remaining.minus(quantity);
+    }
+
+    if (remaining.greaterThan(0)) {
+      throw new BadRequestException(`Не удалось вернуть списание товара "${title}" полностью`);
+    }
+  }
+
+  private async getBillItemDeductedQuantity(tx: Prisma.TransactionClient, billItemId: string, productId: string) {
+    const movements = await tx.stockMovement.findMany({
+      where: {
+        billItemId,
+        productId,
+        type: { in: [StockMovementType.VISIT_USAGE, StockMovementType.WRITE_OFF, StockMovementType.CORRECTION] },
+      },
+      select: { quantity: true },
+    });
+    const deducted = movements.reduce((sum, movement) => sum.minus(movement.quantity), decimal(0));
+
+    return maxDecimal(deducted, decimal(0));
+  }
+
+  private async getWarehouseScope(employeeId: string): Promise<WarehouseScope> {
+    const accesses = await this.prisma.employeeWarehouseAccess.findMany({
+      where: { employeeId },
+      select: { warehouseId: true },
+    });
+
+    return accesses.length ? accesses.map((access) => access.warehouseId) : null;
+  }
 }
 
 const billListInclude = {
@@ -706,6 +979,13 @@ const billInclude = {
       product: {
         select: { id: true, title: true, retailPrice: true },
       },
+      stockMovements: {
+        orderBy: { createdAt: 'asc' },
+        include: {
+          stockBatch: { select: { id: true, series: true, expiresAt: true } },
+          warehouse: { select: { id: true, name: true } },
+        },
+      },
     },
   },
   payments: {
@@ -726,6 +1006,13 @@ type BillCreationData = {
   ownerId: string;
   animalId?: string;
   visitId?: string;
+};
+
+type BillStockContext = {
+  id: string;
+  source: BillSource;
+  visitId: string | null;
+  saleId: string | null;
 };
 
 function calculateBillItemLine(input: {
@@ -758,6 +1045,27 @@ function calculateBillItemLine(input: {
   };
 }
 
+type BillItemLine = ReturnType<typeof calculateBillItemLine>;
+
+function compareStockBatches(
+  left: { expiresAt: Date | null; createdAt: Date },
+  right: { expiresAt: Date | null; createdAt: Date },
+) {
+  if (left.expiresAt && right.expiresAt && left.expiresAt.getTime() !== right.expiresAt.getTime()) {
+    return left.expiresAt.getTime() - right.expiresAt.getTime();
+  }
+
+  if (left.expiresAt && !right.expiresAt) {
+    return -1;
+  }
+
+  if (!left.expiresAt && right.expiresAt) {
+    return 1;
+  }
+
+  return left.createdAt.getTime() - right.createdAt.getTime();
+}
+
 function resolvePaymentStatus(totalAmount: Prisma.Decimal, paidAmount: Prisma.Decimal, currentStatus?: PaymentStatus) {
   if (currentStatus === PaymentStatus.CANCELLED) {
     return PaymentStatus.CANCELLED;
@@ -785,6 +1093,7 @@ function decimal(value: Prisma.Decimal.Value) {
 function decimalToNumber(value: Prisma.Decimal.Value) {
   return decimal(value).toNumber();
 }
+
 
 function maxDecimal(left: Prisma.Decimal, right: Prisma.Decimal) {
   return left.lessThan(right) ? right : left;
