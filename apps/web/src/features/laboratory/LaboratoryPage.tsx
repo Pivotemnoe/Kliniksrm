@@ -1,26 +1,37 @@
 import { EditOutlined, ExperimentOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Alert, Button, Drawer, Form, Input, Select, Space, Switch, Table, Tabs, Tag, Typography } from 'antd';
+import { App, Alert, Button, Card, Drawer, Form, Input, Select, Space, Switch, Table, Tabs, Tag, Typography } from 'antd';
 import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
+import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { PageHeader } from '../../shared/ui/PageHeader';
+import { formatDateTime } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
+import {
+  laboratoryOrderItemStatusLabels,
+  laboratoryOrderStatusColors,
+  laboratoryOrderStatusLabels,
+  VisitLaboratoryOrderItemStatus,
+  VisitLaboratoryOrderStatus,
+} from '../visits/types';
 import {
   createLaboratoryProfile,
   createLaboratoryTest,
   getLaboratoryResources,
+  listLaboratoryOrders,
   listLaboratoryProfiles,
   listLaboratoryTests,
+  updateLaboratoryOrderItem,
   updateLaboratoryProfile,
   updateLaboratoryTest,
 } from './laboratory.api';
-import { LaboratoryProfile, LaboratoryResources, LaboratoryTest } from './types';
+import { LaboratoryOrder, LaboratoryOrderItem, LaboratoryOrderItemInput, LaboratoryProfile, LaboratoryResources, LaboratoryTest } from './types';
 
 const pageSize = 10;
 const nullableText = z.string().trim().optional().transform((value) => value || undefined);
@@ -46,19 +57,32 @@ const profileSchema = z.object({
   isActive: z.boolean().default(true),
   testIds: z.array(z.string()).optional(),
 });
+const resultSchema = z.object({
+  status: z.enum(['ORDERED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']),
+  resultValue: z.string().trim().max(120).optional(),
+  resultText: z.string().trim().max(2000).optional(),
+  unit: z.string().trim().max(80).optional(),
+  referenceRange: z.string().trim().max(500).optional(),
+  comment: z.string().trim().max(1000).optional(),
+});
 
 type TestFormInput = z.input<typeof testSchema>;
 type TestFormValues = z.output<typeof testSchema>;
 type ProfileFormInput = z.input<typeof profileSchema>;
 type ProfileFormValues = z.output<typeof profileSchema>;
+type ResultFormInput = z.input<typeof resultSchema>;
+type ResultFormValues = z.output<typeof resultSchema>;
 
 export function LaboratoryPage() {
   const { data: auth } = useCurrentEmployee();
   const canManage = hasPermission(auth?.employee, 'laboratory.manage');
-  const [activeTab, setActiveTab] = useState('tests');
+  const [activeTab, setActiveTab] = useState('orders');
   const [search, setSearch] = useState('');
   const [species, setSpecies] = useState<string | undefined>();
+  const [orderStatus, setOrderStatus] = useState<VisitLaboratoryOrderStatus | undefined>();
   const [offset, setOffset] = useState(0);
+  const [selectedOrder, setSelectedOrder] = useState<LaboratoryOrder | null>(null);
+  const [editingItem, setEditingItem] = useState<{ order: LaboratoryOrder; item: LaboratoryOrderItem } | null>(null);
   const [editingTest, setEditingTest] = useState<LaboratoryTest | null>(null);
   const [editingProfile, setEditingProfile] = useState<LaboratoryProfile | null>(null);
   const [testOpen, setTestOpen] = useState(false);
@@ -103,21 +127,50 @@ export function LaboratoryPage() {
           }}
           tabBarExtraContent={
             <Space wrap>
-              <Select
-                allowClear
-                placeholder="Вид животного"
-                className="status-filter"
-                value={species}
-                onChange={(value) => {
-                  setSpecies(value);
-                  setOffset(0);
-                }}
-                options={resourcesQuery.data?.species.map((item) => ({ value: item.title, label: item.title })) ?? []}
-              />
+              {activeTab === 'orders' ? (
+                <Select
+                  allowClear
+                  placeholder="Статус"
+                  className="status-filter"
+                  value={orderStatus}
+                  onChange={(value) => {
+                    setOrderStatus(value);
+                    setOffset(0);
+                  }}
+                  options={Object.entries(laboratoryOrderStatusLabels).map(([value, label]) => ({ value, label }))}
+                />
+              ) : (
+                <Select
+                  allowClear
+                  placeholder="Вид животного"
+                  className="status-filter"
+                  value={species}
+                  onChange={(value) => {
+                    setSpecies(value);
+                    setOffset(0);
+                  }}
+                  options={resourcesQuery.data?.species.map((item) => ({ value: item.title, label: item.title })) ?? []}
+                />
+              )}
               <Input.Search allowClear enterButton={<SearchOutlined />} placeholder="Поиск" className="search-input" onSearch={handleSearch} />
             </Space>
           }
           items={[
+            {
+              key: 'orders',
+              label: 'Журнал',
+              children: (
+                <OrdersTable
+                  search={search}
+                  status={orderStatus}
+                  offset={offset}
+                  canManage={canManage}
+                  onTableChange={handleTableChange}
+                  onOpenOrder={setSelectedOrder}
+                  onEditItem={(order, item) => setEditingItem({ order, item })}
+                />
+              ),
+            },
             {
               key: 'tests',
               label: 'Анализы',
@@ -161,6 +214,13 @@ export function LaboratoryPage() {
         resources={resourcesQuery.data}
         onClose={() => setProfileOpen(false)}
       />
+      <OrderDrawer
+        order={selectedOrder}
+        canManage={canManage}
+        onClose={() => setSelectedOrder(null)}
+        onEditItem={(order, item) => setEditingItem({ order, item })}
+      />
+      <ResultDrawer target={editingItem} onClose={() => setEditingItem(null)} />
     </div>
   );
 
@@ -173,6 +233,264 @@ export function LaboratoryPage() {
     setEditingProfile(profile);
     setProfileOpen(true);
   }
+}
+
+function OrdersTable({
+  search,
+  status,
+  offset,
+  canManage,
+  onTableChange,
+  onOpenOrder,
+  onEditItem,
+}: {
+  search: string;
+  status?: VisitLaboratoryOrderStatus;
+  offset: number;
+  canManage: boolean;
+  onTableChange: (pagination: TablePaginationConfig) => void;
+  onOpenOrder: (order: LaboratoryOrder) => void;
+  onEditItem: (order: LaboratoryOrder, item: LaboratoryOrderItem) => void;
+}) {
+  const navigate = useNavigate();
+  const query = useQuery({
+    queryKey: ['laboratory', 'orders', { search, status, limit: pageSize, offset }],
+    queryFn: () => listLaboratoryOrders({ search, status, limit: pageSize, offset }),
+  });
+  const columns = useMemo<ColumnsType<LaboratoryOrder>>(
+    () => [
+      {
+        title: 'Дата',
+        dataIndex: 'createdAt',
+        key: 'createdAt',
+        width: 150,
+        render: (value: string) => formatDateTime(value),
+      },
+      {
+        title: 'Пациент',
+        key: 'patient',
+        width: 260,
+        render: (_, order) => (
+          <Space direction="vertical" size={0}>
+            <Typography.Text strong>{order.visit.animal.nickname}</Typography.Text>
+            <Typography.Text type="secondary">
+              {[order.visit.animal.species, order.visit.animal.breed].filter(Boolean).join(', ') || 'Вид не указан'}
+            </Typography.Text>
+          </Space>
+        ),
+      },
+      {
+        title: 'Владелец',
+        key: 'owner',
+        width: 260,
+        render: (_, order) => (
+          <Space direction="vertical" size={0}>
+            <Typography.Text>{order.visit.owner.fullName}</Typography.Text>
+            <Typography.Text type="secondary">{order.visit.owner.phone || 'Телефон не указан'}</Typography.Text>
+          </Space>
+        ),
+      },
+      {
+        title: 'Анализы',
+        key: 'items',
+        render: (_, order) => (
+          <Space direction="vertical" size={2}>
+            <Typography.Text>{formatOrderItems(order.items)}</Typography.Text>
+            <Typography.Text type="secondary">{formatOrderProgress(order.items)}</Typography.Text>
+          </Space>
+        ),
+      },
+      {
+        title: 'Врач',
+        key: 'employee',
+        width: 210,
+        render: (_, order) => order.visit.employee?.fullName ?? '—',
+      },
+      {
+        title: 'Статус',
+        dataIndex: 'status',
+        key: 'status',
+        width: 130,
+        render: (value: VisitLaboratoryOrderStatus) => <Tag color={laboratoryOrderStatusColors[value]}>{laboratoryOrderStatusLabels[value]}</Tag>,
+      },
+      {
+        title: '',
+        key: 'actions',
+        width: 240,
+        render: (_, order) => (
+          <Space wrap>
+            <Button size="small" icon={<ExperimentOutlined />} onClick={() => onOpenOrder(order)}>
+              Открыть
+            </Button>
+            <Button size="small" onClick={() => navigate(`/visits/${order.visit.id}`)}>
+              Приём
+            </Button>
+            {canManage && order.items.length === 1 ? (
+              <Button size="small" icon={<EditOutlined />} onClick={() => onEditItem(order, order.items[0])}>
+                Результат
+              </Button>
+            ) : null}
+          </Space>
+        ),
+      },
+    ],
+    [canManage, navigate, onEditItem, onOpenOrder],
+  );
+
+  return (
+    <div className="list-panel-body">
+      {query.isError ? <Alert type="error" showIcon message={getErrorMessage(query.error)} className="form-alert" /> : null}
+      <Table<LaboratoryOrder>
+        rowKey="id"
+        columns={columns}
+        dataSource={query.data?.items ?? []}
+        loading={query.isLoading}
+        pagination={{ current: offset / pageSize + 1, pageSize, total: query.data?.total ?? 0, showSizeChanger: false }}
+        onChange={onTableChange}
+        className="dense-table"
+        scroll={{ x: 1390 }}
+        onRow={(order) => ({ onDoubleClick: () => onOpenOrder(order) })}
+      />
+    </div>
+  );
+}
+
+function OrderDrawer({
+  order,
+  canManage,
+  onClose,
+  onEditItem,
+}: {
+  order: LaboratoryOrder | null;
+  canManage: boolean;
+  onClose: () => void;
+  onEditItem: (order: LaboratoryOrder, item: LaboratoryOrderItem) => void;
+}) {
+  const navigate = useNavigate();
+  const columns = useMemo<ColumnsType<LaboratoryOrderItem>>(
+    () => [
+      {
+        title: 'Анализ',
+        dataIndex: 'title',
+        key: 'title',
+        render: (value, item) => (
+          <Space direction="vertical" size={0}>
+            <Typography.Text strong>{value}</Typography.Text>
+            {item.code || item.groupName ? <Typography.Text type="secondary">{[item.code, item.groupName].filter(Boolean).join(' · ')}</Typography.Text> : null}
+            {item.profile ? <Tag>{item.profile.title}</Tag> : null}
+          </Space>
+        ),
+      },
+      { title: 'Результат', key: 'result', render: (_, item) => item.resultValue || item.resultText || '—' },
+      { title: 'Ед.', dataIndex: 'unit', key: 'unit', width: 90, render: fallback },
+      { title: 'Референс', dataIndex: 'referenceRange', key: 'referenceRange', width: 150, render: fallback },
+      {
+        title: 'Статус',
+        dataIndex: 'status',
+        key: 'status',
+        width: 130,
+        render: (value: VisitLaboratoryOrderItemStatus) => <Tag>{laboratoryOrderItemStatusLabels[value]}</Tag>,
+      },
+      {
+        title: '',
+        key: 'actions',
+        width: 110,
+        render: (_, item) =>
+          canManage && order ? (
+            <Button size="small" icon={<EditOutlined />} onClick={() => onEditItem(order, item)}>
+              Открыть
+            </Button>
+          ) : null,
+      },
+    ],
+    [canManage, onEditItem, order],
+  );
+
+  return (
+    <Drawer title="Лабораторный заказ" open={Boolean(order)} onClose={onClose} width={900} destroyOnHidden>
+      {order ? (
+        <Space direction="vertical" size={16} className="full-width">
+          <Card size="small">
+            <Space direction="vertical" size={8} className="full-width">
+              <Space wrap>
+                <Tag color={laboratoryOrderStatusColors[order.status]}>{laboratoryOrderStatusLabels[order.status]}</Tag>
+                <Typography.Text>{formatDateTime(order.createdAt)}</Typography.Text>
+                {order.completedAt ? <Typography.Text type="secondary">Завершён: {formatDateTime(order.completedAt)}</Typography.Text> : null}
+              </Space>
+              <Space wrap size={16}>
+                <Typography.Text strong>{order.visit.animal.nickname}</Typography.Text>
+                <Typography.Text>{order.visit.owner.fullName}</Typography.Text>
+                <Typography.Text type="secondary">{order.visit.owner.phone || 'Телефон не указан'}</Typography.Text>
+                <Typography.Text type="secondary">{order.visit.employee?.fullName ?? 'Врач не указан'}</Typography.Text>
+              </Space>
+              {order.comment ? <Typography.Paragraph>{order.comment}</Typography.Paragraph> : null}
+              <Button size="small" onClick={() => navigate(`/visits/${order.visit.id}`)}>
+                Открыть приём
+              </Button>
+            </Space>
+          </Card>
+          <Table<LaboratoryOrderItem>
+            rowKey="id"
+            columns={columns}
+            dataSource={order.items}
+            pagination={false}
+            className="dense-table"
+            scroll={{ x: 980 }}
+          />
+        </Space>
+      ) : null}
+    </Drawer>
+  );
+}
+
+function ResultDrawer({ target, onClose }: { target: { order: LaboratoryOrder; item: LaboratoryOrderItem } | null; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const { message } = App.useApp();
+  const form = useForm<ResultFormInput, unknown, ResultFormValues>({
+    resolver: zodResolver(resultSchema),
+    defaultValues: getResultDefaults(null),
+  });
+  const mutation = useMutation({
+    mutationFn: (values: LaboratoryOrderItemInput) => updateLaboratoryOrderItem(target!.order.id, target!.item.id, values),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['laboratory', 'orders'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+      ]);
+      message.success('Результат анализа сохранён');
+      onClose();
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
+
+  useEffect(() => {
+    form.reset(getResultDefaults(target?.item ?? null));
+  }, [form, target]);
+
+  return (
+    <Drawer title={target?.item.title ?? 'Результат анализа'} open={Boolean(target)} onClose={onClose} width={620} destroyOnHidden>
+      <Form layout="vertical" onFinish={form.handleSubmit((values) => mutation.mutate(values))}>
+        {mutation.error ? <Alert type="error" showIcon message={getErrorMessage(mutation.error)} className="form-alert" /> : null}
+        <Controller
+          control={form.control}
+          name="status"
+          render={({ field }) => (
+            <Form.Item label="Статус">
+              <Select {...field} options={Object.entries(laboratoryOrderItemStatusLabels).map(([value, label]) => ({ value, label }))} />
+            </Form.Item>
+          )}
+        />
+        <Controller control={form.control} name="resultValue" render={({ field }) => <Form.Item label="Значение"><Input {...field} /></Form.Item>} />
+        <Controller control={form.control} name="unit" render={({ field }) => <Form.Item label="Единица"><Input {...field} /></Form.Item>} />
+        <Controller control={form.control} name="referenceRange" render={({ field }) => <Form.Item label="Референс"><Input {...field} /></Form.Item>} />
+        <Controller control={form.control} name="resultText" render={({ field }) => <Form.Item label="Текст результата"><Input.TextArea {...field} rows={4} /></Form.Item>} />
+        <Controller control={form.control} name="comment" render={({ field }) => <Form.Item label="Комментарий"><Input.TextArea {...field} rows={3} /></Form.Item>} />
+        <Button type="primary" htmlType="submit" loading={mutation.isPending}>
+          Сохранить результат
+        </Button>
+      </Form>
+    </Drawer>
+  );
 }
 
 function TestsTable({
@@ -496,6 +814,47 @@ function getProfileDefaults(profile: LaboratoryProfile | null): ProfileFormInput
     isActive: profile?.isActive ?? true,
     testIds: profile?.tests.map((link) => link.testId) ?? [],
   };
+}
+
+function getResultDefaults(item: LaboratoryOrderItem | null): ResultFormInput {
+  return {
+    status: item?.status ?? 'ORDERED',
+    resultValue: item?.resultValue ?? '',
+    resultText: item?.resultText ?? '',
+    unit: item?.unit ?? '',
+    referenceRange: item?.referenceRange ?? '',
+    comment: item?.comment ?? '',
+  };
+}
+
+function formatOrderItems(items: LaboratoryOrderItem[]) {
+  if (!items.length) {
+    return 'Анализы не добавлены';
+  }
+
+  const titles = items.map((item) => item.title);
+  return titles.length > 3 ? `${titles.slice(0, 3).join(', ')} и ещё ${titles.length - 3}` : titles.join(', ');
+}
+
+function formatOrderProgress(items: LaboratoryOrderItem[]) {
+  if (!items.length) {
+    return '0 анализов';
+  }
+
+  const completed = items.filter((item) => item.status === 'COMPLETED').length;
+  const inProgress = items.filter((item) => item.status === 'IN_PROGRESS').length;
+  const cancelled = items.filter((item) => item.status === 'CANCELLED').length;
+  const parts = [`${completed}/${items.length} готово`];
+
+  if (inProgress) {
+    parts.push(`${inProgress} в работе`);
+  }
+
+  if (cancelled) {
+    parts.push(`${cancelled} отменено`);
+  }
+
+  return parts.join(' · ');
 }
 
 function renderSpecies(values: string[]) {

@@ -3,6 +3,10 @@ import { PaginatedResponse } from '../../shared/types/api';
 import { buildQuery } from '../../shared/utils/query';
 import {
   LaboratoryListQuery,
+  LaboratoryOrder,
+  LaboratoryOrderItem,
+  LaboratoryOrderItemInput,
+  LaboratoryOrdersQuery,
   LaboratoryProfile,
   LaboratoryProfileInput,
   LaboratoryResources,
@@ -12,6 +16,14 @@ import {
 
 export function getLaboratoryResources() {
   return apiRequest<LaboratoryResources>('/v1/laboratory/resources');
+}
+
+export function listLaboratoryOrders(query: LaboratoryOrdersQuery) {
+  return apiRequest<PaginatedResponse<LaboratoryOrder>>(`/v1/laboratory/orders${buildQuery(query)}`);
+}
+
+export function updateLaboratoryOrderItem(orderId: string, itemId: string, input: LaboratoryOrderItemInput) {
+  return apiRequest<LaboratoryOrderItem>(`/v1/laboratory/orders/${orderId}/items/${itemId}`, { method: 'PATCH', body: input });
 }
 
 export function listLaboratoryTests(query: LaboratoryListQuery) {

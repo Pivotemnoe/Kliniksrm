@@ -1,9 +1,11 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { LaboratoryOrderItemStatus, LaboratoryOrderStatus, Prisma } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { ListLaboratoryOrdersQueryDto } from './dto/list-laboratory-orders-query.dto';
 import { ListLaboratoryQueryDto } from './dto/list-laboratory-query.dto';
+import { UpdateLaboratoryOrderItemDto } from './dto/update-laboratory-order-item.dto';
 import { UpdateLaboratoryProfileDto, UpsertLaboratoryProfileDto } from './dto/upsert-laboratory-profile.dto';
 import { UpdateLaboratoryTestDto, UpsertLaboratoryTestDto } from './dto/upsert-laboratory-test.dto';
 
@@ -25,6 +27,69 @@ export class LaboratoryService {
     ]);
 
     return { services, species };
+  }
+
+  async listOrders(query: ListLaboratoryOrdersQueryDto) {
+    const { limit, offset } = parsePagination(query);
+    const where = this.buildOrderWhere(query);
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.laboratoryOrder.findMany({
+        where,
+        orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
+        include: laboratoryOrderInclude,
+        skip: offset,
+        take: limit,
+      }),
+      this.prisma.laboratoryOrder.count({ where }),
+    ]);
+
+    return { items, total, limit, offset };
+  }
+
+  async updateOrderItem(orderId: string, itemId: string, dto: UpdateLaboratoryOrderItemDto, actorId: string) {
+    const existingItem = await this.prisma.laboratoryOrderItem.findFirst({
+      where: { id: itemId, orderId },
+      include: { order: { select: { id: true, status: true } } },
+    });
+
+    if (!existingItem) {
+      throw new NotFoundException('Строка лабораторного заказа не найдена');
+    }
+
+    if (existingItem.order.status === LaboratoryOrderStatus.CANCELLED) {
+      throw new BadRequestException('Отменённый лабораторный заказ нельзя менять');
+    }
+
+    const updatedItem = await this.prisma.$transaction(async (tx) => {
+      const item = await tx.laboratoryOrderItem.update({
+        where: { id: itemId },
+        data: {
+          ...(dto.status !== undefined ? { status: dto.status } : {}),
+          ...(dto.resultValue !== undefined ? { resultValue: clean(dto.resultValue) } : {}),
+          ...(dto.resultText !== undefined ? { resultText: clean(dto.resultText) } : {}),
+          ...(dto.unit !== undefined ? { unit: clean(dto.unit) } : {}),
+          ...(dto.referenceRange !== undefined ? { referenceRange: clean(dto.referenceRange) } : {}),
+          ...(dto.comment !== undefined ? { comment: clean(dto.comment) } : {}),
+          ...(dto.status === LaboratoryOrderItemStatus.COMPLETED ? { completedAt: new Date() } : {}),
+          ...(dto.status !== undefined && dto.status !== LaboratoryOrderItemStatus.COMPLETED ? { completedAt: null } : {}),
+        },
+        include: laboratoryOrderItemInclude,
+      });
+
+      await syncLaboratoryOrderStatus(tx, orderId);
+
+      return item;
+    });
+
+    await this.auditService.log({
+      actorId,
+      action: 'laboratory.order_item.update',
+      entityType: 'LaboratoryOrderItem',
+      entityId: itemId,
+      metadata: { orderId, status: updatedItem.status },
+    });
+
+    return updatedItem;
   }
 
   async listTests(query: ListLaboratoryQueryDto) {
@@ -168,6 +233,31 @@ export class LaboratoryService {
               { material: { contains: search, mode: 'insensitive' } },
               { method: { contains: search, mode: 'insensitive' } },
               { service: { title: { contains: search, mode: 'insensitive' } } },
+            ],
+          }
+        : {}),
+    };
+  }
+
+  private buildOrderWhere(query: ListLaboratoryOrdersQueryDto): Prisma.LaboratoryOrderWhereInput {
+    const search = query.search?.trim();
+
+    return {
+      ...(query.status ? { status: query.status } : {}),
+      ...(search
+        ? {
+            OR: [
+              { comment: { contains: search, mode: 'insensitive' } },
+              { items: { some: { title: { contains: search, mode: 'insensitive' } } } },
+              { items: { some: { code: { contains: search, mode: 'insensitive' } } } },
+              { items: { some: { resultValue: { contains: search, mode: 'insensitive' } } } },
+              { items: { some: { resultText: { contains: search, mode: 'insensitive' } } } },
+              { visit: { owner: { fullName: { contains: search, mode: 'insensitive' } } } },
+              { visit: { owner: { phone: { contains: search, mode: 'insensitive' } } } },
+              { visit: { animal: { nickname: { contains: search, mode: 'insensitive' } } } },
+              { visit: { animal: { species: { contains: search, mode: 'insensitive' } } } },
+              { visit: { animal: { breed: { contains: search, mode: 'insensitive' } } } },
+              { visit: { employee: { fullName: { contains: search, mode: 'insensitive' } } } },
             ],
           }
         : {}),
@@ -320,6 +410,30 @@ const laboratoryProfileInclude = {
   },
 } satisfies Prisma.LaboratoryProfileInclude;
 
+const laboratoryOrderItemInclude = {
+  test: { select: { id: true, title: true, code: true, groupName: true } },
+  profile: { select: { id: true, title: true, code: true } },
+  billItem: { select: { id: true, title: true, totalAmount: true } },
+} satisfies Prisma.LaboratoryOrderItemInclude;
+
+const laboratoryOrderInclude = {
+  visit: {
+    select: {
+      id: true,
+      status: true,
+      startedAt: true,
+      completedAt: true,
+      owner: { select: { id: true, fullName: true, phone: true } },
+      animal: { select: { id: true, nickname: true, species: true, breed: true } },
+      employee: { select: { id: true, fullName: true, position: true } },
+    },
+  },
+  items: {
+    orderBy: [{ createdAt: 'asc' }, { title: 'asc' }],
+    include: laboratoryOrderItemInclude,
+  },
+} satisfies Prisma.LaboratoryOrderInclude;
+
 function clean(value?: string | null) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
@@ -336,4 +450,41 @@ function required(value: string | null | undefined, message: string) {
 
 function normalizeSpecies(values?: string[]) {
   return [...new Set((values ?? []).map((value) => value.trim()).filter(Boolean))];
+}
+
+async function syncLaboratoryOrderStatus(tx: Prisma.TransactionClient, orderId: string) {
+  const items = await tx.laboratoryOrderItem.findMany({
+    where: { orderId },
+    select: { status: true },
+  });
+
+  const status = resolveLaboratoryOrderStatus(items.map((item) => item.status));
+
+  await tx.laboratoryOrder.update({
+    where: { id: orderId },
+    data: {
+      status,
+      completedAt: status === LaboratoryOrderStatus.COMPLETED ? new Date() : null,
+    },
+  });
+}
+
+function resolveLaboratoryOrderStatus(itemStatuses: LaboratoryOrderItemStatus[]) {
+  if (!itemStatuses.length) {
+    return LaboratoryOrderStatus.ORDERED;
+  }
+
+  if (itemStatuses.every((status) => status === LaboratoryOrderItemStatus.CANCELLED)) {
+    return LaboratoryOrderStatus.CANCELLED;
+  }
+
+  if (itemStatuses.every((status) => status === LaboratoryOrderItemStatus.COMPLETED)) {
+    return LaboratoryOrderStatus.COMPLETED;
+  }
+
+  if (itemStatuses.some((status) => status === LaboratoryOrderItemStatus.IN_PROGRESS || status === LaboratoryOrderItemStatus.COMPLETED)) {
+    return LaboratoryOrderStatus.IN_PROGRESS;
+  }
+
+  return LaboratoryOrderStatus.ORDERED;
 }

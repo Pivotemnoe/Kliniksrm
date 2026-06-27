@@ -3,7 +3,9 @@ import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { AuthEmployee } from '../auth/auth.types';
 import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { ListLaboratoryOrdersQueryDto } from './dto/list-laboratory-orders-query.dto';
 import { ListLaboratoryQueryDto } from './dto/list-laboratory-query.dto';
+import { UpdateLaboratoryOrderItemDto } from './dto/update-laboratory-order-item.dto';
 import { UpdateLaboratoryProfileDto, UpsertLaboratoryProfileDto } from './dto/upsert-laboratory-profile.dto';
 import { UpdateLaboratoryTestDto, UpsertLaboratoryTestDto } from './dto/upsert-laboratory-test.dto';
 import { LaboratoryService } from './laboratory.service';
@@ -18,6 +20,25 @@ export class LaboratoryController {
   @ApiOkResponse({ description: 'Laboratory services and animal species.' })
   getResources() {
     return this.laboratoryService.getResources();
+  }
+
+  @Get('orders')
+  @RequirePermissions('laboratory.read')
+  @ApiOkResponse({ description: 'Laboratory order journal.' })
+  listOrders(@Query() query: ListLaboratoryOrdersQueryDto) {
+    return this.laboratoryService.listOrders(query);
+  }
+
+  @Patch('orders/:orderId/items/:itemId')
+  @RequirePermissions('laboratory.manage')
+  @ApiOkResponse({ description: 'Laboratory order item result updated.' })
+  updateOrderItem(
+    @Param('orderId') orderId: string,
+    @Param('itemId') itemId: string,
+    @Body() dto: UpdateLaboratoryOrderItemDto,
+    @CurrentEmployee() actor: AuthEmployee,
+  ) {
+    return this.laboratoryService.updateOrderItem(orderId, itemId, dto, actor.id);
   }
 
   @Get('tests')
