@@ -71,6 +71,8 @@ export class NotificationsService {
       throw new BadRequestException('Укажите корректную дату отправки');
     }
 
+    const templateContext = await this.buildTemplateContext(ownerId, animalId, scheduledAt);
+
     const message = await this.prisma.notificationOutbox.create({
       data: {
         ownerId,
@@ -79,8 +81,8 @@ export class NotificationsService {
         createdById: actorId,
         channel: dto.channel,
         recipient: dto.recipient.trim(),
-        subject: emptyToNull(dto.subject),
-        body: dto.body.trim(),
+        subject: renderNotificationTemplate(emptyToNull(dto.subject), templateContext),
+        body: renderNotificationTemplate(dto.body.trim(), templateContext) ?? '',
         scheduledAt,
       },
       include: notificationInclude,
@@ -280,6 +282,39 @@ export class NotificationsService {
       throw new NotFoundException('Уведомление не найдено');
     }
   }
+
+  private async buildTemplateContext(ownerId: string | null, animalId: string | null, scheduledAt: Date) {
+    const [owner, animal, organization] = await Promise.all([
+      ownerId
+        ? this.prisma.owner.findUnique({
+            where: { id: ownerId },
+            include: { office: { include: { organization: true } } },
+          })
+        : Promise.resolve(null),
+      animalId
+        ? this.prisma.animal.findUnique({
+            where: { id: animalId },
+            include: { owner: { include: { office: { include: { organization: true } } } } },
+          })
+        : Promise.resolve(null),
+      this.prisma.organization.findFirst({
+        include: { offices: { orderBy: { createdAt: 'asc' }, take: 1 } },
+        orderBy: { createdAt: 'asc' },
+      }),
+    ]);
+
+    const templateOwner = owner ?? animal?.owner ?? null;
+    const templateOffice = templateOwner?.office ?? organization?.offices[0] ?? null;
+    const templateOrganization = templateOwner?.office?.organization ?? organization;
+
+    return {
+      owner: templateOwner,
+      animal,
+      office: templateOffice,
+      organization: templateOrganization,
+      scheduledAt,
+    };
+  }
 }
 
 const notificationInclude = {
@@ -292,6 +327,120 @@ const notificationInclude = {
 function emptyToNull(value: string | null | undefined) {
   const trimmed = value?.trim() ?? '';
   return trimmed ? trimmed : null;
+}
+
+type NotificationTemplateContext = {
+  owner: {
+    fullName: string;
+    phone: string | null;
+    extraPhone: string | null;
+    email: string | null;
+    address: string | null;
+  } | null;
+  animal: {
+    nickname: string;
+    species: string | null;
+    breed: string | null;
+  } | null;
+  office: {
+    name: string;
+    phone: string | null;
+    address: string | null;
+  } | null;
+  organization: {
+    displayName: string;
+    legalName: string | null;
+    orgType: string | null;
+    legalAddress: string | null;
+  } | null;
+  scheduledAt: Date;
+};
+
+function renderNotificationTemplate(text: string | null | undefined, context: NotificationTemplateContext) {
+  if (!text) {
+    return null;
+  }
+
+  const values: Record<string, string | null | undefined> = {
+    'organization.displayName': context.organization?.displayName,
+    'organization.legalName': context.organization?.legalName,
+    'organization.orgType': context.organization?.orgType,
+    'clinic.name': context.organization?.displayName,
+    'clinic.legalName': context.organization?.legalName,
+    'clinic.address': context.office?.address ?? context.organization?.legalAddress,
+    'office.name': context.office?.name,
+    'office.phone': context.office?.phone,
+    'office.address': context.office?.address,
+    'owner.fullName': context.owner?.fullName,
+    'owner.phone': context.owner?.phone,
+    'owner.extraPhone': context.owner?.extraPhone,
+    'owner.email': context.owner?.email,
+    'owner.address': context.owner?.address,
+    'animal.nickname': context.animal?.nickname,
+    'animal.species': context.animal?.species,
+    'animal.breed': context.animal?.breed,
+    'appointment.startsAt': formatDateTime(context.scheduledAt),
+    'appointment.date': formatDate(context.scheduledAt),
+    'appointment.time': formatTime(context.scheduledAt),
+    currentDate: formatDate(new Date()),
+    currentDateTime: formatDateTime(new Date()),
+    'Organization.title': context.organization?.displayName,
+    'Organization.type': context.organization?.orgType,
+    'Organization.Office.phonePrimary': context.office?.phone,
+    'Owner.fullName': context.owner?.fullName,
+    'Owner.phone': context.owner?.phone,
+    'Animal.nick': context.animal?.nickname,
+    'Animal.species': context.animal?.species,
+    'Appointment.date': formatDate(context.scheduledAt),
+    'Appointment.time': formatTime(context.scheduledAt),
+  };
+
+  return text.replace(/\{\{\s*([\w.]+)\s*\}\}|\{([\w.]+)\}/g, (_match, doubleBraceKey: string | undefined, singleBraceKey: string | undefined) => {
+    const key = singleBraceKey ?? doubleBraceKey;
+    return key ? (values[key] ?? '') : '';
+  });
+}
+
+function formatDate(value: Date | string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date.toLocaleDateString('ru-RU');
+}
+
+function formatTime(value: Date | string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatDateTime(value: Date | string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date.toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
 }
 
 function hashToken(token: string) {
