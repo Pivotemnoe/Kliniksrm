@@ -571,6 +571,54 @@ body {
   background: #ffffff;
 }
 
+.laboratory-work-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.laboratory-work-tile {
+  display: grid;
+  min-height: 96px;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1px solid #dfe3e8;
+  border-left: 4px solid #6d5d9d;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #202226;
+  cursor: pointer;
+  text-align: left;
+}
+
+.laboratory-work-tile:hover {
+  background: #fbfcfd;
+  border-color: #c8d2dc;
+  border-left-color: #6d5d9d;
+}
+
+.laboratory-work-tile span {
+  color: #5d6673;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.laboratory-work-tile strong {
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.laboratory-work-tile small {
+  min-width: 0;
+  overflow: hidden;
+  color: #6b7280;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .dashboard-grid {
   display: grid;
   grid-template-columns: 1.1fr 1fr;

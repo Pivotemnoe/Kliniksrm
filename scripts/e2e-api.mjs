@@ -508,6 +508,7 @@ async function runRequestedE2eScenarios() {
   await scenarioRefund();
   await scenarioManualBillWithoutVisit();
   await scenarioManualBillProductStockWriteOff();
+  await scenarioLaboratoryWorkflow();
 }
 
 async function scenarioAppointmentToQueue() {
@@ -683,6 +684,85 @@ async function scenarioManualBillProductStockWriteOff() {
   assertEqual(Number(productCard.stockRest), 5, 'stock rest after bill product delete');
 }
 
+async function scenarioLaboratoryWorkflow() {
+  const test = await request('doctor', 'POST', '/api/v1/laboratory/tests', {
+    title: `${e2eMarker} laboratory glucose`,
+    code: `${e2eMarker}-LAB-${randomDigits(6)}`,
+    groupName: `${e2eMarker} biochemistry`,
+    material: 'Кровь',
+    method: 'Экспресс',
+    unit: 'ммоль/л',
+    referenceRange: '3.3-6.1',
+    species: ['Кошка'],
+    isActive: true,
+    description: `${e2eMarker} laboratory test`,
+  });
+  assertEqual(test.title, `${e2eMarker} laboratory glucose`, 'laboratory test create');
+
+  const testsList = await request('assistant', 'GET', `/api/v1/laboratory/tests?search=${encodeURIComponent(test.code)}`);
+  if (!testsList.items.some((item) => item.id === test.id)) {
+    throw new Error('laboratory test missing from catalog');
+  }
+
+  const { owner, animal } = await createOwnerAnimal('Laboratory');
+  const visit = await request('doctor', 'POST', '/api/v1/visits', { ownerId: owner.id, animalId: animal.id });
+  const visitWithOrder = await request('doctor', 'POST', `/api/v1/visits/${visit.id}/laboratory-orders`, {
+    testIds: [test.id],
+    comment: `${e2eMarker} laboratory order`,
+  });
+  const order = visitWithOrder.laboratoryOrders.find((candidate) => candidate.comment === `${e2eMarker} laboratory order`);
+
+  if (!order) {
+    throw new Error('laboratory order was not created from visit');
+  }
+
+  const item = order.items.find((candidate) => candidate.testId === test.id);
+  if (!item) {
+    throw new Error('laboratory order item was not created from test');
+  }
+
+  let activeOrders = await request('assistant', 'GET', `/api/v1/laboratory/orders?activeOnly=true&search=${encodeURIComponent(e2eMarker)}`);
+  if (!activeOrders.items.some((candidate) => candidate.id === order.id)) {
+    throw new Error('laboratory order missing from active journal');
+  }
+
+  const inProgressItem = await request('doctor', 'PATCH', `/api/v1/laboratory/orders/${order.id}/items/${item.id}`, {
+    status: 'IN_PROGRESS',
+    resultValue: '5.2',
+    comment: `${e2eMarker} first result`,
+  });
+  assertEqual(inProgressItem.status, 'IN_PROGRESS', 'laboratory item in progress');
+  assertEqual(inProgressItem.resultValue, '5.2', 'laboratory result value');
+
+  const inProgressOrders = await request('assistant', 'GET', `/api/v1/laboratory/orders?status=IN_PROGRESS&search=${encodeURIComponent(e2eMarker)}`);
+  if (!inProgressOrders.items.some((candidate) => candidate.id === order.id)) {
+    throw new Error('laboratory order did not move to IN_PROGRESS');
+  }
+
+  const completedOrder = await request('doctor', 'PATCH', `/api/v1/laboratory/orders/${order.id}`, {
+    status: 'COMPLETED',
+  });
+  assertEqual(completedOrder.status, 'COMPLETED', 'laboratory order completed');
+  if (!completedOrder.items.every((candidate) => candidate.status === 'COMPLETED')) {
+    throw new Error('laboratory order quick complete did not complete every item');
+  }
+
+  const today = toDateInput(new Date());
+  const completedToday = await request(
+    'assistant',
+    'GET',
+    `/api/v1/laboratory/orders?status=COMPLETED&from=${today}&to=${today}&search=${encodeURIComponent(e2eMarker)}`,
+  );
+  if (!completedToday.items.some((candidate) => candidate.id === order.id)) {
+    throw new Error('laboratory order missing from completed-today journal');
+  }
+
+  const dashboard = await request('assistant', 'GET', `/api/v1/dashboard/today?date=${today}`);
+  if (dashboard.laboratory.completedToday < 1) {
+    throw new Error('dashboard laboratory completed counter did not update');
+  }
+}
+
 async function assertAuditLog() {
   const logs = await request('director', 'GET', '/api/v1/audit-logs');
   const actions = new Set(logs.map((log) => log.action));
@@ -840,6 +920,10 @@ async function cleanupE2eData() {
     INSERT INTO e2e_ids SELECT id FROM "Appointment" WHERE comment LIKE '${e2eMarker}%';
     INSERT INTO e2e_ids SELECT id FROM "Task" WHERE title LIKE '${e2eMarker}%' OR comment LIKE '${e2eMarker}%';
     INSERT INTO e2e_ids SELECT id FROM "Visit" WHERE "ownerId" IN (SELECT id FROM e2e_ids) OR "animalId" IN (SELECT id FROM e2e_ids);
+    INSERT INTO e2e_ids SELECT id FROM "LaboratoryTest" WHERE title LIKE '${e2eMarker}%' OR code LIKE '${e2eMarker}%' OR description LIKE '${e2eMarker}%';
+    INSERT INTO e2e_ids SELECT id FROM "LaboratoryProfile" WHERE title LIKE '${e2eMarker}%' OR code LIKE '${e2eMarker}%' OR description LIKE '${e2eMarker}%';
+    INSERT INTO e2e_ids SELECT id FROM "LaboratoryOrder" WHERE "visitId" IN (SELECT id FROM e2e_ids) OR comment LIKE '${e2eMarker}%';
+    INSERT INTO e2e_ids SELECT id FROM "LaboratoryOrderItem" WHERE "orderId" IN (SELECT id FROM e2e_ids) OR "testId" IN (SELECT id FROM e2e_ids) OR "profileId" IN (SELECT id FROM e2e_ids) OR title LIKE '${e2eMarker}%' OR comment LIKE '${e2eMarker}%';
     INSERT INTO e2e_ids SELECT id FROM "VisitDocument" WHERE "visitId" IN (SELECT id FROM e2e_ids) OR "templateId" IN (SELECT id FROM e2e_ids) OR title LIKE '${e2eMarker}%' OR body LIKE '${e2eMarker}%';
     INSERT INTO e2e_ids SELECT id FROM "Bill" WHERE "visitId" IN (SELECT id FROM e2e_ids) OR "ownerId" IN (SELECT id FROM e2e_ids) OR "animalId" IN (SELECT id FROM e2e_ids);
     INSERT INTO e2e_ids SELECT id FROM "BillItem" WHERE title LIKE '${e2eMarker}%' OR "billId" IN (SELECT id FROM e2e_ids);
@@ -857,6 +941,11 @@ async function cleanupE2eData() {
     DELETE FROM "Payment" WHERE id IN (SELECT id FROM e2e_ids) OR "billId" IN (SELECT id FROM e2e_ids);
     DELETE FROM "BillItem" WHERE id IN (SELECT id FROM e2e_ids) OR "billId" IN (SELECT id FROM e2e_ids);
     DELETE FROM "Bill" WHERE id IN (SELECT id FROM e2e_ids);
+    DELETE FROM "LaboratoryOrderItem" WHERE id IN (SELECT id FROM e2e_ids) OR "orderId" IN (SELECT id FROM e2e_ids) OR "testId" IN (SELECT id FROM e2e_ids) OR "profileId" IN (SELECT id FROM e2e_ids);
+    DELETE FROM "LaboratoryOrder" WHERE id IN (SELECT id FROM e2e_ids) OR "visitId" IN (SELECT id FROM e2e_ids);
+    DELETE FROM "LaboratoryProfileTest" WHERE "profileId" IN (SELECT id FROM e2e_ids) OR "testId" IN (SELECT id FROM e2e_ids);
+    DELETE FROM "LaboratoryProfile" WHERE id IN (SELECT id FROM e2e_ids);
+    DELETE FROM "LaboratoryTest" WHERE id IN (SELECT id FROM e2e_ids);
     DELETE FROM "SupplyInvoiceItem" WHERE id IN (SELECT id FROM e2e_ids) OR "supplyInvoiceId" IN (SELECT id FROM e2e_ids) OR "productId" IN (SELECT id FROM e2e_ids);
     DELETE FROM "StockBatch" WHERE id IN (SELECT id FROM e2e_ids) OR "productId" IN (SELECT id FROM e2e_ids) OR "supplierId" IN (SELECT id FROM e2e_ids);
     DELETE FROM "SupplyInvoice" WHERE id IN (SELECT id FROM e2e_ids) OR "supplierId" IN (SELECT id FROM e2e_ids);
@@ -965,6 +1054,13 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function toDateInput(value) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 const rbacEndpoints = [
   { method: 'GET', path: '/api/auth/me', permissions: [] },
   { method: 'PATCH', path: '/api/auth/password', permissions: [], body: {} },
@@ -1044,6 +1140,16 @@ const rbacEndpoints = [
   { method: 'GET', path: `/api/v1/visits/${fakeId}/documents`, permissions: ['documents.read'] },
   { method: 'POST', path: `/api/v1/visits/${fakeId}/documents`, permissions: ['documents.manage'], body: {} },
   { method: 'PATCH', path: `/api/v1/visits/${fakeId}/documents/${fakeId}`, permissions: ['documents.manage'], body: {} },
+  { method: 'GET', path: '/api/v1/laboratory/resources', permissions: ['laboratory.read'] },
+  { method: 'GET', path: '/api/v1/laboratory/orders', permissions: ['laboratory.read'] },
+  { method: 'PATCH', path: `/api/v1/laboratory/orders/${fakeId}`, permissions: ['laboratory.manage'], body: {} },
+  { method: 'PATCH', path: `/api/v1/laboratory/orders/${fakeId}/items/${fakeId}`, permissions: ['laboratory.manage'], body: {} },
+  { method: 'GET', path: '/api/v1/laboratory/tests', permissions: ['laboratory.read'] },
+  { method: 'POST', path: '/api/v1/laboratory/tests', permissions: ['laboratory.manage'], body: {} },
+  { method: 'PATCH', path: `/api/v1/laboratory/tests/${fakeId}`, permissions: ['laboratory.manage'], body: {} },
+  { method: 'GET', path: '/api/v1/laboratory/profiles', permissions: ['laboratory.read'] },
+  { method: 'POST', path: '/api/v1/laboratory/profiles', permissions: ['laboratory.manage'], body: {} },
+  { method: 'PATCH', path: `/api/v1/laboratory/profiles/${fakeId}`, permissions: ['laboratory.manage'], body: {} },
   { method: 'GET', path: '/api/v1/bills', permissions: ['billing.read'] },
   { method: 'POST', path: '/api/v1/bills', permissions: ['billing.manage'], body: {} },
   { method: 'GET', path: `/api/v1/bills/${fakeId}`, permissions: ['billing.read'] },

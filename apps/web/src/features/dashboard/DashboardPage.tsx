@@ -126,7 +126,7 @@ export function DashboardPage() {
           icon={<ExperimentOutlined />}
           loading={dashboardQuery.isLoading}
           variant="lab"
-          onClick={() => navigate('/settings/laboratories')}
+          onClick={() => navigate('/laboratory?status=active')}
         />
       </div>
       <div className="dashboard-grid dashboard-grid-expanded">
@@ -271,8 +271,8 @@ export function DashboardPage() {
         <section className="list-panel">
           <div className="list-panel-header">
             <Typography.Title level={4}>Лаборатория</Typography.Title>
-            <Button size="small" onClick={() => navigate('/settings/laboratories')}>
-              Справочник
+            <Button size="small" onClick={() => navigate('/laboratory?status=active')}>
+              Журнал
             </Button>
           </div>
           <List
@@ -281,7 +281,7 @@ export function DashboardPage() {
             dataSource={summary?.laboratory.items ?? []}
             locale={{ emptyText: 'Ожидающих исследований нет' }}
             renderItem={(item) => (
-              <List.Item onClick={() => navigate(`/visits/${item.visit.id}`)}>
+              <List.Item onClick={() => navigate('/laboratory?status=active')}>
                 <List.Item.Meta
                   title={`${item.visit.animal.nickname} · ${item.visit.owner.fullName}`}
                   description={

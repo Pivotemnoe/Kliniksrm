@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { LaboratoryOrderStatus } from '@prisma/client';
-import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBooleanString, IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 import { PaginationQuery } from '../../../common/pagination';
 
 export class ListLaboratoryOrdersQueryDto implements PaginationQuery {
@@ -24,4 +24,19 @@ export class ListLaboratoryOrdersQueryDto implements PaginationQuery {
   @IsString()
   @MaxLength(200)
   search?: string;
+
+  @ApiPropertyOptional({ description: 'ISO date. Inclusive order creation date from.' })
+  @IsOptional()
+  @IsString()
+  from?: string;
+
+  @ApiPropertyOptional({ description: 'ISO date. Inclusive order creation date to.' })
+  @IsOptional()
+  @IsString()
+  to?: string;
+
+  @ApiPropertyOptional({ description: 'Only ORDERED and IN_PROGRESS laboratory orders.' })
+  @IsOptional()
+  @IsBooleanString()
+  activeOnly?: string;
 }

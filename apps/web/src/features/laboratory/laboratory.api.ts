@@ -4,6 +4,7 @@ import { buildQuery } from '../../shared/utils/query';
 import {
   LaboratoryListQuery,
   LaboratoryOrder,
+  LaboratoryOrderInput,
   LaboratoryOrderItem,
   LaboratoryOrderItemInput,
   LaboratoryOrdersQuery,
@@ -20,6 +21,10 @@ export function getLaboratoryResources() {
 
 export function listLaboratoryOrders(query: LaboratoryOrdersQuery) {
   return apiRequest<PaginatedResponse<LaboratoryOrder>>(`/v1/laboratory/orders${buildQuery(query)}`);
+}
+
+export function updateLaboratoryOrder(orderId: string, input: LaboratoryOrderInput) {
+  return apiRequest<LaboratoryOrder>(`/v1/laboratory/orders/${orderId}`, { method: 'PATCH', body: input });
 }
 
 export function updateLaboratoryOrderItem(orderId: string, itemId: string, input: LaboratoryOrderItemInput) {

@@ -5,6 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { ListLaboratoryOrdersQueryDto } from './dto/list-laboratory-orders-query.dto';
 import { ListLaboratoryQueryDto } from './dto/list-laboratory-query.dto';
+import { UpdateLaboratoryOrderDto } from './dto/update-laboratory-order.dto';
 import { UpdateLaboratoryOrderItemDto } from './dto/update-laboratory-order-item.dto';
 import { UpdateLaboratoryProfileDto, UpsertLaboratoryProfileDto } from './dto/upsert-laboratory-profile.dto';
 import { UpdateLaboratoryTestDto, UpsertLaboratoryTestDto } from './dto/upsert-laboratory-test.dto';
@@ -44,6 +45,59 @@ export class LaboratoryService {
     ]);
 
     return { items, total, limit, offset };
+  }
+
+  async updateOrder(orderId: string, dto: UpdateLaboratoryOrderDto, actorId: string) {
+    const existingOrder = await this.prisma.laboratoryOrder.findUnique({
+      where: { id: orderId },
+      include: { items: { select: { id: true, status: true } } },
+    });
+
+    if (!existingOrder) {
+      throw new NotFoundException('Лабораторный заказ не найден');
+    }
+
+    if (existingOrder.status === LaboratoryOrderStatus.CANCELLED) {
+      throw new BadRequestException('Отменённый лабораторный заказ нельзя менять');
+    }
+
+    if (dto.status === LaboratoryOrderStatus.CANCELLED) {
+      throw new BadRequestException('Отменяйте лабораторный заказ из карточки приёма, чтобы корректно пересчитать счёт');
+    }
+
+    const updatedOrder = await this.prisma.$transaction(async (tx) => {
+      if (dto.status !== undefined) {
+        const completedAt = dto.status === LaboratoryOrderStatus.COMPLETED ? new Date() : null;
+        await tx.laboratoryOrderItem.updateMany({
+          where: { orderId, status: { not: LaboratoryOrderItemStatus.CANCELLED } },
+          data: { status: dto.status, completedAt },
+        });
+      }
+
+      await tx.laboratoryOrder.update({
+        where: { id: orderId },
+        data: {
+          ...(dto.comment !== undefined ? { comment: clean(dto.comment) } : {}),
+        },
+      });
+
+      await syncLaboratoryOrderStatus(tx, orderId);
+
+      return tx.laboratoryOrder.findUniqueOrThrow({
+        where: { id: orderId },
+        include: laboratoryOrderInclude,
+      });
+    });
+
+    await this.auditService.log({
+      actorId,
+      action: 'laboratory.order.update',
+      entityType: 'LaboratoryOrder',
+      entityId: orderId,
+      metadata: { changedFields: Object.keys(dto), status: updatedOrder.status },
+    });
+
+    return updatedOrder;
   }
 
   async updateOrderItem(orderId: string, itemId: string, dto: UpdateLaboratoryOrderItemDto, actorId: string) {
@@ -241,9 +295,12 @@ export class LaboratoryService {
 
   private buildOrderWhere(query: ListLaboratoryOrdersQueryDto): Prisma.LaboratoryOrderWhereInput {
     const search = query.search?.trim();
+    const createdAt = parseDateRange(query.from, query.to);
 
     return {
+      ...(createdAt ? { createdAt } : {}),
       ...(query.status ? { status: query.status } : {}),
+      ...(query.activeOnly === 'true' ? { status: { in: [LaboratoryOrderStatus.ORDERED, LaboratoryOrderStatus.IN_PROGRESS] } } : {}),
       ...(search
         ? {
             OR: [
@@ -450,6 +507,37 @@ function required(value: string | null | undefined, message: string) {
 
 function normalizeSpecies(values?: string[]) {
   return [...new Set((values ?? []).map((value) => value.trim()).filter(Boolean))];
+}
+
+function parseDateRange(from?: string, to?: string): Prisma.DateTimeFilter | undefined {
+  const filter: Prisma.DateTimeFilter = {};
+
+  if (from) {
+    filter.gte = parseDateBoundary(from, 'start');
+  }
+
+  if (to) {
+    filter.lte = parseDateBoundary(to, 'end');
+  }
+
+  return Object.keys(filter).length ? filter : undefined;
+}
+
+function parseDateBoundary(value: string, boundary: 'start' | 'end') {
+  const match = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const date = match ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])) : new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    throw new BadRequestException('Укажите дату лабораторного журнала в формате ГГГГ-ММ-ДД');
+  }
+
+  if (boundary === 'start') {
+    date.setHours(0, 0, 0, 0);
+  } else {
+    date.setHours(23, 59, 59, 999);
+  }
+
+  return date;
 }
 
 async function syncLaboratoryOrderStatus(tx: Prisma.TransactionClient, orderId: string) {

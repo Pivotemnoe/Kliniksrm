@@ -5,6 +5,7 @@ import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { ListLaboratoryOrdersQueryDto } from './dto/list-laboratory-orders-query.dto';
 import { ListLaboratoryQueryDto } from './dto/list-laboratory-query.dto';
+import { UpdateLaboratoryOrderDto } from './dto/update-laboratory-order.dto';
 import { UpdateLaboratoryOrderItemDto } from './dto/update-laboratory-order-item.dto';
 import { UpdateLaboratoryProfileDto, UpsertLaboratoryProfileDto } from './dto/upsert-laboratory-profile.dto';
 import { UpdateLaboratoryTestDto, UpsertLaboratoryTestDto } from './dto/upsert-laboratory-test.dto';
@@ -27,6 +28,13 @@ export class LaboratoryController {
   @ApiOkResponse({ description: 'Laboratory order journal.' })
   listOrders(@Query() query: ListLaboratoryOrdersQueryDto) {
     return this.laboratoryService.listOrders(query);
+  }
+
+  @Patch('orders/:orderId')
+  @RequirePermissions('laboratory.manage')
+  @ApiOkResponse({ description: 'Laboratory order status updated.' })
+  updateOrder(@Param('orderId') orderId: string, @Body() dto: UpdateLaboratoryOrderDto, @CurrentEmployee() actor: AuthEmployee) {
+    return this.laboratoryService.updateOrder(orderId, dto, actor.id);
   }
 
   @Patch('orders/:orderId/items/:itemId')

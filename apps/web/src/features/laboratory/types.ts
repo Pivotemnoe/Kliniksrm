@@ -60,6 +60,9 @@ export type LaboratoryListQuery = {
 export type LaboratoryOrdersQuery = {
   search?: string;
   status?: VisitLaboratoryOrderStatus;
+  activeOnly?: boolean;
+  from?: string;
+  to?: string;
   limit?: number;
   offset?: number;
 };
@@ -140,5 +143,10 @@ export type LaboratoryOrderItemInput = {
   resultText?: string | null;
   unit?: string | null;
   referenceRange?: string | null;
+  comment?: string | null;
+};
+
+export type LaboratoryOrderInput = {
+  status?: VisitLaboratoryOrderStatus;
   comment?: string | null;
 };

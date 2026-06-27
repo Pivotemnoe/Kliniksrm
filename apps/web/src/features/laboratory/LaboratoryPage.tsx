@@ -1,11 +1,11 @@
-import { EditOutlined, ExperimentOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
+import { CheckCircleOutlined, EditOutlined, ExperimentOutlined, PlayCircleOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Alert, Button, Card, Drawer, Form, Input, Select, Space, Switch, Table, Tabs, Tag, Typography } from 'antd';
 import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
@@ -27,13 +27,15 @@ import {
   listLaboratoryOrders,
   listLaboratoryProfiles,
   listLaboratoryTests,
+  updateLaboratoryOrder,
   updateLaboratoryOrderItem,
   updateLaboratoryProfile,
   updateLaboratoryTest,
 } from './laboratory.api';
-import { LaboratoryOrder, LaboratoryOrderItem, LaboratoryOrderItemInput, LaboratoryProfile, LaboratoryResources, LaboratoryTest } from './types';
+import { LaboratoryOrder, LaboratoryOrderInput, LaboratoryOrderItem, LaboratoryOrderItemInput, LaboratoryProfile, LaboratoryResources, LaboratoryTest } from './types';
 
 const pageSize = 10;
+type OrderStatusFilter = VisitLaboratoryOrderStatus | 'ACTIVE';
 const nullableText = z.string().trim().optional().transform((value) => value || undefined);
 const testSchema = z.object({
   title: z.string().trim().min(1, 'Укажите название анализа').max(240),
@@ -75,11 +77,14 @@ type ResultFormValues = z.output<typeof resultSchema>;
 
 export function LaboratoryPage() {
   const { data: auth } = useCurrentEmployee();
+  const [searchParams] = useSearchParams();
   const canManage = hasPermission(auth?.employee, 'laboratory.manage');
-  const [activeTab, setActiveTab] = useState('orders');
+  const [activeTab, setActiveTab] = useState(() => getInitialTab(searchParams.get('tab')));
   const [search, setSearch] = useState('');
   const [species, setSpecies] = useState<string | undefined>();
-  const [orderStatus, setOrderStatus] = useState<VisitLaboratoryOrderStatus | undefined>();
+  const [orderStatus, setOrderStatus] = useState<OrderStatusFilter | undefined>(() => getInitialOrderStatus(searchParams.get('status')));
+  const [fromDate, setFromDate] = useState(searchParams.get('from') ?? '');
+  const [toDate, setToDate] = useState(searchParams.get('to') ?? '');
   const [offset, setOffset] = useState(0);
   const [selectedOrder, setSelectedOrder] = useState<LaboratoryOrder | null>(null);
   const [editingItem, setEditingItem] = useState<{ order: LaboratoryOrder; item: LaboratoryOrderItem } | null>(null);
@@ -104,7 +109,7 @@ export function LaboratoryPage() {
     <div className="page">
       <PageHeader
         title="Лаборатории"
-        description="Внутренние анализы, профили, единицы измерения, виды животных и связь с услугами."
+        description="Рабочий журнал лабораторных заказов, результаты и справочник анализов."
         extra={
           canManage ? (
             <Space wrap>
@@ -118,6 +123,37 @@ export function LaboratoryPage() {
           ) : null
         }
       />
+      <LaboratoryWorkSummary
+        onSelectActive={() => {
+          setActiveTab('orders');
+          setOrderStatus('ACTIVE');
+          setFromDate('');
+          setToDate('');
+          setOffset(0);
+        }}
+        onSelectOrdered={() => {
+          setActiveTab('orders');
+          setOrderStatus('ORDERED');
+          setFromDate('');
+          setToDate('');
+          setOffset(0);
+        }}
+        onSelectInProgress={() => {
+          setActiveTab('orders');
+          setOrderStatus('IN_PROGRESS');
+          setFromDate('');
+          setToDate('');
+          setOffset(0);
+        }}
+        onSelectCompletedToday={() => {
+          const today = toDateInput(new Date());
+          setActiveTab('orders');
+          setOrderStatus('COMPLETED');
+          setFromDate(today);
+          setToDate(today);
+          setOffset(0);
+        }}
+      />
       <div className="list-panel">
         <Tabs
           activeKey={activeTab}
@@ -128,17 +164,42 @@ export function LaboratoryPage() {
           tabBarExtraContent={
             <Space wrap>
               {activeTab === 'orders' ? (
-                <Select
-                  allowClear
-                  placeholder="Статус"
-                  className="status-filter"
-                  value={orderStatus}
-                  onChange={(value) => {
-                    setOrderStatus(value);
-                    setOffset(0);
-                  }}
-                  options={Object.entries(laboratoryOrderStatusLabels).map(([value, label]) => ({ value, label }))}
-                />
+                <>
+                  <Select
+                    allowClear
+                    placeholder="Статус"
+                    className="status-filter"
+                    value={orderStatus}
+                    onChange={(value) => {
+                      setOrderStatus(value);
+                      setOffset(0);
+                    }}
+                    options={[
+                      { value: 'ACTIVE', label: 'Активные' },
+                      ...Object.entries(laboratoryOrderStatusLabels).map(([value, label]) => ({ value, label })),
+                    ]}
+                  />
+                  <Input
+                    type="date"
+                    className="date-filter"
+                    value={fromDate}
+                    onChange={(event) => {
+                      setFromDate(event.target.value);
+                      setOffset(0);
+                    }}
+                    aria-label="Лабораторные заказы с даты"
+                  />
+                  <Input
+                    type="date"
+                    className="date-filter"
+                    value={toDate}
+                    onChange={(event) => {
+                      setToDate(event.target.value);
+                      setOffset(0);
+                    }}
+                    aria-label="Лабораторные заказы по дату"
+                  />
+                </>
               ) : (
                 <Select
                   allowClear
@@ -163,6 +224,8 @@ export function LaboratoryPage() {
                 <OrdersTable
                   search={search}
                   status={orderStatus}
+                  fromDate={fromDate}
+                  toDate={toDate}
                   offset={offset}
                   canManage={canManage}
                   onTableChange={handleTableChange}
@@ -235,9 +298,72 @@ export function LaboratoryPage() {
   }
 }
 
+function LaboratoryWorkSummary({
+  onSelectActive,
+  onSelectOrdered,
+  onSelectInProgress,
+  onSelectCompletedToday,
+}: {
+  onSelectActive: () => void;
+  onSelectOrdered: () => void;
+  onSelectInProgress: () => void;
+  onSelectCompletedToday: () => void;
+}) {
+  const today = useMemo(() => toDateInput(new Date()), []);
+  const activeQuery = useQuery({
+    queryKey: ['laboratory', 'orders', 'summary', 'active'],
+    queryFn: () => listLaboratoryOrders({ activeOnly: true, limit: 1, offset: 0 }),
+  });
+  const orderedQuery = useQuery({
+    queryKey: ['laboratory', 'orders', 'summary', 'ordered'],
+    queryFn: () => listLaboratoryOrders({ status: 'ORDERED', limit: 1, offset: 0 }),
+  });
+  const inProgressQuery = useQuery({
+    queryKey: ['laboratory', 'orders', 'summary', 'in-progress'],
+    queryFn: () => listLaboratoryOrders({ status: 'IN_PROGRESS', limit: 1, offset: 0 }),
+  });
+  const completedTodayQuery = useQuery({
+    queryKey: ['laboratory', 'orders', 'summary', 'completed-today', today],
+    queryFn: () => listLaboratoryOrders({ status: 'COMPLETED', from: today, to: today, limit: 1, offset: 0 }),
+  });
+
+  return (
+    <div className="laboratory-work-strip">
+      <LaboratoryWorkTile title="Активные" value={activeQuery.data?.total ?? 0} hint="Назначены или в работе" loading={activeQuery.isLoading} onClick={onSelectActive} />
+      <LaboratoryWorkTile title="Назначено" value={orderedQuery.data?.total ?? 0} hint="Ждут забора или запуска" loading={orderedQuery.isLoading} onClick={onSelectOrdered} />
+      <LaboratoryWorkTile title="В работе" value={inProgressQuery.data?.total ?? 0} hint="Результат ещё не готов" loading={inProgressQuery.isLoading} onClick={onSelectInProgress} />
+      <LaboratoryWorkTile title="Готово сегодня" value={completedTodayQuery.data?.total ?? 0} hint="Завершённые за день" loading={completedTodayQuery.isLoading} onClick={onSelectCompletedToday} />
+    </div>
+  );
+}
+
+function LaboratoryWorkTile({
+  title,
+  value,
+  hint,
+  loading,
+  onClick,
+}: {
+  title: string;
+  value: number;
+  hint: string;
+  loading: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button type="button" className="laboratory-work-tile" onClick={onClick}>
+      <span>{title}</span>
+      <strong>{loading ? '...' : value}</strong>
+      <small>{hint}</small>
+    </button>
+  );
+}
+
 function OrdersTable({
   search,
   status,
+  fromDate,
+  toDate,
   offset,
   canManage,
   onTableChange,
@@ -245,7 +371,9 @@ function OrdersTable({
   onEditItem,
 }: {
   search: string;
-  status?: VisitLaboratoryOrderStatus;
+  status?: OrderStatusFilter;
+  fromDate?: string;
+  toDate?: string;
   offset: number;
   canManage: boolean;
   onTableChange: (pagination: TablePaginationConfig) => void;
@@ -253,9 +381,31 @@ function OrdersTable({
   onEditItem: (order: LaboratoryOrder, item: LaboratoryOrderItem) => void;
 }) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { message } = App.useApp();
   const query = useQuery({
-    queryKey: ['laboratory', 'orders', { search, status, limit: pageSize, offset }],
-    queryFn: () => listLaboratoryOrders({ search, status, limit: pageSize, offset }),
+    queryKey: ['laboratory', 'orders', { search, status, fromDate, toDate, limit: pageSize, offset }],
+    queryFn: () =>
+      listLaboratoryOrders({
+        search,
+        status: status && status !== 'ACTIVE' ? status : undefined,
+        activeOnly: status === 'ACTIVE' ? true : undefined,
+        from: fromDate || undefined,
+        to: toDate || undefined,
+        limit: pageSize,
+        offset,
+      }),
+  });
+  const statusMutation = useMutation({
+    mutationFn: ({ order, input }: { order: LaboratoryOrder; input: LaboratoryOrderInput }) => updateLaboratoryOrder(order.id, input),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['laboratory', 'orders'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+      ]);
+      message.success('Статус лабораторного заказа обновлён');
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
   });
   const columns = useMemo<ColumnsType<LaboratoryOrder>>(
     () => [
@@ -319,6 +469,16 @@ function OrdersTable({
         width: 240,
         render: (_, order) => (
           <Space wrap>
+            {canManage && order.status === 'ORDERED' ? (
+              <Button size="small" icon={<PlayCircleOutlined />} loading={statusMutation.isPending} onClick={() => statusMutation.mutate({ order, input: { status: 'IN_PROGRESS' } })}>
+                В работу
+              </Button>
+            ) : null}
+            {canManage && order.status === 'IN_PROGRESS' ? (
+              <Button size="small" icon={<CheckCircleOutlined />} loading={statusMutation.isPending} onClick={() => statusMutation.mutate({ order, input: { status: 'COMPLETED' } })}>
+                Готово
+              </Button>
+            ) : null}
             <Button size="small" icon={<ExperimentOutlined />} onClick={() => onOpenOrder(order)}>
               Открыть
             </Button>
@@ -334,7 +494,7 @@ function OrdersTable({
         ),
       },
     ],
-    [canManage, navigate, onEditItem, onOpenOrder],
+    [canManage, navigate, onEditItem, onOpenOrder, statusMutation],
   );
 
   return (
@@ -875,4 +1035,27 @@ function activeTag(value: boolean) {
 
 function fallback(value?: string | null) {
   return value || '—';
+}
+
+function getInitialTab(value: string | null) {
+  return value === 'tests' || value === 'profiles' ? value : 'orders';
+}
+
+function getInitialOrderStatus(value: string | null): OrderStatusFilter | undefined {
+  if (value === 'active') {
+    return 'ACTIVE';
+  }
+
+  if (value && value in laboratoryOrderStatusLabels) {
+    return value as VisitLaboratoryOrderStatus;
+  }
+
+  return undefined;
+}
+
+function toDateInput(value: Date) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }

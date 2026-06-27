@@ -84,6 +84,7 @@ export const routes: RouteObject[] = [
           { path: '/patients/:animalId', element: <AnimalCardPage /> },
           { path: '/visits', element: <VisitsPage /> },
           { path: '/visits/:visitId', element: <VisitCardPage /> },
+          { path: '/laboratory', element: <LaboratoryPage /> },
           { path: '/hospital', element: <HospitalPage /> },
           { path: '/bills', element: <BillsPage /> },
           { path: '/bills/:billId', element: <BillCardPage /> },
