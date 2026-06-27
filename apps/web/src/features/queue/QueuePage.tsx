@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Button, Input, Segmented, Select, Space, Table, Tag, Typography } from 'antd';
 import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
@@ -29,6 +29,7 @@ const queueAcceptDelayMs = 10_000;
 
 export function QueuePage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const { message } = App.useApp();
   const { data: auth } = useCurrentEmployee();
@@ -46,6 +47,17 @@ export function QueuePage() {
     queryKey: ['queue', { search, status, urgency, limit: pageSize, offset, ...dateRange }],
     queryFn: () => listQueue({ search, status, urgency, limit: pageSize, offset, ...dateRange }),
   });
+
+  useEffect(() => {
+    if (searchParams.get('create') !== '1') {
+      return;
+    }
+
+    setCreateOpen(true);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('create');
+    setSearchParams(nextParams, { replace: true });
+  }, [searchParams, setSearchParams]);
   const createMutation = useMutation({
     mutationFn: (values: QueueFormSubmitInput) => createQueueEntryFromForm(values),
     onSuccess: async (queueEntry) => {

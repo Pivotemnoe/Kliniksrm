@@ -41,6 +41,7 @@ type ImportResult = {
 
 type ClientRow = {
   rowNumber: number;
+  ownerNameRaw: string | null;
   ownerName: string | null;
   phoneNormalized: string | null;
   phone: string | null;
@@ -309,11 +310,21 @@ export class ImportsService {
 
   private async findOwner(row: ClientRow) {
     if (row.phoneNormalized) {
-      return this.prisma.owner.findFirst({ where: { phoneNormalized: row.phoneNormalized } });
+      const owner = await this.prisma.owner.findFirst({ where: { phoneNormalized: row.phoneNormalized } });
+      if (owner) {
+        return owner;
+      }
     }
 
     if (row.ownerName) {
-      return this.prisma.owner.findFirst({ where: { fullNameNormalized: normalizePersonNameKey(row.ownerName) } });
+      const owner = await this.prisma.owner.findFirst({ where: { fullNameNormalized: normalizePersonNameKey(row.ownerName) } });
+      if (owner) {
+        return owner;
+      }
+    }
+
+    if (row.ownerNameRaw && row.ownerNameRaw !== row.ownerName) {
+      return this.prisma.owner.findFirst({ where: { fullNameNormalized: normalizePersonNameKey(row.ownerNameRaw) } });
     }
 
     return null;
@@ -433,10 +444,12 @@ export class ImportsService {
 }
 
 function parseClientRow(row: VetafImportRowDto, issues: ImportIssue[]): ClientRow | null {
-  const ownerName = clean(getField(row.data, ['владелец', 'фио', 'фио владельца', 'клиент', 'фио клиента', 'owner', 'owner name']));
-  const phoneRaw = clean(getField(row.data, ['телефон', 'телефон моб', 'телефон мобильный', 'телефон владельца', 'мобильный', 'phone']));
+  const ownerNameRaw = clean(getField(row.data, ['владелец', 'фио', 'фио владельца', 'клиент', 'фио клиента', 'owner', 'owner name']));
+  const phoneFieldRaw = clean(getField(row.data, ['телефон', 'телефон моб', 'телефон мобильный', 'телефон владельца', 'мобильный', 'phone']));
+  const phoneRaw = (phoneFieldRaw && extractPhoneCandidate(phoneFieldRaw) ? phoneFieldRaw : null) ?? extractPhoneCandidate(ownerNameRaw) ?? phoneFieldRaw;
   const phoneNormalized = safePhone(phoneRaw, row.rowNumber, issues);
   const phone = formatNormalizedRussianPhone(phoneNormalized);
+  const ownerName = clean(removePhonesFromText(ownerNameRaw));
   const animalName = clean(getField(row.data, ['кличка', 'пациент', 'животное', 'питомец', 'animal', 'pet']));
 
   if (!ownerName && !phone) {
@@ -446,6 +459,7 @@ function parseClientRow(row: VetafImportRowDto, issues: ImportIssue[]): ClientRo
 
   return {
     rowNumber: row.rowNumber,
+    ownerNameRaw: ownerNameRaw ? normalizeDisplayName(ownerNameRaw) : null,
     ownerName: ownerName ? normalizeDisplayName(ownerName) : null,
     phoneNormalized,
     phone,
@@ -520,8 +534,10 @@ function safePhone(value: string | null, rowNumber: number, issues: ImportIssue[
     return null;
   }
 
+  const candidate = extractPhoneCandidate(value) ?? value;
+
   try {
-    return normalizePhoneForLookup(value);
+    return normalizePhoneForLookup(candidate);
   } catch {
     issues.push({ rowNumber, level: 'warning', field: 'phone', message: 'Телефон не похож на российский номер, поле пропущено' });
     return null;
@@ -593,20 +609,103 @@ function parseOptionalDecimal(value?: string | null) {
   return Number.isFinite(parsed) ? new Prisma.Decimal(parsed) : null;
 }
 
-function hasOwnerFillableFields(owner: { email: string | null; address: string | null; extraPhone: string | null; comment: string | null }, row: ClientRow) {
-  return Boolean((!owner.email && row.email) || (!owner.address && row.address) || (!owner.extraPhone && row.extraPhone) || (!owner.comment && row.ownerComment));
+const russianPhoneInTextPattern = /(?:\+?\s*7|8)?[\s(.-]*\d{3}[\s).-]*\d{3}[\s.-]*\d{2}[\s.-]*\d{2}/g;
+
+function extractPhoneCandidate(value?: string | null) {
+  const cleaned = clean(value);
+  if (!cleaned) {
+    return null;
+  }
+
+  for (const match of cleaned.matchAll(russianPhoneInTextPattern)) {
+    const candidate = match[0]?.trim();
+    if (!candidate) {
+      continue;
+    }
+
+    try {
+      normalizePhoneForLookup(candidate);
+      return candidate;
+    } catch {
+      // Try the next match in the same cell.
+    }
+  }
+
+  return null;
+}
+
+function removePhonesFromText(value?: string | null) {
+  const cleaned = clean(value);
+  if (!cleaned) {
+    return null;
+  }
+
+  return clean(
+    cleaned
+      .replace(russianPhoneInTextPattern, ' ')
+      .replace(/[,:;|/\\]+/g, ' ')
+      .replace(/\s+/g, ' '),
+  );
+}
+
+function hasOwnerFillableFields(
+  owner: {
+    fullName: string;
+    email: string | null;
+    address: string | null;
+    phone: string | null;
+    phoneNormalized: string | null;
+    extraPhone: string | null;
+    comment: string | null;
+  },
+  row: ClientRow,
+) {
+  return Boolean(
+    shouldRepairOwnerName(owner, row) ||
+      shouldFillOwnerPhone(owner, row) ||
+      (!owner.email && row.email) ||
+      (!owner.address && row.address) ||
+      (!owner.extraPhone && row.extraPhone) ||
+      (!owner.comment && row.ownerComment),
+  );
 }
 
 function getOwnerFillData(
-  owner: { email: string | null; address: string | null; extraPhone: string | null; comment: string | null },
+  owner: {
+    fullName: string;
+    email: string | null;
+    address: string | null;
+    phone: string | null;
+    phoneNormalized: string | null;
+    extraPhone: string | null;
+    comment: string | null;
+  },
   row: ClientRow,
 ): Prisma.OwnerUpdateInput {
+  const shouldRepairName = shouldRepairOwnerName(owner, row);
   return {
+    ...(shouldRepairName && row.ownerName ? { fullName: row.ownerName, fullNameNormalized: normalizePersonNameKey(row.ownerName) } : {}),
+    ...(shouldFillOwnerPhone(owner, row) ? { phone: row.phone, phoneNormalized: row.phoneNormalized } : {}),
     ...(!owner.email && row.email ? { email: row.email } : {}),
     ...(!owner.address && row.address ? { address: row.address } : {}),
     ...(!owner.extraPhone && row.extraPhone ? { extraPhone: row.extraPhone } : {}),
     ...(!owner.comment && row.ownerComment ? { comment: row.ownerComment } : {}),
   };
+}
+
+function shouldRepairOwnerName(owner: { fullName: string }, row: ClientRow) {
+  if (!row.ownerName || normalizePersonNameKey(owner.fullName) === normalizePersonNameKey(row.ownerName)) {
+    return false;
+  }
+
+  return Boolean(
+    extractPhoneCandidate(owner.fullName) ||
+      (row.ownerNameRaw && normalizePersonNameKey(owner.fullName) === normalizePersonNameKey(row.ownerNameRaw)),
+  );
+}
+
+function shouldFillOwnerPhone(owner: { phone: string | null; phoneNormalized: string | null }, row: ClientRow) {
+  return Boolean(row.phone && row.phoneNormalized && !owner.phone && !owner.phoneNormalized);
 }
 
 function buildResult(kind: VetafImportKind, mode: 'preview' | 'commit', summary: ImportSummary, issues: ImportIssue[], samples: ImportResult['samples']) {

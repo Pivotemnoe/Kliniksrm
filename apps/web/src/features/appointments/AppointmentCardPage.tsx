@@ -5,7 +5,6 @@ import {
   FileTextOutlined,
   LeftOutlined,
   LoginOutlined,
-  OrderedListOutlined,
   PlayCircleOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -18,7 +17,6 @@ import { useCurrentEmployee } from '../../auth/useAuth';
 import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDateTime } from '../../shared/utils/date';
-import { createQueueEntry } from '../queue/queue.api';
 import {
   arriveAppointment,
   cancelAppointment,
@@ -42,7 +40,6 @@ export function AppointmentCardPage() {
   const { data: auth } = useCurrentEmployee();
   const canManage = hasPermission(auth?.employee, 'appointments.manage');
   const canManageVisits = hasPermission(auth?.employee, 'visits.manage');
-  const canCreateQueueFromAppointment = hasPermission(auth?.employee, 'queue.manage') || canManageVisits;
   const [editOpen, setEditOpen] = useState(false);
   const appointmentQuery = useQuery({
     queryKey: ['appointments', appointmentId],
@@ -55,32 +52,6 @@ export function AppointmentCardPage() {
       await invalidate();
       setEditOpen(false);
       message.success('Запись сохранена');
-    },
-    onError: (error) => message.error(getErrorMessage(error)),
-  });
-  const queueMutation = useMutation({
-    mutationFn: async ({ appointment, syncArrival }: { appointment: Appointment; syncArrival: boolean }) => {
-      if (syncArrival && appointment.status === 'PLANNED') {
-        await arriveAppointment(appointment.id);
-      }
-
-      return createQueueEntry({
-        officeId: appointment.officeId ?? undefined,
-        ownerId: appointment.ownerId,
-        animalId: appointment.animalId,
-        employeeId: appointment.employeeId ?? undefined,
-        roomId: appointment.roomId ?? undefined,
-        urgency: 'PLANNED',
-        comment: `Запись на ${formatDateTime(appointment.startsAt)}`,
-      });
-    },
-    onSuccess: async (queueEntry) => {
-      await Promise.all([
-        invalidate(),
-        queryClient.invalidateQueries({ queryKey: ['queue'] }),
-      ]);
-      message.success('Клиент поставлен в очередь');
-      navigate(`/queue/${queueEntry.id}`);
     },
     onError: (error) => message.error(getErrorMessage(error)),
   });
@@ -144,18 +115,9 @@ export function AppointmentCardPage() {
                     Пришёл
                   </Button>
                 ) : null}
-                {(canManage || canCreateQueueFromAppointment) && ['PLANNED', 'ARRIVED'].includes(appointment.status) ? (
-                  <Button
-                    icon={<OrderedListOutlined />}
-                    loading={queueMutation.isPending}
-                    onClick={() => queueMutation.mutate({ appointment, syncArrival: canManage })}
-                  >
-                    Поставить в очередь
-                  </Button>
-                ) : null}
                 {canManage && appointment.status === 'ARRIVED' ? (
                   <Button icon={<PlayCircleOutlined />} loading={actionMutation.isPending} onClick={() => actionMutation.mutate('start')}>
-                    Начать
+                    Вызвать на приём
                   </Button>
                 ) : null}
                 {canManage && appointment.status === 'IN_PROGRESS' ? (

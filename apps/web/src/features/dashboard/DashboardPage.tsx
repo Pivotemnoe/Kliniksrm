@@ -48,8 +48,11 @@ export function DashboardPage() {
             <Button icon={<CalendarOutlined />} onClick={() => navigate('/schedule')}>
               Расписание
             </Button>
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/queue')}>
+            <Button icon={<PlusOutlined />} onClick={() => navigate('/queue?create=1')}>
               Добавить в очередь
+            </Button>
+            <Button type="primary" icon={<CalendarOutlined />} onClick={() => navigate('/schedule?create=1')}>
+              Записать на приём
             </Button>
           </Space>
         }

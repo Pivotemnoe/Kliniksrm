@@ -2,8 +2,8 @@ import { LeftOutlined, PlusOutlined, RightOutlined, SearchOutlined } from '@ant-
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Button, Input, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
 import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
-import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
@@ -27,6 +27,7 @@ const pageSize = 10;
 
 export function AppointmentsPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const { message } = App.useApp();
   const { data: auth } = useCurrentEmployee();
@@ -55,6 +56,17 @@ export function AppointmentsPage() {
     () => (weeklyShiftsQuery.data ?? []).filter((shift) => overlapsDay(shift, date)),
     [date, weeklyShiftsQuery.data],
   );
+
+  useEffect(() => {
+    if (searchParams.get('create') !== '1') {
+      return;
+    }
+
+    setCreateOpen(true);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('create');
+    setSearchParams(nextParams, { replace: true });
+  }, [searchParams, setSearchParams]);
   const createMutation = useMutation({
     mutationFn: async (values: AppointmentFormSubmit) => {
       let ownerId = values.appointment.ownerId;
@@ -252,7 +264,7 @@ export function AppointmentsPage() {
       </div>
       <AppointmentFormDrawer
         open={createOpen}
-        title="Создать запись"
+        title="Создать запись на приём"
         onClose={() => setCreateOpen(false)}
         onSubmit={(values) => createMutation.mutate(values)}
         isSubmitting={createMutation.isPending}
@@ -317,7 +329,7 @@ function AppointmentsWeekBoard({
           <Button icon={<RightOutlined />} onClick={() => onMoveWeek(1)} aria-label="Следующая неделя" />
           {canManage ? (
             <Button type="primary" icon={<PlusOutlined />} onClick={onCreate}>
-              Записать
+              Записать на приём
             </Button>
           ) : null}
         </Space>
