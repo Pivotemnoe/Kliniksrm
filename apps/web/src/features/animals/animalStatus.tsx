@@ -1,21 +1,27 @@
 import { Tag } from 'antd';
 
 export const animalStatusOptions = [
-  { value: 'Живой', label: 'Живой', color: 'green' },
-  { value: 'Наблюдение', label: 'Наблюдение', color: 'gold' },
-  { value: 'Умер', label: 'Умер', color: 'red' },
-  { value: 'Эвтаназия', label: 'Эвтаназия', color: 'red' },
-  { value: 'Пропал', label: 'Пропал', color: 'orange' },
-  { value: 'Выбыл', label: 'Выбыл', color: 'default' },
+  { value: 'Здоров', label: 'Здоров', color: 'green' },
+  { value: 'Улучшение', label: 'Улучшение', color: 'blue' },
+  { value: 'Ухудшение', label: 'Ухудшение', color: 'red' },
+  { value: 'Обследование', label: 'Обследование', color: 'gold' },
+  { value: 'Погиб', label: 'Погиб', color: 'default' },
+  { value: 'Неактивен', label: 'Неактивен', color: 'default' },
 ];
 
 const legacyStatusMap: Record<string, string> = {
-  active: 'Живой',
-  'под наблюдением': 'Наблюдение',
-  'хронический пациент': 'Наблюдение',
-  активен: 'Живой',
-  активный: 'Живой',
-  архив: 'Выбыл',
+  active: 'Здоров',
+  'под наблюдением': 'Обследование',
+  'хронический пациент': 'Обследование',
+  активен: 'Здоров',
+  активный: 'Здоров',
+  архив: 'Неактивен',
+  живой: 'Здоров',
+  наблюдение: 'Обследование',
+  умер: 'Погиб',
+  эвтаназия: 'Погиб',
+  пропал: 'Неактивен',
+  выбыл: 'Неактивен',
 };
 
 const statusByValue = new Map<string, (typeof animalStatusOptions)[number]>(animalStatusOptions.map((option) => [option.value, option]));

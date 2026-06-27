@@ -1,7 +1,7 @@
 import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Alert, AutoComplete, Button, Drawer, Form, Input, Popconfirm, Space, Table, Typography } from 'antd';
+import { Alert, AutoComplete, Button, Drawer, Form, Input, Popconfirm, Select, Space, Table, Tag, Typography } from 'antd';
 import { ColumnsType } from 'antd/es/table';
 import { useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
@@ -54,8 +54,16 @@ export function VisitDiagnosesTab({ visit, canManage, locked, compact = false, s
   const columns = useMemo<ColumnsType<VisitDiagnosis>>(
     () => [
       { title: 'Диагноз', dataIndex: 'title', key: 'title' },
-      { title: 'Тип', dataIndex: 'diagnosisType', key: 'diagnosisType', render: (value: string | null) => value || '—' },
-      { title: 'Статус', dataIndex: 'status', key: 'status', render: (value: string | null) => value || '—' },
+      { title: 'Тип', dataIndex: 'diagnosisType', key: 'diagnosisType', render: (value: string | null) => normalizeDiagnosisType(value) || '—' },
+      {
+        title: 'Статус',
+        dataIndex: 'status',
+        key: 'status',
+        render: (value: string | null) => {
+          const status = normalizeDiagnosisStatus(value);
+          return status ? <Tag color={getDiagnosisStatusColor(status)}>{status}</Tag> : '—';
+        },
+      },
       {
         title: 'Описание',
         dataIndex: 'description',
@@ -163,7 +171,7 @@ function DiagnosisDrawer({
 
   return (
     <Drawer
-      title={diagnosis ? 'Редактировать диагноз' : 'Добавить диагноз'}
+      title={diagnosis ? 'Изменить диагноз' : 'Добавить диагноз'}
       width={560}
       open={open}
       onClose={onClose}
@@ -202,14 +210,16 @@ function DiagnosisDrawer({
             name="diagnosisType"
             render={({ field, fieldState }) => (
               <Form.Item label="Тип" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
-                <AutoComplete
+                <Select
+                  {...field}
+                  allowClear
+                  showSearch
                   value={field.value}
-                  options={diagnosisTypeOptions.map((value) => ({ value }))}
-                  filterOption={(input, option) => String(option?.value ?? '').toLowerCase().includes(input.toLowerCase())}
-                  onChange={field.onChange}
-                >
-                  <Input placeholder="Предварительный, основной..." />
-                </AutoComplete>
+                  options={diagnosisTypeOptions}
+                  placeholder="Выберите тип"
+                  filterOption={(input, option) => String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+                  onChange={(value) => field.onChange(value ?? '')}
+                />
               </Form.Item>
             )}
           />
@@ -218,14 +228,16 @@ function DiagnosisDrawer({
             name="status"
             render={({ field, fieldState }) => (
               <Form.Item label="Статус" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
-                <AutoComplete
+                <Select
+                  {...field}
+                  allowClear
+                  showSearch
                   value={field.value}
-                  options={diagnosisStatusOptions.map((value) => ({ value }))}
-                  filterOption={(input, option) => String(option?.value ?? '').toLowerCase().includes(input.toLowerCase())}
-                  onChange={field.onChange}
-                >
-                  <Input placeholder="Активен, под вопросом..." />
-                </AutoComplete>
+                  options={diagnosisStatusOptions}
+                  placeholder="Выберите статус"
+                  filterOption={(input, option) => String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+                  onChange={(value) => field.onChange(value ?? '')}
+                />
               </Form.Item>
             )}
           />
@@ -245,25 +257,19 @@ function DiagnosisDrawer({
 }
 
 const diagnosisTypeOptions = [
-  'Предварительный',
-  'Основной',
-  'Сопутствующий',
-  'Дифференциальный',
-  'Заключительный',
-  'Послеоперационный',
-  'Хронический',
-  'Осложнение',
+  { value: 'Дифференциальный', label: 'Дифференциальный' },
+  { value: 'Окончательный', label: 'Окончательный' },
+  { value: 'Клинический', label: 'Клинический' },
+  { value: 'Предварительный', label: 'Предварительный' },
 ];
 
 const diagnosisStatusOptions = [
-  'Активен',
-  'Под вопросом',
-  'Подтверждён',
-  'Исключён',
-  'Хронический',
-  'В ремиссии',
-  'Требует наблюдения',
-  'Решён',
+  { value: 'На лечении', label: 'На лечении' },
+  { value: 'Под вопросом', label: 'Под вопросом' },
+  { value: 'Подтверждён', label: 'Подтверждён' },
+  { value: 'Исключён', label: 'Исключён' },
+  { value: 'В ремиссии', label: 'В ремиссии' },
+  { value: 'Завершён', label: 'Завершён' },
 ];
 
 const commonDiagnoses = [
@@ -336,8 +342,59 @@ function getDiagnosisOptions(species?: string | null) {
 function getDefaultValues(diagnosis: VisitDiagnosis | null): DiagnosisFormInput {
   return {
     title: diagnosis?.title ?? '',
-    diagnosisType: nullToEmpty(diagnosis?.diagnosisType),
+    diagnosisType: normalizeDiagnosisType(diagnosis?.diagnosisType),
     description: nullToEmpty(diagnosis?.description),
-    status: nullToEmpty(diagnosis?.status),
+    status: normalizeDiagnosisStatus(diagnosis?.status),
   };
+}
+
+function normalizeDiagnosisType(value?: string | null) {
+  const key = normalizeDictionaryKey(value);
+  const legacyMap: Record<string, string> = {
+    заключительный: 'Окончательный',
+    основной: 'Клинический',
+    сопутствующий: 'Клинический',
+    хронический: 'Клинический',
+    осложнение: 'Клинический',
+    послеоперационный: 'Клинический',
+  };
+
+  return key ? legacyMap[key] ?? nullToEmpty(value) : '';
+}
+
+function normalizeDiagnosisStatus(value?: string | null) {
+  const key = normalizeDictionaryKey(value);
+  const legacyMap: Record<string, string> = {
+    активен: 'На лечении',
+    хронический: 'На лечении',
+    'требует наблюдения': 'На лечении',
+    решен: 'Завершён',
+    решён: 'Завершён',
+  };
+
+  return key ? legacyMap[key] ?? nullToEmpty(value) : '';
+}
+
+function getDiagnosisStatusColor(status: string) {
+  if (status === 'На лечении') {
+    return 'gold';
+  }
+
+  if (status === 'Подтверждён') {
+    return 'green';
+  }
+
+  if (status === 'Исключён') {
+    return 'default';
+  }
+
+  if (status === 'В ремиссии' || status === 'Завершён') {
+    return 'blue';
+  }
+
+  return 'default';
+}
+
+function normalizeDictionaryKey(value?: string | null) {
+  return value?.trim().toLocaleLowerCase('ru-RU').replace(/ё/g, 'е').replace(/\s+/g, ' ') ?? '';
 }
