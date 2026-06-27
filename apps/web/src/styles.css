@@ -390,6 +390,8 @@ body {
 }
 
 .list-panel-body {
+  min-width: 0;
+  overflow-x: auto;
   padding: 14px 16px 16px;
 }
 
@@ -646,8 +648,18 @@ body {
   background: #f8fafb;
 }
 
+.dense-table {
+  min-width: 0;
+  overflow-x: auto;
+}
+
 .dense-table .ant-table {
+  min-width: 760px;
   font-size: 13px;
+}
+
+.dense-table .ant-table-content {
+  overflow-x: auto;
 }
 
 .dense-table .ant-table-thead > tr > th {
@@ -1547,6 +1559,22 @@ body {
   overflow-wrap: anywhere;
 }
 
+.portal-invite-layout {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.portal-qr-card {
+  display: grid;
+  place-items: center;
+  padding: 8px;
+  border: 1px solid #dfe3e8;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
 .portal-form-row {
   width: 100%;
 }
@@ -2004,6 +2032,15 @@ body {
     flex-direction: column;
   }
 
+  .ant-table-wrapper {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .ant-table-wrapper .ant-table {
+    min-width: 680px;
+  }
+
   .schedule-app-toolbar {
     align-items: stretch;
     flex-direction: column;
@@ -2038,6 +2075,10 @@ body {
   }
 
   .two-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .portal-invite-layout {
     grid-template-columns: 1fr;
   }
 

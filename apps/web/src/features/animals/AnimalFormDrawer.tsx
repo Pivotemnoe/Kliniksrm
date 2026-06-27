@@ -6,6 +6,7 @@ import { getErrorMessage } from '../../api/errors';
 import { formatAnimalBirthDateInput, isAnimalBirthDateInputValid, normalizeAnimalBirthDateInput } from '../../shared/utils/animalBirthDate';
 import { nullToEmpty, optionalString } from '../../shared/utils/forms';
 import { AnimalCatalogFields } from './AnimalCatalogFields';
+import { animalStatusOptions, normalizeAnimalStatusInput } from './animalStatus';
 import { Animal, AnimalMutationInput, AnimalSex } from './types';
 
 const animalSchema = z.object({
@@ -146,8 +147,14 @@ export function AnimalFormDrawer({
             control={control}
             name="status"
             render={({ field, fieldState }) => (
-              <Form.Item label="Статус" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
-                <Input {...field} />
+              <Form.Item label="Состояние" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+                <Select
+                  {...field}
+                  allowClear
+                  placeholder="Не указано"
+                  options={animalStatusOptions}
+                  onChange={(value) => field.onChange(value ?? '')}
+                />
               </Form.Item>
             )}
           />
@@ -196,7 +203,7 @@ function getDefaultValues(animal?: Animal | null): AnimalFormInput {
     color: nullToEmpty(animal?.color),
     microchip: nullToEmpty(animal?.microchip),
     mark: nullToEmpty(animal?.mark),
-    status: nullToEmpty(animal?.status),
+    status: normalizeAnimalStatusInput(animal?.status),
     comment: nullToEmpty(animal?.comment),
     isSterilized: animal?.isSterilized ?? false,
     isFavorite: animal?.isFavorite ?? false,
@@ -207,5 +214,6 @@ function normalizeAnimalFormValues(values: AnimalFormValues): AnimalMutationInpu
   return {
     ...values,
     birthDate: normalizeAnimalBirthDateInput(values.birthDate),
+    status: normalizeAnimalStatusInput(values.status),
   };
 }

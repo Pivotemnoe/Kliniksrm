@@ -11,6 +11,7 @@ import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDate, formatDateTime } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
+import { AnimalStatusTag } from '../animals/animalStatus';
 import { VisitDocumentsTab } from './VisitDocumentsTab';
 import { VisitExamTab } from './VisitExamTab';
 import { VisitHistoryTab } from './VisitHistoryTab';
@@ -123,7 +124,7 @@ export function VisitCardPage() {
             <ContextRow label="Вид" value={<AnimalSpeciesLabel species={visit?.animal.species} />} />
             <ContextRow label="Порода" value={visit?.animal.breed} />
             <ContextRow label="Пол" value={visit ? sexLabel[visit.animal.sex] : undefined} />
-            <ContextRow label="Статус" value={visit?.animal.status} />
+            <ContextRow label="Состояние" value={visit ? <AnimalStatusTag status={visit.animal.status} /> : undefined} />
           </div>
         </div>
         <div className="context-section">

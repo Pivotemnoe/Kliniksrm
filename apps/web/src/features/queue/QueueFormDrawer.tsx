@@ -13,6 +13,7 @@ import { AddressAutocomplete } from '../../shared/ui/AddressAutocomplete';
 import { RussianPhoneInput } from '../../shared/ui/RussianPhoneInput';
 import { isAnimalBirthDateInputValid, normalizeAnimalBirthDateInput } from '../../shared/utils/animalBirthDate';
 import { AnimalCatalogFields } from '../animals/AnimalCatalogFields';
+import { animalStatusOptions, normalizeAnimalStatusInput } from '../animals/animalStatus';
 import { AnimalMutationInput, AnimalSex } from '../animals/types';
 import { Owner, OwnerMutationInput } from '../owners/types';
 import { QueueEntry, QueueMutationInput, QueueUrgency, queueUrgencyLabels } from './types';
@@ -580,17 +581,12 @@ function PrimaryCardsStep({ control, setValue }: { control: any; setValue: any }
           control={control}
           name="animalStatus"
           render={({ field, fieldState }) => (
-            <Form.Item label="Статус пациента" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+            <Form.Item label="Состояние пациента" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
               <Select
                 {...field}
                 allowClear
                 placeholder="Не выбран"
-                options={[
-                  { value: 'Активен', label: 'Активен' },
-                  { value: 'Под наблюдением', label: 'Под наблюдением' },
-                  { value: 'Хронический пациент', label: 'Хронический пациент' },
-                  { value: 'Архив', label: 'Архив' },
-                ]}
+                options={animalStatusOptions}
                 onChange={(value) => field.onChange(value ?? '')}
               />
             </Form.Item>
@@ -809,7 +805,7 @@ function toQueueInput(values: QueueFormValues, options: { createCards: boolean }
           color: values.color,
           microchip: values.microchip,
           mark: values.mark,
-          status: values.animalStatus,
+          status: normalizeAnimalStatusInput(values.animalStatus),
           comment: values.animalComment,
           isSterilized: values.isSterilized,
           isFavorite: values.isFavorite,

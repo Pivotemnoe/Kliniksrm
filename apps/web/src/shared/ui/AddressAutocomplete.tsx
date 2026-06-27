@@ -286,6 +286,7 @@ function matchesLocality(locality: LocalityPreset, query: string) {
 }
 
 function getStreetWords(query: string, locality: LocalityPreset) {
+  const localityNoiseWords = getLocalityNoiseWords(locality);
   const withoutRegion = query
     .replace(/\bкраснодарский\b/g, ' ')
     .replace(/\bкрай\b/g, ' ')
@@ -307,7 +308,32 @@ function getStreetWords(query: string, locality: LocalityPreset) {
     .replace(/\b(г|город|ул|улица|пер|переулок|пр|проспект|ш|шоссе|ст|станица|с|село|п|поселок|посёлок|д|дом|кв|квартира)\b/g, ' ')
     .split(/\s+/)
     .map((word) => word.trim())
-    .filter((word) => word.length > 1 && !/^\d+$/.test(word));
+    .filter((word) => word.length > 1 && !/^\d+$/.test(word))
+    .filter((word) => !localityNoiseWords.has(word));
+}
+
+function getLocalityNoiseWords(locality: LocalityPreset) {
+  const localityAliases = locality.aliases.flatMap((alias) => normalizeAddress(alias).split(/\s+/));
+  const localityLabelWords = normalizeAddress(locality.label).split(/\s+/);
+
+  return new Set(
+    [
+      'краснодарский',
+      'край',
+      'россия',
+      'г',
+      'город',
+      'ст',
+      'станица',
+      'с',
+      'село',
+      'п',
+      'поселок',
+      'посёлок',
+      ...localityLabelWords,
+      ...localityAliases,
+    ].filter((word) => word.length > 1),
+  );
 }
 
 function matchesStreet(street: string, words: string[]) {

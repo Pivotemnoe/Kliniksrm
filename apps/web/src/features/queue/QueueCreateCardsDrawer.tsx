@@ -8,6 +8,7 @@ import { RussianPhoneInput } from '../../shared/ui/RussianPhoneInput';
 import { isAnimalBirthDateInputValid, normalizeAnimalBirthDateInput } from '../../shared/utils/animalBirthDate';
 import { nullToEmpty, optionalString } from '../../shared/utils/forms';
 import { AnimalCatalogFields } from '../animals/AnimalCatalogFields';
+import { animalStatusOptions, normalizeAnimalStatusInput } from '../animals/animalStatus';
 import { AnimalMutationInput, AnimalSex } from '../animals/types';
 import { OwnerMutationInput } from '../owners/types';
 import { QueueEntry } from './types';
@@ -79,7 +80,7 @@ export function QueueCreateCardsDrawer({
         color: values.color,
         microchip: values.microchip,
         mark: values.mark,
-        status: values.status,
+        status: normalizeAnimalStatusInput(values.status),
         comment: values.comment,
         isSterilized: values.isSterilized,
       },
@@ -208,8 +209,14 @@ export function QueueCreateCardsDrawer({
             control={control}
             name="status"
             render={({ field, fieldState }) => (
-              <Form.Item label="Статус пациента" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
-                <Input placeholder="Активен, наблюдение, архив..." {...field} />
+              <Form.Item label="Состояние пациента" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+                <Select
+                  {...field}
+                  allowClear
+                  placeholder="Не указано"
+                  options={animalStatusOptions}
+                  onChange={(value) => field.onChange(value ?? '')}
+                />
               </Form.Item>
             )}
           />

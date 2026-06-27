@@ -1,7 +1,8 @@
 import { CheckCircleOutlined, CopyOutlined, LinkOutlined, LockOutlined, MailOutlined, StopOutlined, UserAddOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Alert, Button, Descriptions, Space, Table, Tag, Typography } from 'antd';
+import { App, Alert, Button, Descriptions, Input, QRCode, Space, Table, Tag, Typography } from 'antd';
 import { ColumnsType } from 'antd/es/table';
+import type { ChangeEvent } from 'react';
 import { useState } from 'react';
 import { getErrorMessage } from '../../api/errors';
 import { formatDateTime } from '../../shared/utils/date';
@@ -31,6 +32,7 @@ export function OwnerCommunicationTab({ owner }: OwnerCommunicationTabProps) {
   const queryClient = useQueryClient();
   const { message } = App.useApp();
   const [lastInviteToken, setLastInviteToken] = useState<string | null>(null);
+  const [portalBaseUrl, setPortalBaseUrl] = useState(() => getInitialPortalBaseUrl());
   const portalQuery = useQuery({
     queryKey: ['owners', owner.id, 'portal-access'],
     queryFn: () => getPortalAccess(owner.id),
@@ -70,7 +72,15 @@ export function OwnerCommunicationTab({ owner }: OwnerCommunicationTabProps) {
   ];
 
   const portalAccess = portalQuery.data;
-  const inviteLink = lastInviteToken ? `${window.location.origin}/portal/${lastInviteToken}` : null;
+  const inviteToken = lastInviteToken ?? portalAccess?.inviteToken ?? null;
+  const inviteLink = inviteToken ? buildPortalInviteLink(inviteToken, portalBaseUrl) : null;
+  const inviteUsesLoopback = inviteLink ? isLoopbackUrl(inviteLink) : false;
+
+  function handlePortalBaseUrlChange(event: ChangeEvent<HTMLInputElement>) {
+    const nextValue = event.target.value;
+    setPortalBaseUrl(nextValue);
+    savePortalBaseUrl(nextValue);
+  }
 
   return (
     <Space direction="vertical" size={16} className="full-width">
@@ -105,12 +115,34 @@ export function OwnerCommunicationTab({ owner }: OwnerCommunicationTabProps) {
               className="form-alert"
               message="Ссылка приглашения создана"
               description={
-                <Space direction="vertical" size={8} className="full-width">
-                  <Typography.Text className="portal-invite-link">{inviteLink}</Typography.Text>
-                  <Button size="small" icon={<CopyOutlined />} onClick={() => copyInviteLink(inviteLink, message)}>
-                    Скопировать ссылку
-                  </Button>
-                </Space>
+                <div className="portal-invite-layout">
+                  <div className="portal-qr-card">
+                    <QRCode value={inviteLink} size={132} />
+                  </div>
+                  <Space direction="vertical" size={8} className="full-width">
+                    {inviteUsesLoopback ? (
+                      <Typography.Text type="warning">
+                        С телефона 127.0.0.1 не откроется. Укажите адрес серверного компьютера в сети, например{' '}
+                        http://192.168.0.80:3000.
+                      </Typography.Text>
+                    ) : null}
+                    <Input
+                      addonBefore="Адрес сервера"
+                      value={portalBaseUrl}
+                      placeholder="http://192.168.0.80:3000"
+                      onChange={handlePortalBaseUrlChange}
+                    />
+                    <Typography.Text className="portal-invite-link">{inviteLink}</Typography.Text>
+                    <Space wrap>
+                      <Button size="small" icon={<CopyOutlined />} onClick={() => copyInviteLink(inviteLink, message)}>
+                        Скопировать ссылку
+                      </Button>
+                      <Button size="small" icon={<LinkOutlined />} onClick={() => window.open(inviteLink, '_blank', 'noopener,noreferrer')}>
+                        Открыть
+                      </Button>
+                    </Space>
+                  </Space>
+                </div>
               }
             />
           ) : null}
@@ -130,7 +162,7 @@ export function OwnerCommunicationTab({ owner }: OwnerCommunicationTabProps) {
             >
               Создать приглашение
             </Button>
-            {lastInviteToken ? (
+            {inviteLink ? (
               <Button icon={<LinkOutlined />} onClick={() => window.open(inviteLink ?? '', '_blank', 'noopener,noreferrer')}>
                 Открыть кабинет
               </Button>
@@ -184,6 +216,43 @@ export function OwnerCommunicationTab({ owner }: OwnerCommunicationTabProps) {
       </div>
     </Space>
   );
+}
+
+const portalBaseUrlStorageKey = 'temichevvet.portalBaseUrl';
+
+function buildPortalInviteLink(token: string, baseUrl: string) {
+  return `${normalizePortalBaseUrl(baseUrl)}/portal/${token}`;
+}
+
+function getInitialPortalBaseUrl() {
+  if (typeof window === 'undefined') {
+    return '';
+  }
+
+  return window.localStorage.getItem(portalBaseUrlStorageKey) || window.location.origin;
+}
+
+function savePortalBaseUrl(value: string) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.localStorage.setItem(portalBaseUrlStorageKey, value);
+}
+
+function normalizePortalBaseUrl(value: string) {
+  const fallback = typeof window === 'undefined' ? '' : window.location.origin;
+  const normalized = (value.trim() || fallback).replace(/\/+$/, '');
+  return normalized && !/^[a-z][a-z\d+\-.]*:\/\//i.test(normalized) ? `http://${normalized}` : normalized;
+}
+
+function isLoopbackUrl(value: string) {
+  try {
+    const host = new URL(value).hostname;
+    return host === '127.0.0.1' || host === 'localhost' || host === '::1';
+  } catch {
+    return false;
+  }
 }
 
 async function copyInviteLink(inviteLink: string, message: ReturnType<typeof App.useApp>['message']) {

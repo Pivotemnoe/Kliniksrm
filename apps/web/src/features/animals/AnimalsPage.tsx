@@ -1,12 +1,13 @@
 import { SearchOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { Button, Input, Table, Tag, Typography } from 'antd';
+import { Button, Input, Table, Typography } from 'antd';
 import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';
 import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
 import { PageHeader } from '../../shared/ui/PageHeader';
+import { AnimalStatusTag } from './animalStatus';
 import { listAnimals } from './animals.api';
 import { Animal } from './types';
 
@@ -37,7 +38,7 @@ export function AnimalsPage() {
         title: 'Состояние',
         dataIndex: 'status',
         key: 'status',
-        render: (value: string | null) => <Tag color={value ? 'green' : 'default'}>{value || 'Не указано'}</Tag>,
+        render: (value: string | null) => <AnimalStatusTag status={value} />,
       },
       {
         title: 'Пациент',

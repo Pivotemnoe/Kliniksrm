@@ -16,6 +16,7 @@ import { AnimalTasksTab } from './AnimalTasksTab';
 import { AnimalVisitsTab } from './AnimalVisitsTab';
 import { AnimalVaccinationsTab } from './AnimalVaccinationsTab';
 import { AnimalWeightsTab } from './AnimalWeightsTab';
+import { AnimalStatusTag, getAnimalStatusLabel } from './animalStatus';
 import { getAnimal, updateAnimal } from './animals.api';
 import { AnimalMutationInput, Vaccination } from './types';
 
@@ -93,7 +94,7 @@ export function AnimalCardPage() {
             <ContextRow label="Пол" value={animal ? sexLabel[animal.sex] : undefined} />
             <ContextRow label="Возраст" value={getAgeLabel(animal?.birthDate)} />
             <ContextRow label="Стерилизация" value={animal?.isSterilized ? 'Да' : 'Нет'} />
-            <ContextRow label="Статус" value={animal?.status} />
+            <ContextRow label="Состояние" value={animal ? <AnimalStatusTag status={animal.status} /> : undefined} />
           </div>
         </div>
         <div className="context-section">
@@ -186,7 +187,7 @@ export function AnimalCardPage() {
                       <Descriptions.Item label="Окрас">{animal.color || '—'}</Descriptions.Item>
                       <Descriptions.Item label="Микрочип">{animal.microchip || '—'}</Descriptions.Item>
                       <Descriptions.Item label="Клеймо">{animal.mark || '—'}</Descriptions.Item>
-                      <Descriptions.Item label="Статус">{animal.status || '—'}</Descriptions.Item>
+                      <Descriptions.Item label="Состояние">{getAnimalStatusLabel(animal.status)}</Descriptions.Item>
                       <Descriptions.Item label="Стерилизация">{animal.isSterilized ? 'Да' : 'Нет'}</Descriptions.Item>
                       <Descriptions.Item label="Избранный">{animal.isFavorite ? 'Да' : 'Нет'}</Descriptions.Item>
                       <Descriptions.Item label="Комментарий" span={2}>
