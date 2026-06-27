@@ -93,11 +93,31 @@ if ! command -v rsync >/dev/null 2>&1; then
   exit 1
 fi
 
+export COPYFILE_DISABLE=1
+
+RSYNC_MACOS_EXCLUDES=(
+  --exclude '.DS_Store'
+  --exclude '._*'
+  --exclude '.AppleDouble/'
+  --exclude '.Spotlight-V100/'
+  --exclude '.Trashes/'
+  --exclude '.fseventsd/'
+)
+
+cleanup_macos_metadata() {
+  local target="$1"
+
+  if [[ -e "$target" ]]; then
+    find "$target" \( -name '._*' -o -name '.DS_Store' \) -type f -exec rm -f {} +
+  fi
+}
+
 rm -rf "$TMP_DIR"
 mkdir -p "$TMP_DIR/CRM" "$TMP_DIR/portable"
 
 echo "Копирую чистую CRM..."
 rsync -a \
+  "${RSYNC_MACOS_EXCLUDES[@]}" \
   --exclude '.git/' \
   --exclude 'node_modules/' \
   --exclude 'backups/' \
@@ -156,7 +176,7 @@ cp "$ROOT_DIR/scripts/portable/update-linux.sh" "$TMP_DIR/Обновить Temic
 
 if [[ -d "$ROOT_DIR/installers" ]]; then
   mkdir -p "$TMP_DIR/installers"
-  rsync -a "$ROOT_DIR/installers/" "$TMP_DIR/installers/"
+  rsync -a "${RSYNC_MACOS_EXCLUDES[@]}" "$ROOT_DIR/installers/" "$TMP_DIR/installers/"
 fi
 
 chmod +x \
@@ -229,12 +249,17 @@ if [[ "$INCLUDE_IMAGES" == "true" ]]; then
   docker save --platform "$PLATFORM" -o "$TMP_DIR/docker-images/temichevvet-images.tar" $IMAGES
 fi
 
+cleanup_macos_metadata "$TMP_DIR"
+
 if [[ -e "$PORTABLE_DIR" ]]; then
   mv "$PORTABLE_DIR" "$BACKUP_DIR"
+  cleanup_macos_metadata "$BACKUP_DIR"
   echo "Предыдущий комплект сохранён как: $BACKUP_DIR"
 fi
 
 mv "$TMP_DIR" "$PORTABLE_DIR"
+cleanup_macos_metadata "$PORTABLE_DIR"
+find "$DESTINATION" -maxdepth 1 -name '._TemichevVet-Portable*' -type f -exec rm -f {} +
 
 echo
 echo "Готово. Комплект создан:"

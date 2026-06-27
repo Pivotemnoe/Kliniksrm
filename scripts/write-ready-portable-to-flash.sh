@@ -40,6 +40,25 @@ if [[ "$DESTINATION" == "/" || "$DESTINATION" == "/private/tmp" || "$DESTINATION
   exit 1
 fi
 
+export COPYFILE_DISABLE=1
+
+RSYNC_MACOS_EXCLUDES=(
+  --exclude '.DS_Store'
+  --exclude '._*'
+  --exclude '.AppleDouble/'
+  --exclude '.Spotlight-V100/'
+  --exclude '.Trashes/'
+  --exclude '.fseventsd/'
+)
+
+cleanup_macos_metadata() {
+  local target="$1"
+
+  if [[ -e "$target" ]]; then
+    find "$target" \( -name '._*' -o -name '.DS_Store' \) -type f -exec rm -f {} +
+  fi
+}
+
 TARGET="$DESTINATION/TemichevVet-Portable"
 BACKUP="$DESTINATION/TemichevVet-Portable.old-$(date +%Y%m%d-%H%M%S)"
 
@@ -47,14 +66,17 @@ if [[ -e "$TARGET" ]]; then
   echo "Сохраняю предыдущую папку как:"
   echo "  $BACKUP"
   mv "$TARGET" "$BACKUP"
+  cleanup_macos_metadata "$BACKUP"
 fi
 
 echo "Копирую готовый TemichevVet-Portable на флешку..."
 if rsync --help 2>/dev/null | grep -q -- '--info='; then
-  rsync -a --info=progress2 "$READY_DIR/" "$TARGET/"
+  rsync -a --info=progress2 "${RSYNC_MACOS_EXCLUDES[@]}" "$READY_DIR/" "$TARGET/"
 else
-  rsync -a --progress "$READY_DIR/" "$TARGET/"
+  rsync -a --progress "${RSYNC_MACOS_EXCLUDES[@]}" "$READY_DIR/" "$TARGET/"
 fi
+cleanup_macos_metadata "$TARGET"
+find "$DESTINATION" -maxdepth 1 -name '._TemichevVet-Portable*' -type f -exec rm -f {} +
 
 echo
 echo "Готово. На флешке записан комплект:"
