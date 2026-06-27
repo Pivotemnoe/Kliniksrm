@@ -42,6 +42,7 @@ export function AppointmentCardPage() {
   const { data: auth } = useCurrentEmployee();
   const canManage = hasPermission(auth?.employee, 'appointments.manage');
   const canManageVisits = hasPermission(auth?.employee, 'visits.manage');
+  const canCreateQueueFromAppointment = hasPermission(auth?.employee, 'queue.manage') || canManageVisits;
   const [editOpen, setEditOpen] = useState(false);
   const appointmentQuery = useQuery({
     queryKey: ['appointments', appointmentId],
@@ -58,8 +59,8 @@ export function AppointmentCardPage() {
     onError: (error) => message.error(getErrorMessage(error)),
   });
   const queueMutation = useMutation({
-    mutationFn: async (appointment: Appointment) => {
-      if (appointment.status === 'PLANNED') {
+    mutationFn: async ({ appointment, syncArrival }: { appointment: Appointment; syncArrival: boolean }) => {
+      if (syncArrival && appointment.status === 'PLANNED') {
         await arriveAppointment(appointment.id);
       }
 
@@ -136,28 +137,28 @@ export function AppointmentCardPage() {
             <Button icon={<LeftOutlined />} onClick={() => navigate('/schedule')}>
               К списку
             </Button>
-            {canManage && appointment ? (
+            {appointment ? (
               <>
-                {appointment.status === 'PLANNED' ? (
+                {canManage && appointment.status === 'PLANNED' ? (
                   <Button icon={<LoginOutlined />} loading={actionMutation.isPending} onClick={() => actionMutation.mutate('arrive')}>
                     Пришёл
                   </Button>
                 ) : null}
-                {['PLANNED', 'ARRIVED'].includes(appointment.status) ? (
+                {(canManage || canCreateQueueFromAppointment) && ['PLANNED', 'ARRIVED'].includes(appointment.status) ? (
                   <Button
                     icon={<OrderedListOutlined />}
                     loading={queueMutation.isPending}
-                    onClick={() => queueMutation.mutate(appointment)}
+                    onClick={() => queueMutation.mutate({ appointment, syncArrival: canManage })}
                   >
                     Поставить в очередь
                   </Button>
                 ) : null}
-                {appointment.status === 'ARRIVED' ? (
+                {canManage && appointment.status === 'ARRIVED' ? (
                   <Button icon={<PlayCircleOutlined />} loading={actionMutation.isPending} onClick={() => actionMutation.mutate('start')}>
                     Начать
                   </Button>
                 ) : null}
-                {appointment.status === 'IN_PROGRESS' ? (
+                {canManage && appointment.status === 'IN_PROGRESS' ? (
                   <Button
                     type="primary"
                     icon={<CheckOutlined />}
@@ -167,12 +168,12 @@ export function AppointmentCardPage() {
                     Завершить
                   </Button>
                 ) : null}
-                {['PLANNED', 'ARRIVED', 'IN_PROGRESS'].includes(appointment.status) ? (
+                {canManage && ['PLANNED', 'ARRIVED', 'IN_PROGRESS'].includes(appointment.status) ? (
                   <Button danger icon={<CloseOutlined />} loading={actionMutation.isPending} onClick={() => actionMutation.mutate('cancel')}>
                     Отменить
                   </Button>
                 ) : null}
-                {appointment.visit ? (
+                {appointment.visit && (canManage || canManageVisits) ? (
                   <Button icon={<FileTextOutlined />} onClick={() => navigate(`/visits/${appointment.visit?.id}`)}>
                     Открыть приём
                   </Button>
@@ -181,9 +182,11 @@ export function AppointmentCardPage() {
                     Создать приём
                   </Button>
                 ) : null}
-                <Button type="primary" icon={<EditOutlined />} onClick={() => setEditOpen(true)}>
-                  Редактировать
-                </Button>
+                {canManage ? (
+                  <Button type="primary" icon={<EditOutlined />} onClick={() => setEditOpen(true)}>
+                    Редактировать
+                  </Button>
+                ) : null}
               </>
             ) : null}
           </Space>

@@ -1,4 +1,4 @@
-import { CheckOutlined, CloseOutlined, LeftOutlined, PlayCircleOutlined, PrinterOutlined } from '@ant-design/icons';
+import { CheckOutlined, CloseOutlined, FileTextOutlined, LeftOutlined, PlayCircleOutlined, PrinterOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, App, Button, Card, Descriptions, Space, Tabs, Tag, Typography } from 'antd';
 import type { ReactNode } from 'react';
@@ -29,6 +29,7 @@ export function VisitCardPage() {
   const { message } = App.useApp();
   const { data: auth } = useCurrentEmployee();
   const canManage = hasPermission(auth?.employee, 'visits.manage');
+  const canReadBilling = hasPermission(auth?.employee, 'billing.read');
   const visitQuery = useQuery({
     queryKey: ['visits', visitId],
     queryFn: () => getVisit(visitId!),
@@ -103,6 +104,11 @@ export function VisitCardPage() {
             <Typography.Text type="secondary">
               {visit?.bill ? `Оплачено ${formatMoney(visit.bill.paidAmount)}` : 'Нет товаров и услуг'}
             </Typography.Text>
+            {visit?.bill && canReadBilling ? (
+              <Button size="small" icon={<FileTextOutlined />} onClick={() => navigate(`/bills/${visit.bill?.id}`)}>
+                Открыть счёт
+              </Button>
+            ) : null}
           </div>
         </div>
         <div className="context-section">
