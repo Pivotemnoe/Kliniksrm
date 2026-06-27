@@ -67,7 +67,7 @@ export function EmployeeShiftsPanel({ canManage }: { canManage: boolean }) {
     () => (shiftsQuery.data ?? []).filter((shift) => overlapsDay(shift, date)),
     [date, shiftsQuery.data],
   );
-  const { control, handleSubmit, reset } = useForm<ShiftFormInput, unknown, ShiftFormValues>({
+  const { control, getValues, handleSubmit, reset, setValue } = useForm<ShiftFormInput, unknown, ShiftFormValues>({
     resolver: zodResolver(shiftSchema),
     defaultValues: getDefaultShiftValues(date, null),
   });
@@ -245,6 +245,14 @@ export function EmployeeShiftsPanel({ canManage }: { canManage: boolean }) {
     });
   }
 
+  function setFullDayShift() {
+    const currentStart = getValues('startsAt');
+    const targetDate = currentStart?.slice(0, 10) || date;
+
+    setValue('startsAt', `${targetDate}T00:00`, { shouldDirty: true, shouldValidate: true });
+    setValue('endsAt', `${shiftDate(targetDate, 1)}T00:00`, { shouldDirty: true, shouldValidate: true });
+  }
+
   return (
     <Space direction="vertical" size={16} className="full-width">
       <Alert
@@ -356,6 +364,9 @@ export function EmployeeShiftsPanel({ canManage }: { canManage: boolean }) {
               )}
             />
           </div>
+          <Button type="default" onClick={setFullDayShift}>
+            Поставить смену на 24 часа
+          </Button>
           <Controller
             control={control}
             name="comment"
@@ -626,8 +637,10 @@ function groupShiftsByDay(days: WeekDay[], shifts: EmployeeShift[]) {
 
 function overlapsDay(shift: EmployeeShift, date: string) {
   const start = new Date(`${date}T00:00:00`);
-  const end = new Date(`${date}T23:59:59.999`);
-  return new Date(shift.startsAt) <= end && new Date(shift.endsAt) >= start;
+  const end = new Date(start);
+  end.setDate(start.getDate() + 1);
+
+  return new Date(shift.startsAt) < end && new Date(shift.endsAt) > start;
 }
 
 function shiftDate(date: string, days: number) {

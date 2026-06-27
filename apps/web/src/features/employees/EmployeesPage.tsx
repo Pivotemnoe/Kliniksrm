@@ -16,7 +16,7 @@ import { CreateEmployeeInput, Employee, RoleTemplate, UpdateEmployeeInput } from
 
 export function EmployeesPage() {
   const queryClient = useQueryClient();
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const currentEmployeeQuery = useCurrentEmployee();
   const employeesQuery = useQuery({ queryKey: ['employees'], queryFn: listEmployees });
   const rolesQuery = useQuery({ queryKey: ['roles'], queryFn: listRoles });
@@ -43,10 +43,32 @@ export function EmployeesPage() {
 
   const createMutation = useMutation({
     mutationFn: (values: CreateEmployeeInput) => createEmployee(values),
-    onSuccess: async () => {
+    onSuccess: async (employee, values) => {
       await queryClient.invalidateQueries({ queryKey: ['employees'] });
       setCreateOpen(false);
       message.success('Сотрудник создан');
+      modal.success({
+        title: 'Данные для входа сотрудника',
+        content: (
+          <Space direction="vertical" size={8}>
+            <Typography.Text>
+              Сотрудник: <Typography.Text strong>{employee.fullName}</Typography.Text>
+            </Typography.Text>
+            <Typography.Text>
+              Логин: <Typography.Text code>{employee.user?.phone || employee.user?.email || values.phone || values.email}</Typography.Text>
+            </Typography.Text>
+            <Typography.Text>
+              Временный пароль: <Typography.Text code>{values.password}</Typography.Text>
+            </Typography.Text>
+            {employee.restrictLoginToShifts ? (
+              <Typography.Text type="warning">
+                Вход разрешён только во время назначенной смены. Если смена не выставлена, сотрудник не сможет войти.
+              </Typography.Text>
+            ) : null}
+          </Space>
+        ),
+        okText: 'Понятно',
+      });
     },
     onError: (mutationError) => message.error(getErrorMessage(mutationError)),
   });

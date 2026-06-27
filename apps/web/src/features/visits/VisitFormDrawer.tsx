@@ -1,17 +1,31 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Button, Descriptions, Drawer, Form, Input, Radio, Select, Space, Tag } from 'antd';
-import { useState } from 'react';
+import { Alert, Button, DatePicker, Descriptions, Drawer, Form, Radio, Select, Space, Tag } from 'antd';
+import dayjs from 'dayjs';
+import { FocusEvent, KeyboardEvent, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
-import { fromDateTimeText, toDateTimeText } from '../../shared/utils/date';
+import { fromDateTimeText, normalizeDateTimeText, toDateTimeText } from '../../shared/utils/date';
 import { nullToEmpty, optionalString } from '../../shared/utils/forms';
 import { Appointment } from '../appointments/types';
 import { listOwnerAnimals, listOwners } from '../owners/owners.api';
 import { QueueEntry } from '../queue/types';
 import { getSchedulingResources } from '../scheduling/scheduling.api';
 import { CreateVisitInput, visitStatusColors, visitStatusLabels } from './types';
+
+const dateTimePickerFormats = [
+  'DD.MM.YYYY HH:mm',
+  'D.M.YYYY H:mm',
+  'DD.MM.YY HH:mm',
+  'DD,MM,YYYY HH:mm',
+  'DD MM YYYY HH:mm',
+  'DD MM YYYY HH mm',
+  'YYYY-MM-DD HH:mm',
+  'YYYY-MM-DDTHH:mm',
+  'YYYY.MM.DD HH:mm',
+  'YYYY MM DD HH:mm',
+];
 
 const visitSchema = z
   .object({
@@ -22,7 +36,7 @@ const visitSchema = z
       .string()
       .trim()
       .min(1, 'Укажите дату и время')
-      .refine((value) => Boolean(fromDateTimeText(value)), 'Формат: 2026-05-29 10:15'),
+      .refine((value) => Boolean(fromDateTimeText(value)), 'Например: 25.06.2026 10:15'),
     status: z.enum(['DRAFT', 'IN_PROGRESS']),
   })
   .superRefine((values, context) => {
@@ -196,7 +210,12 @@ export function VisitFormDrawer({
             name="startedAt"
             render={({ field, fieldState }) => (
               <Form.Item label="Дата и время" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
-                <Input placeholder="2026-05-29 10:15" {...field} />
+                <DateTimePickerInput
+                  value={field.value}
+                  onChange={field.onChange}
+                  onBlur={field.onBlur}
+                  placeholder="25.06.2026 10:15"
+                />
               </Form.Item>
             )}
           />
@@ -240,6 +259,69 @@ export function VisitFormDrawer({
       </Form>
     </Drawer>
   );
+}
+
+function DateTimePickerInput({
+  value,
+  onChange,
+  onBlur,
+  placeholder,
+}: {
+  value?: string;
+  onChange: (value: string) => void;
+  onBlur: () => void;
+  placeholder: string;
+}) {
+  const parsedIso = fromDateTimeText(value);
+
+  function commitRawValue(rawValue: string) {
+    const normalized = normalizeDateTimeText(rawValue);
+    onChange(normalized ?? rawValue.trim());
+  }
+
+  function handleBlur(event: FocusEvent<HTMLElement>) {
+    const rawValue = getPickerInputValue(event);
+    if (rawValue) {
+      commitRawValue(rawValue);
+    }
+    onBlur();
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.key !== 'Enter') {
+      return;
+    }
+
+    const rawValue = getPickerInputValue(event);
+    if (rawValue) {
+      commitRawValue(rawValue);
+    }
+  }
+
+  return (
+    <DatePicker
+      showTime={{ format: 'HH:mm' }}
+      format={dateTimePickerFormats}
+      value={parsedIso ? dayjs(parsedIso) : null}
+      allowClear
+      preserveInvalidOnBlur
+      className="full-width"
+      placeholder={placeholder}
+      onChange={(nextValue) => onChange(nextValue ? toDateTimeText(nextValue.toDate().toISOString()) : '')}
+      onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
+    />
+  );
+}
+
+function getPickerInputValue(event: FocusEvent<HTMLElement> | KeyboardEvent<HTMLElement>) {
+  const target = event.target as HTMLInputElement | null;
+  if (target && typeof target.value === 'string') {
+    return target.value.trim();
+  }
+
+  const input = event.currentTarget.querySelector('input');
+  return input?.value.trim() ?? '';
 }
 
 function SourceDescription({ sourceContext }: { sourceContext: NonNullable<VisitSourceContext> }) {

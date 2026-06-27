@@ -65,7 +65,7 @@ export class NotificationsController {
   }
 
   @Patch('owners/:ownerId/portal-access')
-  @RequirePermissions('owners.manage')
+  @RequirePermissions('notifications.manage')
   @ApiOkResponse({ description: 'Owner client portal access updated.' })
   updatePortalAccess(@Param('ownerId') ownerId: string, @Body() dto: UpdatePortalAccessDto, @CurrentEmployee() actor: AuthEmployee) {
     return this.notificationsService.updatePortalAccess(ownerId, dto, actor.id);

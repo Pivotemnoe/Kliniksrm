@@ -88,6 +88,7 @@ export function EmployeeFormDrawer({
     reset,
     setError,
     formState: { errors },
+    setValue,
   } = useForm<EmployeeFormInput, unknown, EmployeeFormValues>({
     resolver: zodResolver(employeeSchema),
     defaultValues: getDefaultValues(initialEmployee),
@@ -288,9 +289,17 @@ export function EmployeeFormDrawer({
             <Form.Item
               label={isEdit ? 'Новый временный пароль' : 'Временный пароль'}
               validateStatus={fieldState.error ? 'error' : undefined}
-              help={fieldState.error?.message}
+              help={fieldState.error?.message ?? (isEdit ? 'Оставьте пустым, если пароль менять не нужно.' : 'Минимум 8 символов. Этот пароль нужен сотруднику для первого входа.')}
             >
-              <Input.Password {...field} autoComplete="new-password" />
+              <Space.Compact className="full-width">
+                <Input.Password {...field} autoComplete="new-password" />
+                <Button
+                  type="default"
+                  onClick={() => setValue('password', createTemporaryPassword(), { shouldDirty: true, shouldValidate: true })}
+                >
+                  Сгенерировать
+                </Button>
+              </Space.Compact>
             </Form.Item>
           )}
         />
@@ -397,6 +406,14 @@ function getPermissionOptions(roles: RoleTemplate[]) {
   return [...permissions.entries()]
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([code, title]) => ({ value: code, label: `${title} · ${code}` }));
+}
+
+function createTemporaryPassword() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  const bytes = new Uint8Array(12);
+  crypto.getRandomValues(bytes);
+
+  return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join('');
 }
 
 function buildPermissionPreview(

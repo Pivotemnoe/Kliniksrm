@@ -96,7 +96,6 @@ const roles = [
       'tasks.read',
       'tasks.manage',
       'owners.read',
-      'owners.manage',
       'animals.read',
       'animals.manage',
       'visits.read',
@@ -1131,6 +1130,7 @@ async function seedEmployeeUser({ phone, email, password, fullName, position, ro
 
   if (replaceRoles) {
     await prisma.employeeRole.deleteMany({ where: { employeeId: employee.id } });
+    await prisma.employeePermissionOverride.deleteMany({ where: { employeeId: employee.id } });
   }
 
   await prisma.employeeRole.upsert({
