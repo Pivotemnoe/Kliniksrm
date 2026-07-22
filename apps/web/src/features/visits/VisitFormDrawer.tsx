@@ -12,7 +12,7 @@ import { Appointment } from '../appointments/types';
 import { listOwnerAnimals, listOwners } from '../owners/owners.api';
 import { QueueEntry } from '../queue/types';
 import { getSchedulingResources } from '../scheduling/scheduling.api';
-import { CreateVisitInput, visitStatusColors, visitStatusLabels } from './types';
+import { CreateVisitInput, VisitType, visitStatusColors, visitStatusLabels, visitTypeLabels } from './types';
 
 const dateTimePickerFormats = [
   'DD.MM.YYYY HH:mm',
@@ -38,6 +38,7 @@ const visitSchema = z
       .min(1, 'Укажите дату и время')
       .refine((value) => Boolean(fromDateTimeText(value)), 'Например: 25.06.2026 10:15'),
     status: z.enum(['DRAFT', 'IN_PROGRESS']),
+    visitType: z.enum(['PRIMARY', 'FOLLOW_UP']),
   })
   .superRefine((values, context) => {
     if (!values.ownerId) {
@@ -132,6 +133,7 @@ export function VisitFormDrawer({
       employeeId: values.employeeId,
       startedAt: fromDateTimeText(values.startedAt),
       status: values.status,
+      visitType: values.visitType,
       ...(sourceContext?.type === 'appointment' ? { appointmentId: sourceContext.appointment.id } : {}),
       ...(sourceContext?.type === 'queue' ? { queueEntryId: sourceContext.queueEntry.id } : {}),
     });
@@ -234,6 +236,18 @@ export function VisitFormDrawer({
                   }))}
                   placeholder="Назначится текущий сотрудник"
                   onChange={(value) => field.onChange(value ?? '')}
+                />
+              </Form.Item>
+            )}
+          />
+          <Controller
+            control={control}
+            name="visitType"
+            render={({ field }) => (
+              <Form.Item label="Прием">
+                <Select<VisitType>
+                  {...field}
+                  options={Object.entries(visitTypeLabels).map(([value, label]) => ({ value: value as VisitType, label }))}
                 />
               </Form.Item>
             )}
@@ -347,6 +361,9 @@ function SourceDescription({ sourceContext }: { sourceContext: NonNullable<Visit
       <Descriptions.Item label="Статус">
         <Tag color={visitStatusColors.DRAFT}>Через очередь</Tag>
       </Descriptions.Item>
+      <Descriptions.Item label="Прием">
+        {queueEntry.visitType ? visitTypeLabels[queueEntry.visitType] : visitTypeLabels.PRIMARY}
+      </Descriptions.Item>
     </Descriptions>
   );
 }
@@ -365,6 +382,7 @@ function getDefaultValues(
     employeeId: nullToEmpty(getSourceEmployeeId(sourceContext)),
     startedAt: toDateTimeText(new Date().toISOString()),
     status: 'IN_PROGRESS',
+    visitType: getSourceVisitType(sourceContext) ?? 'PRIMARY',
   };
 }
 
@@ -411,6 +429,14 @@ function getSourceEmployeeId(sourceContext: VisitSourceContext) {
 
   if (sourceContext?.type === 'queue') {
     return sourceContext.queueEntry.employeeId;
+  }
+
+  return undefined;
+}
+
+function getSourceVisitType(sourceContext: VisitSourceContext) {
+  if (sourceContext?.type === 'queue') {
+    return sourceContext.queueEntry.visitType;
   }
 
   return undefined;

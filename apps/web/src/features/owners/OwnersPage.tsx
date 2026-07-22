@@ -43,6 +43,18 @@ export function OwnersPage() {
     setOffset(0);
   }, [searchParams]);
 
+  useEffect(() => {
+    const trimmedSearch = searchInput.trim();
+    const timeoutId = window.setTimeout(() => {
+      if (trimmedSearch !== search) {
+        setSearch(trimmedSearch);
+        setOffset(0);
+      }
+    }, 250);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [search, searchInput]);
+
   const columns = useMemo<ColumnsType<Owner>>(
     () => [
       {

@@ -5,6 +5,7 @@ import { SchedulingEmployee } from '../scheduling/types';
 export type DecimalValue = string | number;
 
 export type VisitStatus = 'DRAFT' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+export type VisitType = 'PRIMARY' | 'FOLLOW_UP';
 
 export type VisitSummary = {
   id: string;
@@ -21,6 +22,7 @@ export type VisitListItem = {
   appointmentId: string | null;
   queueEntryId: string | null;
   hospitalBoxId: string | null;
+  visitType: VisitType | null;
   status: VisitStatus;
   startedAt: string;
   completedAt: string | null;
@@ -225,12 +227,14 @@ export type CreateVisitInput = {
   hospitalBoxId?: string;
   startedAt?: string;
   status?: VisitStatus;
+  visitType?: VisitType;
 };
 
 export type UpdateVisitInput = {
   employeeId?: string;
   hospitalBoxId?: string;
   status?: VisitStatus;
+  visitType?: VisitType;
 };
 
 export type VisitExamInput = {
@@ -292,6 +296,11 @@ export const visitStatusColors: Record<VisitStatus, string> = {
   IN_PROGRESS: 'gold',
   COMPLETED: 'green',
   CANCELLED: 'red',
+};
+
+export const visitTypeLabels: Record<VisitType, string> = {
+  PRIMARY: 'Первичный',
+  FOLLOW_UP: 'Повторный',
 };
 
 export const laboratoryOrderStatusLabels: Record<VisitLaboratoryOrderStatus, string> = {

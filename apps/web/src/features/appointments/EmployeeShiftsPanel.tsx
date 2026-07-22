@@ -1,4 +1,12 @@
-import { CopyOutlined, DeleteOutlined, EditOutlined, LeftOutlined, PlusOutlined, RightOutlined } from '@ant-design/icons';
+import {
+  CopyOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  EyeInvisibleOutlined,
+  LeftOutlined,
+  PlusOutlined,
+  RightOutlined,
+} from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, App, Button, Checkbox, Form, Input, Modal, Select, Space, Table, Tag, Typography } from 'antd';
@@ -10,6 +18,8 @@ import { getErrorMessage } from '../../api/errors';
 import { fromDatetimeLocal, formatDateTime, toDatetimeLocal } from '../../shared/utils/date';
 import {
   createEmployeeShift,
+  createEmployeeShifts,
+  deleteEmployeeShift,
   disableEmployeeShift,
   getSchedulingResources,
   listEmployeeShifts,
@@ -54,7 +64,7 @@ export function EmployeeShiftsPanel({ canManage }: { canManage: boolean }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingShift, setEditingShift] = useState<EmployeeShift | null>(null);
   const [copyDraft, setCopyDraft] = useState<CopyDraft | null>(null);
-  const [copyTargetDate, setCopyTargetDate] = useState('');
+  const [copyTargetDates, setCopyTargetDates] = useState<string[]>([]);
   const weekDays = useMemo(() => getWeekDays(date), [date]);
   const weekBounds = useMemo(() => getRangeBounds(weekDays[0].value, weekDays[6].value), [weekDays]);
   const resourcesQuery = useQuery({ queryKey: ['scheduling', 'resources'], queryFn: getSchedulingResources });
@@ -101,16 +111,28 @@ export function EmployeeShiftsPanel({ canManage }: { canManage: boolean }) {
     onError: (error) => message.error(getErrorMessage(error)),
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: deleteEmployeeShift,
+    onSuccess: async () => {
+      await invalidateShifts(queryClient);
+      message.success('Смена удалена');
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
+
   const copyMutation = useMutation({
-    mutationFn: async ({ shifts, targetDate }: { shifts: EmployeeShift[]; targetDate: string }) => {
-      for (const shift of shifts) {
-        await createEmployeeShift(buildCopiedShiftPayload(shift, targetDate));
-      }
+    mutationFn: async ({ shifts, targetDates }: { shifts: EmployeeShift[]; targetDates: string[] }) => {
+      const payloads = targetDates.flatMap((date) =>
+        shifts.map((shift) => buildCopiedShiftPayload(shift, date)),
+      );
+
+      return createEmployeeShifts(payloads);
     },
     onSuccess: async (_, variables) => {
       await invalidateShifts(queryClient);
-      setDate(variables.targetDate);
-      message.success(variables.shifts.length > 1 ? 'День смен скопирован' : 'Смена скопирована');
+      setDate(variables.targetDates[0]);
+      const shiftsCount = variables.shifts.length * variables.targetDates.length;
+      message.success(`Скопировано смен: ${shiftsCount}`);
       closeCopyModal();
     },
     onError: (error) => message.error(getErrorMessage(error)),
@@ -158,7 +180,7 @@ export function EmployeeShiftsPanel({ canManage }: { canManage: boolean }) {
       {
         title: 'Действия',
         key: 'actions',
-        width: 210,
+        width: 320,
         render: (_, shift) =>
           canManage ? (
             <Space wrap>
@@ -169,10 +191,13 @@ export function EmployeeShiftsPanel({ canManage }: { canManage: boolean }) {
                 Копировать
               </Button>
               {shift.isActive ? (
-                <Button size="small" danger icon={<DeleteOutlined />} onClick={() => confirmDisable(shift)}>
-                  Отключить
+                <Button size="small" icon={<EyeInvisibleOutlined />} onClick={() => confirmDisable(shift)}>
+                  Скрыть
                 </Button>
               ) : null}
+              <Button size="small" danger icon={<DeleteOutlined />} onClick={() => confirmDelete(shift)}>
+                Удалить
+              </Button>
             </Space>
           ) : null,
       },
@@ -210,7 +235,7 @@ export function EmployeeShiftsPanel({ canManage }: { canManage: boolean }) {
       shifts: [shift],
       sourceDate,
     });
-    setCopyTargetDate(shiftDate(sourceDate, 1));
+    setCopyTargetDates([shiftDate(sourceDate, 1)]);
   }
 
   function openCopyDay(sourceDate: string, shifts: EmployeeShift[]) {
@@ -226,22 +251,32 @@ export function EmployeeShiftsPanel({ canManage }: { canManage: boolean }) {
       shifts: activeShifts,
       sourceDate,
     });
-    setCopyTargetDate(shiftDate(sourceDate, 7));
+    setCopyTargetDates([shiftDate(sourceDate, 7)]);
   }
 
   function closeCopyModal() {
     setCopyDraft(null);
-    setCopyTargetDate('');
+    setCopyTargetDates([]);
   }
 
   function confirmDisable(shift: EmployeeShift) {
     modal.confirm({
-      title: 'Отключить смену?',
+      title: 'Скрыть смену?',
       content: `${shift.employee.fullName}: ${formatDateTime(shift.startsAt)} - ${formatDateTime(shift.endsAt)}`,
-      okText: 'Отключить',
-      okButtonProps: { danger: true },
+      okText: 'Скрыть',
       cancelText: 'Отмена',
       onOk: () => disableMutation.mutateAsync(shift.id),
+    });
+  }
+
+  function confirmDelete(shift: EmployeeShift) {
+    modal.confirm({
+      title: 'Удалить смену из графика?',
+      content: `${shift.employee.fullName}: ${formatDateTime(shift.startsAt)} - ${formatDateTime(shift.endsAt)}`,
+      okText: 'Удалить',
+      okButtonProps: { danger: true },
+      cancelText: 'Отмена',
+      onOk: () => deleteMutation.mutateAsync(shift.id),
     });
   }
 
@@ -296,6 +331,7 @@ export function EmployeeShiftsPanel({ canManage }: { canManage: boolean }) {
         onCreate={openCreateForDate}
         onEdit={openEdit}
         onCopy={openCopyShift}
+        onDelete={confirmDelete}
         onCopyDay={openCopyDay}
       />
       {resourcesQuery.isError ? <Alert type="error" showIcon message={getErrorMessage(resourcesQuery.error)} /> : null}
@@ -401,11 +437,11 @@ export function EmployeeShiftsPanel({ canManage }: { canManage: boolean }) {
             <Button
               type="primary"
               icon={<CopyOutlined />}
-              disabled={!copyDraft || !copyTargetDate}
+              disabled={!copyDraft || !copyTargetDates.length}
               loading={copyMutation.isPending}
               onClick={() =>
                 copyDraft
-                  ? copyMutation.mutate({ shifts: copyDraft.shifts, targetDate: copyTargetDate })
+                  ? copyMutation.mutate({ shifts: copyDraft.shifts, targetDates: copyTargetDates })
                   : undefined
               }
             >
@@ -417,17 +453,86 @@ export function EmployeeShiftsPanel({ canManage }: { canManage: boolean }) {
         <Space direction="vertical" size={14} className="full-width">
           <Typography.Text>
             {copyDraft
-              ? `Будет создано смен: ${copyDraft.shifts.length}. Исходный день: ${formatCompactDate(copyDraft.sourceDate)}.`
+              ? `Исходный день: ${formatCompactDate(copyDraft.sourceDate)}. Смен в исходном наборе: ${copyDraft.shifts.length}.`
               : null}
           </Typography.Text>
-          <Form layout="vertical">
-            <Form.Item label="Куда скопировать">
-              <Input type="date" value={copyTargetDate} onChange={(event) => setCopyTargetDate(event.target.value)} />
-            </Form.Item>
-          </Form>
+          <ShiftCopyDatePicker
+            selectedDates={copyTargetDates}
+            initialMonth={copyTargetDates[0] ?? copyDraft?.sourceDate ?? date}
+            onChange={setCopyTargetDates}
+          />
+          <Typography.Text type="secondary">
+            {copyTargetDates.length
+              ? `Выбрано дат: ${copyTargetDates.length}. Будет создано смен: ${(copyDraft?.shifts.length ?? 0) * copyTargetDates.length}.`
+              : 'Выберите одну или несколько дат в календаре.'}
+          </Typography.Text>
         </Space>
       </Modal>
     </Space>
+  );
+}
+
+function ShiftCopyDatePicker({
+  selectedDates,
+  initialMonth,
+  onChange,
+}: {
+  selectedDates: string[];
+  initialMonth: string;
+  onChange: (dates: string[]) => void;
+}) {
+  const [visibleMonth, setVisibleMonth] = useState(toMonthInput(initialMonth));
+  const calendarCells = useMemo(() => getCalendarCells(visibleMonth), [visibleMonth]);
+  const selected = useMemo(() => new Set(selectedDates), [selectedDates]);
+
+  function toggleDate(date: string) {
+    const next = selected.has(date)
+      ? selectedDates.filter((item) => item !== date)
+      : [...selectedDates, date].sort();
+
+    onChange(next);
+  }
+
+  return (
+    <div className="shift-copy-calendar">
+      <div className="shift-copy-calendar-head">
+        <Button size="small" icon={<LeftOutlined />} onClick={() => setVisibleMonth(shiftMonth(visibleMonth, -1))} />
+        <Typography.Text strong>{formatMonthLabel(visibleMonth)}</Typography.Text>
+        <Button size="small" icon={<RightOutlined />} onClick={() => setVisibleMonth(shiftMonth(visibleMonth, 1))} />
+      </div>
+      <div className="shift-copy-calendar-weekdays">
+        {['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map((weekday) => (
+          <span key={weekday}>{weekday}</span>
+        ))}
+      </div>
+      <div className="shift-copy-calendar-grid">
+        {calendarCells.map((cell, index) =>
+          cell ? (
+            <button
+              key={cell}
+              type="button"
+              className="shift-copy-date"
+              aria-pressed={selected.has(cell)}
+              onClick={() => toggleDate(cell)}
+            >
+              {new Date(`${cell}T00:00:00`).getDate()}
+            </button>
+          ) : (
+            <span key={`blank-${index}`} className="shift-copy-date blank" />
+          ),
+        )}
+      </div>
+      <div className="shift-copy-selected-dates">
+        {selectedDates.map((date) => (
+          <Tag key={date} closable onClose={() => toggleDate(date)}>
+            {formatFullDate(date)}
+          </Tag>
+        ))}
+        <Button size="small" disabled={!selectedDates.length} onClick={() => onChange([])}>
+          Очистить
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -474,6 +579,41 @@ function toDateInput(value: Date) {
   return `${year}-${month}-${day}`;
 }
 
+function toMonthInput(value: string) {
+  return value ? value.slice(0, 7) : toDateInput(new Date()).slice(0, 7);
+}
+
+function shiftMonth(month: string, offset: number) {
+  const value = new Date(`${month}-01T00:00:00`);
+  value.setMonth(value.getMonth() + offset);
+  return toMonthInput(toDateInput(value));
+}
+
+function getCalendarCells(month: string) {
+  const start = new Date(`${month}-01T00:00:00`);
+  const firstWeekdayIndex = (start.getDay() + 6) % 7;
+  const cursor = new Date(start);
+  const cells: Array<string | null> = Array.from({ length: firstWeekdayIndex }, () => null);
+
+  while (cursor.getMonth() === start.getMonth()) {
+    cells.push(toDateInput(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return cells;
+}
+
+function formatMonthLabel(month: string) {
+  return new Date(`${month}-01T00:00:00`).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+}
+
+function formatFullDate(value: string) {
+  return new Date(`${value}T00:00:00`).toLocaleDateString('ru-RU', {
+    day: 'numeric',
+    month: 'long',
+  });
+}
+
 type WeekDay = {
   value: string;
   weekday: string;
@@ -494,6 +634,7 @@ function EmployeeShiftWeekBoard({
   onCreate,
   onEdit,
   onCopy,
+  onDelete,
   onCopyDay,
 }: {
   days: WeekDay[];
@@ -507,6 +648,7 @@ function EmployeeShiftWeekBoard({
   onCreate: (date: string) => void;
   onEdit: (shift: EmployeeShift) => void;
   onCopy: (shift: EmployeeShift) => void;
+  onDelete: (shift: EmployeeShift) => void;
   onCopyDay: (date: string, shifts: EmployeeShift[]) => void;
 }) {
   const shiftsByDay = useMemo(() => groupShiftsByDay(days, shifts), [days, shifts]);
@@ -557,9 +699,14 @@ function EmployeeShiftWeekBoard({
                           {shift.employee.restrictLoginToShifts ? <Tag color="orange">Вход по смене</Tag> : null}
                         </button>
                         {canManage ? (
-                          <button type="button" className="shift-inline-copy-button" onClick={() => onCopy(shift)}>
-                            <CopyOutlined /> Копировать
-                          </button>
+                          <div className="shift-chip-actions">
+                            <button type="button" className="shift-inline-copy-button" onClick={() => onCopy(shift)}>
+                              <CopyOutlined /> Копировать
+                            </button>
+                            <button type="button" className="shift-inline-delete-button" onClick={() => onDelete(shift)}>
+                              <DeleteOutlined /> Удалить
+                            </button>
+                          </div>
                         ) : null}
                       </div>
                     ))

@@ -1,18 +1,19 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Alert, Button, Form, Input, Space } from 'antd';
+import { Alert, Button, Form, Input, Select, Space } from 'antd';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
 import { nullToEmpty, optionalString } from '../../shared/utils/forms';
 import { MedicalTextArea } from './MedicalTextArea';
 import { VisitDiagnosesTab } from './VisitDiagnosesTab';
-import { upsertVisitExam } from './visits.api';
-import { Visit, VisitExamInput } from './types';
+import { updateVisit, upsertVisitExam } from './visits.api';
+import { Visit, VisitType, visitTypeLabels } from './types';
 
 const examSchema = z.object({
   weightKg: optionalNumber(0, 300),
   temperatureC: optionalNumber(30, 45),
+  visitType: z.enum(['PRIMARY', 'FOLLOW_UP']),
   anamnesis: optionalString(4000),
   examination: optionalString(4000),
   symptoms: optionalString(4000),
@@ -36,7 +37,15 @@ export function VisitExamTab({ visit, canManage, locked }: VisitExamTabProps) {
     defaultValues: getDefaultValues(visit),
   });
   const mutation = useMutation({
-    mutationFn: (values: VisitExamInput) => upsertVisitExam(visit.id, values),
+    mutationFn: async (values: ExamValues) => {
+      const { visitType, ...examValues } = values;
+
+      if (visitType !== visit.visitType) {
+        await updateVisit(visit.id, { visitType });
+      }
+
+      return upsertVisitExam(visit.id, { ...examValues, purpose: '' });
+    },
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['visits', visit.id] }),
@@ -51,7 +60,7 @@ export function VisitExamTab({ visit, canManage, locked }: VisitExamTabProps) {
   const diagnoses = visit.diagnoses.map((diagnosis) => diagnosis.title);
 
   function submit(values: ExamValues) {
-    mutation.mutate({ ...values, purpose: '' });
+    mutation.mutate(values);
   }
 
   return (
@@ -59,7 +68,7 @@ export function VisitExamTab({ visit, canManage, locked }: VisitExamTabProps) {
       {locked ? <Alert type="info" showIcon message="Редактирование закрыто: отменённый приём нельзя менять, завершённый доступен директору или в течение 30 минут после завершения." className="form-alert" /> : null}
       {mutation.isError ? <Alert type="error" showIcon message={getErrorMessage(mutation.error)} className="form-alert" /> : null}
       {mutation.isSuccess ? <Alert type="success" showIcon message="Лист осмотра сохранён" className="form-alert" /> : null}
-      <div className="form-grid two-columns">
+      <div className="form-grid visit-exam-vitals-grid">
         <Controller
           control={control}
           name="weightKg"
@@ -75,6 +84,18 @@ export function VisitExamTab({ visit, canManage, locked }: VisitExamTabProps) {
           render={({ field, fieldState }) => (
             <Form.Item label="Температура, °C" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
               <Input inputMode="decimal" {...field} />
+            </Form.Item>
+          )}
+        />
+        <Controller
+          control={control}
+          name="visitType"
+          render={({ field }) => (
+            <Form.Item label="Прием">
+              <Select<VisitType>
+                {...field}
+                options={Object.entries(visitTypeLabels).map(([value, label]) => ({ value: value as VisitType, label }))}
+              />
             </Form.Item>
           )}
         />
@@ -120,7 +141,7 @@ export function VisitExamTab({ visit, canManage, locked }: VisitExamTabProps) {
         render={({ field, fieldState }) => (
           <Form.Item label="Симптомы" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
             <MedicalTextArea
-              rows={3}
+              rows={6}
               disabled={disabled}
               snippets={examSnippets.symptoms}
               fieldKey="visit.exam.symptoms"
@@ -214,6 +235,7 @@ function getDefaultValues(visit: Visit): ExamInput {
   return {
     weightKg: nullToEmpty(visit.exam?.weightKg ? String(visit.exam.weightKg) : undefined),
     temperatureC: nullToEmpty(visit.exam?.temperatureC ? String(visit.exam.temperatureC) : undefined),
+    visitType: visit.visitType ?? 'PRIMARY',
     anamnesis: mergeText(visit.exam?.purpose, visit.exam?.anamnesis),
     examination: nullToEmpty(visit.exam?.examination),
     symptoms: nullToEmpty(visit.exam?.symptoms),

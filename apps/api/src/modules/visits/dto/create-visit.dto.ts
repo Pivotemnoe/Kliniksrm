@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { VisitStatus } from '@prisma/client';
+import { VisitStatus, VisitType } from '@prisma/client';
 import { IsDateString, IsEnum, IsOptional, IsUUID } from 'class-validator';
 
 export class CreateVisitDto {
@@ -42,4 +42,9 @@ export class CreateVisitDto {
   @IsOptional()
   @IsEnum(VisitStatus)
   status?: VisitStatus;
+
+  @ApiPropertyOptional({ enum: VisitType })
+  @IsOptional()
+  @IsEnum(VisitType)
+  visitType?: VisitType;
 }

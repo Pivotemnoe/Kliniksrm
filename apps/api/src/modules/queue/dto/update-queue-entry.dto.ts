@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { AnimalSex, QueueStatus, QueueUrgency } from '@prisma/client';
+import { AnimalSex, QueueStatus, QueueUrgency, VisitType } from '@prisma/client';
 import { IsEnum, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
 
 export class UpdateQueueEntryDto {
@@ -75,6 +75,11 @@ export class UpdateQueueEntryDto {
   @IsOptional()
   @IsEnum(QueueUrgency)
   urgency?: QueueUrgency;
+
+  @ApiPropertyOptional({ enum: VisitType })
+  @IsOptional()
+  @IsEnum(VisitType)
+  visitType?: VisitType;
 
   @ApiPropertyOptional({ enum: QueueStatus })
   @IsOptional()

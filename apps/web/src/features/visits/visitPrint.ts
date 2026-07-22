@@ -1,7 +1,7 @@
 import { appConfig } from '../../app/config';
 import { formatDateTime } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
-import { Visit, VisitRecommendationInput } from './types';
+import { Visit, VisitRecommendationInput, visitTypeLabels } from './types';
 
 export function printVisitSheet(visit: Visit) {
   openPrintWindow({
@@ -21,6 +21,7 @@ export function printVisitSheet(visit: Visit) {
     compactMeta: [
       ['Вес', visit.exam?.weightKg ? `${visit.exam.weightKg} кг` : '—'],
       ['Температура', visit.exam?.temperatureC ? `${visit.exam.temperatureC} °C` : '—'],
+      ['Прием', visit.visitType ? visitTypeLabels[visit.visitType] : '—'],
       ['Стоимость', formatMoney(visit.totalAmount)],
     ],
   });
@@ -100,7 +101,7 @@ function openPrintWindow({
     .meta { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 20px; margin: 0 0 16px; padding: 14px; border: 1px solid #d1d5db; border-radius: 8px; }
     .meta-row span, .compact-meta span { display: block; color: #6b7280; font-size: 11px; text-transform: uppercase; }
     .meta-row strong, .compact-meta strong { display: block; margin-top: 2px; font-size: 14px; }
-    .compact-meta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+    .compact-meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
     .compact-meta div { padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 8px; }
     .section { margin-top: 14px; page-break-inside: avoid; }
     .section h2 { margin: 0 0 7px; font-size: 16px; }

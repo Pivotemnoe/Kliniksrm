@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { AnimalSex, Prisma, QueueStatus, QueueUrgency, VisitStatus } from '@prisma/client';
+import { AnimalSex, Prisma, QueueStatus, QueueUrgency, VisitStatus, VisitType } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
 import { normalizeRussianPhone } from '../../common/phone';
 import { AuditService } from '../audit/audit.service';
@@ -311,6 +311,7 @@ export class QueueService {
       animalSpecies: dto.animalSpecies,
       animalBreed: dto.animalBreed,
       animalSex: dto.animalSex,
+      visitType: dto.visitType,
       urgency: dto.urgency,
       comment: dto.comment,
     };
@@ -430,6 +431,7 @@ type QueueMutationData = {
   animalSpecies?: string;
   animalBreed?: string;
   animalSex?: AnimalSex;
+  visitType?: VisitType;
   urgency?: QueueUrgency;
   comment?: string;
 };

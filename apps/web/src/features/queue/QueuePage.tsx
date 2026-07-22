@@ -11,6 +11,7 @@ import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDateTime } from '../../shared/utils/date';
 import { createVisit } from '../visits/visits.api';
+import { visitTypeLabels } from '../visits/types';
 import { completeQueueEntry, listQueue, startQueueEntry } from './queue.api';
 import { createQueueEntryFromForm } from './createQueueEntryFromForm';
 import { QueueFormDrawer, QueueFormSubmitInput } from './QueueFormDrawer';
@@ -94,6 +95,7 @@ export function QueuePage() {
         employeeId: record.employeeId ?? undefined,
         startedAt: new Date().toISOString(),
         status: 'IN_PROGRESS',
+        visitType: record.visitType ?? 'PRIMARY',
       });
 
       return { action, visit };
@@ -168,6 +170,12 @@ export function QueuePage() {
         key: 'urgency',
         width: 120,
         render: (value: QueueUrgency) => <Tag color={queueUrgencyColors[value]}>{queueUrgencyLabels[value]}</Tag>,
+      },
+      {
+        title: 'Прием',
+        key: 'visitType',
+        width: 120,
+        render: (_, record) => (record.visitType ? visitTypeLabels[record.visitType] : '—'),
       },
       { title: 'Вызовов', dataIndex: 'callCount', key: 'callCount', width: 100, render: (value: number) => value || '—' },
       { title: 'Ожидание', key: 'waiting', width: 120, render: (_, record) => getWaitingTime(record, now) },

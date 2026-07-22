@@ -17,6 +17,7 @@ import { animalStatusOptions, normalizeAnimalStatusInput } from '../animals/anim
 import { AnimalMutationInput, AnimalSex } from '../animals/types';
 import { Owner, OwnerMutationInput } from '../owners/types';
 import { QueueEntry, QueueMutationInput, QueueUrgency, queueUrgencyLabels } from './types';
+import { VisitType, visitTypeLabels } from '../visits/types';
 
 const queueSchema = z
   .object({
@@ -33,6 +34,7 @@ const queueSchema = z
     animalSpecies: optionalString(80),
     animalBreed: optionalString(120),
     animalSex: z.enum(['MALE', 'FEMALE', 'UNKNOWN']),
+    visitType: z.enum(['PRIMARY', 'FOLLOW_UP']),
     birthDate: optionalString().refine(isAnimalBirthDateInputValid, 'Введите дату: ГГГГ, ММ.ГГГГ или ДД.ММ.ГГГГ'),
     color: optionalString(120),
     microchip: optionalString(120),
@@ -90,6 +92,12 @@ const queueSchema = z
 
 type QueueFormValues = z.infer<typeof queueSchema>;
 type QueueFormInput = z.input<typeof queueSchema>;
+type OwnerSelectOption = {
+  label: string;
+  value: string;
+  fullName: string;
+  phone: string | null;
+};
 
 export type QueueFormSubmitInput = QueueMutationInput & {
   createCards?: {
@@ -157,10 +165,12 @@ export function QueueFormDrawer({
 
   const rooms = resourcesQuery.data?.rooms.filter((room) => !officeId || room.officeId === officeId) ?? [];
   const ownerOptions = [
-    ...(initialQueue?.owner ? [{ label: initialQueue.owner.fullName, value: initialQueue.owner.id }] : []),
+    ...(initialQueue?.owner ? [toOwnerSelectOption(initialQueue.owner)] : []),
     ...(ownersQuery.data?.items.map((owner) => ({
-      label: owner.phone ? `${owner.fullName}, ${owner.phone}` : owner.fullName,
+      label: owner.fullName,
       value: owner.id,
+      fullName: owner.fullName,
+      phone: owner.phone ?? owner.extraPhone ?? null,
     })) ?? []),
   ].filter((option, index, options) => options.findIndex((item) => item.value === option.value) === index);
   const animalOptions = [
@@ -355,13 +365,15 @@ function ExistingClientFields({
 }: {
   control: any;
   ownerId?: string;
-  ownerOptions: Array<{ label: string; value: string }>;
+  ownerOptions: OwnerSelectOption[];
   animalOptions: Array<{ label: string; value: string }>;
   ownersLoading: boolean;
   animalsLoading: boolean;
   setOwnerSearch: (value: string) => void;
   setValue: any;
 }) {
+  const selectedOwner = ownerOptions.find((option) => option.value === ownerId);
+
   return (
     <div className="form-grid two-columns">
       <Controller
@@ -377,12 +389,19 @@ function ExistingClientFields({
               onSearch={setOwnerSearch}
               loading={ownersLoading}
               options={ownerOptions}
+              optionLabelProp="label"
+              optionRender={(option) => {
+                const owner = option.data as OwnerSelectOption;
+
+                return <OwnerSelectLabel fullName={owner.fullName} phone={owner.phone} />;
+              }}
               placeholder="Найти владельца"
               onChange={(value) => {
                 field.onChange(value ?? '');
                 setValue('animalId', '');
               }}
             />
+            {selectedOwner ? <OwnerSelectSummary fullName={selectedOwner.fullName} phone={selectedOwner.phone} /> : null}
           </Form.Item>
         )}
       />
@@ -720,6 +739,18 @@ function QueueDetailsFields({
               </Form.Item>
             )}
           />
+          <Controller
+            control={control}
+            name="visitType"
+            render={({ field }) => (
+              <Form.Item label="Прием">
+                <Select<VisitType>
+                  {...field}
+                  options={Object.entries(visitTypeLabels).map(([value, label]) => ({ value: value as VisitType, label }))}
+                />
+              </Form.Item>
+            )}
+          />
       </div>
       <Controller
         control={control}
@@ -749,6 +780,7 @@ function getDefaultValues(queueEntry?: QueueEntry | null): QueueFormInput {
     animalSpecies: nullToEmpty(queueEntry?.animalSpecies),
     animalBreed: nullToEmpty(queueEntry?.animalBreed),
     animalSex: queueEntry?.animalSex ?? 'UNKNOWN',
+    visitType: queueEntry?.visitType ?? 'PRIMARY',
     birthDate: '',
     color: '',
     microchip: '',
@@ -767,6 +799,7 @@ function toQueueInput(values: QueueFormValues, options: { createCards: boolean }
     officeId: values.officeId,
     employeeId: values.employeeId,
     roomId: values.roomId,
+    visitType: values.visitType,
     urgency: values.urgency,
     comment: values.comment,
   };
@@ -910,6 +943,33 @@ function getDuplicateInfo(owners: Owner[], ownerName?: string, phone?: string, a
 
 function ownerHasPhone(owner: Owner, phoneKey: string) {
   return [owner.phone, owner.extraPhone].some((phone) => getPhoneKey(phone) === phoneKey);
+}
+
+function toOwnerSelectOption(owner: Pick<Owner, 'id' | 'fullName' | 'phone' | 'extraPhone'>): OwnerSelectOption {
+  return {
+    label: owner.fullName,
+    value: owner.id,
+    fullName: owner.fullName,
+    phone: owner.phone ?? owner.extraPhone ?? null,
+  };
+}
+
+function OwnerSelectLabel({ fullName, phone }: { fullName: string; phone: string | null }) {
+  return (
+    <div className="owner-select-option">
+      <span className="owner-select-name">{fullName}</span>
+      <span className="owner-select-phone">{phone || 'Телефон не указан'}</span>
+    </div>
+  );
+}
+
+function OwnerSelectSummary({ fullName, phone }: { fullName: string; phone: string | null }) {
+  return (
+    <div className="owner-select-summary">
+      <span>{fullName}</span>
+      <strong>{phone || 'Телефон не указан'}</strong>
+    </div>
+  );
 }
 
 function getPhoneKey(value?: string | null) {

@@ -1,7 +1,7 @@
 import { Animal } from '../animals/types';
 import { Owner } from '../owners/types';
 import { SchedulingEmployee, SchedulingOffice, SchedulingRoom } from '../scheduling/types';
-import type { VisitSummary } from '../visits/types';
+import type { VisitSummary, VisitType } from '../visits/types';
 
 export type QueueUrgency = 'PLANNED' | 'URGENT';
 export type QueueStatus = 'WAITING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
@@ -20,6 +20,7 @@ export type QueueEntry = {
   animalSpecies: string | null;
   animalBreed: string | null;
   animalSex: Animal['sex'] | null;
+  visitType: VisitType | null;
   urgency: QueueUrgency;
   status: QueueStatus;
   comment: string | null;
@@ -70,6 +71,7 @@ export type QueueMutationInput = {
   animalSpecies?: string;
   animalBreed?: string;
   animalSex?: Animal['sex'];
+  visitType?: VisitType;
   urgency?: QueueUrgency;
   status?: QueueStatus;
   comment?: string;

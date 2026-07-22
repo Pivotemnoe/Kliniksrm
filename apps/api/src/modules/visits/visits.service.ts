@@ -9,6 +9,7 @@ import {
   QueueStatus,
   StockMovementType,
   VisitStatus,
+  VisitType,
 } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
 import { AuditService } from '../audit/audit.service';
@@ -102,6 +103,7 @@ export class VisitsService {
           appointmentId: data.appointmentId,
           queueEntryId: data.queueEntryId,
           hospitalBoxId: data.hospitalBoxId,
+          visitType: data.visitType,
           status: data.status,
           startedAt: data.startedAt,
         },
@@ -174,6 +176,7 @@ export class VisitsService {
         data: {
           ...(dto.employeeId !== undefined ? { employeeId: dto.employeeId } : {}),
           ...(dto.hospitalBoxId !== undefined ? { hospitalBoxId: dto.hospitalBoxId } : {}),
+          ...(dto.visitType !== undefined ? { visitType: dto.visitType } : {}),
           ...statusData,
         },
       });
@@ -719,6 +722,7 @@ export class VisitsService {
     let ownerId = dto.ownerId;
     let animalId = dto.animalId;
     let employeeId = dto.employeeId;
+    let visitType = dto.visitType;
 
     if (dto.appointmentId) {
       const appointment = await this.prisma.appointment.findUnique({
@@ -742,7 +746,7 @@ export class VisitsService {
     if (dto.queueEntryId) {
       const queueEntry = await this.prisma.queueEntry.findUnique({
         where: { id: dto.queueEntryId },
-        select: { ownerId: true, animalId: true, employeeId: true, visit: { select: { id: true } } },
+        select: { ownerId: true, animalId: true, employeeId: true, visitType: true, visit: { select: { id: true } } },
       });
 
       if (!queueEntry) {
@@ -760,6 +764,7 @@ export class VisitsService {
       ownerId = queueEntry.ownerId;
       animalId = queueEntry.animalId;
       employeeId = employeeId ?? queueEntry.employeeId ?? actor.id;
+      visitType = visitType ?? queueEntry.visitType ?? undefined;
     }
 
     if (!ownerId || !animalId) {
@@ -795,6 +800,7 @@ export class VisitsService {
       appointmentId: dto.appointmentId,
       queueEntryId: dto.queueEntryId,
       hospitalBoxId: dto.hospitalBoxId,
+      visitType,
       startedAt,
       status,
     };
@@ -1273,6 +1279,7 @@ type VisitCreationData = {
   appointmentId?: string;
   queueEntryId?: string;
   hospitalBoxId?: string;
+  visitType?: VisitType;
   startedAt: Date;
   status: VisitStatus;
 };

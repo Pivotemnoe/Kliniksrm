@@ -4,6 +4,7 @@ import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateClinicOfficeDto } from './dto/create-clinic-office.dto';
 import { CreateEmployeeShiftDto } from './dto/create-employee-shift.dto';
+import { CreateEmployeeShiftsBulkDto } from './dto/create-employee-shifts-bulk.dto';
 import { CreateSchedulingResourceDto } from './dto/create-scheduling-resource.dto';
 import { ListEmployeeShiftsQueryDto } from './dto/list-employee-shifts-query.dto';
 import { UpdateClinicOfficeDto } from './dto/update-clinic-office.dto';
@@ -184,6 +185,40 @@ export class SchedulingService {
     return shift;
   }
 
+  async createEmployeeShiftsBulk(dto: CreateEmployeeShiftsBulkDto, actorId: string) {
+    const drafts = await this.prepareEmployeeShiftDrafts(dto.shifts);
+    ensureNoDraftShiftOverlap(drafts);
+
+    for (const draft of drafts.filter((item) => item.isActive)) {
+      await this.ensureNoShiftOverlap(draft.employeeId, draft.startsAt, draft.endsAt);
+    }
+
+    const shifts = await this.prisma.$transaction(
+      drafts.map((draft) =>
+        this.prisma.employeeShift.create({
+          data: {
+            employeeId: draft.employeeId,
+            startsAt: draft.startsAt,
+            endsAt: draft.endsAt,
+            comment: draft.comment,
+            isActive: draft.isActive,
+          },
+          include: employeeShiftInclude,
+        }),
+      ),
+    );
+
+    await this.auditService.log({
+      actorId,
+      action: 'scheduling.employee_shift.bulk_create',
+      entityType: 'EmployeeShift',
+      entityId: shifts[0]?.id ?? null,
+      metadata: { count: shifts.length, employeeIds: [...new Set(shifts.map((shift) => shift.employeeId))] },
+    });
+
+    return shifts;
+  }
+
   async updateEmployeeShift(shiftId: string, dto: UpdateEmployeeShiftDto, actorId: string) {
     const existing = await this.getEmployeeShiftOrThrow(shiftId);
     const employeeId = dto.employeeId ?? existing.employeeId;
@@ -239,6 +274,26 @@ export class SchedulingService {
     });
 
     return shift;
+  }
+
+  async deleteEmployeeShift(shiftId: string, actorId: string) {
+    const existing = await this.getEmployeeShiftOrThrow(shiftId);
+
+    await this.prisma.employeeShift.delete({ where: { id: shiftId } });
+
+    await this.auditService.log({
+      actorId,
+      action: 'scheduling.employee_shift.delete',
+      entityType: 'EmployeeShift',
+      entityId: shiftId,
+      metadata: {
+        employeeId: existing.employeeId,
+        startsAt: existing.startsAt.toISOString(),
+        endsAt: existing.endsAt.toISOString(),
+      },
+    });
+
+    return { deleted: true, id: shiftId };
   }
 
   async createRoom(dto: CreateSchedulingResourceDto, actorId: string) {
@@ -505,6 +560,28 @@ export class SchedulingService {
     return warehouse;
   }
 
+  private async prepareEmployeeShiftDrafts(items: CreateEmployeeShiftDto[]) {
+    const employeeIds = [...new Set(items.map((item) => item.employeeId))];
+
+    for (const employeeId of employeeIds) {
+      await this.ensureEmployeeActive(employeeId);
+    }
+
+    return items.map((item) => {
+      const startsAt = parseDate(item.startsAt, 'Укажите корректное начало смены');
+      const endsAt = parseDate(item.endsAt, 'Укажите корректное окончание смены');
+      validateShiftRange(startsAt, endsAt);
+
+      return {
+        employeeId: item.employeeId,
+        startsAt,
+        endsAt,
+        comment: emptyToNull(item.comment),
+        isActive: item.isActive ?? true,
+      };
+    });
+  }
+
   private async getEmployeeShiftOrThrow(shiftId: string) {
     const shift = await this.prisma.employeeShift.findUnique({
       where: { id: shiftId },
@@ -576,6 +653,28 @@ function parseDate(value: string, message: string) {
 function validateShiftRange(startsAt: Date, endsAt: Date) {
   if (startsAt >= endsAt) {
     throw new BadRequestException('Окончание смены должно быть позже начала');
+  }
+}
+
+function ensureNoDraftShiftOverlap(
+  drafts: Array<{ employeeId: string; startsAt: Date; endsAt: Date; isActive: boolean }>,
+) {
+  const activeDrafts = drafts
+    .filter((draft) => draft.isActive)
+    .sort(
+      (first, second) =>
+        first.employeeId.localeCompare(second.employeeId) || first.startsAt.getTime() - second.startsAt.getTime(),
+    );
+
+  for (let index = 1; index < activeDrafts.length; index += 1) {
+    const previous = activeDrafts[index - 1];
+    const current = activeDrafts[index];
+
+    if (previous.employeeId === current.employeeId && previous.endsAt > current.startsAt) {
+      throw new BadRequestException(
+        `В копируемых сменах есть пересечение: ${previous.startsAt.toLocaleString('ru-RU')} - ${previous.endsAt.toLocaleString('ru-RU')}`,
+      );
+    }
   }
 }
 

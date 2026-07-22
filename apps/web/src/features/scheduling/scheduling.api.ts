@@ -36,12 +36,25 @@ export function createEmployeeShift(payload: EmployeeShiftPayload) {
   return apiRequest<EmployeeShift>('/v1/scheduling/employee-shifts', { method: 'POST', body: payload });
 }
 
+export function createEmployeeShifts(payloads: EmployeeShiftPayload[]) {
+  return apiRequest<EmployeeShift[]>('/v1/scheduling/employee-shifts/bulk', {
+    method: 'POST',
+    body: { shifts: payloads },
+  });
+}
+
 export function updateEmployeeShift(shiftId: string, payload: Partial<EmployeeShiftPayload>) {
   return apiRequest<EmployeeShift>(`/v1/scheduling/employee-shifts/${shiftId}`, { method: 'PATCH', body: payload });
 }
 
 export function disableEmployeeShift(shiftId: string) {
   return apiRequest<EmployeeShift>(`/v1/scheduling/employee-shifts/${shiftId}`, { method: 'DELETE' });
+}
+
+export function deleteEmployeeShift(shiftId: string) {
+  return apiRequest<{ deleted: true; id: string }>(`/v1/scheduling/employee-shifts/${shiftId}/permanent`, {
+    method: 'DELETE',
+  });
 }
 
 export function createRoom(payload: SchedulingResourcePayload) {

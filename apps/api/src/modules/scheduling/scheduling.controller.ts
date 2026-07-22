@@ -4,6 +4,7 @@ import { AuthEmployee } from '../auth/auth.types';
 import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { CreateEmployeeShiftDto } from './dto/create-employee-shift.dto';
+import { CreateEmployeeShiftsBulkDto } from './dto/create-employee-shifts-bulk.dto';
 import { CreateClinicOfficeDto } from './dto/create-clinic-office.dto';
 import { CreateSchedulingResourceDto } from './dto/create-scheduling-resource.dto';
 import { ListEmployeeShiftsQueryDto } from './dto/list-employee-shifts-query.dto';
@@ -63,6 +64,13 @@ export class SchedulingController {
     return this.schedulingService.createEmployeeShift(dto, actor.id);
   }
 
+  @Post('employee-shifts/bulk')
+  @RequirePermissions('appointments.manage')
+  @ApiCreatedResponse({ description: 'Employee work shifts created.' })
+  createEmployeeShiftsBulk(@Body() dto: CreateEmployeeShiftsBulkDto, @CurrentEmployee() actor: AuthEmployee) {
+    return this.schedulingService.createEmployeeShiftsBulk(dto, actor.id);
+  }
+
   @Patch('employee-shifts/:shiftId')
   @RequirePermissions('appointments.manage')
   @ApiOkResponse({ description: 'Employee work shift updated.' })
@@ -79,6 +87,13 @@ export class SchedulingController {
   @ApiOkResponse({ description: 'Employee work shift disabled.' })
   disableEmployeeShift(@Param('shiftId') shiftId: string, @CurrentEmployee() actor: AuthEmployee) {
     return this.schedulingService.disableEmployeeShift(shiftId, actor.id);
+  }
+
+  @Delete('employee-shifts/:shiftId/permanent')
+  @RequirePermissions('appointments.manage')
+  @ApiOkResponse({ description: 'Employee work shift deleted.' })
+  deleteEmployeeShift(@Param('shiftId') shiftId: string, @CurrentEmployee() actor: AuthEmployee) {
+    return this.schedulingService.deleteEmployeeShift(shiftId, actor.id);
   }
 
   @Post('rooms')

@@ -20,7 +20,7 @@ import { VisitLaboratoryTab } from './VisitLaboratoryTab';
 import { VisitRecommendationTab } from './VisitRecommendationTab';
 import { VisitServicesTab } from './VisitServicesTab';
 import { cancelVisit, completeVisit, getVisit, startVisit } from './visits.api';
-import { Visit, visitStatusColors, visitStatusLabels } from './types';
+import { Visit, visitStatusColors, visitStatusLabels, visitTypeLabels } from './types';
 import { printVisitRecommendation, printVisitSheet } from './visitPrint';
 
 export function VisitCardPage() {
@@ -143,6 +143,7 @@ export function VisitCardPage() {
               }
             />
             <ContextRow label="Температура" value={visit?.exam?.temperatureC ? `${visit.exam.temperatureC} °C` : '—'} />
+            <ContextRow label="Прием" value={visit?.visitType ? visitTypeLabels[visit.visitType] : '—'} />
             <ContextRow
               label="Диагнозы"
               value={
@@ -282,6 +283,7 @@ export function VisitCardPage() {
                         )}
                       </Descriptions.Item>
                       <Descriptions.Item label="Кабинет/стационар">{visit.hospitalBox?.name ?? visit.hospitalBox?.title ?? '—'}</Descriptions.Item>
+                      <Descriptions.Item label="Прием">{visit.visitType ? visitTypeLabels[visit.visitType] : '—'}</Descriptions.Item>
                       <Descriptions.Item label="Начат">{formatDateTime(visit.startedAt)}</Descriptions.Item>
                       <Descriptions.Item label="Завершён">{formatDateTime(visit.completedAt)}</Descriptions.Item>
                       <Descriptions.Item label="Счёт">

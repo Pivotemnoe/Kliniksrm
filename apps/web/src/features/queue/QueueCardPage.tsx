@@ -17,6 +17,7 @@ import { useCurrentEmployee } from '../../auth/useAuth';
 import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDateTime } from '../../shared/utils/date';
+import { visitTypeLabels } from '../visits/types';
 import { AnimalMutationInput } from '../animals/types';
 import { createOwner, createOwnerAnimal } from '../owners/owners.api';
 import { OwnerMutationInput } from '../owners/types';
@@ -228,6 +229,7 @@ export function QueueCardPage() {
             <Descriptions.Item label="Срочность">
               <Tag color={queueUrgencyColors[queueEntry.urgency]}>{queueUrgencyLabels[queueEntry.urgency]}</Tag>
             </Descriptions.Item>
+            <Descriptions.Item label="Прием">{queueEntry.visitType ? visitTypeLabels[queueEntry.visitType] : '—'}</Descriptions.Item>
             <Descriptions.Item label="Статус">
               {statusView ? <Tag color={statusView.color}>{statusView.label}</Tag> : '—'}
             </Descriptions.Item>

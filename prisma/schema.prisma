@@ -46,6 +46,11 @@ enum VisitStatus {
   CANCELLED
 }
 
+enum VisitType {
+  PRIMARY
+  FOLLOW_UP
+}
+
 enum TaskStatus {
   OPEN
   DONE
@@ -622,6 +627,7 @@ model QueueEntry {
   animalSpecies  String?
   animalBreed    String?
   animalSex      AnimalSex?
+  visitType      VisitType?
   urgency        QueueUrgency  @default(PLANNED)
   status         QueueStatus   @default(WAITING)
   comment        String?
@@ -708,6 +714,7 @@ model Visit {
   queueEntry       QueueEntry?          @relation(fields: [queueEntryId], references: [id], onDelete: SetNull)
   hospitalBoxId    String?
   hospitalBox      HospitalBox?         @relation(fields: [hospitalBoxId], references: [id], onDelete: SetNull)
+  visitType        VisitType?
   status           VisitStatus          @default(DRAFT)
   startedAt        DateTime             @default(now())
   completedAt      DateTime?

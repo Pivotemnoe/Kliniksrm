@@ -947,7 +947,14 @@ body {
   gap: 5px;
 }
 
+.shift-chip-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px;
+}
+
 .shift-inline-copy-button,
+.shift-inline-delete-button,
 .shift-copy-day-button {
   display: inline-flex;
   width: 100%;
@@ -964,9 +971,19 @@ body {
 }
 
 .shift-inline-copy-button:hover,
+.shift-inline-delete-button:hover,
 .shift-copy-day-button:hover {
   border-color: #2f6df6;
   background: #f5f8ff;
+}
+
+.shift-inline-delete-button {
+  color: #cf1322;
+}
+
+.shift-inline-delete-button:hover {
+  border-color: #cf1322;
+  background: #fff1f0;
 }
 
 .schedule-empty {
@@ -1012,6 +1029,73 @@ body {
 
 .shift-table-title h5.ant-typography {
   margin: 0;
+}
+
+.shift-copy-calendar {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #dfe3e8;
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
+.shift-copy-calendar-head {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) 32px;
+  gap: 8px;
+  align-items: center;
+  text-align: center;
+}
+
+.shift-copy-calendar-weekdays,
+.shift-copy-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.shift-copy-calendar-weekdays span {
+  color: #68717d;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.shift-copy-date {
+  aspect-ratio: 1;
+  min-width: 0;
+  border: 1px solid #dfe3e8;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #202226;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.shift-copy-date:hover {
+  border-color: #2a9d8f;
+  background: #f4fbfa;
+}
+
+.shift-copy-date[aria-pressed='true'] {
+  color: #ffffff;
+  border-color: #2a9d8f;
+  background: #2a9d8f;
+}
+
+.shift-copy-date.blank {
+  border-color: transparent;
+  background: transparent;
+  pointer-events: none;
+}
+
+.shift-copy-selected-dates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
 }
 
 .selected-shifts-panel {
@@ -1414,6 +1498,10 @@ body {
   min-width: min(260px, 100%);
 }
 
+.visit-exam-vitals-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(160px, 0.64fr);
+}
+
 .medical-phrases-filters {
   width: 100%;
 }
@@ -1798,6 +1886,46 @@ body {
   max-width: 320px;
 }
 
+.owner-select-option {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  line-height: 1.2;
+}
+
+.owner-select-name {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.owner-select-phone {
+  min-width: 0;
+  overflow: hidden;
+  color: #6b7280;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.owner-select-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  margin-top: 6px;
+  color: #5d6673;
+  font-size: 12px;
+}
+
+.owner-select-summary span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .status-filter,
 .date-filter {
   width: 180px;
@@ -2075,6 +2203,10 @@ body {
   }
 
   .two-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .visit-exam-vitals-grid {
     grid-template-columns: 1fr;
   }
 
