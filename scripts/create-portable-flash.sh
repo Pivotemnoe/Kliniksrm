@@ -284,7 +284,11 @@ if [[ "$INCLUDE_IMAGES" == "true" ]]; then
       -t temichevvet-web:local -f apps/web/Dockerfile .
   fi
 
-  IMAGES="$(docker compose config --images | tr '\n' ' ')"
+  IMAGES="$(
+    TEMICHEVVET_API_IMAGE=temichevvet-api:local \
+    TEMICHEVVET_WEB_IMAGE=temichevvet-web:local \
+      docker compose config --images | tr '\n' ' '
+  )"
   if [[ -z "$IMAGES" ]]; then
     echo "Не удалось получить список Docker-образов." >&2
     exit 1
