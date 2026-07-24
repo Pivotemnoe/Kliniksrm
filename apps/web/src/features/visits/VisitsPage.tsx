@@ -38,10 +38,13 @@ export function VisitsPage() {
   const queueEntryId = searchParams.get('queueEntryId') ?? undefined;
   const initialOwnerId = searchParams.get('ownerId') ?? undefined;
   const initialAnimalId = searchParams.get('animalId') ?? undefined;
+  const createRequested = searchParams.get('create') === '1';
+  const employeeId = searchParams.get('employeeId') ?? undefined;
+  const isPersonalVisits = Boolean(employeeId && employeeId === auth?.employee.id);
 
   const visitsQuery = useQuery({
-    queryKey: ['visits', { search, status, limit: pageSize, offset }],
-    queryFn: () => listVisits({ search, status, limit: pageSize, offset }),
+    queryKey: ['visits', { search, status, employeeId, limit: pageSize, offset }],
+    queryFn: () => listVisits({ search, status, employeeId, limit: pageSize, offset }),
   });
   const appointmentQuery = useQuery({
     queryKey: ['appointments', appointmentId],
@@ -96,10 +99,10 @@ export function VisitsPage() {
       return;
     }
 
-    if ((appointmentId && appointmentQuery.data) || (queueEntryId && queueQuery.data) || (initialOwnerId && initialAnimalId)) {
+    if (createRequested || (appointmentId && appointmentQuery.data) || (queueEntryId && queueQuery.data) || (initialOwnerId && initialAnimalId)) {
       setCreateOpen(true);
     }
-  }, [appointmentId, appointmentQuery.data, initialAnimalId, initialOwnerId, navigate, queueEntryId, queueQuery.data]);
+  }, [appointmentId, appointmentQuery.data, createRequested, initialAnimalId, initialOwnerId, navigate, queueEntryId, queueQuery.data]);
 
   const columns = useMemo<ColumnsType<VisitListItem>>(
     () => [
@@ -135,7 +138,7 @@ export function VisitsPage() {
 
   function closeCreateDrawer() {
     setCreateOpen(false);
-    if (appointmentId || queueEntryId || initialOwnerId || initialAnimalId) {
+    if (createRequested || appointmentId || queueEntryId || initialOwnerId || initialAnimalId) {
       setSearchParams({});
     }
   }
@@ -143,7 +146,7 @@ export function VisitsPage() {
   return (
     <div className="page">
       <PageHeader
-        title="Приёмы"
+        title={isPersonalVisits ? 'Мои приёмы' : 'Приёмы'}
         extra={
           canManage || canCreateQueue ? (
             <Space wrap>

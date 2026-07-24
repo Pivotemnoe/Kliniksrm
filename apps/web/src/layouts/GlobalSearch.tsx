@@ -5,6 +5,8 @@ import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getErrorMessage } from '../api/errors';
+import { hasPermission } from '../auth/permissions';
+import { useCurrentEmployee } from '../auth/useAuth';
 import { listAnimals } from '../features/animals/animals.api';
 import { Animal } from '../features/animals/types';
 import { listOwners } from '../features/owners/owners.api';
@@ -13,26 +15,29 @@ import { AnimalSpeciesLabel } from '../shared/ui/AnimalSpeciesIcon';
 
 export function GlobalSearch() {
   const navigate = useNavigate();
+  const { data: auth } = useCurrentEmployee();
+  const canSearchOwners = hasPermission(auth?.employee, 'owners.read');
+  const canSearchAnimals = hasPermission(auth?.employee, 'animals.read');
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const [value, setValue] = useState('');
   const [focused, setFocused] = useState(false);
   const term = value.trim();
-  const enabled = term.length >= 2;
+  const enabled = term.length >= 2 && (canSearchOwners || canSearchAnimals);
   const ownersQuery = useQuery({
     queryKey: ['global-search', 'owners', term],
     queryFn: () => listOwners({ search: term, limit: 5, offset: 0 }),
-    enabled,
+    enabled: enabled && canSearchOwners,
   });
   const animalsQuery = useQuery({
     queryKey: ['global-search', 'animals', term],
     queryFn: () => listAnimals({ search: term, limit: 5, offset: 0 }),
-    enabled,
+    enabled: enabled && canSearchAnimals,
   });
   const owners = ownersQuery.data?.items ?? [];
   const animals = animalsQuery.data?.items ?? [];
-  const hasResults = owners.length > 0 || animals.length > 0;
-  const isLoading = ownersQuery.isFetching || animalsQuery.isFetching;
-  const isError = ownersQuery.isError || animalsQuery.isError;
+  const hasResults = (canSearchOwners && owners.length > 0) || (canSearchAnimals && animals.length > 0);
+  const isLoading = (canSearchOwners && ownersQuery.isFetching) || (canSearchAnimals && animalsQuery.isFetching);
+  const isError = (canSearchOwners && ownersQuery.isError) || (canSearchAnimals && animalsQuery.isError);
   const popoverOpen = focused && enabled;
 
   useEffect(() => {
@@ -62,7 +67,11 @@ export function GlobalSearch() {
     }
 
     setFocused(false);
-    navigate(`/owners?search=${encodeURIComponent(term)}`);
+    navigate(`${canSearchOwners ? '/owners' : '/patients'}?search=${encodeURIComponent(term)}`);
+  }
+
+  if (!canSearchOwners && !canSearchAnimals) {
+    return null;
   }
 
   return (
@@ -95,40 +104,44 @@ export function GlobalSearch() {
           ) : null}
           {!isLoading && !isError && hasResults ? (
             <Space direction="vertical" size={10} className="full-width">
-              <SearchSection title="Владельцы">
-                {owners.map((owner) => (
-                  <button
-                    key={owner.id}
-                    type="button"
-                    className="global-search-row"
-                    onClick={() => openPath(`/owners/${owner.id}`)}
-                  >
-                    <UserOutlined />
-                    <span>
-                      <Typography.Text strong>{owner.fullName}</Typography.Text>
-                      <Typography.Text type="secondary">{formatOwnerDetails(owner)}</Typography.Text>
-                    </span>
-                  </button>
-                ))}
-              </SearchSection>
-              <SearchSection title="Пациенты">
-                {animals.map((animal) => (
-                  <button
-                    key={animal.id}
-                    type="button"
-                    className="global-search-row"
-                    onClick={() => openPath(`/patients/${animal.id}`)}
-                  >
-                    <AnimalSpeciesLabel species={animal.species} fallback="Вид не указан" showTooltip={false} />
-                    <span>
-                      <Typography.Text strong>{animal.nickname}</Typography.Text>
-                      <Typography.Text type="secondary">{formatAnimalDetails(animal)}</Typography.Text>
-                    </span>
-                  </button>
-                ))}
-              </SearchSection>
+              {canSearchOwners ? (
+                <SearchSection title="Владельцы">
+                  {owners.map((owner) => (
+                    <button
+                      key={owner.id}
+                      type="button"
+                      className="global-search-row"
+                      onClick={() => openPath(`/owners/${owner.id}`)}
+                    >
+                      <UserOutlined />
+                      <span>
+                        <Typography.Text strong>{owner.fullName}</Typography.Text>
+                        <Typography.Text type="secondary">{formatOwnerDetails(owner)}</Typography.Text>
+                      </span>
+                    </button>
+                  ))}
+                </SearchSection>
+              ) : null}
+              {canSearchAnimals ? (
+                <SearchSection title="Пациенты">
+                  {animals.map((animal) => (
+                    <button
+                      key={animal.id}
+                      type="button"
+                      className="global-search-row"
+                      onClick={() => openPath(`/patients/${animal.id}`)}
+                    >
+                      <AnimalSpeciesLabel species={animal.species} fallback="Вид не указан" showTooltip={false} />
+                      <span>
+                        <Typography.Text strong>{animal.nickname}</Typography.Text>
+                        <Typography.Text type="secondary">{formatAnimalDetails(animal)}</Typography.Text>
+                      </span>
+                    </button>
+                  ))}
+                </SearchSection>
+              ) : null}
               <button type="button" className="global-search-all" onClick={submitSearch}>
-                Открыть полный поиск по владельцам
+                {canSearchOwners ? 'Открыть полный поиск по владельцам' : 'Открыть полный поиск по пациентам'}
               </button>
             </Space>
           ) : null}

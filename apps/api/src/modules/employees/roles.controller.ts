@@ -9,7 +9,7 @@ export class RolesController {
   constructor(private readonly employeesService: EmployeesService) {}
 
   @Get()
-  @RequireAnyPermissions('employees.read', 'employees.manage', 'roles.manage')
+  @RequireAnyPermissions('employees.read', 'employees.manage', 'roles.manage', 'tasks.manage')
   @ApiOkResponse({ description: 'Available employee roles and permissions.' })
   listRoles() {
     return this.employeesService.listRoles();

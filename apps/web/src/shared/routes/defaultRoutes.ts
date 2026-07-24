@@ -1,4 +1,5 @@
 import type { Employee } from '../types/auth';
+import { canAccessPath, getFirstAccessibleRoute } from '../../auth/access';
 
 export const defaultRouteOptions = [
   { value: '/dashboard', label: 'Сводка' },
@@ -20,8 +21,12 @@ export const defaultRouteOptions = [
 
 const defaultRouteLabels = new Map(defaultRouteOptions.map((item) => [item.value, item.label]));
 
-export function getEmployeeDefaultRoute(employee?: Pick<Employee, 'defaultRoute'> | null) {
-  return employee?.defaultRoute || '/dashboard';
+export function getEmployeeDefaultRoute(employee?: Employee | null) {
+  if (employee?.defaultRoute && canAccessPath(employee, employee.defaultRoute)) {
+    return employee.defaultRoute;
+  }
+
+  return getFirstAccessibleRoute(employee ?? undefined);
 }
 
 export function getDefaultRouteLabel(route?: string | null) {

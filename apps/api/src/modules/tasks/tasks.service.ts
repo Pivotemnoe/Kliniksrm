@@ -4,6 +4,7 @@ import { parsePagination } from '../../common/pagination';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
+import { AuthEmployee } from '../auth/auth.types';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { ListTasksQueryDto } from './dto/list-tasks-query.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
@@ -16,7 +17,7 @@ export class TasksService {
     private readonly schedulingService: SchedulingService,
   ) {}
 
-  async listTasks(query: ListTasksQueryDto) {
+  async listTasks(query: ListTasksQueryDto, actor: AuthEmployee) {
     const { limit, offset } = parsePagination(query);
     const search = query.search?.trim();
     const where: Prisma.TaskWhereInput = {
@@ -25,6 +26,9 @@ export class TasksService {
       ...(query.animalId ? { animalId: query.animalId } : {}),
       ...(query.assigneeId ? { assigneeId: query.assigneeId } : {}),
       ...(query.assigneeRoleCode ? { assigneeRoleCode: query.assigneeRoleCode } : {}),
+      ...(query.mine === 'true'
+        ? { OR: [{ assigneeId: actor.id }, { assigneeRoleCode: { in: actor.roles } }] }
+        : {}),
       ...(query.dueFrom || query.dueTo
         ? {
             dueAt: {
@@ -35,14 +39,18 @@ export class TasksService {
         : {}),
       ...(search
         ? {
-            OR: [
-              { title: { contains: search, mode: 'insensitive' } },
-              { comment: { contains: search, mode: 'insensitive' } },
-              { taskType: { contains: search, mode: 'insensitive' } },
-              { owner: { fullName: { contains: search, mode: 'insensitive' } } },
-              { owner: { phone: { contains: search, mode: 'insensitive' } } },
-              { animal: { nickname: { contains: search, mode: 'insensitive' } } },
-              { assignee: { fullName: { contains: search, mode: 'insensitive' } } },
+            AND: [
+              {
+                OR: [
+                  { title: { contains: search, mode: 'insensitive' } },
+                  { comment: { contains: search, mode: 'insensitive' } },
+                  { taskType: { contains: search, mode: 'insensitive' } },
+                  { owner: { fullName: { contains: search, mode: 'insensitive' } } },
+                  { owner: { phone: { contains: search, mode: 'insensitive' } } },
+                  { animal: { nickname: { contains: search, mode: 'insensitive' } } },
+                  { assignee: { fullName: { contains: search, mode: 'insensitive' } } },
+                ],
+              },
             ],
           }
         : {}),

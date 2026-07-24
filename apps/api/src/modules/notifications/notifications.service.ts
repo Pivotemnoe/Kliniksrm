@@ -1,10 +1,13 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { ClientPortalStatus, NotificationStatus, Prisma } from '@prisma/client';
+import { BadRequestException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { ClientPortalStatus, NotificationChannel, NotificationStatus, Prisma } from '@prisma/client';
 import { randomBytes, createHash } from 'node:crypto';
 import { parsePagination } from '../../common/pagination';
 import { AuditService } from '../audit/audit.service';
+import { MaxBotClient, MaxPortalInviteDelivery } from './providers/max-bot.client';
+import { OwnerGatewayClient, OwnerMessengerChannel } from './providers/owner-gateway.client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateNotificationDto } from './dto/create-notification.dto';
+import { CreatePortalInviteDto, PortalInviteChannel } from './dto/create-portal-invite.dto';
 import { ListNotificationsQueryDto } from './dto/list-notifications-query.dto';
 import { ListTemplatesQueryDto } from './dto/list-templates-query.dto';
 import { UpdatePortalAccessDto } from './dto/update-portal-access.dto';
@@ -15,6 +18,8 @@ export class NotificationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
+    private readonly maxBotClient: MaxBotClient,
+    private readonly ownerGatewayClient: OwnerGatewayClient,
   ) {}
 
   async listOutbox(query: ListNotificationsQueryDto) {
@@ -52,6 +57,15 @@ export class NotificationsService {
     const ownerId = emptyToNull(dto.ownerId);
     const animalId = emptyToNull(dto.animalId);
     const templateId = emptyToNull(dto.templateId);
+    const directRecipient = emptyToNull(dto.recipient);
+
+    if (dto.channel === NotificationChannel.MESSENGER && !ownerId) {
+      throw new BadRequestException('Для автоматической отправки выберите владельца');
+    }
+
+    if (dto.channel !== NotificationChannel.MESSENGER && !directRecipient) {
+      throw new BadRequestException('Укажите получателя');
+    }
 
     if (ownerId) {
       await this.ensureOwnerExists(ownerId);
@@ -80,10 +94,21 @@ export class NotificationsService {
         templateId,
         createdById: actorId,
         channel: dto.channel,
-        recipient: dto.recipient.trim(),
+        recipient: directRecipient ?? `owner:${ownerId}`,
         subject: renderNotificationTemplate(emptyToNull(dto.subject), templateContext),
         body: renderNotificationTemplate(dto.body.trim(), templateContext) ?? '',
         scheduledAt,
+        ...(dto.channel === NotificationChannel.MESSENGER && dto.messengerChannels !== undefined
+          ? {
+              metadata: {
+                delivery: {
+                  mode: 'EXPLICIT',
+                  messengerChannels: dto.messengerChannels,
+                  deliveredMessengerChannels: [],
+                },
+              },
+            }
+          : {}),
       },
       include: notificationInclude,
     });
@@ -204,13 +229,17 @@ export class NotificationsService {
     const access = await this.prisma.clientPortalAccess.findUnique({
       where: { ownerId },
     });
+    const gatewayStatus = await this.ownerGatewayClient.getStatus(ownerId);
 
-    return access ?? { id: null, ownerId, owner, status: ClientPortalStatus.DISABLED };
+    return access
+      ? { ...access, gatewayStatus }
+      : { id: null, ownerId, owner, status: ClientPortalStatus.DISABLED, gatewayStatus };
   }
 
   async updatePortalAccess(ownerId: string, dto: UpdatePortalAccessDto, actorId: string) {
     await this.ensureOwnerExists(ownerId);
     const inviteToken = dto.status === ClientPortalStatus.INVITED ? randomBytes(24).toString('hex') : null;
+    const invalidatesTokens = dto.status === ClientPortalStatus.DISABLED || dto.status === ClientPortalStatus.BLOCKED;
     const access = await this.prisma.clientPortalAccess.upsert({
       where: { ownerId },
       create: {
@@ -218,33 +247,221 @@ export class NotificationsService {
         status: dto.status,
         blockedReason: dto.status === ClientPortalStatus.BLOCKED ? emptyToNull(dto.blockedReason) : null,
         inviteTokenHash: inviteToken ? hashToken(inviteToken) : null,
-        inviteExpiresAt: inviteToken ? addDays(new Date(), 7) : null,
+        inviteExpiresAt: inviteToken ? addHours(new Date(), 24) : null,
         invitedAt: inviteToken ? new Date() : null,
       },
       update: {
         status: dto.status,
         blockedReason: dto.status === ClientPortalStatus.BLOCKED ? emptyToNull(dto.blockedReason) : null,
-        inviteTokenHash: inviteToken ? hashToken(inviteToken) : undefined,
-        inviteExpiresAt: inviteToken ? addDays(new Date(), 7) : undefined,
+        inviteTokenHash: inviteToken ? hashToken(inviteToken) : invalidatesTokens ? null : undefined,
+        inviteExpiresAt: inviteToken ? addHours(new Date(), 24) : invalidatesTokens ? null : undefined,
         invitedAt: inviteToken ? new Date() : undefined,
+        loginCodeHash: invalidatesTokens ? null : undefined,
+        loginCodeExpiresAt: invalidatesTokens ? null : undefined,
+        loginCodeAttempts: invalidatesTokens ? 0 : undefined,
       },
       include: {
         owner: { select: { id: true, fullName: true, phone: true, email: true } },
       },
     });
+    const gatewaySync = invalidatesTokens ? await this.ownerGatewayClient.revokeAccess(ownerId) : undefined;
 
     await this.auditService.log({
       actorId,
       action: 'client_portal.access_update',
       entityType: 'ClientPortalAccess',
       entityId: access.id,
-      metadata: { ownerId, status: access.status },
+      metadata: { ownerId, status: access.status, gatewaySync },
+    });
+
+    return { ...access, inviteToken, gatewaySync };
+  }
+
+  async createPortalInvite(ownerId: string, dto: CreatePortalInviteDto, actorId: string) {
+    const owner = await this.prisma.owner.findUnique({
+      where: { id: ownerId },
+      select: {
+        id: true,
+        fullName: true,
+        phone: true,
+        email: true,
+        telegramChatId: true,
+        maxUserId: true,
+      },
+    });
+
+    if (!owner) {
+      throw new NotFoundException('Владелец не найден');
+    }
+
+    const inviteToken = randomBytes(24).toString('hex');
+    const now = new Date();
+    const inviteExpiresAt = addHours(now, 24);
+    const notificationChannel = toNotificationChannel(dto.channel);
+    const directRecipient = getDirectInviteRecipient(owner, dto.channel);
+
+    const access = await this.prisma.$transaction(async (tx) => {
+      if (notificationChannel) {
+        await tx.owner.update({
+          where: { id: ownerId },
+          data: {
+            preferredNotificationChannel: notificationChannel,
+            ...(notificationChannel === NotificationChannel.MAX ? { allowMax: true } : { allowTelegram: true }),
+          },
+        });
+      }
+
+      return tx.clientPortalAccess.upsert({
+        where: { ownerId },
+        create: {
+          ownerId,
+          status: ClientPortalStatus.INVITED,
+          inviteTokenHash: hashToken(inviteToken),
+          inviteExpiresAt,
+          invitedAt: now,
+        },
+        update: {
+          status: ClientPortalStatus.INVITED,
+          blockedReason: null,
+          inviteTokenHash: hashToken(inviteToken),
+          inviteExpiresAt,
+          invitedAt: now,
+          loginCodeHash: null,
+          loginCodeExpiresAt: null,
+          loginCodeAttempts: 0,
+        },
+        include: {
+          owner: { select: { id: true, fullName: true, phone: true, email: true } },
+        },
+      });
+    });
+
+    const gatewayResult = await this.ownerGatewayClient.syncInvitation({
+      ownerId,
+      displayName: owner.fullName,
+      token: inviteToken,
+      channel: dto.channel,
+      expiresAt: inviteExpiresAt,
+    });
+    const automaticDelivery = gatewayResult.status === 'synced'
+      ? gatewayResult.automaticDelivery
+      : await this.deliverPortalInvite(dto.channel, ownerId, directRecipient, inviteToken);
+
+    await this.auditService.log({
+      actorId,
+      action: 'client_portal.invite_create',
+      entityType: 'ClientPortalAccess',
+      entityId: access.id,
+      metadata: {
+        ownerId,
+        channel: dto.channel,
+        directDeliveryAvailable: Boolean(directRecipient),
+        automaticDelivery,
+        gatewaySync: gatewayResult.status,
+        gatewayFailureReason: gatewayResult.failureReason,
+      },
     });
 
     return {
       ...access,
       inviteToken,
+      inviteChannel: dto.channel,
+      directDeliveryAvailable: Boolean(directRecipient),
+      deliveryUrl: gatewayResult.deliveryUrl,
+      automaticDelivery,
+      gatewaySync: gatewayResult.status,
     };
+  }
+
+  async syncPortalSnapshot(ownerId: string, actorId: string) {
+    const owner = await this.prisma.owner.findUnique({
+      where: { id: ownerId },
+      select: { id: true, fullName: true },
+    });
+
+    if (!owner) {
+      throw new NotFoundException('Владелец не найден');
+    }
+
+    const status = await this.ownerGatewayClient.syncSnapshot({ ownerId, displayName: owner.fullName });
+    await this.auditService.log({
+      actorId,
+      action: 'client_portal.snapshot_sync',
+      entityType: 'Owner',
+      entityId: ownerId,
+      metadata: { status },
+    });
+
+    return { ok: status === 'synced', status };
+  }
+
+  async resetPortalConnection(ownerId: string, channelValue: string, actorId: string) {
+    const channel = normalizeOwnerMessengerChannel(channelValue);
+    await this.ensureOwnerExists(ownerId);
+
+    const gatewaySync = await this.ownerGatewayClient.resetConnection(ownerId, channel);
+    if (gatewaySync !== 'synced') {
+      throw new ServiceUnavailableException(
+        'Публичный шлюз не подтвердил сброс. Привязка и текущие входы сохранены, повторите позже.',
+      );
+    }
+
+    const access = await this.prisma.$transaction(async (tx) => {
+      await tx.owner.update({
+        where: { id: ownerId },
+        data: channel === 'MAX' ? { maxUserId: null } : { telegramChatId: null },
+      });
+
+      return tx.clientPortalAccess.upsert({
+        where: { ownerId },
+        create: { ownerId, status: ClientPortalStatus.DISABLED },
+        update: {
+          status: ClientPortalStatus.DISABLED,
+          inviteTokenHash: null,
+          inviteExpiresAt: null,
+          invitedAt: null,
+          lastLoginAt: null,
+          loginCodeHash: null,
+          loginCodeExpiresAt: null,
+          loginCodeAttempts: 0,
+          blockedReason: null,
+        },
+        include: {
+          owner: { select: { id: true, fullName: true, phone: true, email: true } },
+        },
+      });
+    });
+
+    await this.auditService.log({
+      actorId,
+      action: 'client_portal.connection_reset',
+      entityType: 'ClientPortalAccess',
+      entityId: access.id,
+      metadata: { ownerId, channel, gatewaySync },
+    });
+
+    return { ...access, channel, gatewaySync };
+  }
+
+  private async deliverPortalInvite(
+    channel: PortalInviteChannel,
+    ownerId: string,
+    recipient: string | null,
+    inviteToken: string,
+  ): Promise<MaxPortalInviteDelivery | 'manual_required' | 'not_implemented'> {
+    if (!recipient) {
+      return 'manual_required';
+    }
+
+    if (channel === PortalInviteChannel.MAX) {
+      return this.maxBotClient.sendPortalInvite(ownerId, recipient, inviteToken);
+    }
+
+    if (channel === PortalInviteChannel.TELEGRAM) {
+      return 'not_implemented';
+    }
+
+    return 'manual_required';
   }
 
   private async ensureOwnerExists(ownerId: string) {
@@ -447,8 +664,44 @@ function hashToken(token: string) {
   return createHash('sha256').update(token).digest('hex');
 }
 
-function addDays(date: Date, days: number) {
+function normalizeOwnerMessengerChannel(value: string): OwnerMessengerChannel {
+  const normalized = value.trim().toUpperCase();
+  if (normalized === 'MAX' || normalized === 'TELEGRAM') {
+    return normalized;
+  }
+
+  throw new BadRequestException('Поддерживается сброс только MAX или Telegram');
+}
+
+function addHours(date: Date, hours: number) {
   const next = new Date(date);
-  next.setDate(next.getDate() + days);
+  next.setHours(next.getHours() + hours);
   return next;
+}
+
+function toNotificationChannel(channel: PortalInviteChannel) {
+  if (channel === PortalInviteChannel.MAX) {
+    return NotificationChannel.MAX;
+  }
+
+  if (channel === PortalInviteChannel.TELEGRAM) {
+    return NotificationChannel.TELEGRAM;
+  }
+
+  return null;
+}
+
+function getDirectInviteRecipient(
+  owner: { telegramChatId: string | null; maxUserId: string | null },
+  channel: PortalInviteChannel,
+) {
+  if (channel === PortalInviteChannel.MAX) {
+    return owner.maxUserId;
+  }
+
+  if (channel === PortalInviteChannel.TELEGRAM) {
+    return owner.telegramChatId;
+  }
+
+  return null;
 }

@@ -34,6 +34,7 @@ import {
 
 const pageSize = 10;
 const channelOptions = Object.entries(notificationChannelLabels).map(([value, label]) => ({ value, label }));
+const automaticMessengerOption = [{ value: 'MESSENGER', label: notificationChannelLabels.MESSENGER }];
 
 export function MessagesPage() {
   const queryClient = useQueryClient();
@@ -51,6 +52,9 @@ export function MessagesPage() {
   const outboxQuery = useQuery({
     queryKey: ['notifications', 'outbox', { status, channel, limit: pageSize, offset }],
     queryFn: () => listNotificationOutbox({ status, channel, limit: pageSize, offset }),
+    refetchInterval: (query) => query.state.data?.items.some(
+      (item) => item.status === 'QUEUED' || item.status === 'SENDING',
+    ) ? 2_000 : false,
   });
   const templatesQuery = useQuery({
     queryKey: ['notifications', 'templates'],
@@ -237,7 +241,7 @@ export function MessagesPage() {
     <div className="page">
       <PageHeader
         title="Сообщения"
-        description="Локальная очередь уведомлений, шаблоны и будущие внешние каналы Telegram, MAX, SMS, email."
+        description="Сообщения владельцам сейчас или в указанную дату, очередь отправки и шаблоны."
         extra={
           canManage ? (
             <Space wrap>
@@ -437,14 +441,22 @@ function NotificationDetailDrawer({
 }
 
 const notificationSchema = z.object({
-  channel: z.enum(['INTERNAL', 'TELEGRAM', 'MAX', 'SMS', 'EMAIL', 'PUSH']),
+  channel: z.enum(['INTERNAL', 'MESSENGER', 'TELEGRAM', 'MAX', 'SMS', 'EMAIL', 'PUSH']),
   ownerId: nullableString(),
   animalId: nullableString(),
   templateId: nullableString(),
-  recipient: z.string().trim().min(2, 'Укажите получателя').max(300),
+  recipient: z.string().trim().max(300),
   subject: nullableString(300),
   body: z.string().trim().min(1, 'Введите текст').max(4000),
   scheduledAt: nullableDateTime(),
+}).superRefine((values, context) => {
+  if (values.channel === 'MESSENGER' && !values.ownerId) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['ownerId'], message: 'Выберите владельца' });
+  }
+
+  if (values.channel !== 'MESSENGER' && values.recipient.length < 2) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['recipient'], message: 'Укажите получателя' });
+  }
 });
 
 type NotificationFormValues = z.infer<typeof notificationSchema>;
@@ -471,6 +483,7 @@ function NotificationFormDrawer({
   });
   const [ownerSearch, setOwnerSearch] = useState('');
   const ownerId = useWatch({ control, name: 'ownerId' });
+  const channel = useWatch({ control, name: 'channel' });
   const ownersQuery = useQuery({
     queryKey: ['owners', { search: ownerSearch, limit: 20, offset: 0 }],
     queryFn: () => listOwners({ search: ownerSearch, limit: 20, offset: 0 }),
@@ -495,7 +508,7 @@ function NotificationFormDrawer({
       ownerId: values.ownerId,
       animalId: values.animalId,
       templateId: values.templateId,
-      recipient: values.recipient,
+      recipient: values.channel === 'MESSENGER' ? undefined : values.recipient,
       subject: values.subject,
       body: values.body,
       scheduledAt: values.scheduledAt ? fromDatetimeLocal(values.scheduledAt) : null,
@@ -527,7 +540,7 @@ function NotificationFormDrawer({
             name="channel"
             render={({ field }) => (
               <Form.Item label="Канал">
-                <Select {...field} options={channelOptions} />
+                <Select {...field} options={automaticMessengerOption} />
               </Form.Item>
             )}
           />
@@ -583,6 +596,15 @@ function NotificationFormDrawer({
             )}
           />
         </div>
+        {channel === 'MESSENGER' ? (
+          <Alert
+            type="info"
+            showIcon
+            className="form-alert"
+            message="Сообщение будет отправлено в подключённый MAX или Telegram"
+            description="Если ни один мессенджер ещё не подключён, сначала создайте владельцу приглашение на вкладке «Связь»."
+          />
+        ) : null}
         <Controller
           control={control}
           name="templateId"
@@ -600,7 +622,7 @@ function NotificationFormDrawer({
                   field.onChange(value ?? '');
                   const template = templates.find((item) => item.id === value);
                   if (template) {
-                    setValue('channel', template.channel as NotificationChannel);
+                    setValue('channel', 'MESSENGER');
                     setValue('subject', template.subject ?? '');
                     setValue('body', template.body);
                   }
@@ -609,15 +631,17 @@ function NotificationFormDrawer({
             </Form.Item>
           )}
         />
-        <Controller
-          control={control}
-          name="recipient"
-          render={({ field, fieldState }) => (
-            <Form.Item label="Получатель" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
-              <Input {...field} placeholder="chat id, телефон, email или внутренний идентификатор" />
-            </Form.Item>
-          )}
-        />
+        {channel !== 'MESSENGER' ? (
+          <Controller
+            control={control}
+            name="recipient"
+            render={({ field, fieldState }) => (
+              <Form.Item label="Получатель" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+                <Input {...field} placeholder="Телефон, email или адрес получателя" />
+              </Form.Item>
+            )}
+          />
+        ) : null}
         <Controller
           control={control}
           name="subject"
@@ -779,7 +803,7 @@ function TemplateFormDrawer({
 
 function getNotificationDefaults(): NotificationFormInput {
   return {
-    channel: 'TELEGRAM',
+    channel: 'MESSENGER',
     ownerId: '',
     animalId: '',
     templateId: '',

@@ -1,17 +1,28 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { NotificationChannel } from '@prisma/client';
-import { IsDateString, IsEnum, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { ArrayUnique, IsArray, IsDateString, IsEnum, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 export class CreateNotificationDto {
   @ApiProperty({ enum: NotificationChannel })
   @IsEnum(NotificationChannel)
   channel!: NotificationChannel;
 
-  @ApiProperty()
+  @ApiPropertyOptional({ description: 'Required for direct channels; selected automatically for MESSENGER.' })
+  @IsOptional()
   @IsString()
-  @MinLength(2)
   @MaxLength(300)
-  recipient!: string;
+  recipient?: string;
+
+  @ApiPropertyOptional({
+    enum: [NotificationChannel.MAX, NotificationChannel.TELEGRAM],
+    isArray: true,
+    description: 'Additional messenger deliveries for an owner message. An empty list means personal cabinet only.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsIn([NotificationChannel.MAX, NotificationChannel.TELEGRAM], { each: true })
+  messengerChannels?: NotificationChannel[];
 
   @ApiProperty()
   @IsString()

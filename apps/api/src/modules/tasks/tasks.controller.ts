@@ -16,8 +16,8 @@ export class TasksController {
   @Get()
   @RequirePermissions('tasks.read')
   @ApiOkResponse({ description: 'Task list.' })
-  listTasks(@Query() query: ListTasksQueryDto) {
-    return this.tasksService.listTasks(query);
+  listTasks(@Query() query: ListTasksQueryDto, @CurrentEmployee() actor: AuthEmployee) {
+    return this.tasksService.listTasks(query, actor);
   }
 
   @Post()

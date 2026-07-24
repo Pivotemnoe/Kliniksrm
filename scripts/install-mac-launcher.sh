@@ -7,7 +7,18 @@ CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
 EXECUTABLE="$MACOS_DIR/TemichevVetLauncher"
-TERMINAL_COMMAND="cd $(printf '%q' "$ROOT_DIR") && scripts/start-clinic-server.sh --update-images --open; echo; read -r -p \"TemichevVet обновлён и запущен. Нажмите Enter, чтобы закрыть это окно...\" _"
+START_OPTIONS="--update-images --open"
+
+if [[ -f "$ROOT_DIR/.env" ]]; then
+  API_IMAGE="$(grep -E '^TEMICHEVVET_API_IMAGE=' "$ROOT_DIR/.env" | tail -1 | cut -d '=' -f2- || true)"
+  WEB_IMAGE="$(grep -E '^TEMICHEVVET_WEB_IMAGE=' "$ROOT_DIR/.env" | tail -1 | cut -d '=' -f2- || true)"
+
+  if [[ "$API_IMAGE" == temichevvet-api:* && "$WEB_IMAGE" == temichevvet-web:* ]]; then
+    START_OPTIONS="--no-image-update --open"
+  fi
+fi
+
+TERMINAL_COMMAND="cd $(printf '%q' "$ROOT_DIR") && scripts/start-clinic-server.sh $START_OPTIONS; echo; printf \"TemichevVet запущен. Нажмите Enter, чтобы закрыть это окно...\"; read -r reply"
 APPLESCRIPT_COMMAND="${TERMINAL_COMMAND//\\/\\\\}"
 APPLESCRIPT_COMMAND="${APPLESCRIPT_COMMAND//\"/\\\"}"
 
@@ -67,4 +78,4 @@ fi
 echo "Mac-ярлык обновлён:"
 echo "  $APP_DIR"
 echo "Команда запуска:"
-echo "  scripts/start-clinic-server.sh --update-images --open"
+echo "  scripts/start-clinic-server.sh $START_OPTIONS"

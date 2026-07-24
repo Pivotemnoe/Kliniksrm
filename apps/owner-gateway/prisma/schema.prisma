@@ -1,0 +1,109 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("OWNER_GATEWAY_DATABASE_URL")
+}
+
+enum PortalInviteChannel {
+  WEB
+  MAX
+  TELEGRAM
+}
+
+enum PortalInviteStatus {
+  ACTIVE
+  REDEEMED
+  REVOKED
+}
+
+enum MessengerChannel {
+  MAX
+  TELEGRAM
+}
+
+model OwnerSnapshot {
+  ownerId         String             @id
+  displayName     String
+  payload         Json
+  sourceVersion   String
+  sourceUpdatedAt DateTime
+  syncedAt        DateTime           @default(now())
+  invitations     PortalInvitation[]
+  bindings        MessengerBinding[]
+  sessions        PortalSession[]
+  pushSubscriptions PortalPushSubscription[]
+
+  @@index([syncedAt])
+}
+
+model PortalInvitation {
+  id         String             @id @default(uuid())
+  ownerId    String
+  owner      OwnerSnapshot      @relation(fields: [ownerId], references: [ownerId], onDelete: Cascade)
+  tokenHash  String             @unique
+  channel    PortalInviteChannel
+  status     PortalInviteStatus @default(ACTIVE)
+  expiresAt  DateTime
+  redeemedAt DateTime?
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+  sessions   PortalSession[]
+
+  @@index([ownerId, status])
+  @@index([status, expiresAt])
+}
+
+model MessengerBinding {
+  id             String           @id @default(uuid())
+  ownerId        String
+  owner          OwnerSnapshot    @relation(fields: [ownerId], references: [ownerId], onDelete: Cascade)
+  channel        MessengerChannel
+  externalUserId String
+  chatId         String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([ownerId, channel])
+  @@unique([channel, externalUserId])
+}
+
+model PortalSession {
+  id         String            @id @default(uuid())
+  ownerId    String
+  owner      OwnerSnapshot     @relation(fields: [ownerId], references: [ownerId], onDelete: Cascade)
+  inviteId   String?
+  invitation PortalInvitation? @relation(fields: [inviteId], references: [id], onDelete: SetNull)
+  tokenHash  String            @unique
+  expiresAt  DateTime
+  lastSeenAt DateTime          @default(now())
+  revokedAt  DateTime?
+  createdAt  DateTime          @default(now())
+  pushSubscriptions PortalPushSubscription[]
+
+  @@index([ownerId, expiresAt])
+  @@index([expiresAt, revokedAt])
+}
+
+model PortalPushSubscription {
+  id            String        @id @default(uuid())
+  ownerId       String
+  owner         OwnerSnapshot @relation(fields: [ownerId], references: [ownerId], onDelete: Cascade)
+  sessionId     String
+  session       PortalSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  endpoint      String        @unique
+  p256dh        String
+  auth          String
+  userAgent     String?
+  failureCount  Int           @default(0)
+  lastSuccessAt DateTime?
+  disabledAt    DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([ownerId, disabledAt])
+  @@index([sessionId])
+}

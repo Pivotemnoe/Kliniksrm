@@ -52,6 +52,7 @@ export class QueueService {
     const where: Prisma.QueueEntryWhereInput = {
       ...(query.status ? { status: query.status } : {}),
       ...(query.urgency ? { urgency: query.urgency } : {}),
+      ...(query.employeeId ? { employeeId: query.employeeId } : {}),
       ...(query.dateFrom || query.dateTo
         ? {
             createdAt: {

@@ -4,6 +4,7 @@ import { AuthEmployee } from '../auth/auth.types';
 import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { CreateNotificationDto } from './dto/create-notification.dto';
+import { CreatePortalInviteDto } from './dto/create-portal-invite.dto';
 import { ListNotificationsQueryDto } from './dto/list-notifications-query.dto';
 import { ListTemplatesQueryDto } from './dto/list-templates-query.dto';
 import { UpdatePortalAccessDto } from './dto/update-portal-access.dto';
@@ -69,5 +70,30 @@ export class NotificationsController {
   @ApiOkResponse({ description: 'Owner client portal access updated.' })
   updatePortalAccess(@Param('ownerId') ownerId: string, @Body() dto: UpdatePortalAccessDto, @CurrentEmployee() actor: AuthEmployee) {
     return this.notificationsService.updatePortalAccess(ownerId, dto, actor.id);
+  }
+
+  @Post('owners/:ownerId/portal-invites')
+  @RequirePermissions('notifications.manage')
+  @ApiCreatedResponse({ description: 'Channel-aware owner portal invitation created.' })
+  createPortalInvite(@Param('ownerId') ownerId: string, @Body() dto: CreatePortalInviteDto, @CurrentEmployee() actor: AuthEmployee) {
+    return this.notificationsService.createPortalInvite(ownerId, dto, actor.id);
+  }
+
+  @Post('owners/:ownerId/portal-sync')
+  @RequirePermissions('notifications.manage')
+  @ApiOkResponse({ description: 'Allowed owner portal snapshot synchronized to the public gateway.' })
+  syncPortalSnapshot(@Param('ownerId') ownerId: string, @CurrentEmployee() actor: AuthEmployee) {
+    return this.notificationsService.syncPortalSnapshot(ownerId, actor.id);
+  }
+
+  @Post('owners/:ownerId/portal-connections/:channel/reset')
+  @RequirePermissions('notifications.manage')
+  @ApiOkResponse({ description: 'Owner messenger binding and active public portal sessions reset.' })
+  resetPortalConnection(
+    @Param('ownerId') ownerId: string,
+    @Param('channel') channel: string,
+    @CurrentEmployee() actor: AuthEmployee,
+  ) {
+    return this.notificationsService.resetPortalConnection(ownerId, channel, actor.id);
   }
 }

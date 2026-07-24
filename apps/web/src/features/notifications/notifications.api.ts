@@ -3,7 +3,9 @@ import { PaginatedResponse } from '../../shared/types/api';
 import { buildQuery } from '../../shared/utils/query';
 import {
   ClientPortalAccess,
+  ClientPortalInvite,
   CreateNotificationInput,
+  CreatePortalInviteInput,
   NotificationChannel,
   NotificationOutboxItem,
   NotificationStatus,
@@ -65,4 +67,25 @@ export function updatePortalAccess(ownerId: string, input: UpdatePortalAccessInp
     method: 'PATCH',
     body: input,
   });
+}
+
+export function createPortalInvite(ownerId: string, input: CreatePortalInviteInput) {
+  return apiRequest<ClientPortalInvite>(`/v1/notifications/owners/${ownerId}/portal-invites`, {
+    method: 'POST',
+    body: input,
+  });
+}
+
+export function syncPortalSnapshot(ownerId: string) {
+  return apiRequest<{ ok: boolean; status: 'synced' | 'skipped_not_configured' | 'failed' }>(
+    `/v1/notifications/owners/${ownerId}/portal-sync`,
+    { method: 'POST' },
+  );
+}
+
+export function resetPortalConnection(ownerId: string, channel: 'MAX' | 'TELEGRAM') {
+  return apiRequest<ClientPortalAccess & { channel: 'MAX' | 'TELEGRAM'; gatewaySync: 'synced' }>(
+    `/v1/notifications/owners/${ownerId}/portal-connections/${channel}/reset`,
+    { method: 'POST' },
+  );
 }

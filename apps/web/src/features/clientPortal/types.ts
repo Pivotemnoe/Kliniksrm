@@ -56,7 +56,6 @@ export type PortalAppointment = {
   startsAt: string;
   endsAt: string | null;
   status: string;
-  comment: string | null;
   animal: Pick<PortalAnimal, 'id' | 'nickname' | 'species'>;
   employee: { id: string; fullName: string; position: string | null } | null;
   room: { id: string; name: string } | null;
@@ -89,7 +88,6 @@ export type PortalBill = {
 export type PortalNotification = {
   id: string;
   channel: string;
-  recipient: string;
   subject: string | null;
   body: string;
   status: string;

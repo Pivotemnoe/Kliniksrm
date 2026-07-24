@@ -7,5 +7,6 @@ import { ClientPortalService } from './client-portal.service';
   imports: [AuditModule],
   controllers: [ClientPortalController],
   providers: [ClientPortalService],
+  exports: [ClientPortalService],
 })
 export class ClientPortalModule {}

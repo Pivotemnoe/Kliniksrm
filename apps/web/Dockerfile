@@ -13,6 +13,7 @@ ENV VITE_IDLE_LOGOUT_MINUTES=$VITE_IDLE_LOGOUT_MINUTES
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/package.json
 COPY apps/web/package.json apps/web/package.json
+COPY apps/owner-gateway/package.json apps/owner-gateway/package.json
 COPY packages/shared/package.json packages/shared/package.json
 
 RUN npm ci

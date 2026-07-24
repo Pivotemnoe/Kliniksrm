@@ -1,6 +1,7 @@
-export type NotificationChannel = 'INTERNAL' | 'TELEGRAM' | 'MAX' | 'SMS' | 'EMAIL' | 'PUSH';
+export type NotificationChannel = 'INTERNAL' | 'MESSENGER' | 'TELEGRAM' | 'MAX' | 'SMS' | 'EMAIL' | 'PUSH';
 export type NotificationStatus = 'QUEUED' | 'SENDING' | 'SENT' | 'FAILED' | 'CANCELLED';
 export type ClientPortalStatus = 'DISABLED' | 'ENABLED' | 'INVITED' | 'BLOCKED';
+export type PortalInviteChannel = 'MAX' | 'TELEGRAM' | 'WEB';
 
 export type NotificationOutboxItem = {
   id: string;
@@ -19,6 +20,7 @@ export type NotificationOutboxItem = {
   lastError: string | null;
   createdAt: string;
   updatedAt: string;
+  metadata?: Record<string, unknown> | null;
   owner?: {
     id: string;
     fullName: string;
@@ -66,6 +68,13 @@ export type ClientPortalAccess = {
   lastLoginAt?: string | null;
   blockedReason?: string | null;
   inviteToken?: string | null;
+  gatewayStatus?: {
+    hasSnapshot: boolean;
+    maxLinked: boolean;
+    telegramLinked: boolean;
+    syncedAt: string | null;
+  } | null;
+  gatewaySync?: 'synced' | 'skipped_not_configured' | 'failed';
   owner?: {
     id: string;
     fullName: string;
@@ -76,13 +85,14 @@ export type ClientPortalAccess = {
 
 export type CreateNotificationInput = {
   channel: NotificationChannel;
-  recipient: string;
+  recipient?: string;
   body: string;
   subject?: string | null;
   ownerId?: string | null;
   animalId?: string | null;
   templateId?: string | null;
   scheduledAt?: string | null;
+  messengerChannels?: Array<'MAX' | 'TELEGRAM'>;
 };
 
 export type UpsertNotificationTemplateInput = {
@@ -99,8 +109,21 @@ export type UpdatePortalAccessInput = {
   blockedReason?: string | null;
 };
 
+export type ClientPortalInvite = ClientPortalAccess & {
+  inviteToken: string;
+  inviteChannel: PortalInviteChannel;
+  directDeliveryAvailable: boolean;
+  deliveryUrl: string | null;
+  automaticDelivery: 'sent' | 'failed' | 'skipped_not_configured' | 'manual_required' | 'not_implemented';
+};
+
+export type CreatePortalInviteInput = {
+  channel: PortalInviteChannel;
+};
+
 export const notificationChannelLabels: Record<NotificationChannel, string> = {
   INTERNAL: 'Внутреннее',
+  MESSENGER: 'Личный кабинет + мессенджер',
   TELEGRAM: 'Telegram',
   MAX: 'MAX',
   SMS: 'SMS',

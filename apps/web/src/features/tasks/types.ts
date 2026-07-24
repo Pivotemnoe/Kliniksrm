@@ -51,6 +51,7 @@ export type ListTasksQuery = {
   animalId?: string;
   assigneeId?: string;
   assigneeRoleCode?: string;
+  mine?: boolean;
   limit?: number;
   offset?: number;
 };

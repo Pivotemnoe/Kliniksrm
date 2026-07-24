@@ -23,7 +23,7 @@ import { listStockAlerts } from '../features/stock/stock.api';
 import { getEmployeeDefaultRoute } from '../shared/routes/defaultRoutes';
 import { formatMoney } from '../shared/utils/money';
 import { GlobalSearch } from './GlobalSearch';
-import { getSelectedMenuKey, menuItems } from './menu';
+import { getAccessibleMenuItems, getSelectedMenuKey } from './menu';
 import { useActivityTracking } from './useActivityTracking';
 
 const { Header, Sider, Content } = Layout;
@@ -43,6 +43,7 @@ export function CrmLayout() {
   const { data } = useCurrentEmployee();
   const logoutMutation = useLogoutMutation();
   const employee = data?.employee;
+  const accessibleMenuItems = useMemo(() => getAccessibleMenuItems(employee), [employee]);
   useActivityTracking(Boolean(employee));
   const selectedKey = useMemo(() => getSelectedMenuKey(location.pathname), [location.pathname]);
   const primaryRole = employee?.roles[0];
@@ -167,7 +168,7 @@ export function CrmLayout() {
           mode="inline"
           inlineCollapsed
           selectedKeys={[selectedKey]}
-          items={menuItems}
+          items={accessibleMenuItems}
           onClick={({ key }) => {
             const path = String(key);
             if (path.startsWith('/')) {
@@ -180,22 +181,28 @@ export function CrmLayout() {
         <Header className="crm-header">
           <GlobalSearch />
           <Space size={12} className="header-actions">
-            <Tooltip title="Сообщения">
-              <Button type="text" shape="circle" icon={<MessageOutlined />} onClick={() => navigate('/messages')} />
-            </Tooltip>
-            <Tooltip title="Онлайн-запись">
-              <Button type="text" shape="circle" icon={<CalendarOutlined />} onClick={() => navigate('/online-requests')} />
-            </Tooltip>
+            {canReadNotifications ? (
+              <Tooltip title="Сообщения">
+                <Button type="text" shape="circle" icon={<MessageOutlined />} onClick={() => navigate('/messages')} />
+              </Tooltip>
+            ) : null}
+            {canReadOnlineRequests ? (
+              <Tooltip title="Онлайн-запись">
+                <Button type="text" shape="circle" icon={<CalendarOutlined />} onClick={() => navigate('/online-requests')} />
+              </Tooltip>
+            ) : null}
             <Tooltip title={headerAlertTooltip}>
               <Badge count={headerAlertCount || undefined} size="small">
                 <Button type="text" shape="circle" icon={<BellOutlined />} onClick={() => navigate(headerAlertTarget)} />
               </Badge>
             </Tooltip>
-            <Tooltip title="Финансы клиники">
-              <Button type="text" icon={<WalletOutlined />} onClick={() => navigate('/settings/finance')}>
-                Финансы
-              </Button>
-            </Tooltip>
+            {hasPermission(employee, 'settings.read') ? (
+              <Tooltip title="Финансы клиники">
+                <Button type="text" icon={<WalletOutlined />} onClick={() => navigate('/settings/finance')}>
+                  Финансы
+                </Button>
+              </Tooltip>
+            ) : null}
             <Dropdown menu={{ items: employeeMenuItems }} trigger={['click']} placement="bottomRight">
               <button className="employee-menu-button" type="button">
                 <span className="employee-block">

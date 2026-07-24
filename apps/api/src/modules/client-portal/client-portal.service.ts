@@ -10,6 +10,7 @@ import { VerifyPortalCodeDto } from './dto/verify-portal-code.dto';
 const PORTAL_CODE_TTL_MINUTES = Number(process.env.CLIENT_PORTAL_CODE_TTL_MINUTES ?? 10);
 const PORTAL_CODE_MAX_ATTEMPTS = Number(process.env.CLIENT_PORTAL_CODE_MAX_ATTEMPTS ?? 5);
 const PORTAL_PHONE_TOKEN_DAYS = Number(process.env.CLIENT_PORTAL_PHONE_TOKEN_DAYS ?? 30);
+const PORTAL_ONLINE_REQUESTS_ENABLED = process.env.CLIENT_PORTAL_ONLINE_REQUESTS_ENABLED === 'true';
 
 @Injectable()
 export class ClientPortalService {
@@ -108,8 +109,26 @@ export class ClientPortalService {
   async getSummary(token: string) {
     const access = await this.resolveAccess(token);
     const ownerId = access.ownerId;
+    const snapshot = await this.buildOwnerGatewaySnapshot(ownerId);
 
-    const [owner, appointments, visits, bills, notifications, onlineRequests] = await this.prisma.$transaction([
+    return {
+      access: {
+        status: access.status,
+        invitedAt: access.invitedAt,
+        inviteExpiresAt: access.inviteExpiresAt,
+        lastLoginAt: access.lastLoginAt,
+      },
+      owner: { ...snapshot.owner, animals: snapshot.animals },
+      appointments: snapshot.appointments,
+      visits: snapshot.visits,
+      bills: snapshot.bills,
+      notifications: snapshot.notifications,
+      onlineRequests: [],
+    };
+  }
+
+  async buildOwnerGatewaySnapshot(ownerId: string) {
+    const [owner, appointments, visits, bills, notifications] = await this.prisma.$transaction([
       this.prisma.owner.findUnique({
         where: { id: ownerId },
         select: {
@@ -154,14 +173,13 @@ export class ClientPortalService {
           startsAt: true,
           endsAt: true,
           status: true,
-          comment: true,
           animal: { select: { id: true, nickname: true, species: true } },
           employee: { select: { id: true, fullName: true, position: true } },
           room: { select: { id: true, name: true } },
         },
       }),
       this.prisma.visit.findMany({
-        where: { ownerId },
+        where: { ownerId, status: 'COMPLETED' },
         orderBy: { startedAt: 'desc' },
         take: 30,
         select: {
@@ -175,7 +193,7 @@ export class ClientPortalService {
           diagnoses: { select: { id: true, title: true, status: true } },
           recommendation: { select: { treatmentPlan: true, careNotes: true } },
           documents: {
-            where: { status: { in: [DocumentStatus.GENERATED, DocumentStatus.SIGNED] } },
+            where: { status: DocumentStatus.SIGNED },
             select: { id: true, title: true, body: true, status: true, createdAt: true },
           },
         },
@@ -196,33 +214,23 @@ export class ClientPortalService {
         },
       }),
       this.prisma.notificationOutbox.findMany({
-        where: { ownerId },
+        where: {
+          ownerId,
+          channel: { not: 'INTERNAL' },
+          OR: [{ status: 'SENT' }, { channel: 'MESSENGER' }],
+        },
         orderBy: { createdAt: 'desc' },
-        take: 20,
+        take: 100,
         select: {
           id: true,
           channel: true,
-          recipient: true,
           subject: true,
           body: true,
           status: true,
           scheduledAt: true,
           sentAt: true,
           createdAt: true,
-        },
-      }),
-      this.prisma.onlineAppointmentRequest.findMany({
-        where: { ownerId },
-        orderBy: { createdAt: 'desc' },
-        take: 20,
-        select: {
-          id: true,
-          status: true,
-          preferredAt: true,
-          comment: true,
-          createdAt: true,
-          animal: { select: { id: true, nickname: true, species: true } },
-          appointment: { select: { id: true, startsAt: true, status: true } },
+          metadata: true,
         },
       }),
     ]);
@@ -231,23 +239,36 @@ export class ClientPortalService {
       throw new NotFoundException('Владелец не найден');
     }
 
+    const { animals, ...ownerProfile } = owner;
+    const visibleNotifications = notifications
+      .filter((notification) => notification.status === 'SENT' || getPortalDeliveredAt(notification.metadata))
+      .slice(0, 20)
+      .map(({ metadata, ...notification }) => {
+        const portalDeliveredAt = getPortalDeliveredAt(metadata);
+        return {
+          ...notification,
+          channel: 'Сообщение клиники',
+          status: 'SENT',
+          sentAt: notification.sentAt ?? portalDeliveredAt,
+        };
+      });
+
     return {
-      access: {
-        status: access.status,
-        invitedAt: access.invitedAt,
-        inviteExpiresAt: access.inviteExpiresAt,
-        lastLoginAt: access.lastLoginAt,
-      },
-      owner,
+      owner: ownerProfile,
+      animals,
       appointments,
       visits,
       bills,
-      notifications,
-      onlineRequests,
+      notifications: visibleNotifications,
+      syncedAt: new Date().toISOString(),
     };
   }
 
   async createOnlineRequest(token: string, dto: CreatePortalOnlineRequestDto) {
+    if (!PORTAL_ONLINE_REQUESTS_ENABLED) {
+      throw new ForbiddenException('Онлайн-запись через личный кабинет пока отключена');
+    }
+
     const access = await this.resolveAccess(token);
     const owner = await this.prisma.owner.findUnique({
       where: { id: access.ownerId },
@@ -371,6 +392,17 @@ export class ClientPortalService {
 
     return access;
   }
+}
+
+function getPortalDeliveredAt(metadata: Prisma.JsonValue | null) {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return null;
+  }
+  const delivery = metadata.delivery;
+  if (!delivery || typeof delivery !== 'object' || Array.isArray(delivery)) {
+    return null;
+  }
+  return typeof delivery.portalDeliveredAt === 'string' ? delivery.portalDeliveredAt : null;
 }
 
 type PortalOwnerForLogin = Prisma.OwnerGetPayload<{ include: { portalAccess: true } }>;

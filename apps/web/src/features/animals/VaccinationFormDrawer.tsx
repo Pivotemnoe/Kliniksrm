@@ -2,6 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Button, Checkbox, Drawer, Form, Input, Radio, Select, Space } from 'antd';
 import { Controller, useForm, useWatch } from 'react-hook-form';
+import { useEffect } from 'react';
 import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
 import { nullToEmpty } from '../../shared/utils/forms';
@@ -19,6 +20,7 @@ const vaccinationSchema = z
     vaccineSeries: nullableString(120),
     vaccineExpiresAt: nullableDateString(),
     smsReminder: z.boolean(),
+    ownerReminderEnabled: z.boolean(),
     notes: nullableString(1000),
     createRevaccinationTask: z.boolean(),
     revaccinationAssigneeMode: z.enum(['none', 'employee', 'role']),
@@ -76,6 +78,7 @@ export function VaccinationFormDrawer({
     defaultValues: getDefaultValues(initialVaccination),
   });
   const expiresAt = useWatch({ control, name: 'expiresAt' });
+  const vaccinatedAt = useWatch({ control, name: 'vaccinatedAt' });
   const createRevaccinationTask = useWatch({ control, name: 'createRevaccinationTask' });
   const revaccinationAssigneeMode = useWatch({ control, name: 'revaccinationAssigneeMode' });
   const showTaskFields = Boolean(expiresAt && createRevaccinationTask);
@@ -86,6 +89,17 @@ export function VaccinationFormDrawer({
     enabled: open,
   });
   const rolesQuery = useQuery({ queryKey: ['roles'], queryFn: listRoles, enabled: open });
+
+  useEffect(() => {
+    if (!open || initialVaccination || !vaccinatedAt || expiresAt) {
+      return;
+    }
+
+    const nextDate = oneYearAfter(vaccinatedAt);
+    if (nextDate) {
+      setValue('expiresAt', nextDate, { shouldValidate: true });
+    }
+  }, [expiresAt, initialVaccination, open, setValue, vaccinatedAt]);
 
   function handleOpenChange(nextOpen: boolean) {
     if (nextOpen) {
@@ -105,6 +119,7 @@ export function VaccinationFormDrawer({
       vaccineSeries: values.vaccineSeries,
       vaccineExpiresAt: values.vaccineExpiresAt,
       smsReminder: values.smsReminder,
+      ownerReminderEnabled: Boolean(values.expiresAt && values.ownerReminderEnabled),
       notes: values.notes,
       createRevaccinationTask: shouldCreateTask,
       revaccinationAssigneeId: shouldCreateTask && values.revaccinationAssigneeMode === 'employee' ? values.revaccinationAssigneeId : null,
@@ -157,7 +172,12 @@ export function VaccinationFormDrawer({
             control={control}
             name="expiresAt"
             render={({ field, fieldState }) => (
-              <Form.Item label="Дата ревакцинации" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+              <Form.Item
+                label="Дата ревакцинации"
+                extra="Для новой вакцинации автоматически предлагается дата через год"
+                validateStatus={fieldState.error ? 'error' : undefined}
+                help={fieldState.error?.message}
+              >
                 <Input type="date" {...field} value={field.value ?? ''} />
               </Form.Item>
             )}
@@ -206,10 +226,14 @@ export function VaccinationFormDrawer({
         <Space direction="vertical" size={12} className="full-width">
           <Controller
             control={control}
-            name="smsReminder"
+            name="ownerReminderEnabled"
             render={({ field }) => (
-              <Checkbox checked={field.value} onChange={(event) => field.onChange(event.target.checked)}>
-                SMS-уведомление
+              <Checkbox
+                checked={field.value}
+                disabled={!expiresAt}
+                onChange={(event) => field.onChange(event.target.checked)}
+              >
+                Напомнить владельцу в MAX или Telegram за 7 дней и за 1 день
               </Checkbox>
             )}
           />
@@ -318,6 +342,7 @@ function getDefaultValues(vaccination?: Vaccination | null): VaccinationFormInpu
     vaccineSeries: nullToEmpty(vaccination?.vaccineSeries),
     vaccineExpiresAt: dateToInput(vaccination?.vaccineExpiresAt),
     smsReminder: vaccination?.smsReminder ?? false,
+    ownerReminderEnabled: vaccination?.ownerReminderEnabled ?? !vaccination,
     notes: nullToEmpty(vaccination?.notes),
     createRevaccinationTask: vaccination ? Boolean(vaccination.expiresAt && task?.status !== 'CANCELLED') : true,
     revaccinationAssigneeMode: task?.assigneeId ? 'employee' : task?.assigneeRoleCode ? 'role' : 'role',
@@ -328,6 +353,16 @@ function getDefaultValues(vaccination?: Vaccination | null): VaccinationFormInpu
 
 function dateToInput(value: string | null | undefined) {
   return value ? value.slice(0, 10) : '';
+}
+
+function oneYearAfter(value: string) {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return '';
+  }
+
+  const nextDate = new Date(Date.UTC(Number(match[1]) + 1, Number(match[2]) - 1, Number(match[3])));
+  return nextDate.toISOString().slice(0, 10);
 }
 
 function nullableString(maxLength?: number) {

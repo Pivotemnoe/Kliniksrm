@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { TaskStatus } from '@prisma/client';
-import { IsDateString, IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { IsDateString, IsEnum, IsIn, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 export class ListTasksQueryDto {
   @ApiPropertyOptional()
@@ -33,6 +33,11 @@ export class ListTasksQueryDto {
   @IsString()
   @MaxLength(80)
   assigneeRoleCode?: string;
+
+  @ApiPropertyOptional({ enum: ['true', 'false'] })
+  @IsOptional()
+  @IsIn(['true', 'false'])
+  mine?: string;
 
   @ApiPropertyOptional({ enum: TaskStatus })
   @IsOptional()

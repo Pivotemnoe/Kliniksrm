@@ -6,17 +6,22 @@ import {
   PaymentStatus,
   Prisma,
   QueueStatus,
+  TaskStatus,
   VisitStatus,
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AuthEmployee } from '../auth/auth.types';
 import { DashboardQueryDto } from './dto/dashboard-query.dto';
 
 @Injectable()
 export class DashboardService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getToday(query: DashboardQueryDto) {
+  async getToday(query: DashboardQueryDto, actor: AuthEmployee) {
     const { date, start, end } = resolveDayBounds(query.date);
+    const workspaceMode = resolveWorkspaceMode(actor.roles);
+    const personalEmployeeId = workspaceMode === 'doctor' ? actor.id : null;
+    const employeeWhere = personalEmployeeId ? { employeeId: personalEmployeeId } : {};
     const expiringUntil = new Date(start);
     expiringUntil.setDate(expiringUntil.getDate() + 30);
 
@@ -56,40 +61,43 @@ export class DashboardService {
       labItems,
       productsForStock,
       expiringBatches,
+      workspaceShifts,
+      workspaceTasks,
     ] = await Promise.all([
-      this.prisma.queueEntry.count({ where: { status: QueueStatus.WAITING } }),
-      this.prisma.queueEntry.count({ where: { status: QueueStatus.IN_PROGRESS } }),
-      this.prisma.queueEntry.count({ where: { status: QueueStatus.COMPLETED, completedAt: { gte: start, lte: end } } }),
-      this.prisma.queueEntry.count({ where: { status: QueueStatus.CANCELLED, completedAt: { gte: start, lte: end } } }),
+      this.prisma.queueEntry.count({ where: { status: QueueStatus.WAITING, ...employeeWhere } }),
+      this.prisma.queueEntry.count({ where: { status: QueueStatus.IN_PROGRESS, ...employeeWhere } }),
+      this.prisma.queueEntry.count({ where: { status: QueueStatus.COMPLETED, completedAt: { gte: start, lte: end }, ...employeeWhere } }),
+      this.prisma.queueEntry.count({ where: { status: QueueStatus.CANCELLED, completedAt: { gte: start, lte: end }, ...employeeWhere } }),
       this.prisma.queueEntry.findMany({
-        where: { status: { in: [QueueStatus.IN_PROGRESS, QueueStatus.WAITING] } },
+        where: { status: { in: [QueueStatus.IN_PROGRESS, QueueStatus.WAITING] }, ...employeeWhere },
         orderBy: [{ status: 'asc' }, { createdAt: 'asc' }],
         take: 8,
         select: queueEntrySelect,
       }),
-      this.prisma.appointment.count({ where: { startsAt: { gte: start, lte: end } } }),
-      this.prisma.appointment.count({ where: { status: AppointmentStatus.PLANNED, startsAt: { gte: start, lte: end } } }),
-      this.prisma.appointment.count({ where: { status: AppointmentStatus.ARRIVED, startsAt: { gte: start, lte: end } } }),
-      this.prisma.appointment.count({ where: { status: AppointmentStatus.IN_PROGRESS, startsAt: { gte: start, lte: end } } }),
-      this.prisma.appointment.count({ where: { status: AppointmentStatus.COMPLETED, startsAt: { gte: start, lte: end } } }),
-      this.prisma.appointment.count({ where: { status: AppointmentStatus.CANCELLED, startsAt: { gte: start, lte: end } } }),
+      this.prisma.appointment.count({ where: { startsAt: { gte: start, lte: end }, ...employeeWhere } }),
+      this.prisma.appointment.count({ where: { status: AppointmentStatus.PLANNED, startsAt: { gte: start, lte: end }, ...employeeWhere } }),
+      this.prisma.appointment.count({ where: { status: AppointmentStatus.ARRIVED, startsAt: { gte: start, lte: end }, ...employeeWhere } }),
+      this.prisma.appointment.count({ where: { status: AppointmentStatus.IN_PROGRESS, startsAt: { gte: start, lte: end }, ...employeeWhere } }),
+      this.prisma.appointment.count({ where: { status: AppointmentStatus.COMPLETED, startsAt: { gte: start, lte: end }, ...employeeWhere } }),
+      this.prisma.appointment.count({ where: { status: AppointmentStatus.CANCELLED, startsAt: { gte: start, lte: end }, ...employeeWhere } }),
       this.prisma.appointment.findMany({
-        where: { startsAt: { gte: start, lte: end } },
+        where: { startsAt: { gte: start, lte: end }, ...employeeWhere },
         orderBy: { startsAt: 'asc' },
         take: 8,
         select: appointmentSelect,
       }),
-      this.prisma.visit.count({ where: { status: { in: [VisitStatus.DRAFT, VisitStatus.IN_PROGRESS] }, hospitalBoxId: null } }),
-      this.prisma.visit.count({ where: { status: VisitStatus.COMPLETED, completedAt: { gte: start, lte: end }, hospitalBoxId: null } }),
+      this.prisma.visit.count({ where: { status: { in: [VisitStatus.DRAFT, VisitStatus.IN_PROGRESS] }, hospitalBoxId: null, ...employeeWhere } }),
+      this.prisma.visit.count({ where: { status: VisitStatus.COMPLETED, completedAt: { gte: start, lte: end }, hospitalBoxId: null, ...employeeWhere } }),
       this.prisma.visit.count({
         where: {
           status: { in: [VisitStatus.DRAFT, VisitStatus.IN_PROGRESS, VisitStatus.COMPLETED] },
           hospitalBoxId: null,
+          ...employeeWhere,
           OR: [{ startedAt: { gte: start, lte: end } }, { completedAt: { gte: start, lte: end } }],
         },
       }),
       this.prisma.visit.findMany({
-        where: { status: { in: [VisitStatus.DRAFT, VisitStatus.IN_PROGRESS] }, hospitalBoxId: null },
+        where: { status: { in: [VisitStatus.DRAFT, VisitStatus.IN_PROGRESS] }, hospitalBoxId: null, ...employeeWhere },
         orderBy: { startedAt: 'desc' },
         take: 8,
         select: visitSelect,
@@ -98,17 +106,18 @@ export class DashboardService {
         where: {
           status: { in: [VisitStatus.DRAFT, VisitStatus.IN_PROGRESS, VisitStatus.COMPLETED] },
           hospitalBoxId: null,
+          ...employeeWhere,
           OR: [{ startedAt: { gte: start, lte: end } }, { completedAt: { gte: start, lte: end } }],
         },
         orderBy: { startedAt: 'desc' },
         take: 8,
         select: visitSelect,
       }),
-      this.prisma.visit.count({ where: { status: { in: [VisitStatus.DRAFT, VisitStatus.IN_PROGRESS] }, hospitalBoxId: { not: null } } }),
-      this.prisma.visit.count({ where: { startedAt: { gte: start, lte: end }, hospitalBoxId: { not: null } } }),
-      this.prisma.visit.count({ where: { status: VisitStatus.COMPLETED, completedAt: { gte: start, lte: end }, hospitalBoxId: { not: null } } }),
+      this.prisma.visit.count({ where: { status: { in: [VisitStatus.DRAFT, VisitStatus.IN_PROGRESS] }, hospitalBoxId: { not: null }, ...employeeWhere } }),
+      this.prisma.visit.count({ where: { startedAt: { gte: start, lte: end }, hospitalBoxId: { not: null }, ...employeeWhere } }),
+      this.prisma.visit.count({ where: { status: VisitStatus.COMPLETED, completedAt: { gte: start, lte: end }, hospitalBoxId: { not: null }, ...employeeWhere } }),
       this.prisma.visit.findMany({
-        where: { status: { in: [VisitStatus.DRAFT, VisitStatus.IN_PROGRESS] }, hospitalBoxId: { not: null } },
+        where: { status: { in: [VisitStatus.DRAFT, VisitStatus.IN_PROGRESS] }, hospitalBoxId: { not: null }, ...employeeWhere },
         orderBy: { startedAt: 'asc' },
         take: 6,
         select: hospitalVisitSelect,
@@ -132,11 +141,11 @@ export class DashboardService {
         take: 6,
         select: onlineRequestSelect,
       }),
-      this.prisma.laboratoryOrder.count({ where: { createdAt: { gte: start, lte: end } } }),
-      this.prisma.laboratoryOrder.count({ where: { status: LaboratoryOrderStatus.COMPLETED, completedAt: { gte: start, lte: end } } }),
-      this.prisma.laboratoryOrder.count({ where: { status: { in: [LaboratoryOrderStatus.ORDERED, LaboratoryOrderStatus.IN_PROGRESS] } } }),
+      this.prisma.laboratoryOrder.count({ where: { createdAt: { gte: start, lte: end }, ...(personalEmployeeId ? { visit: { employeeId: personalEmployeeId } } : {}) } }),
+      this.prisma.laboratoryOrder.count({ where: { status: LaboratoryOrderStatus.COMPLETED, completedAt: { gte: start, lte: end }, ...(personalEmployeeId ? { visit: { employeeId: personalEmployeeId } } : {}) } }),
+      this.prisma.laboratoryOrder.count({ where: { status: { in: [LaboratoryOrderStatus.ORDERED, LaboratoryOrderStatus.IN_PROGRESS] }, ...(personalEmployeeId ? { visit: { employeeId: personalEmployeeId } } : {}) } }),
       this.prisma.laboratoryOrder.findMany({
-        where: { status: { in: [LaboratoryOrderStatus.ORDERED, LaboratoryOrderStatus.IN_PROGRESS] } },
+        where: { status: { in: [LaboratoryOrderStatus.ORDERED, LaboratoryOrderStatus.IN_PROGRESS] }, ...(personalEmployeeId ? { visit: { employeeId: personalEmployeeId } } : {}) },
         orderBy: { createdAt: 'asc' },
         take: 6,
         select: laboratoryOrderSelect,
@@ -169,6 +178,37 @@ export class DashboardService {
           warehouse: { select: { id: true, name: true } },
         },
       }),
+      personalEmployeeId
+        ? this.prisma.employeeShift.findMany({
+            where: {
+              employeeId: personalEmployeeId,
+              isActive: true,
+              startsAt: { lt: end },
+              endsAt: { gt: start },
+            },
+            orderBy: { startsAt: 'asc' },
+            select: { id: true, startsAt: true, endsAt: true, comment: true, isActive: true },
+          })
+        : Promise.resolve([]),
+      personalEmployeeId
+        ? this.prisma.task.findMany({
+            where: {
+              status: TaskStatus.OPEN,
+              OR: [{ assigneeId: personalEmployeeId }, { assigneeRoleCode: { in: actor.roles } }],
+            },
+            orderBy: [{ dueAt: 'asc' }, { createdAt: 'asc' }],
+            take: 6,
+            select: {
+              id: true,
+              title: true,
+              taskType: true,
+              dueAt: true,
+              status: true,
+              owner: { select: { id: true, fullName: true } },
+              animal: { select: { id: true, nickname: true } },
+            },
+          })
+        : Promise.resolve([]),
     ]);
 
     const lowStockProducts = productsForStock
@@ -186,16 +226,24 @@ export class DashboardService {
       .sort((a, b) => a.rest - b.rest)
       .slice(0, 6);
 
+    const canRead = (permission: string) => actor.permissions.includes('*') || actor.permissions.includes(permission);
+
     return {
       date,
-      queue: {
+      workspace: {
+        mode: workspaceMode,
+        employeeId: personalEmployeeId,
+        shifts: canRead('appointments.read') ? workspaceShifts : [],
+        tasks: canRead('tasks.read') ? workspaceTasks : [],
+      },
+      queue: canRead('queue.read') ? {
         waiting: waitingQueue,
         inProgress: activeQueue,
         completedToday: completedQueueToday,
         cancelledToday: cancelledQueueToday,
         items: queueItems,
-      },
-      appointments: {
+      } : { waiting: 0, inProgress: 0, completedToday: 0, cancelledToday: 0, items: [] },
+      appointments: canRead('appointments.read') ? {
         today: appointmentsToday,
         planned: plannedAppointments,
         arrived: arrivedAppointments,
@@ -203,46 +251,62 @@ export class DashboardService {
         completed: completedAppointments,
         cancelled: cancelledAppointments,
         items: appointmentItems,
-      },
-      visits: {
+      } : { today: 0, planned: 0, arrived: 0, inProgress: 0, completed: 0, cancelled: 0, items: [] },
+      visits: canRead('visits.read') ? {
         active: activeVisits,
         completedToday: completedVisitsToday,
         totalToday: visitsToday,
         items: visitItems,
         todayItems: visitItemsToday,
-      },
-      finance: {
+      } : { active: 0, completedToday: 0, totalToday: 0, items: [], todayItems: [] },
+      finance: canRead('billing.read') ? {
         billsToday,
         unpaidBills,
         paidBillsToday,
         paymentsTodayAmount: decimalToNumber(paymentsToday._sum.amount) ?? 0,
         refundsTodayAmount: Math.abs(decimalToNumber(refundsToday._sum.amount) ?? 0),
-      },
-      hospital: {
+      } : { billsToday: 0, unpaidBills: 0, paidBillsToday: 0, paymentsTodayAmount: 0, refundsTodayAmount: 0 },
+      hospital: canRead('hospital.read') ? {
         activePatients: activeHospital,
         admittedToday: admittedHospitalToday,
         dischargedToday: dischargedHospitalToday,
         items: hospitalItems,
-      },
-      stock: {
+      } : { activePatients: 0, admittedToday: 0, dischargedToday: 0, items: [] },
+      stock: canRead('stock.read') ? {
         lowStockProducts: lowStockProducts.length,
         expiringBatches: expiringBatches.length,
         lowStockItems: lowStockProducts,
         expiringItems: expiringBatches,
-      },
-      onlineRequests: {
+      } : { lowStockProducts: 0, expiringBatches: 0, lowStockItems: [], expiringItems: [] },
+      onlineRequests: canRead('appointments.read') ? {
         newRequests: onlineNew,
         inReview: onlineInReview,
         items: onlineItems,
-      },
-      laboratory: {
+      } : { newRequests: 0, inReview: 0, items: [] },
+      laboratory: canRead('laboratory.read') ? {
         orderedToday: labOrderedToday,
         completedToday: labCompletedToday,
         pending: labPending,
         items: labItems,
-      },
+      } : { orderedToday: 0, completedToday: 0, pending: 0, items: [] },
     };
   }
+}
+
+function resolveWorkspaceMode(roles: string[]) {
+  if (roles.includes('director')) {
+    return 'director' as const;
+  }
+
+  if (roles.includes('administrator')) {
+    return 'administrator' as const;
+  }
+
+  if (roles.includes('doctor')) {
+    return 'doctor' as const;
+  }
+
+  return 'employee' as const;
 }
 
 function resolveDayBounds(value?: string) {

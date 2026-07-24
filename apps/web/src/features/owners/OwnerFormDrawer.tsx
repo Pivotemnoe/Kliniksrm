@@ -192,7 +192,9 @@ export function OwnerFormDrawer({ open, title, initialOwner, submitError, isSubm
                 {...field}
                 allowClear
                 placeholder="Не выбран"
-                options={Object.entries(notificationChannelLabels).map(([value, label]) => ({ value, label }))}
+                options={Object.entries(notificationChannelLabels)
+                  .filter(([value]) => value !== 'MESSENGER')
+                  .map(([value, label]) => ({ value, label }))}
                 onChange={(value) => field.onChange(value ?? '')}
               />
             </Form.Item>
@@ -272,7 +274,9 @@ function getDefaultValues(owner?: Owner | null): OwnerFormInput {
     source: nullToEmpty(owner?.source),
     passportData: nullToEmpty(owner?.passportData),
     comment: nullToEmpty(owner?.comment),
-    preferredNotificationChannel: owner?.preferredNotificationChannel ?? '',
+    preferredNotificationChannel: owner?.preferredNotificationChannel === 'MESSENGER'
+      ? ''
+      : owner?.preferredNotificationChannel ?? '',
     telegramChatId: nullToEmpty(owner?.telegramChatId),
     maxUserId: nullToEmpty(owner?.maxUserId),
     allowSms: owner?.allowSms ?? false,

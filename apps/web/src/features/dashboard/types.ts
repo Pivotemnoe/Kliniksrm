@@ -7,6 +7,26 @@ import { BillPaymentStatus, DecimalValue, VisitStatus } from '../visits/types';
 
 export type DashboardSummary = {
   date: string;
+  workspace: {
+    mode: 'director' | 'administrator' | 'doctor' | 'employee';
+    employeeId: string | null;
+    shifts: Array<{
+      id: string;
+      startsAt: string;
+      endsAt: string;
+      comment: string | null;
+      isActive: boolean;
+    }>;
+    tasks: Array<{
+      id: string;
+      title: string;
+      taskType: string | null;
+      dueAt: string | null;
+      status: 'OPEN';
+      owner: { id: string; fullName: string } | null;
+      animal: { id: string; nickname: string } | null;
+    }>;
+  };
   queue: {
     waiting: number;
     inProgress: number;

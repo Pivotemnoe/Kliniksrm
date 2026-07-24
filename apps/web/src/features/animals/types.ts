@@ -87,6 +87,7 @@ export type Vaccination = {
   vaccineSeries: string | null;
   vaccineExpiresAt: string | null;
   smsReminder: boolean;
+  ownerReminderEnabled: boolean;
   notes: string | null;
   revaccinationTask?: {
     id: string;
@@ -114,6 +115,7 @@ export type VaccinationMutationInput = {
   vaccineSeries?: string | null;
   vaccineExpiresAt?: string | null;
   smsReminder?: boolean;
+  ownerReminderEnabled?: boolean;
   notes?: string | null;
   createRevaccinationTask?: boolean;
   revaccinationAssigneeId?: string | null;

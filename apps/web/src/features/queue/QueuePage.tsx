@@ -37,6 +37,8 @@ export function QueuePage() {
   const canManage = hasPermission(auth?.employee, 'queue.manage');
   const canCallQueue = hasPermission(auth?.employee, 'queue.call') || canManage;
   const canManageVisits = hasPermission(auth?.employee, 'visits.manage');
+  const employeeId = searchParams.get('employeeId') ?? undefined;
+  const isPersonalQueue = Boolean(employeeId && employeeId === auth?.employee.id);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<QueueStatus | undefined>('WAITING');
   const [urgency, setUrgency] = useState<QueueUrgency | undefined>();
@@ -45,8 +47,8 @@ export function QueuePage() {
   const now = useNow();
   const dateRange = getQueueDateRange(status);
   const queueQuery = useQuery({
-    queryKey: ['queue', { search, status, urgency, limit: pageSize, offset, ...dateRange }],
-    queryFn: () => listQueue({ search, status, urgency, limit: pageSize, offset, ...dateRange }),
+    queryKey: ['queue', { search, status, urgency, employeeId, limit: pageSize, offset, ...dateRange }],
+    queryFn: () => listQueue({ search, status, urgency, employeeId, limit: pageSize, offset, ...dateRange }),
   });
 
   useEffect(() => {
@@ -212,7 +214,7 @@ export function QueuePage() {
   return (
     <div className="page">
       <PageHeader
-        title={`Электронная очередь${queueQuery.data?.total !== undefined ? ` ${queueQuery.data.total}` : ''}`}
+        title={`${isPersonalQueue ? 'Моя очередь' : 'Электронная очередь'}${queueQuery.data?.total !== undefined ? ` ${queueQuery.data.total}` : ''}`}
         extra={
           <Space>
             <Button icon={<ExportOutlined />} onClick={() => window.open('/queue/tv', '_blank', 'noopener,noreferrer')}>

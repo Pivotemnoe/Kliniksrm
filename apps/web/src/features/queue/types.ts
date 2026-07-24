@@ -81,6 +81,7 @@ export type ListQueueQuery = {
   search?: string;
   status?: QueueStatus;
   urgency?: QueueUrgency;
+  employeeId?: string;
   dateFrom?: string;
   dateTo?: string;
   limit?: number;

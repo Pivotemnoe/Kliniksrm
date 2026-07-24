@@ -1,5 +1,6 @@
 import {
   CalendarOutlined,
+  ClockCircleOutlined,
   ExperimentOutlined,
   FileDoneOutlined,
   MedicineBoxOutlined,
@@ -13,17 +14,22 @@ import { Alert, Button, List, Space, Tag, Typography } from 'antd';
 import { type ReactNode, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';
+import { hasPermission } from '../../auth/permissions';
+import { useCurrentEmployee } from '../../auth/useAuth';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDate, formatDateTime } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
 import { appointmentStatusColors, appointmentStatusLabels } from '../appointments/types';
 import { queueStatusColors, queueStatusLabels, queueUrgencyColors, queueUrgencyLabels } from '../queue/types';
+import { getTaskTypeLabel } from '../tasks/types';
 import { visitStatusColors, visitStatusLabels } from '../visits/types';
 import { getDashboardToday } from './dashboard.api';
-import { DashboardQueueItem } from './types';
+import { DashboardQueueItem, DashboardSummary } from './types';
 
 export function DashboardPage() {
   const navigate = useNavigate();
+  const { data: auth } = useCurrentEmployee();
+  const employee = auth?.employee;
   const today = useMemo(() => toDateInput(new Date()), []);
   const dashboardQuery = useQuery({
     queryKey: ['dashboard', today],
@@ -35,10 +41,25 @@ export function DashboardPage() {
   const stockAlerts = (summary?.stock.lowStockProducts ?? 0) + (summary?.stock.expiringBatches ?? 0);
   const requestAlerts = (summary?.onlineRequests.newRequests ?? 0) + (summary?.onlineRequests.inReview ?? 0);
 
+  if (summary?.workspace.mode === 'doctor' && employee) {
+    return (
+      <DoctorDashboard
+        summary={summary}
+        employeeId={employee.id}
+        loading={dashboardQuery.isLoading}
+        error={dashboardQuery.error}
+      />
+    );
+  }
+
+  if (summary?.workspace.mode === 'employee' && employee) {
+    return <EmployeeDashboard summary={summary} loading={dashboardQuery.isLoading} error={dashboardQuery.error} />;
+  }
+
   return (
     <div className="page">
       <PageHeader
-        title="Сводка"
+        title={summary?.workspace.mode === 'director' ? 'Кабинет директора' : summary?.workspace.mode === 'administrator' ? 'Кабинет администратора' : 'Сводка'}
         description={`Рабочая картина клиники на ${formatDate(today)}.`}
         extra={
           <Space wrap>
@@ -93,7 +114,7 @@ export function DashboardPage() {
           icon={<WalletOutlined />}
           loading={dashboardQuery.isLoading}
           variant="money"
-          onClick={() => navigate('/billing')}
+          onClick={() => navigate('/bills')}
         />
         <DashboardActionTile
           title="Стационар"
@@ -338,6 +359,334 @@ export function DashboardPage() {
                     }
                   />
                 )}
+              </List.Item>
+            )}
+          />
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function EmployeeDashboard({
+  summary,
+  loading,
+  error,
+}: {
+  summary: DashboardSummary;
+  loading: boolean;
+  error: unknown;
+}) {
+  const navigate = useNavigate();
+  const { data: auth } = useCurrentEmployee();
+  const employee = auth?.employee;
+
+  return (
+    <div className="page">
+      <PageHeader
+        title="Рабочий кабинет"
+        description={`Доступные разделы на ${formatDate(summary.date)}. Набор данных и действий зависит от роли сотрудника.`}
+      />
+      {error ? <Alert type="error" showIcon message={getErrorMessage(error)} className="form-alert" /> : null}
+      <div className="dashboard-app-strip">
+        {hasPermission(employee, 'queue.read') ? (
+          <DashboardActionTile
+            title="Очередь"
+            value={summary.queue.waiting}
+            hint={`В работе ${summary.queue.inProgress}`}
+            icon={<OrderedListOutlined />}
+            loading={loading}
+            variant="queue"
+            onClick={() => navigate('/queue')}
+          />
+        ) : null}
+        {hasPermission(employee, 'appointments.read') ? (
+          <DashboardActionTile
+            title="Расписание"
+            value={summary.appointments.today}
+            hint={`Пришли ${summary.appointments.arrived}`}
+            icon={<CalendarOutlined />}
+            loading={loading}
+            variant="schedule"
+            onClick={() => navigate('/schedule')}
+          />
+        ) : null}
+        {hasPermission(employee, 'tasks.read') ? (
+          <DashboardActionTile
+            title="Задачи"
+            value="Открыть"
+            hint="Задачи на сегодня"
+            icon={<ClockCircleOutlined />}
+            loading={loading}
+            variant="requests"
+            onClick={() => navigate('/tasks')}
+          />
+        ) : null}
+        {hasPermission(employee, 'visits.read') ? (
+          <DashboardActionTile
+            title="Приёмы"
+            value={summary.visits.totalToday}
+            hint={`Активных ${summary.visits.active}`}
+            icon={<FileDoneOutlined />}
+            loading={loading}
+            variant="visits"
+            onClick={() => navigate('/visits')}
+          />
+        ) : null}
+        {hasPermission(employee, 'billing.read') ? (
+          <DashboardActionTile
+            title="Счета"
+            value={formatMoney(summary.finance.paymentsTodayAmount)}
+            hint={`Не оплачено ${summary.finance.unpaidBills}`}
+            icon={<WalletOutlined />}
+            loading={loading}
+            variant="money"
+            onClick={() => navigate('/bills')}
+          />
+        ) : null}
+        {hasPermission(employee, 'laboratory.read') ? (
+          <DashboardActionTile
+            title="Лаборатория"
+            value={summary.laboratory.pending}
+            hint={`Готово сегодня ${summary.laboratory.completedToday}`}
+            icon={<ExperimentOutlined />}
+            loading={loading}
+            variant="laboratory"
+            onClick={() => navigate('/laboratory')}
+          />
+        ) : null}
+        {hasPermission(employee, 'hospital.read') ? (
+          <DashboardActionTile
+            title="Стационар"
+            value={summary.hospital.activePatients}
+            hint={`Поступило сегодня ${summary.hospital.admittedToday}`}
+            icon={<MedicineBoxOutlined />}
+            loading={loading}
+            variant="hospital"
+            onClick={() => navigate('/hospital')}
+          />
+        ) : null}
+        {hasPermission(employee, 'stock.read') ? (
+          <DashboardActionTile
+            title="Склад"
+            value={summary.stock.lowStockProducts + summary.stock.expiringBatches}
+            hint="Остатки и сроки годности"
+            icon={<ShopOutlined />}
+            loading={loading}
+            variant="stock"
+            onClick={() => navigate('/stock')}
+          />
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function DoctorDashboard({
+  summary,
+  employeeId,
+  loading,
+  error,
+}: {
+  summary: DashboardSummary;
+  employeeId: string;
+  loading: boolean;
+  error: unknown;
+}) {
+  const navigate = useNavigate();
+  const { data: auth } = useCurrentEmployee();
+  const employee = auth?.employee;
+  const scope = `employeeId=${encodeURIComponent(employeeId)}`;
+  const canCallQueue = hasPermission(employee, 'queue.call');
+  const canManageVisits = hasPermission(employee, 'visits.manage');
+
+  return (
+    <div className="page">
+      <PageHeader
+        title="Кабинет врача"
+        description={`Личная рабочая картина на ${formatDate(summary.date)}: смена, назначенные записи, очередь, приёмы и задачи.`}
+        extra={
+          <Space wrap>
+            <Button icon={<OrderedListOutlined />} onClick={() => navigate('/queue')}>
+              Общая очередь
+            </Button>
+            <Button icon={<CalendarOutlined />} onClick={() => navigate(`/schedule?${scope}`)}>
+              Моё расписание
+            </Button>
+            {canManageVisits ? (
+              <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/visits?create=1')}>
+                Начать приём
+              </Button>
+            ) : null}
+          </Space>
+        }
+      />
+      {error ? <Alert type="error" showIcon message={getErrorMessage(error)} className="form-alert" /> : null}
+      <div className="dashboard-app-strip">
+        <DashboardActionTile
+          title="Моя очередь"
+          value={summary.queue.waiting}
+          hint={`Вызваны ${summary.queue.inProgress}`}
+          icon={<OrderedListOutlined />}
+          loading={loading}
+          variant="queue"
+          onClick={() => navigate(`/queue?${scope}`)}
+        />
+        <DashboardActionTile
+          title="Моё расписание"
+          value={summary.appointments.today}
+          hint={`Пришли ${summary.appointments.arrived} · в работе ${summary.appointments.inProgress}`}
+          icon={<CalendarOutlined />}
+          loading={loading}
+          variant="schedule"
+          onClick={() => navigate(`/schedule?${scope}`)}
+        />
+        <DashboardActionTile
+          title="Мои приёмы"
+          value={summary.visits.totalToday}
+          hint={`Активных ${summary.visits.active}`}
+          icon={<FileDoneOutlined />}
+          loading={loading}
+          variant="visits"
+          onClick={() => navigate(`/visits?${scope}`)}
+        />
+        <DashboardActionTile
+          title="Мои задачи"
+          value={summary.workspace.tasks.length}
+          hint="Открытые и назначенные роли врача"
+          icon={<ClockCircleOutlined />}
+          loading={loading}
+          variant="requests"
+          onClick={() => navigate('/tasks?mine=true')}
+        />
+      </div>
+      <div className="dashboard-grid dashboard-grid-expanded">
+        <section className="list-panel">
+          <div className="list-panel-header">
+            <Typography.Title level={4}>Моя смена сегодня</Typography.Title>
+            <ClockCircleOutlined />
+          </div>
+          <List
+            className="compact-list"
+            loading={loading}
+            dataSource={summary.workspace.shifts}
+            locale={{ emptyText: 'Активная смена на сегодня не назначена' }}
+            renderItem={(shift) => (
+              <List.Item>
+                <List.Item.Meta
+                  title={`${formatDateTime(shift.startsAt)} — ${formatDateTime(shift.endsAt)}`}
+                  description={shift.comment || 'Без комментария'}
+                />
+              </List.Item>
+            )}
+          />
+        </section>
+        <section className="list-panel">
+          <div className="list-panel-header">
+            <Typography.Title level={4}>Мои задачи</Typography.Title>
+            <Button size="small" onClick={() => navigate('/tasks?mine=true')}>
+              Все задачи
+            </Button>
+          </div>
+          <List
+            className="compact-list"
+            loading={loading}
+            dataSource={summary.workspace.tasks}
+            locale={{ emptyText: 'Открытых задач нет' }}
+            renderItem={(task) => (
+              <List.Item onClick={() => navigate(`/tasks/${task.id}`)}>
+                <List.Item.Meta
+                  title={task.title}
+                  description={
+                    <Space wrap size={6}>
+                      <Tag color="blue">{getTaskTypeLabel(task.taskType)}</Tag>
+                      {task.animal ? <span>{task.animal.nickname}</span> : null}
+                      {task.owner ? <span>{task.owner.fullName}</span> : null}
+                      <span>{task.dueAt ? formatDateTime(task.dueAt) : 'Без срока'}</span>
+                    </Space>
+                  }
+                />
+              </List.Item>
+            )}
+          />
+        </section>
+        <section className="list-panel">
+          <div className="list-panel-header">
+            <Typography.Title level={4}>Назначенные записи</Typography.Title>
+            <Button size="small" onClick={() => navigate(`/schedule?${scope}`)}>
+              Моё расписание
+            </Button>
+          </div>
+          <List
+            className="compact-list"
+            loading={loading}
+            dataSource={summary.appointments.items}
+            locale={{ emptyText: 'Записей на сегодня нет' }}
+            renderItem={(item) => (
+              <List.Item onClick={() => navigate(`/schedule/${item.id}`)}>
+                <List.Item.Meta
+                  title={`${formatDateTime(item.startsAt)} · ${item.animal?.nickname ?? 'Пациент'}`}
+                  description={
+                    <Space wrap size={6}>
+                      <Tag color={appointmentStatusColors[item.status]}>{appointmentStatusLabels[item.status]}</Tag>
+                      <span>{item.owner?.fullName ?? 'Владелец не указан'}</span>
+                    </Space>
+                  }
+                />
+              </List.Item>
+            )}
+          />
+        </section>
+        <section className="list-panel">
+          <div className="list-panel-header">
+            <Typography.Title level={4}>Назначенная очередь</Typography.Title>
+            <Button size="small" disabled={!canCallQueue} onClick={() => navigate(`/queue?${scope}`)}>
+              Открыть
+            </Button>
+          </div>
+          <List
+            className="compact-list"
+            loading={loading}
+            dataSource={summary.queue.items}
+            locale={{ emptyText: 'Назначенных пациентов нет' }}
+            renderItem={(item) => (
+              <List.Item onClick={() => navigate(`/queue/${item.id}`)}>
+                <List.Item.Meta
+                  title={getQueueTitle(item)}
+                  description={
+                    <Space wrap size={6}>
+                      <Tag color={queueStatusColors[item.status]}>{queueStatusLabels[item.status]}</Tag>
+                      <Tag color={queueUrgencyColors[item.urgency]}>{queueUrgencyLabels[item.urgency]}</Tag>
+                    </Space>
+                  }
+                />
+              </List.Item>
+            )}
+          />
+        </section>
+        <section className="list-panel">
+          <div className="list-panel-header">
+            <Typography.Title level={4}>Мои приёмы сегодня</Typography.Title>
+            <Button size="small" onClick={() => navigate(`/visits?${scope}`)}>
+              Все приёмы
+            </Button>
+          </div>
+          <List
+            className="compact-list"
+            loading={loading}
+            dataSource={summary.visits.todayItems}
+            locale={{ emptyText: 'Приёмов сегодня нет' }}
+            renderItem={(item) => (
+              <List.Item onClick={() => navigate(`/visits/${item.id}`)}>
+                <List.Item.Meta
+                  title={`${item.animal?.nickname ?? 'Пациент'} · ${item.owner?.fullName ?? 'Владелец не указан'}`}
+                  description={
+                    <Space wrap size={6}>
+                      <Tag color={visitStatusColors[item.status]}>{visitStatusLabels[item.status]}</Tag>
+                      <span>{formatDateTime(item.completedAt ?? item.startedAt)}</span>
+                    </Space>
+                  }
+                />
               </List.Item>
             )}
           />

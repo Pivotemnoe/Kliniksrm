@@ -1,0 +1,97 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: temichevvet-owner-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${OWNER_GATEWAY_POSTGRES_DB:-owner_gateway}
+      POSTGRES_USER: ${OWNER_GATEWAY_POSTGRES_USER:-owner_gateway}
+      POSTGRES_PASSWORD: ${OWNER_GATEWAY_POSTGRES_PASSWORD}
+    volumes:
+      - owner_gateway_postgres_data:/var/lib/postgresql/data
+      - ./migration.sql:/docker-entrypoint-initdb.d/001-owner-gateway.sql:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${OWNER_GATEWAY_POSTGRES_USER:-owner_gateway} -d ${OWNER_GATEWAY_POSTGRES_DB:-owner_gateway}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - owner_gateway
+
+  gateway:
+    image: ${OWNER_GATEWAY_IMAGE}
+    container_name: temichevvet-owner-gateway
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    environment:
+      NODE_ENV: production
+      OWNER_GATEWAY_PORT: 4100
+      OWNER_GATEWAY_DATABASE_URL: postgresql://${OWNER_GATEWAY_POSTGRES_USER:-owner_gateway}:${OWNER_GATEWAY_POSTGRES_PASSWORD}@postgres:5432/${OWNER_GATEWAY_POSTGRES_DB:-owner_gateway}
+      OWNER_GATEWAY_PUBLIC_URL: https://cabinet.temichevvet.ru
+      OWNER_GATEWAY_SYNC_SECRET: ${OWNER_GATEWAY_SYNC_SECRET}
+      OWNER_GATEWAY_SESSION_COOKIE: temichevvet_owner_session
+      OWNER_GATEWAY_SESSION_DAYS: ${OWNER_GATEWAY_SESSION_DAYS:-365}
+      OWNER_GATEWAY_TRANSFER_MINUTES: ${OWNER_GATEWAY_TRANSFER_MINUTES:-10}
+      OWNER_GATEWAY_VAPID_SUBJECT: ${OWNER_GATEWAY_VAPID_SUBJECT}
+      OWNER_GATEWAY_VAPID_PUBLIC_KEY: ${OWNER_GATEWAY_VAPID_PUBLIC_KEY}
+      OWNER_GATEWAY_VAPID_PRIVATE_KEY: ${OWNER_GATEWAY_VAPID_PRIVATE_KEY}
+      MAX_BOT_NAME: ${MAX_BOT_NAME}
+      MAX_BOT_TOKEN: ${MAX_BOT_TOKEN}
+      MAX_WEBHOOK_SECRET: ${MAX_WEBHOOK_SECRET}
+      MAX_API_BASE_URL: https://platform-api2.max.ru
+      TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
+      TELEGRAM_API_BASE_URL: ${TELEGRAM_API_BASE_URL:-https://api.telegram.org}
+    ports:
+      - "127.0.0.1:${OWNER_GATEWAY_HOST_PORT:-4100}:4100"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4100/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks:
+      - owner_gateway
+
+  backup:
+    image: postgres:16-alpine
+    container_name: temichevvet-owner-backup
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    environment:
+      BACKUP_DIR: /backups
+      BACKUP_INTERVAL_SECONDS: ${OWNER_GATEWAY_BACKUP_INTERVAL_SECONDS:-86400}
+      BACKUP_RETENTION_DAYS: ${OWNER_GATEWAY_BACKUP_RETENTION_DAYS:-14}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${OWNER_GATEWAY_POSTGRES_DB:-owner_gateway}
+      POSTGRES_USER: ${OWNER_GATEWAY_POSTGRES_USER:-owner_gateway}
+      PGPASSWORD: ${OWNER_GATEWAY_POSTGRES_PASSWORD}
+    volumes:
+      - ./backups:/backups
+      - ./backup-loop.sh:/usr/local/bin/owner-gateway-backup-loop.sh:ro
+    command: ["sh", "/usr/local/bin/owner-gateway-backup-loop.sh"]
+    networks:
+      - owner_gateway
+
+volumes:
+  owner_gateway_postgres_data:
+    name: temichevvet_owner_gateway_postgres_data
+
+networks:
+  owner_gateway:
+    name: temichevvet_owner_gateway_net

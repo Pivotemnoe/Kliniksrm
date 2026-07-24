@@ -5,6 +5,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/package.json
 COPY apps/web/package.json apps/web/package.json
+COPY apps/owner-gateway/package.json apps/owner-gateway/package.json
 COPY packages/shared/package.json packages/shared/package.json
 
 RUN npm ci
@@ -34,6 +35,7 @@ LABEL org.opencontainers.image.source=$TEMICHEVVET_IMAGE_SOURCE
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/package.json
 COPY apps/web/package.json apps/web/package.json
+COPY apps/owner-gateway/package.json apps/owner-gateway/package.json
 COPY packages/shared/package.json packages/shared/package.json
 
 RUN npm ci --omit=dev
@@ -43,6 +45,7 @@ RUN npm --workspace @clinic-crm/api run db:generate
 
 COPY --from=build /app/apps/api/dist apps/api/dist
 COPY apps/api/docker-entrypoint.sh apps/api/docker-entrypoint.sh
+COPY certs/russian_trusted_root_ca.pem certs/russian_trusted_root_ca.pem
 
 EXPOSE 4000
 

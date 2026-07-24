@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Button, Input, Segmented, Select, Space, Table, Tag, Typography } from 'antd';
 import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
@@ -21,14 +21,22 @@ type DuePreset = 'all' | 'overdue' | 'today' | 'tomorrow';
 
 export function TasksPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const { message } = App.useApp();
   const { data: auth } = useCurrentEmployee();
   const canManage = hasPermission(auth?.employee, 'tasks.manage');
+  const isPersonalTasks = searchParams.get('mine') === 'true';
+  const canReadSchedulingResources = hasPermission(auth?.employee, 'appointments.read');
+  const canReadRoles =
+    canManage ||
+    hasPermission(auth?.employee, 'employees.read') ||
+    hasPermission(auth?.employee, 'employees.manage') ||
+    hasPermission(auth?.employee, 'roles.manage');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<TaskStatus | undefined>('OPEN');
   const [dueDate, setDueDate] = useState('');
-  const [duePreset, setDuePreset] = useState<DuePreset>('today');
+  const [duePreset, setDuePreset] = useState<DuePreset>(() => (isPersonalTasks ? 'all' : 'today'));
   const [assigneeId, setAssigneeId] = useState<string | undefined>();
   const [assigneeRoleCode, setAssigneeRoleCode] = useState<string | undefined>();
   const [offset, setOffset] = useState(0);
@@ -36,11 +44,15 @@ export function TasksPage() {
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const dueBounds = getTaskDueBounds(duePreset, dueDate);
   const tasksQuery = useQuery({
-    queryKey: ['tasks', { search, status, dueDate, duePreset, assigneeId, assigneeRoleCode, limit: pageSize, offset }],
-    queryFn: () => listTasks({ search, status, assigneeId, assigneeRoleCode, ...dueBounds, limit: pageSize, offset }),
+    queryKey: ['tasks', { search, status, dueDate, duePreset, assigneeId, assigneeRoleCode, mine: isPersonalTasks, limit: pageSize, offset }],
+    queryFn: () => listTasks({ search, status, assigneeId, assigneeRoleCode, mine: isPersonalTasks || undefined, ...dueBounds, limit: pageSize, offset }),
   });
-  const resourcesQuery = useQuery({ queryKey: ['scheduling', 'resources'], queryFn: getSchedulingResources });
-  const rolesQuery = useQuery({ queryKey: ['roles'], queryFn: listRoles });
+  const resourcesQuery = useQuery({
+    queryKey: ['scheduling', 'resources'],
+    queryFn: getSchedulingResources,
+    enabled: canReadSchedulingResources,
+  });
+  const rolesQuery = useQuery({ queryKey: ['roles'], queryFn: listRoles, enabled: canReadRoles });
 
   const createMutation = useMutation({
     mutationFn: (values: CreateTaskInput) => createTask(values),
@@ -200,7 +212,7 @@ export function TasksPage() {
   return (
     <div className="page">
       <PageHeader
-        title="Календарь задач"
+        title={isPersonalTasks ? 'Мои задачи' : 'Календарь задач'}
         description="Задачи по пациентам, сотрудникам, ролям и напоминаниям."
         extra={
           canManage ? (
@@ -258,36 +270,44 @@ export function TasksPage() {
               }}
               options={Object.entries(taskStatusLabels).map(([value, label]) => ({ value, label }))}
             />
-            <Select
-              allowClear
-              placeholder="Сотрудник"
-              className="status-filter"
-              value={assigneeId}
-              loading={resourcesQuery.isLoading}
-              onChange={(value) => {
-                setAssigneeId(value);
-                if (value) {
-                  setAssigneeRoleCode(undefined);
-                }
-                setOffset(0);
-              }}
-              options={resourcesQuery.data?.employees.map((employee) => ({ value: employee.id, label: employee.fullName }))}
-            />
-            <Select
-              allowClear
-              placeholder="Роль"
-              className="status-filter"
-              value={assigneeRoleCode}
-              loading={rolesQuery.isLoading}
-              onChange={(value) => {
-                setAssigneeRoleCode(value);
-                if (value) {
-                  setAssigneeId(undefined);
-                }
-                setOffset(0);
-              }}
-              options={rolesQuery.data?.map((role) => ({ value: role.code, label: role.title }))}
-            />
+            {!isPersonalTasks ? (
+              <>
+                {canReadSchedulingResources ? (
+                  <Select
+                    allowClear
+                    placeholder="Сотрудник"
+                    className="status-filter"
+                    value={assigneeId}
+                    loading={resourcesQuery.isLoading}
+                    onChange={(value) => {
+                      setAssigneeId(value);
+                      if (value) {
+                        setAssigneeRoleCode(undefined);
+                      }
+                      setOffset(0);
+                    }}
+                    options={resourcesQuery.data?.employees.map((employee) => ({ value: employee.id, label: employee.fullName }))}
+                  />
+                ) : null}
+                {canReadRoles ? (
+                  <Select
+                    allowClear
+                    placeholder="Роль"
+                    className="status-filter"
+                    value={assigneeRoleCode}
+                    loading={rolesQuery.isLoading}
+                    onChange={(value) => {
+                      setAssigneeRoleCode(value);
+                      if (value) {
+                        setAssigneeId(undefined);
+                      }
+                      setOffset(0);
+                    }}
+                    options={rolesQuery.data?.map((role) => ({ value: role.code, label: role.title }))}
+                  />
+                ) : null}
+              </>
+            ) : null}
           </Space>
         </div>
         <div className="list-panel-body">

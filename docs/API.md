@@ -79,9 +79,11 @@ Vaccination payload supports Vetaf-like fields:
 
 ## Notifications and client portal foundation
 
-Notifications are local-first. CRM writes outgoing messages to `NotificationOutbox` in PostgreSQL. A future worker will send queued messages to external channels such as Telegram, MAX, SMS, email or push. If internet is unavailable, the message remains local with `QUEUED` or `FAILED` status and can be retried later.
+Notifications are local-first. CRM writes outgoing messages to `NotificationOutbox` in PostgreSQL. The dispatcher processes only the `MESSENGER` channel, asks the isolated owner gateway to choose a linked MAX or Telegram account, and records the actual channel, attempts, delivery time and error. If internet is unavailable, the message remains local and is retried with a bounded delay. SMS, email and push remain placeholders and are not dispatched.
 
-Current channels: `INTERNAL`, `TELEGRAM`, `MAX`, `SMS`, `EMAIL`, `PUSH`.
+Current channels: `INTERNAL`, `MESSENGER`, `TELEGRAM`, `MAX`, `SMS`, `EMAIL`, `PUSH`.
+
+Vaccination reminders use `MESSENGER` and create deduplicated queue entries 7 days and 1 day before the revaccination date. Existing vaccinations stay opted out until an employee enables owner reminders.
 
 Current outbox statuses: `QUEUED`, `SENDING`, `SENT`, `FAILED`, `CANCELLED`.
 
@@ -93,6 +95,22 @@ Owner cards can store communication preferences:
 - `allowSms`, `allowTelegram`, `allowMax`, `allowEmail`
 
 Client portal access is stored separately in `ClientPortalAccess`. Staff can disable, enable, invite or block access. Invite tokens are returned only once from the API and stored in the database as SHA-256 hash.
+
+Portal invitations are channel-aware:
+
+- `POST /api/v1/notifications/owners/:ownerId/portal-invites` with `channel=MAX`, `TELEGRAM` or `WEB` creates a new 24-hour invitation and invalidates the previous invitation link.
+- MAX or Telegram is recorded as the owner's preferred notification channel only after the owner has chosen it.
+- `CLIENT_PORTAL_ONLINE_REQUESTS_ENABLED` defaults to `false`; owner-cabinet online booking stays unavailable until explicitly enabled in a later release.
+
+Public owner-gateway flow:
+
+- The separate `apps/owner-gateway` service has its own PostgreSQL schema and never connects to the clinic database.
+- The local CRM only makes outbound requests when both `OWNER_GATEWAY_URL` and `OWNER_GATEWAY_SYNC_SECRET` are configured. If the gateway is unavailable, clinic workflows continue locally.
+- The synchronized snapshot contains only owner-visible fields: patients, appointments without internal comments, completed visits, signed documents, bills and sent external messages.
+- `POST /api/v1/notifications/owners/:ownerId/portal-sync` lets a permitted employee refresh this snapshot without creating a new invitation.
+- A previously linked MAX or Telegram owner receives a new invitation through the gateway automatically. A first-time owner opens the bot link, and the corresponding protected webhook records the binding.
+- Disabling or blocking portal access revokes active gateway invitations and sessions when the gateway is reachable.
+- The local CRM API and clinic database port must never be exposed to the internet for MAX webhooks.
 - `GET /api/v1/scheduling/resources`
 - `GET /api/v1/queue`
 - `GET /api/v1/queue/screen`

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#17324d" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="ЛК TemichevVet" />
+    <title>Личный кабинет — TemichevVet</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/png" sizes="64x64" href="/portal/icons/lk-icon-64.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/portal/icons/lk-icon-180.png" />
+    <link rel="stylesheet" href="/portal/app.css?v=20260724-push1" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/portal" aria-label="ЛК TemichevVet">
+        <img class="brand-logo" src="/portal/icons/lk-icon-192.png" alt="" width="46" height="46" />
+        <span><strong>ЛК TemichevVet</strong><small>Личный кабинет владельца</small></span>
+      </a>
+      <button id="logout" class="button button-quiet" type="button" hidden>Выйти</button>
+    </header>
+    <main id="app" class="shell" aria-live="polite">
+      <section class="state-card"><div class="spinner"></div><p>Загружаем личный кабинет…</p></section>
+    </main>
+    <script src="/portal/app.js?v=20260724-push1" defer></script>
+  </body>
+</html>

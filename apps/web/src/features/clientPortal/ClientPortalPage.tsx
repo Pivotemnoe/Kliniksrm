@@ -3,50 +3,36 @@ import {
   FileTextOutlined,
   HistoryOutlined,
   MessageOutlined,
-  PlusOutlined,
-  ReloadOutlined,
   WalletOutlined,
 } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Alert, Button, Empty, Form, Input, Select, Space, Statistic, Table, Tabs, Tag, Typography } from 'antd';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { App, Alert, Button, Empty, Form, Input, Space, Statistic, Table, Tabs, Tag, Typography } from 'antd';
 import { ColumnsType } from 'antd/es/table';
 import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
-import { Controller, useForm, useWatch } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
 import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
 import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
 import { RussianPhoneInput } from '../../shared/ui/RussianPhoneInput';
-import { fromDatetimeLocal, formatDate, formatDateTime } from '../../shared/utils/date';
-import { AnimalCatalogFields } from '../animals/AnimalCatalogFields';
-import { createPortalOnlineRequest, getClientPortalSummary, requestClientPortalCode, verifyClientPortalCode } from './clientPortal.api';
+import { formatDate, formatDateTime } from '../../shared/utils/date';
+import { getClientPortalSummary, requestClientPortalCode, verifyClientPortalCode } from './clientPortal.api';
 import {
   ClientPortalDeliveryChannel,
-  CreatePortalOnlineRequestInput,
   PortalAnimal,
   PortalAppointment,
   PortalBill,
   PortalNotification,
-  PortalOnlineRequest,
   PortalVisit,
 } from './types';
 
-const requestSchema = z.object({
-  animalId: z.string().optional(),
-  animalNickname: z.string().optional(),
-  animalSpecies: z.string().optional(),
-  animalBreed: z.string().optional(),
-  preferredAt: z.string().optional(),
-  comment: z.string().max(1000, 'До 1000 символов').optional(),
-});
 const portalLoginSchema = z.object({
   phone: z.string().trim().min(7, 'Укажите телефон').max(32, 'До 32 символов'),
   code: z.string().trim().optional(),
 });
 
-type RequestFormValues = z.infer<typeof requestSchema>;
 type PortalLoginFormValues = z.infer<typeof portalLoginSchema>;
 
 const appointmentStatusLabels: Record<string, string> = {
@@ -56,14 +42,6 @@ const appointmentStatusLabels: Record<string, string> = {
   COMPLETED: 'Завершена',
   CANCELLED: 'Отменена',
   NO_SHOW: 'Не пришёл',
-};
-
-const requestStatusLabels: Record<string, string> = {
-  NEW: 'Новая',
-  IN_REVIEW: 'В обработке',
-  ACCEPTED: 'Принята',
-  CANCELLED: 'Отменена',
-  ARCHIVED: 'Архив',
 };
 
 const billStatusLabels: Record<string, string> = {
@@ -89,29 +67,11 @@ type PortalDocumentRow = PortalVisit['documents'][number] & {
 export function ClientPortalPage() {
   const { token = '' } = useParams();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const { message } = App.useApp();
   const portalQuery = useQuery({
     queryKey: ['client-portal', token],
     queryFn: () => getClientPortalSummary(token),
     enabled: Boolean(token),
   });
-  const form = useForm<RequestFormValues>({
-    resolver: zodResolver(requestSchema),
-    defaultValues: { animalId: undefined, preferredAt: '', comment: '' },
-  });
-  const selectedAnimalId = useWatch({ control: form.control, name: 'animalId' });
-  const selectedAnimal = portalQuery.data?.owner.animals.find((animal) => animal.id === selectedAnimalId);
-  const createMutation = useMutation({
-    mutationFn: (values: CreatePortalOnlineRequestInput) => createPortalOnlineRequest(token, values),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['client-portal', token] });
-      form.reset({ animalId: selectedAnimalId, preferredAt: '', comment: '' });
-      message.success('Заявка отправлена в клинику');
-    },
-    onError: (error) => message.error(getErrorMessage(error)),
-  });
-
   const data = portalQuery.data;
 
   const appointmentColumns = useMemo<ColumnsType<PortalAppointment>>(
@@ -121,7 +81,6 @@ export function ClientPortalPage() {
       { title: 'Статус', dataIndex: 'status', key: 'status', width: 140, render: (value: string) => statusTag(appointmentStatusLabels[value] ?? value) },
       { title: 'Врач', key: 'employee', render: (_, item) => item.employee?.fullName ?? '—' },
       { title: 'Кабинет', key: 'room', render: (_, item) => item.room?.name ?? '—' },
-      { title: 'Комментарий', dataIndex: 'comment', key: 'comment', render: (value: string | null) => value || '—' },
     ],
     [],
   );
@@ -151,7 +110,6 @@ export function ClientPortalPage() {
   const notificationColumns = useMemo<ColumnsType<PortalNotification>>(
     () => [
       { title: 'Дата', dataIndex: 'createdAt', key: 'createdAt', width: 170, render: formatDateTime },
-      { title: 'Канал', dataIndex: 'channel', key: 'channel', width: 110 },
       { title: 'Статус', dataIndex: 'status', key: 'status', width: 120, render: statusTag },
       { title: 'Сообщение', key: 'body', render: (_, item) => item.subject ? `${item.subject}: ${item.body}` : item.body },
     ],
@@ -184,29 +142,6 @@ export function ClientPortalPage() {
     ],
     [],
   );
-  const requestColumns = useMemo<ColumnsType<PortalOnlineRequest>>(
-    () => [
-      { title: 'Дата', dataIndex: 'createdAt', key: 'createdAt', width: 170, render: formatDateTime },
-      { title: 'Пациент', key: 'animal', render: (_, item) => item.animal?.nickname ?? '—' },
-      { title: 'Желаемое время', dataIndex: 'preferredAt', key: 'preferredAt', width: 180, render: formatDateTime },
-      { title: 'Статус', dataIndex: 'status', key: 'status', width: 140, render: (value: string) => statusTag(requestStatusLabels[value] ?? value) },
-      { title: 'Комментарий', dataIndex: 'comment', key: 'comment', render: (value: string | null) => value || '—' },
-    ],
-    [],
-  );
-
-  function submitRequest(values: RequestFormValues) {
-    const animal = data?.owner.animals.find((item) => item.id === values.animalId);
-    createMutation.mutate({
-      animalId: values.animalId || undefined,
-      animalNickname: animal?.nickname ?? values.animalNickname,
-      animalSpecies: animal?.species ?? values.animalSpecies,
-      animalBreed: animal?.breed ?? values.animalBreed,
-      preferredAt: fromDatetimeLocal(values.preferredAt),
-      comment: values.comment,
-    });
-  }
-
   if (!token) {
     return <ClientPortalLoginPage onVerified={(verifiedToken) => navigate(`/portal/${verifiedToken}`, { replace: true })} />;
   }
@@ -233,7 +168,7 @@ export function ClientPortalPage() {
         <section className="portal-summary">
           <div>
             <Typography.Title level={1}>Личный кабинет</Typography.Title>
-            <Typography.Text type="secondary">Данные владельца, пациенты, история клиники и онлайн-заявки.</Typography.Text>
+            <Typography.Text type="secondary">Пациенты, история приёмов, документы и сообщения клиники.</Typography.Text>
           </div>
           <Space wrap>
             <Statistic title="Пациентов" value={data.owner.animals.length} />
@@ -241,7 +176,7 @@ export function ClientPortalPage() {
           </Space>
         </section>
 
-        <section className="portal-grid">
+        <section className="portal-grid portal-grid-single">
           <div className="list-panel portal-owner-panel">
             <div className="list-panel-header">
               <Typography.Title level={4} className="compact-title">Владелец</Typography.Title>
@@ -251,62 +186,6 @@ export function ClientPortalPage() {
               <InfoRow label="Телефон" value={data.owner.phone} />
               <InfoRow label="Email" value={data.owner.email} />
               <InfoRow label="Адрес" value={data.owner.address} />
-            </div>
-          </div>
-
-          <div className="list-panel">
-            <div className="list-panel-header">
-              <Space direction="vertical" size={2}>
-                <Typography.Title level={4} className="compact-title">Новая заявка</Typography.Title>
-                <Typography.Text type="secondary">Администратор увидит её в разделе онлайн-записи.</Typography.Text>
-              </Space>
-              <CalendarOutlined />
-            </div>
-            <div className="list-panel-body">
-              {createMutation.error ? <Alert type="error" showIcon message={getErrorMessage(createMutation.error)} className="form-alert" /> : null}
-              <Form layout="vertical" onFinish={form.handleSubmit(submitRequest)}>
-                <Controller
-                  control={form.control}
-                  name="animalId"
-                  render={({ field }) => (
-                    <Form.Item label="Пациент">
-                      <Select
-                        {...field}
-                        allowClear
-                        placeholder="Выберите пациента"
-                        options={data.owner.animals.map((animal) => ({ value: animal.id, label: `${animal.nickname}${animal.species ? `, ${animal.species}` : ''}` }))}
-                      />
-                    </Form.Item>
-                  )}
-                />
-                {!selectedAnimal ? (
-                  <div className="form-grid two-columns">
-                    <Controller control={form.control} name="animalNickname" render={({ field }) => <Form.Item label="Кличка"><Input {...field} /></Form.Item>} />
-                    <AnimalCatalogFields control={form.control} setValue={form.setValue} speciesName="animalSpecies" breedName="animalBreed" />
-                  </div>
-                ) : null}
-                <Controller
-                  control={form.control}
-                  name="preferredAt"
-                  render={({ field }) => (
-                    <Form.Item label="Желаемая дата и время">
-                      <Input {...field} type="datetime-local" />
-                    </Form.Item>
-                  )}
-                />
-                <Controller
-                  control={form.control}
-                  name="comment"
-                  render={({ field }) => (
-                    <Form.Item label="Комментарий">
-                      <Input.TextArea {...field} rows={3} placeholder="Что случилось или на что записаться" />
-                    </Form.Item>
-                  )}
-                />
-                <Button type="primary" icon={<PlusOutlined />} htmlType="submit" loading={createMutation.isPending}>
-                  Отправить заявку
-                </Button>
-              </Form>
             </div>
           </div>
         </section>
@@ -338,11 +217,6 @@ export function ClientPortalPage() {
               key: 'documents',
               label: 'Документы',
               children: <PortalDocumentsTable columns={documentColumns} data={documentRows} />,
-            },
-            {
-              key: 'requests',
-              label: 'Заявки',
-              children: <PortalTable columns={requestColumns} data={data.onlineRequests} icon={<ReloadOutlined />} emptyText="Заявок пока нет" />,
             },
             {
               key: 'notifications',

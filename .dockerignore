@@ -5,6 +5,7 @@
 node_modules
 **/node_modules
 **/dist
+apps/owner-gateway/src/generated
 coverage
 
 .env

@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, TaskStatus } from '@prisma/client';
+import { NotificationChannel, NotificationStatus, Prisma, TaskStatus } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -206,12 +206,14 @@ export class AnimalsService {
           vaccineSeries: emptyToNull(dto.vaccineSeries),
           vaccineExpiresAt: dateOrNull(dto.vaccineExpiresAt),
           smsReminder: dto.smsReminder ?? false,
+          ownerReminderEnabled: dto.ownerReminderEnabled ?? false,
           notes: emptyToNull(dto.notes),
         },
         include: vaccinationInclude,
       });
 
       taskAudit = await this.syncRevaccinationTask(tx, animal, createdVaccination, dto, actorId);
+      await this.syncOwnerVaccinationReminders(tx, animal, createdVaccination, actorId);
 
       return tx.vaccination.findUniqueOrThrow({
         where: { id: createdVaccination.id },
@@ -256,12 +258,14 @@ export class AnimalsService {
           ...(dto.vaccineSeries !== undefined ? { vaccineSeries: emptyToNull(dto.vaccineSeries) } : {}),
           ...(dto.vaccineExpiresAt !== undefined ? { vaccineExpiresAt: dateOrNull(dto.vaccineExpiresAt) } : {}),
           ...(dto.smsReminder !== undefined ? { smsReminder: dto.smsReminder } : {}),
+          ...(dto.ownerReminderEnabled !== undefined ? { ownerReminderEnabled: dto.ownerReminderEnabled } : {}),
           ...(dto.notes !== undefined ? { notes: emptyToNull(dto.notes) } : {}),
         },
         include: vaccinationInclude,
       });
 
       taskAudit = await this.syncRevaccinationTask(tx, animal, savedVaccination, dto, actorId);
+      await this.syncOwnerVaccinationReminders(tx, animal, savedVaccination, actorId);
 
       return tx.vaccination.findUniqueOrThrow({
         where: { id: vaccinationId },
@@ -390,6 +394,76 @@ export class AnimalsService {
     };
   }
 
+  private async syncOwnerVaccinationReminders(
+    tx: Prisma.TransactionClient,
+    animal: AnimalForVaccination,
+    vaccination: VaccinationWithTask,
+    actorId: string,
+  ) {
+    const dedupePrefix = `vaccination:${vaccination.id}:`;
+
+    await tx.notificationOutbox.updateMany({
+      where: {
+        dedupeKey: { startsWith: dedupePrefix },
+        status: { in: [NotificationStatus.QUEUED, NotificationStatus.FAILED, NotificationStatus.CANCELLED] },
+      },
+      data: { status: NotificationStatus.CANCELLED },
+    });
+
+    if (!vaccination.ownerReminderEnabled || !vaccination.expiresAt || !animal.ownerId) {
+      return;
+    }
+
+    const dueDateKey = vaccination.expiresAt.toISOString().slice(0, 10);
+    const dueDateText = vaccination.expiresAt.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' });
+    const now = new Date();
+
+    for (const offsetDays of OWNER_VACCINATION_REMINDER_OFFSETS) {
+      const scheduledAt = vaccinationReminderTime(vaccination.expiresAt, offsetDays);
+      if (scheduledAt <= now) {
+        continue;
+      }
+
+      const dedupeKey = `${dedupePrefix}${dueDateKey}:${offsetDays}d`;
+      const body = buildVaccinationReminderBody(animal.nickname, vaccination.title, dueDateText, offsetDays);
+      const existing = await tx.notificationOutbox.findUnique({
+        where: { dedupeKey },
+        select: { id: true, status: true },
+      });
+
+      if (existing?.status === NotificationStatus.SENT || existing?.status === NotificationStatus.SENDING) {
+        continue;
+      }
+
+      const data = {
+        ownerId: animal.ownerId,
+        animalId: animal.id,
+        createdById: actorId,
+        channel: NotificationChannel.MESSENGER,
+        recipient: `owner:${animal.ownerId}`,
+        subject: 'Напоминание о вакцинации',
+        body,
+        status: NotificationStatus.QUEUED,
+        attempts: 0,
+        scheduledAt,
+        sentAt: null,
+        lastError: null,
+        metadata: {
+          source: 'vaccination',
+          vaccinationId: vaccination.id,
+          offsetDays,
+          dueDate: dueDateKey,
+        } satisfies Prisma.InputJsonObject,
+      };
+
+      if (existing) {
+        await tx.notificationOutbox.update({ where: { id: existing.id }, data });
+      } else {
+        await tx.notificationOutbox.create({ data: { ...data, dedupeKey } });
+      }
+    }
+  }
+
   private async validateRevaccinationAssignment(dto: CreateVaccinationDto | UpdateVaccinationDto) {
     const assigneeId = emptyToNull(dto.revaccinationAssigneeId);
     const assigneeRoleCode = emptyToNull(dto.revaccinationAssigneeRoleCode);
@@ -506,6 +580,22 @@ type TaskAudit = {
   taskId: string;
   metadata: Prisma.InputJsonObject;
 };
+
+const OWNER_VACCINATION_REMINDER_OFFSETS = [7, 1] as const;
+
+function vaccinationReminderTime(dueDate: Date, offsetDays: number) {
+  return new Date(Date.UTC(
+    dueDate.getUTCFullYear(),
+    dueDate.getUTCMonth(),
+    dueDate.getUTCDate() - offsetDays,
+    7,
+  ));
+}
+
+function buildVaccinationReminderBody(animalName: string, vaccinationTitle: string, dueDate: string, offsetDays: number) {
+  const timing = offsetDays === 1 ? 'завтра' : 'через неделю';
+  return `TemichevVet: напоминаем, что ${timing} для питомца ${animalName} подходит срок вакцинации «${vaccinationTitle}» (${dueDate}). Пожалуйста, свяжитесь с клиникой, чтобы согласовать время.`;
+}
 
 function emptyToNull(value: string | null | undefined) {
   const trimmed = value?.trim() ?? '';

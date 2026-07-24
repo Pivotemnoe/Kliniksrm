@@ -5,6 +5,7 @@ node_modules/
 dist/
 build/
 coverage/
+apps/owner-gateway/src/generated/
 
 # Local env
 .env

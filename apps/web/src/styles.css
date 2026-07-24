@@ -1612,6 +1612,10 @@ body {
   margin-bottom: 18px;
 }
 
+.portal-grid-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .portal-owner-panel .list-panel-body {
   display: grid;
   gap: 8px;

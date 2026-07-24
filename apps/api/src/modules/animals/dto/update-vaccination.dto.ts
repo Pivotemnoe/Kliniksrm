@@ -47,6 +47,11 @@ export class UpdateVaccinationDto {
   @IsBoolean()
   smsReminder?: boolean;
 
+  @ApiPropertyOptional({ description: 'Schedule owner reminders 7 days and 1 day before revaccination.' })
+  @IsOptional()
+  @IsBoolean()
+  ownerReminderEnabled?: boolean;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

@@ -9,6 +9,7 @@ UPDATE_IMAGES="false"
 SKIP_IMAGE_UPDATE="false"
 OPEN_BROWSER="false"
 DOCKER_PLATFORM="${DOCKER_DEFAULT_PLATFORM:-}"
+COMPOSE_PLATFORM=""
 
 usage() {
   cat <<'USAGE'
@@ -112,10 +113,26 @@ docker_pull_image() {
 }
 
 docker_compose() {
-  if [[ -n "$DOCKER_PLATFORM" ]]; then
-    DOCKER_DEFAULT_PLATFORM="$DOCKER_PLATFORM" docker compose "$@"
+  if [[ -n "$COMPOSE_PLATFORM" ]]; then
+    DOCKER_DEFAULT_PLATFORM="$COMPOSE_PLATFORM" docker compose "$@"
   else
-    docker compose "$@"
+    env -u DOCKER_DEFAULT_PLATFORM docker compose "$@"
+  fi
+}
+
+set_compose_platform_for_images() {
+  local api_image="$1"
+  local web_image="$2"
+  local api_platform=""
+  local web_platform=""
+
+  api_platform="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$api_image" 2>/dev/null || true)"
+  web_platform="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$web_image" 2>/dev/null || true)"
+
+  COMPOSE_PLATFORM=""
+  if [[ -n "$api_platform" && "$api_platform" == "$web_platform" ]]; then
+    COMPOSE_PLATFORM="$api_platform"
+    echo "Docker Compose platform: $COMPOSE_PLATFORM"
   fi
 }
 
@@ -310,11 +327,15 @@ if [[ "$FORCE_BUILD" != "true" ]] && has_docker_image "$API_IMAGE" && has_docker
   echo "Найдены готовые Docker-образы. Запускаю без пересборки:"
   echo "  api: $API_IMAGE"
   echo "  web: $WEB_IMAGE"
+  set_compose_platform_for_images "$API_IMAGE" "$WEB_IMAGE"
   docker_compose up -d --no-build postgres redis minio api web
 elif [[ "$FORCE_BUILD" != "true" ]] && has_docker_image "temichevvet-api:local" && has_docker_image "temichevvet-web:local"; then
   set_env_value "TEMICHEVVET_API_IMAGE" "temichevvet-api:local"
   set_env_value "TEMICHEVVET_WEB_IMAGE" "temichevvet-web:local"
+  API_IMAGE="temichevvet-api:local"
+  WEB_IMAGE="temichevvet-web:local"
   echo "Образы из реестра недоступны. Запускаю локальные offline-образы..."
+  set_compose_platform_for_images "$API_IMAGE" "$WEB_IMAGE"
   docker_compose up -d --no-build postgres redis minio api web
 else
   docker_compose up -d postgres redis minio api web
@@ -325,6 +346,7 @@ wait_for_url "http://127.0.0.1:${WEB_PORT}" "Frontend"
 
 LOCAL_URL="http://127.0.0.1:${WEB_PORT}/login"
 NETWORK_URL="http://${LOCAL_IP}:${WEB_PORT}/login"
+BROWSER_URL="${LOCAL_URL}?force=1"
 
 echo
 echo "TemichevVet запущен."
@@ -345,8 +367,8 @@ echo
 
 if [[ "$OPEN_BROWSER" == "true" ]]; then
   if command -v open >/dev/null 2>&1; then
-    open "$LOCAL_URL"
+    open "$BROWSER_URL"
   elif command -v xdg-open >/dev/null 2>&1; then
-    xdg-open "$LOCAL_URL" >/dev/null 2>&1 || true
+    xdg-open "$BROWSER_URL" >/dev/null 2>&1 || true
   fi
 fi

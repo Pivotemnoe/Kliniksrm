@@ -32,6 +32,8 @@ export function AppointmentsPage() {
   const { message } = App.useApp();
   const { data: auth } = useCurrentEmployee();
   const canManage = hasPermission(auth?.employee, 'appointments.manage');
+  const employeeId = searchParams.get('employeeId') ?? undefined;
+  const isPersonalSchedule = Boolean(employeeId && employeeId === auth?.employee.id);
   const [search, setSearch] = useState('');
   const [date, setDate] = useState(toDateInput(new Date()));
   const [status, setStatus] = useState<AppointmentStatus | undefined>();
@@ -41,16 +43,16 @@ export function AppointmentsPage() {
   const weekDays = useMemo(() => getWeekDays(date), [date]);
   const weekBounds = useMemo(() => getRangeBounds(weekDays[0].value, weekDays[6].value), [weekDays]);
   const appointmentsQuery = useQuery({
-    queryKey: ['appointments', { search, status, date, limit: pageSize, offset }],
-    queryFn: () => listAppointments({ search, status, ...dateBounds, limit: pageSize, offset }),
+    queryKey: ['appointments', { search, status, employeeId, date, limit: pageSize, offset }],
+    queryFn: () => listAppointments({ search, status, employeeId, ...dateBounds, limit: pageSize, offset }),
   });
   const weeklyAppointmentsQuery = useQuery({
-    queryKey: ['appointments-week', { search, status, from: weekBounds.dateFrom, to: weekBounds.dateTo }],
-    queryFn: () => listAppointments({ search, status, ...weekBounds, limit: 100, offset: 0 }),
+    queryKey: ['appointments-week', { search, status, employeeId, from: weekBounds.dateFrom, to: weekBounds.dateTo }],
+    queryFn: () => listAppointments({ search, status, employeeId, ...weekBounds, limit: 100, offset: 0 }),
   });
   const weeklyShiftsQuery = useQuery({
-    queryKey: ['employee-shifts', { from: weekBounds.dateFrom, to: weekBounds.dateTo, schedule: true }],
-    queryFn: () => listEmployeeShifts({ from: weekBounds.dateFrom, to: weekBounds.dateTo }),
+    queryKey: ['employee-shifts', { employeeId, from: weekBounds.dateFrom, to: weekBounds.dateTo, schedule: true }],
+    queryFn: () => listEmployeeShifts({ employeeId, from: weekBounds.dateFrom, to: weekBounds.dateTo }),
   });
   const selectedDayShifts = useMemo(
     () => (weeklyShiftsQuery.data ?? []).filter((shift) => overlapsDay(shift, date)),
@@ -146,7 +148,7 @@ export function AppointmentsPage() {
   return (
     <div className="page">
       <PageHeader
-        title="Расписание"
+        title={isPersonalSchedule ? 'Моё расписание' : 'Расписание'}
         extra={
           canManage ? (
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>

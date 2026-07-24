@@ -23,6 +23,8 @@ import {
   UserOutlined,
 } from '@ant-design/icons';
 import { MenuProps } from 'antd';
+import { canAccessPath } from '../auth/access';
+import type { Employee } from '../shared/types/auth';
 
 export const menuItems: MenuProps['items'] = [
   { key: '/news', icon: <NotificationOutlined />, label: 'Новости' },
@@ -65,6 +67,10 @@ export const menuItems: MenuProps['items'] = [
     ],
   },
 ];
+
+export function getAccessibleMenuItems(employee: Employee | undefined): MenuProps['items'] {
+  return filterMenuItems(menuItems, employee);
+}
 
 export const pageTitles: Record<string, string> = {
   news: 'Новости',
@@ -141,5 +147,21 @@ function collectMenuKeys(items: MenuProps['items']): string[] {
     const children = 'children' in item ? collectMenuKeys(item.children as MenuProps['items']) : [];
 
     return [key, ...children];
+  });
+}
+
+function filterMenuItems(items: MenuProps['items'], employee: Employee | undefined): MenuProps['items'] {
+  return (items ?? []).flatMap((item) => {
+    if (!item || !('key' in item)) {
+      return [];
+    }
+
+    const key = String(item.key);
+    const children = 'children' in item ? filterMenuItems(item.children as MenuProps['items'], employee) : undefined;
+    if (children?.length) {
+      return [{ ...item, children }];
+    }
+
+    return canAccessPath(employee, key) ? [item] : [];
   });
 }
