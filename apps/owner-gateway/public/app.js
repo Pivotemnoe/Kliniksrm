@@ -2,12 +2,9 @@ const app = document.querySelector('#app');
 const logoutButton = document.querySelector('#logout');
 const transferStorageKey = 'temichevvet-browser-transfer';
 const readNotificationsStoragePrefix = 'temichevvet-owner-read-notifications:';
-
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/portal/sw.js', { scope: '/portal/' }).catch(() => undefined);
-  });
-}
+const serviceWorkerRegistrationPromise = 'serviceWorker' in navigator
+  ? navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => null)
+  : Promise.resolve(null);
 
 void start();
 
@@ -319,16 +316,21 @@ async function updatePushButton() {
     return;
   }
 
-  const registration = await navigator.serviceWorker.ready;
-  const subscription = await registration.pushManager.getSubscription();
-  if (subscription && Notification.permission === 'granted') {
-    button.textContent = 'Уведомления включены';
-    button.disabled = true;
-    return;
-  }
+  try {
+    const registration = await getPushServiceWorkerRegistration();
+    const subscription = await registration.pushManager.getSubscription();
+    if (subscription && Notification.permission === 'granted') {
+      button.textContent = 'Уведомления включены';
+      button.disabled = true;
+      return;
+    }
 
-  button.textContent = 'Включить уведомления';
-  button.disabled = false;
+    button.textContent = 'Включить уведомления';
+    button.disabled = false;
+  } catch {
+    button.textContent = 'Повторить подключение уведомлений';
+    button.disabled = false;
+  }
 }
 
 async function enablePushNotifications() {
@@ -336,21 +338,24 @@ async function enablePushNotifications() {
   if (!button || !('Notification' in window)) return;
 
   button.disabled = true;
+  button.textContent = 'Запрашиваем разрешение…';
   try {
     const permission = Notification.permission === 'granted'
       ? 'granted'
       : await Notification.requestPermission();
     if (permission !== 'granted') {
       button.textContent = 'Уведомления не разрешены';
+      button.disabled = permission === 'denied';
       return;
     }
 
+    button.textContent = 'Подключаем уведомления…';
     const config = await request('/v1/portal/push/config');
     if (!config?.available || typeof config.publicKey !== 'string') {
       throw new Error('Push-уведомления пока не настроены клиникой');
     }
 
-    const registration = await navigator.serviceWorker.ready;
+    const registration = await getPushServiceWorkerRegistration();
     let subscription = await registration.pushManager.getSubscription();
     if (!subscription) {
       subscription = await registration.pushManager.subscribe({
@@ -383,7 +388,7 @@ async function enablePushNotifications() {
 
 async function removeCurrentPushSubscription() {
   if (!('serviceWorker' in navigator)) return;
-  const registration = await navigator.serviceWorker.ready;
+  const registration = await getPushServiceWorkerRegistration();
   const subscription = await registration.pushManager?.getSubscription();
   if (!subscription) return;
   try {
@@ -395,6 +400,25 @@ async function removeCurrentPushSubscription() {
   } finally {
     await subscription.unsubscribe();
   }
+}
+
+async function getPushServiceWorkerRegistration() {
+  const registration = await withTimeout(
+    serviceWorkerRegistrationPromise,
+    15_000,
+    'Не удалось подготовить уведомления. Закройте приложение, откройте снова и повторите.',
+  );
+  if (!registration) {
+    throw new Error('Не удалось подготовить push-уведомления в этом браузере');
+  }
+  return registration;
+}
+
+function withTimeout(promise, timeoutMs, message) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => window.setTimeout(() => reject(new Error(message)), timeoutMs)),
+  ]);
 }
 
 function urlBase64ToUint8Array(value) {

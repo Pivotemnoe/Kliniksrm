@@ -26,7 +26,7 @@ export class PortalPageController {
     return response.sendFile(resolve(__dirname, 'public/manifest.webmanifest'));
   }
 
-  @Get('portal/sw.js')
+  @Get(['sw.js', 'portal/sw.js'])
   serviceWorker(@Res() response: Response) {
     response.type('application/javascript');
     response.setHeader('Cache-Control', 'no-cache');
