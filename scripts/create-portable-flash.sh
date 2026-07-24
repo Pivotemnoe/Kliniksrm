@@ -88,6 +88,23 @@ if command -v git >/dev/null 2>&1 && git -C "$ROOT_DIR" rev-parse --is-inside-wo
   GIT_COMMIT="$(git -C "$ROOT_DIR" rev-parse HEAD 2>/dev/null || echo local)"
 fi
 
+CONNECTIVITY_ENV_SOURCE="$ROOT_DIR/.env"
+CONNECTIVITY_ENV_TARGET="$TMP_DIR/portable/clinic-connectivity.env"
+CONNECTIVITY_KEYS=(
+  OWNER_GATEWAY_URL
+  OWNER_GATEWAY_SYNC_SECRET
+  OWNER_GATEWAY_REQUEST_TIMEOUT_MS
+  NOTIFICATION_DISPATCH_INTERVAL_MS
+  CLIENT_PORTAL_PUBLIC_URL
+  MAX_BOT_NAME
+  MAX_BOT_TOKEN
+  MAX_API_BASE_URL
+  TELEGRAM_BOT_USERNAME
+  TELEGRAM_BOT_TOKEN
+  TELEGRAM_WEBHOOK_SECRET
+  TELEGRAM_API_BASE_URL
+)
+
 if ! command -v rsync >/dev/null 2>&1; then
   echo "Не найдена команда rsync." >&2
   exit 1
@@ -166,6 +183,31 @@ cp "$ROOT_DIR/scripts/portable/start-mac.command" "$TMP_DIR/Установить
 cp "$ROOT_DIR/scripts/portable/update-mac.command" "$TMP_DIR/Обновить TemichevVet - Mac.command"
 cp "$ROOT_DIR/scripts/portable/start-linux.sh" "$TMP_DIR/Установить TemichevVet - Linux.sh"
 cp "$ROOT_DIR/scripts/portable/update-linux.sh" "$TMP_DIR/Обновить TemichevVet - Linux.sh"
+
+if [[ -f "$CONNECTIVITY_ENV_SOURCE" ]]; then
+  connectivity_count=0
+  {
+    echo "# TemichevVet clinic connectivity settings. Keep this flash drive protected."
+    for key in "${CONNECTIVITY_KEYS[@]}"; do
+      line="$(grep -E "^${key}=" "$CONNECTIVITY_ENV_SOURCE" | tail -1 || true)"
+      value="${line#*=}"
+      if [[ -n "$line" && -n "$value" ]]; then
+        printf '%s=%s\n' "$key" "$value"
+        connectivity_count=$((connectivity_count + 1))
+      fi
+    done
+  } > "$CONNECTIVITY_ENV_TARGET"
+
+  if [[ "$connectivity_count" -gt 0 ]]; then
+    chmod 600 "$CONNECTIVITY_ENV_TARGET" 2>/dev/null || true
+    echo "Добавлены настройки связи личного кабинета: $connectivity_count параметров (значения не выводятся)."
+  else
+    rm -f "$CONNECTIVITY_ENV_TARGET"
+    echo "Предупреждение: в локальном .env нет настроек связи личного кабинета."
+  fi
+else
+  echo "Предупреждение: локальный .env не найден; настройки связи личного кабинета не добавлены."
+fi
 
 {
   echo "TemichevVet Portable"

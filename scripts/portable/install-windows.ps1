@@ -13,6 +13,21 @@ $InstallDir = Join-Path $Env:USERPROFILE "TemichevVet"
 $ImagesTar = Join-Path $PortableRoot "docker-images\temichevvet-images.tar"
 $InstalledEnvFile = Join-Path $InstallDir ".env"
 $PortableVersionFile = Join-Path $PortableRoot "VERSION.txt"
+$PortableConnectivityFile = Join-Path $PortableRoot "portable\clinic-connectivity.env"
+$PortableConnectivityKeys = @(
+  "OWNER_GATEWAY_URL",
+  "OWNER_GATEWAY_SYNC_SECRET",
+  "OWNER_GATEWAY_REQUEST_TIMEOUT_MS",
+  "NOTIFICATION_DISPATCH_INTERVAL_MS",
+  "CLIENT_PORTAL_PUBLIC_URL",
+  "MAX_BOT_NAME",
+  "MAX_BOT_TOKEN",
+  "MAX_API_BASE_URL",
+  "TELEGRAM_BOT_USERNAME",
+  "TELEGRAM_BOT_TOKEN",
+  "TELEGRAM_WEBHOOK_SECRET",
+  "TELEGRAM_API_BASE_URL"
+)
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
@@ -99,6 +114,68 @@ function Set-InstalledEnvDefault($Key, $Value) {
   $current = Get-ExistingEnvValue $Key ""
   if ([string]::IsNullOrWhiteSpace($current)) {
     Set-InstalledEnvValue $Key $Value
+  }
+}
+
+function Initialize-InstalledEnvFile {
+  if (Test-Path $InstalledEnvFile) {
+    return
+  }
+
+  $envExample = Join-Path $InstallDir ".env.example"
+  if (!(Test-Path $envExample)) {
+    throw "Environment template was not found: $envExample"
+  }
+
+  Copy-Item -Force -Path $envExample -Destination $InstalledEnvFile
+}
+
+function Import-PortableConnectivity {
+  if (!(Test-Path $PortableConnectivityFile)) {
+    Write-Host "Настройки связи личного кабинета на флешке не найдены."
+    return
+  }
+
+  Initialize-InstalledEnvFile
+  $imported = 0
+
+  foreach ($rawLine in Get-Content $PortableConnectivityFile) {
+    $line = $rawLine.Trim()
+    if ([string]::IsNullOrWhiteSpace($line) -or $line.StartsWith("#")) {
+      continue
+    }
+
+    $separator = $line.IndexOf("=")
+    if ($separator -le 0) {
+      continue
+    }
+
+    $key = $line.Substring(0, $separator).Trim()
+    $value = $line.Substring($separator + 1)
+    if (($PortableConnectivityKeys -notcontains $key) -or [string]::IsNullOrWhiteSpace($value)) {
+      continue
+    }
+
+    Set-InstalledEnvValue $key $value
+    $imported++
+  }
+
+  Write-Host "Настройки связи личного кабинета обновлены: $imported параметров (значения скрыты)."
+}
+
+function Set-InstalledSourceVersion {
+  if (!(Test-Path $PortableVersionFile)) {
+    return
+  }
+
+  $match = Get-Content $PortableVersionFile | Where-Object { $_ -match "^git_commit=" } | Select-Object -Last 1
+  if (!$match) {
+    return
+  }
+
+  $commit = $match.Substring("git_commit=".Length).Trim()
+  if (![string]::IsNullOrWhiteSpace($commit)) {
+    Set-InstalledEnvValue "CRM_SOURCE_VERSION" $commit
   }
 }
 
@@ -377,6 +454,10 @@ Install-PortableAssets
 if (Test-Path $PortableVersionFile) {
   Copy-Item -Force -Path $PortableVersionFile -Destination (Join-Path $InstallDir "VERSION.txt")
 }
+
+Initialize-InstalledEnvFile
+Import-PortableConnectivity
+Set-InstalledSourceVersion
 
 Set-InstalledEnvDefault "TEMICHEVVET_REMOTE_API_IMAGE" "ghcr.io/pivotemnoe/kliniksrm-api:stable"
 Set-InstalledEnvDefault "TEMICHEVVET_REMOTE_WEB_IMAGE" "ghcr.io/pivotemnoe/kliniksrm-web:stable"
