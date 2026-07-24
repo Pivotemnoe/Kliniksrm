@@ -129,6 +129,21 @@ cleanup_macos_metadata() {
   fi
 }
 
+write_windows_text() {
+  local source="$1"
+  local target="$2"
+
+  LC_ALL=C awk '{ sub(/\r$/, ""); printf "%s\r\n", $0 }' "$source" > "$target"
+}
+
+write_windows_powershell() {
+  local source="$1"
+  local target="$2"
+
+  printf '\xef\xbb\xbf' > "$target"
+  LC_ALL=C awk '{ sub(/\r$/, ""); printf "%s\r\n", $0 }' "$source" >> "$target"
+}
+
 rm -rf "$TMP_DIR"
 mkdir -p "$TMP_DIR/CRM" "$TMP_DIR/portable"
 
@@ -167,22 +182,32 @@ else
   cp "$ROOT_DIR/scripts/portable/README.txt" "$TMP_DIR/README-Windows.txt"
 fi
 
-printf '\xef\xbb\xbf' > "$TMP_DIR/portable/install-windows.ps1"
-cat "$ROOT_DIR/scripts/portable/install-windows.ps1" >> "$TMP_DIR/portable/install-windows.ps1"
-printf '\xef\xbb\xbf' > "$TMP_DIR/portable/install-workstation-windows.ps1"
-cat "$ROOT_DIR/scripts/portable/install-workstation-windows.ps1" >> "$TMP_DIR/portable/install-workstation-windows.ps1"
+write_windows_powershell "$ROOT_DIR/scripts/portable/install-windows.ps1" "$TMP_DIR/portable/install-windows.ps1"
+write_windows_powershell "$ROOT_DIR/scripts/portable/install-workstation-windows.ps1" "$TMP_DIR/portable/install-workstation-windows.ps1"
 cp "$ROOT_DIR/scripts/portable/install-mac.sh" "$TMP_DIR/portable/install-mac.sh"
 cp "$ROOT_DIR/scripts/portable/install-linux.sh" "$TMP_DIR/portable/install-linux.sh"
-cp "$ROOT_DIR/scripts/portable/start-windows.bat" "$TMP_DIR/Установить TemichevVet - Windows.bat"
-cp "$ROOT_DIR/scripts/portable/update-windows.bat" "$TMP_DIR/Обновить TemichevVet - Windows.bat"
-cp "$ROOT_DIR/scripts/portable/update-online-windows.bat" "$TMP_DIR/Обновить TemichevVet через интернет - Windows.bat"
-cp "$ROOT_DIR/scripts/portable/configure-github-updates-windows.bat" "$TMP_DIR/Настроить обновления GitHub - Windows.bat"
-cp "$ROOT_DIR/scripts/portable/check-version-windows.bat" "$TMP_DIR/Проверить версию TemichevVet - Windows.bat"
-cp "$ROOT_DIR/scripts/portable/start-workstation-windows.bat" "$TMP_DIR/Подключить рабочее место - Windows.bat"
+write_windows_text "$ROOT_DIR/scripts/portable/start-windows.bat" "$TMP_DIR/Установить TemichevVet - Windows.bat"
+write_windows_text "$ROOT_DIR/scripts/portable/update-windows.bat" "$TMP_DIR/Обновить TemichevVet - Windows.bat"
+write_windows_text "$ROOT_DIR/scripts/portable/update-online-windows.bat" "$TMP_DIR/Обновить TemichevVet через интернет - Windows.bat"
+write_windows_text "$ROOT_DIR/scripts/portable/configure-github-updates-windows.bat" "$TMP_DIR/Настроить обновления GitHub - Windows.bat"
+write_windows_text "$ROOT_DIR/scripts/portable/check-version-windows.bat" "$TMP_DIR/Проверить версию TemichevVet - Windows.bat"
+write_windows_text "$ROOT_DIR/scripts/portable/start-workstation-windows.bat" "$TMP_DIR/Подключить рабочее место - Windows.bat"
 cp "$ROOT_DIR/scripts/portable/start-mac.command" "$TMP_DIR/Установить TemichevVet - Mac.command"
 cp "$ROOT_DIR/scripts/portable/update-mac.command" "$TMP_DIR/Обновить TemichevVet - Mac.command"
 cp "$ROOT_DIR/scripts/portable/start-linux.sh" "$TMP_DIR/Установить TemichevVet - Linux.sh"
 cp "$ROOT_DIR/scripts/portable/update-linux.sh" "$TMP_DIR/Обновить TemichevVet - Linux.sh"
+
+while IFS= read -r -d '' powershell_file; do
+  normalized_file="${powershell_file}.windows"
+  write_windows_powershell "$powershell_file" "$normalized_file"
+  mv "$normalized_file" "$powershell_file"
+done < <(find "$TMP_DIR/CRM" -type f -name '*.ps1' -print0)
+
+while IFS= read -r -d '' batch_file; do
+  normalized_file="${batch_file}.windows"
+  write_windows_text "$batch_file" "$normalized_file"
+  mv "$normalized_file" "$batch_file"
+done < <(find "$TMP_DIR/CRM" -type f \( -name '*.bat' -o -name '*.cmd' \) -print0)
 
 if [[ -f "$CONNECTIVITY_ENV_SOURCE" ]]; then
   connectivity_count=0
