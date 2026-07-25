@@ -166,6 +166,15 @@ random_secret() {
   date +%s | shasum -a 256 | awk '{print $1}'
 }
 
+random_password() {
+  if command -v openssl >/dev/null 2>&1; then
+    printf 'Tv!%s' "$(openssl rand -hex 12)"
+    return
+  fi
+
+  printf 'Tv!%s' "$(date +%s | shasum -a 256 | awk '{print substr($1, 1, 24)}')"
+}
+
 set_env_value() {
   local key="$1"
   local value="$2"
@@ -306,6 +315,7 @@ if [[ ! -f "$ENV_FILE" ]]; then
   set_env_value "WEB_BIND_ADDR" "0.0.0.0"
   set_env_value "APP_URL" "http://${LOCAL_IP}:3000"
   set_env_value "SESSION_SECRET" "$(random_secret)"
+  set_env_value "BOOTSTRAP_DIRECTOR_PASSWORD" "$(random_password)"
 
   echo "Создан файл настроек: $ENV_FILE"
 fi
@@ -313,6 +323,14 @@ fi
 WEB_PORT="$(load_env_value WEB_PORT 3000)"
 API_HOST_PORT="$(load_env_value API_HOST_PORT 4000)"
 DIRECTOR_PHONE="$(load_env_value BOOTSTRAP_DIRECTOR_PHONE '+70000000001')"
+CURRENT_SESSION_SECRET="$(load_env_value SESSION_SECRET '')"
+
+if [[ -z "$CURRENT_SESSION_SECRET" || "$CURRENT_SESSION_SECRET" == "change-me" ]]; then
+  set_env_value "SESSION_SECRET" "$(random_secret)"
+  echo "Небезопасный стандартный секрет входа заменён на случайный. Данные клиники не изменены."
+fi
+
+set_env_value "APP_URL" "http://${LOCAL_IP}:${WEB_PORT}"
 
 if [[ "$FORCE_BUILD" == "true" ]]; then
   docker_compose build api web

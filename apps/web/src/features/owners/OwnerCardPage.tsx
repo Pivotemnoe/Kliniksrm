@@ -171,8 +171,6 @@ export function OwnerCardPage() {
                       <Descriptions.Item label="Предпочтительный канал">
                         {owner.preferredNotificationChannel ? notificationChannelLabels[owner.preferredNotificationChannel] : '—'}
                       </Descriptions.Item>
-                      <Descriptions.Item label="Telegram chat id">{owner.telegramChatId || '—'}</Descriptions.Item>
-                      <Descriptions.Item label="MAX user id">{owner.maxUserId || '—'}</Descriptions.Item>
                       <Descriptions.Item label="Разрешённые каналы">{formatAllowedChannels(owner)}</Descriptions.Item>
                       <Descriptions.Item label="Скидка на товары">{owner.goodsDiscount} %</Descriptions.Item>
                       <Descriptions.Item label="Скидка на услуги">{owner.servicesDiscount} %</Descriptions.Item>

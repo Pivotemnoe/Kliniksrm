@@ -13,14 +13,14 @@ export class ImportsController {
 
   @Post('vetaf/preview')
   @RequireAnyPermissions('owners.manage', 'stock.manage')
-  @ApiOkResponse({ description: 'VetaF import preview.' })
+  @ApiOkResponse({ description: 'Предпросмотр переноса данных.' })
   previewVetafImport(@Body() dto: VetafImportDto, @CurrentEmployee() actor: AuthEmployee) {
     return this.importsService.previewVetafImport(dto, actor);
   }
 
   @Post('vetaf/commit')
   @RequireAnyPermissions('owners.manage', 'stock.manage')
-  @ApiOkResponse({ description: 'VetaF import committed.' })
+  @ApiOkResponse({ description: 'Перенос данных выполнен.' })
   commitVetafImport(@Body() dto: VetafImportDto, @CurrentEmployee() actor: AuthEmployee) {
     return this.importsService.commitVetafImport(dto, actor);
   }

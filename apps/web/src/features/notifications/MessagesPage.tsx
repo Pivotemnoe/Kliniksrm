@@ -1,9 +1,9 @@
 import { CloseOutlined, EditOutlined, EyeOutlined, PlusOutlined, RedoOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Alert, Button, Checkbox, Descriptions, Drawer, Form, Input, Select, Space, Table, Tabs, Tag, Tooltip, Typography } from 'antd';
+import { App, Alert, Button, Checkbox, Descriptions, Drawer, Form, Input, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
 import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
@@ -11,7 +11,7 @@ import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { fromDatetimeLocal, formatDateTime } from '../../shared/utils/date';
-import { listOwnerAnimals, listOwners } from '../owners/owners.api';
+import { getOwner, listOwnerAnimals, listOwners } from '../owners/owners.api';
 import {
   cancelNotification,
   createNotification,
@@ -34,7 +34,6 @@ import {
 
 const pageSize = 10;
 const channelOptions = Object.entries(notificationChannelLabels).map(([value, label]) => ({ value, label }));
-const automaticMessengerOption = [{ value: 'MESSENGER', label: notificationChannelLabels.MESSENGER }];
 
 export function MessagesPage() {
   const queryClient = useQueryClient();
@@ -65,7 +64,7 @@ export function MessagesPage() {
     onSuccess: async () => {
       await invalidateNotifications(queryClient);
       setCreateOpen(false);
-      message.success('Уведомление поставлено в очередь');
+      message.success('Сообщение принято к отправке');
     },
     onError: (error) => message.error(getErrorMessage(error)),
   });
@@ -85,10 +84,21 @@ export function MessagesPage() {
     onSuccess: async (updated) => {
       await invalidateNotifications(queryClient);
       setSelectedOutbox((current) => (current?.id === updated.id ? updated : current));
-      message.success('Статус уведомления обновлён');
+      message.success('Статус сообщения обновлён');
     },
     onError: (error) => message.error(getErrorMessage(error)),
   });
+
+  useEffect(() => {
+    if (!selectedOutbox) {
+      return;
+    }
+
+    const updatedItem = outboxQuery.data?.items.find((item) => item.id === selectedOutbox.id);
+    if (updatedItem && updatedItem.updatedAt !== selectedOutbox.updatedAt) {
+      setSelectedOutbox(updatedItem);
+    }
+  }, [outboxQuery.data, selectedOutbox]);
 
   const outboxColumns = useMemo<ColumnsType<NotificationOutboxItem>>(
     () => [
@@ -107,11 +117,10 @@ export function MessagesPage() {
         render: (value: NotificationChannel) => formatNotificationChannel(value),
       },
       {
-        title: 'Получатель',
-        dataIndex: 'recipient',
-        key: 'recipient',
-        width: 190,
-        ellipsis: true,
+        title: 'Доставка',
+        key: 'delivery',
+        width: 210,
+        render: (_, item) => formatOutboxDelivery(item),
       },
       {
         title: 'Клиент / пациент',
@@ -136,28 +145,6 @@ export function MessagesPage() {
             {item.template ? <Typography.Text type="secondary">{getTemplateLabel(item)}</Typography.Text> : null}
           </Space>
         ),
-      },
-      {
-        title: 'Попытки',
-        dataIndex: 'attempts',
-        key: 'attempts',
-        width: 95,
-        render: (value: number) => value || 0,
-      },
-      {
-        title: 'Ошибка',
-        dataIndex: 'lastError',
-        key: 'lastError',
-        width: 220,
-        ellipsis: true,
-        render: (value: string | null) =>
-          value ? (
-            <Tooltip title={value}>
-              <Typography.Text type="danger">{value}</Typography.Text>
-            </Tooltip>
-          ) : (
-            '—'
-          ),
       },
       { title: 'Запланировано', dataIndex: 'scheduledAt', key: 'scheduledAt', width: 175, render: formatDateTime },
       { title: 'Отправлено', dataIndex: 'sentAt', key: 'sentAt', width: 175, render: formatDateTime },
@@ -249,7 +236,7 @@ export function MessagesPage() {
                 Новый шаблон
               </Button>
               <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-                Создать уведомление
+                Написать владельцу
               </Button>
             </Space>
           ) : null
@@ -386,7 +373,7 @@ function NotificationDetailDrawer({
 }) {
   return (
     <Drawer
-      title="Сообщение в очереди"
+      title="Сообщение владельцу"
       width={680}
       open={Boolean(item)}
       onClose={onClose}
@@ -415,18 +402,17 @@ function NotificationDetailDrawer({
               <NotificationStatusTag status={item.status} />
             </Descriptions.Item>
             <Descriptions.Item label="Канал">{formatNotificationChannel(item.channel)}</Descriptions.Item>
-            <Descriptions.Item label="Получатель">{item.recipient}</Descriptions.Item>
+            <Descriptions.Item label="Доставка">{formatOutboxDelivery(item)}</Descriptions.Item>
             <Descriptions.Item label="Владелец">{item.owner?.fullName ?? '—'}</Descriptions.Item>
             <Descriptions.Item label="Пациент">{getAnimalLabel(item)}</Descriptions.Item>
             <Descriptions.Item label="Шаблон">{getTemplateLabel(item)}</Descriptions.Item>
             <Descriptions.Item label="Создал">{item.createdBy?.fullName ?? '—'}</Descriptions.Item>
-            <Descriptions.Item label="Попытки">{item.attempts || 0}</Descriptions.Item>
             <Descriptions.Item label="Запланировано">{formatDateTime(item.scheduledAt)}</Descriptions.Item>
             <Descriptions.Item label="Отправлено">{formatDateTime(item.sentAt)}</Descriptions.Item>
             <Descriptions.Item label="Создано">{formatDateTime(item.createdAt)}</Descriptions.Item>
             <Descriptions.Item label="Обновлено">{formatDateTime(item.updatedAt)}</Descriptions.Item>
           </Descriptions>
-          {item.lastError ? <Alert type="error" showIcon message="Ошибка отправки" description={item.lastError} /> : null}
+          {getDeliveryIssueText(item) ? <Alert type="warning" showIcon message={getDeliveryIssueText(item)} /> : null}
           <div>
             <Typography.Title level={5} className="compact-title">
               Текст сообщения
@@ -449,6 +435,7 @@ const notificationSchema = z.object({
   subject: nullableString(300),
   body: z.string().trim().min(1, 'Введите текст').max(4000),
   scheduledAt: nullableDateTime(),
+  messengerChannels: z.array(z.enum(['MAX', 'TELEGRAM'])),
 }).superRefine((values, context) => {
   if (values.channel === 'MESSENGER' && !values.ownerId) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['ownerId'], message: 'Выберите владельца' });
@@ -483,7 +470,6 @@ function NotificationFormDrawer({
   });
   const [ownerSearch, setOwnerSearch] = useState('');
   const ownerId = useWatch({ control, name: 'ownerId' });
-  const channel = useWatch({ control, name: 'channel' });
   const ownersQuery = useQuery({
     queryKey: ['owners', { search: ownerSearch, limit: 20, offset: 0 }],
     queryFn: () => listOwners({ search: ownerSearch, limit: 20, offset: 0 }),
@@ -494,6 +480,14 @@ function NotificationFormDrawer({
     queryFn: () => listOwnerAnimals(ownerId!),
     enabled: open && Boolean(ownerId),
   });
+  const selectedOwnerQuery = useQuery({
+    queryKey: ['owners', ownerId],
+    queryFn: () => getOwner(ownerId!),
+    enabled: open && Boolean(ownerId),
+  });
+  const selectedOwner = selectedOwnerQuery.data;
+  const maxConnected = Boolean(selectedOwner?.allowMax && selectedOwner.maxUserId);
+  const telegramConnected = Boolean(selectedOwner?.allowTelegram && selectedOwner.telegramChatId);
 
   function handleOpenChange(nextOpen: boolean) {
     if (nextOpen) {
@@ -512,12 +506,13 @@ function NotificationFormDrawer({
       subject: values.subject,
       body: values.body,
       scheduledAt: values.scheduledAt ? fromDatetimeLocal(values.scheduledAt) : null,
+      messengerChannels: values.messengerChannels,
     });
   }
 
   return (
     <Drawer
-      title="Новое уведомление"
+      title="Сообщение владельцу"
       width={680}
       open={open}
       onClose={onClose}
@@ -527,7 +522,7 @@ function NotificationFormDrawer({
         <Space>
           <Button onClick={onClose}>Отмена</Button>
           <Button type="primary" loading={isSubmitting} onClick={handleSubmit(submit)}>
-            Поставить в очередь
+            Отправить сообщение
           </Button>
         </Space>
       }
@@ -535,24 +530,6 @@ function NotificationFormDrawer({
       <Form layout="vertical">
         {submitError ? <Alert type="error" showIcon message={getErrorMessage(submitError)} className="form-alert" /> : null}
         <div className="form-grid two-columns">
-          <Controller
-            control={control}
-            name="channel"
-            render={({ field }) => (
-              <Form.Item label="Канал">
-                <Select {...field} options={automaticMessengerOption} />
-              </Form.Item>
-            )}
-          />
-          <Controller
-            control={control}
-            name="scheduledAt"
-            render={({ field }) => (
-              <Form.Item label="Отправить после">
-                <Input type="datetime-local" {...field} value={field.value ?? ''} />
-              </Form.Item>
-            )}
-          />
           <Controller
             control={control}
             name="ownerId"
@@ -573,6 +550,7 @@ function NotificationFormDrawer({
                   onChange={(value) => {
                     field.onChange(value ?? '');
                     setValue('animalId', '');
+                    setValue('messengerChannels', []);
                   }}
                 />
               </Form.Item>
@@ -595,16 +573,41 @@ function NotificationFormDrawer({
               </Form.Item>
             )}
           />
-        </div>
-        {channel === 'MESSENGER' ? (
-          <Alert
-            type="info"
-            showIcon
-            className="form-alert"
-            message="Сообщение будет отправлено в подключённый MAX или Telegram"
-            description="Если ни один мессенджер ещё не подключён, сначала создайте владельцу приглашение на вкладке «Связь»."
+          <Controller
+            control={control}
+            name="scheduledAt"
+            render={({ field }) => (
+              <Form.Item label="Отправить после">
+                <Input type="datetime-local" {...field} value={field.value ?? ''} />
+              </Form.Item>
+            )}
           />
-        ) : null}
+        </div>
+        <Alert
+          type="info"
+          showIcon
+          className="form-alert"
+          message="Личный кабинет включён всегда"
+          description="Владелец увидит сообщение в личном кабинете. Ниже можно дополнительно выбрать подключённые мессенджеры."
+        />
+        <Controller
+          control={control}
+          name="messengerChannels"
+          render={({ field }) => (
+            <Form.Item label="Дополнительно отправить">
+              <Checkbox.Group value={field.value} onChange={field.onChange}>
+                <Space direction="vertical">
+                  <Checkbox value="MAX" disabled={!maxConnected}>
+                    MAX {ownerId && !maxConnected ? '— не подключён' : ''}
+                  </Checkbox>
+                  <Checkbox value="TELEGRAM" disabled={!telegramConnected}>
+                    Telegram {ownerId && !telegramConnected ? '— не подключён' : ''}
+                  </Checkbox>
+                </Space>
+              </Checkbox.Group>
+            </Form.Item>
+          )}
+        />
         <Controller
           control={control}
           name="templateId"
@@ -631,17 +634,6 @@ function NotificationFormDrawer({
             </Form.Item>
           )}
         />
-        {channel !== 'MESSENGER' ? (
-          <Controller
-            control={control}
-            name="recipient"
-            render={({ field, fieldState }) => (
-              <Form.Item label="Получатель" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
-                <Input {...field} placeholder="Телефон, email или адрес получателя" />
-              </Form.Item>
-            )}
-          />
-        ) : null}
         <Controller
           control={control}
           name="subject"
@@ -811,6 +803,7 @@ function getNotificationDefaults(): NotificationFormInput {
     subject: '',
     body: '',
     scheduledAt: '',
+    messengerChannels: [],
   };
 }
 
@@ -828,6 +821,41 @@ function formatNotificationChannel(value: NotificationChannel | string | null | 
   }
 
   return (notificationChannelLabels as Record<string, string>)[value] ?? value;
+}
+
+function formatOutboxDelivery(item: NotificationOutboxItem) {
+  if (item.channel !== 'MESSENGER') {
+    return formatNotificationChannel(item.channel);
+  }
+
+  const delivery = item.metadata?.delivery;
+  if (!delivery || typeof delivery !== 'object' || Array.isArray(delivery)) {
+    return 'Личный кабинет';
+  }
+
+  const requested = readDeliveryChannels((delivery as { messengerChannels?: unknown }).messengerChannels);
+  const delivered = readDeliveryChannels((delivery as { deliveredMessengerChannels?: unknown }).deliveredMessengerChannels);
+  const channels = [...new Set([...requested, ...delivered])];
+
+  return channels.length
+    ? `Личный кабинет + ${channels.map((value) => notificationChannelLabels[value]).join(' + ')}`
+    : 'Личный кабинет';
+}
+
+function getDeliveryIssueText(item: NotificationOutboxItem) {
+  if (!item.lastError) {
+    return null;
+  }
+
+  return item.status === 'FAILED'
+    ? 'Не удалось доставить сообщение. Проверьте подключение владельца и повторите отправку.'
+    : 'Доставка временно задержана. Система повторит попытку автоматически.';
+}
+
+function readDeliveryChannels(value: unknown): Array<'MAX' | 'TELEGRAM'> {
+  return Array.isArray(value)
+    ? value.filter((channel): channel is 'MAX' | 'TELEGRAM' => channel === 'MAX' || channel === 'TELEGRAM')
+    : [];
 }
 
 function getAnimalLabel(item: NotificationOutboxItem) {

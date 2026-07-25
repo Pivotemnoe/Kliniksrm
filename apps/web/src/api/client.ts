@@ -62,5 +62,5 @@ function extractMessage(payload: unknown, status: number) {
     }
   }
 
-  return `Ошибка API: ${status}`;
+  return `Система вернула ошибку: ${status}`;
 }

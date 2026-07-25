@@ -12,7 +12,8 @@ services:
       redis:
         condition: service_healthy
     environment:
-      NODE_ENV: ${NODE_ENV:-development}
+      NODE_ENV: ${NODE_ENV:-production}
+      CLINIC_RUNTIME_MODE: ${CLINIC_RUNTIME_MODE:-production}
       API_PORT: 4000
       APP_URL: ${APP_URL:-http://127.0.0.1:3000}
       DATABASE_URL: postgresql://${POSTGRES_USER:-clinic_crm}:${POSTGRES_PASSWORD:-clinic_crm}@postgres:5432/${POSTGRES_DB:-clinic_crm}
@@ -24,9 +25,13 @@ services:
       S3_SECRET_KEY: ${S3_SECRET_KEY:-clinic-crm-password}
       SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-clinic_crm_session}
       SESSION_SECRET: ${SESSION_SECRET:-change-me}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-auto}
       SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-12}
       SESSION_IDLE_TIMEOUT_MINUTES: ${SESSION_IDLE_TIMEOUT_MINUTES:-15}
       SEED_ON_START: ${SEED_ON_START:-true}
+      SEED_TEST_DATA: ${SEED_TEST_DATA:-false}
+      CLIENT_PORTAL_DEBUG_CODES: ${CLIENT_PORTAL_DEBUG_CODES:-false}
+      API_DOCS_ENABLED: ${API_DOCS_ENABLED:-false}
       CLIENT_PORTAL_ONLINE_REQUESTS_ENABLED: ${CLIENT_PORTAL_ONLINE_REQUESTS_ENABLED:-false}
       CLIENT_PORTAL_PUBLIC_URL: ${CLIENT_PORTAL_PUBLIC_URL:-}
       OWNER_GATEWAY_URL: ${OWNER_GATEWAY_URL:-}

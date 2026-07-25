@@ -20,6 +20,7 @@
     "db:migrate": "npm --workspace @clinic-crm/api run db:migrate",
     "db:seed": "npm --workspace @clinic-crm/api run db:seed",
     "api:e2e": "node scripts/e2e-api.mjs",
+    "test:unit": "npm run api:build && npm run owner-gateway:build && node --test tests/*.test.mjs",
     "clinic:start": "scripts/start-clinic-server.sh",
     "clinic:start:build": "scripts/start-clinic-server.sh --build",
     "clinic:start:open": "scripts/start-clinic-server.sh --open",
@@ -36,5 +37,15 @@
   },
   "engines": {
     "node": ">=22"
+  },
+  "devDependencies": {
+    "postcss": "8.5.23",
+    "react": "19.2.6",
+    "react-dom": "19.2.6"
+  },
+  "overrides": {
+    "postcss": "8.5.23",
+    "react": "19.2.6",
+    "react-dom": "19.2.6"
   }
 }

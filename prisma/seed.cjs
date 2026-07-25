@@ -944,7 +944,7 @@ async function seedAnimalCatalog() {
 }
 
 async function seedDirectorEmployee() {
-  const isProduction = process.env.NODE_ENV === 'production';
+  const isProduction = (process.env.CLINIC_RUNTIME_MODE ?? process.env.NODE_ENV) === 'production';
   const defaultPassword = 'ChangeMe123!';
   const password = process.env.BOOTSTRAP_DIRECTOR_PASSWORD ?? (isProduction ? undefined : defaultPassword);
 
@@ -966,6 +966,10 @@ async function seedDirectorEmployee() {
     },
     include: { employee: true },
   });
+
+  if (!user && isProduction && (!password || password === defaultPassword)) {
+    throw new Error('Для создания директора в рабочей клинической базе нужен случайный пароль установщика');
+  }
 
   if (!user) {
     user = await prisma.user.create({
@@ -1016,6 +1020,10 @@ async function seedDirectorEmployee() {
 
 async function seedTestingData({ isProduction }) {
   const seedTestData = process.env.SEED_TEST_DATA ?? (isProduction ? 'false' : 'true');
+
+  if (isProduction && seedTestData === 'true') {
+    throw new Error('Тестовые сотрудники запрещены в рабочей клинической среде');
+  }
 
   if (seedTestData !== 'true') {
     console.log('Skipped test seed data: SEED_TEST_DATA is not true');

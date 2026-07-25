@@ -101,6 +101,7 @@ function renderPortal(response) {
         ${showBrowserTransfer ? '<button id="copy-browser-link" class="button browser-button browser-only" type="button" hidden>Скопировать ссылку</button>' : ''}
         ${showBrowserTransfer ? '<span id="browser-hint" class="browser-hint browser-only" hidden>Нажмите значок браузера внизу MAX или скопируйте ссылку и вставьте её в любой браузер. Переход действует 10 минут, пароль не нужен.</span>' : ''}
         <button id="enable-push" class="button push-button" type="button" hidden>Включить уведомления</button>
+        <span id="push-status" class="push-status" role="status" aria-live="polite" hidden></span>
       </div>
     </section>
     <nav class="tabs" aria-label="Разделы личного кабинета">
@@ -303,9 +304,16 @@ async function updatePushButton() {
   const button = document.querySelector('#enable-push');
   if (!button) return;
 
+  if (isIosDevice() && !isStandaloneMode()) {
+    button.hidden = true;
+    setPushStatus('На iPhone уведомления включаются после добавления личного кабинета на экран «Домой».');
+    return;
+  }
+
   const supported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
   if (!supported) {
     button.hidden = true;
+    setPushStatus('Этот браузер не поддерживает push-уведомления. Сообщения останутся доступны в личном кабинете.');
     return;
   }
 
@@ -313,23 +321,36 @@ async function updatePushButton() {
   if (Notification.permission === 'denied') {
     button.textContent = 'Уведомления запрещены';
     button.disabled = true;
+    setPushStatus('Разрешите уведомления для личного кабинета в настройках устройства.');
     return;
   }
 
   try {
+    const config = await request('/v1/portal/push/config');
+    if (!config?.available || typeof config.publicKey !== 'string') {
+      button.textContent = 'Уведомления пока недоступны';
+      button.disabled = true;
+      setPushStatus('Клиника ещё не завершила настройку push-уведомлений. Сообщения в кабинете работают.');
+      return;
+    }
+
     const registration = await getPushServiceWorkerRegistration();
     const subscription = await registration.pushManager.getSubscription();
     if (subscription && Notification.permission === 'granted') {
+      await savePushSubscription(subscription);
       button.textContent = 'Уведомления включены';
       button.disabled = true;
+      setPushStatus('Новые сообщения будут появляться как уведомления на этом устройстве.');
       return;
     }
 
     button.textContent = 'Включить уведомления';
     button.disabled = false;
-  } catch {
+    setPushStatus('Нажмите кнопку и подтвердите разрешение в системном окне.');
+  } catch (error) {
     button.textContent = 'Повторить подключение уведомлений';
     button.disabled = false;
+    setPushStatus(error instanceof Error ? error.message : 'Не удалось проверить push-уведомления.');
   }
 }
 
@@ -346,6 +367,9 @@ async function enablePushNotifications() {
     if (permission !== 'granted') {
       button.textContent = 'Уведомления не разрешены';
       button.disabled = permission === 'denied';
+      setPushStatus(permission === 'denied'
+        ? 'Разрешите уведомления в настройках устройства и откройте приложение снова.'
+        : 'Без разрешения сообщения останутся доступны внутри личного кабинета.');
       return;
     }
 
@@ -363,27 +387,44 @@ async function enablePushNotifications() {
         applicationServerKey: urlBase64ToUint8Array(config.publicKey),
       });
     }
-    const value = subscription.toJSON();
-    if (!value.endpoint || !value.keys?.p256dh || !value.keys?.auth) {
-      throw new Error('Браузер не создал подписку на уведомления');
-    }
-
-    await request('/v1/portal/push/subscriptions', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        endpoint: value.endpoint,
-        p256dh: value.keys.p256dh,
-        auth: value.keys.auth,
-      }),
-    });
+    await savePushSubscription(subscription);
     button.textContent = 'Уведомления включены';
     button.disabled = true;
+    setPushStatus('Готово. Новые сообщения будут появляться как уведомления на этом устройстве.');
   } catch (error) {
     button.textContent = 'Включить уведомления';
     button.disabled = false;
-    window.alert(error instanceof Error ? error.message : 'Не удалось включить уведомления');
+    setPushStatus(error instanceof Error ? error.message : 'Не удалось включить уведомления');
   }
+}
+
+async function savePushSubscription(subscription) {
+  const value = subscription.toJSON();
+  if (!value.endpoint || !value.keys?.p256dh || !value.keys?.auth) {
+    throw new Error('Браузер не создал подписку на уведомления');
+  }
+
+  await request('/v1/portal/push/subscriptions', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      endpoint: value.endpoint,
+      p256dh: value.keys.p256dh,
+      auth: value.keys.auth,
+    }),
+  });
+}
+
+function setPushStatus(text) {
+  const status = document.querySelector('#push-status');
+  if (!status) return;
+  status.textContent = text;
+  status.hidden = !text;
+}
+
+function isIosDevice() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 }
 
 async function removeCurrentPushSubscription() {

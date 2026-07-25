@@ -1,7 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Space, Tag, Typography } from 'antd';
 import { apiBaseUrl } from '../../api/client';
-import { getErrorMessage } from '../../api/errors';
 import { getHealth, getMeta } from './system.api';
 
 export function SystemStatus() {
@@ -21,29 +20,34 @@ export function SystemStatus() {
       <Alert
         type="error"
         showIcon
-        message="Backend недоступен"
-        description={getErrorMessage(healthQuery.error ?? metaQuery.error)}
+        message="CRM временно недоступна"
+        description="Не удалось проверить соединение с системой. Повторите попытку или обратитесь к техническому специалисту."
       />
     );
   }
 
   return (
     <div className="system-status">
-      <Space direction="vertical" size={8}>
-        <Typography.Text type="secondary">API base URL: {apiBaseUrl}</Typography.Text>
+      <Space direction="vertical" size={10} className="full-width">
         <Space wrap>
-          <Tag color={healthQuery.data?.status === 'ok' ? 'green' : 'default'}>API {healthQuery.data?.status ?? '...'}</Tag>
-          <Tag color={healthQuery.data?.database === 'ok' ? 'green' : 'default'}>
-            DB {healthQuery.data?.database ?? '...'}
+          <Tag color={healthQuery.data?.status === 'ok' ? 'green' : 'default'}>
+            {healthQuery.data?.status === 'ok' ? 'CRM работает' : 'CRM проверяется'}
           </Tag>
-          <Tag color="blue">{metaQuery.data?.version ? `v${metaQuery.data.version}` : 'meta ...'}</Tag>
-          {metaQuery.data?.revision ? <Tag color="purple">commit {metaQuery.data.revision.slice(0, 12)}</Tag> : null}
-          {metaQuery.data?.buildDate ? <Tag>{metaQuery.data.buildDate}</Tag> : null}
-          <Tag>{metaQuery.data?.modules.length ?? 0} модулей</Tag>
+          <Tag color={healthQuery.data?.database === 'ok' ? 'green' : 'default'}>
+            {healthQuery.data?.database === 'ok' ? 'База данных доступна' : 'База данных проверяется'}
+          </Tag>
+          {metaQuery.data?.version ? <Tag color="blue">Версия {metaQuery.data.version}</Tag> : null}
         </Space>
-        {metaQuery.data?.imageSource ? (
-          <Typography.Text type="secondary">Источник сборки: {metaQuery.data.imageSource}</Typography.Text>
-        ) : null}
+        <details className="technical-details">
+          <summary>Техническая информация</summary>
+          <Space direction="vertical" size={4} className="technical-details-body">
+            <Typography.Text type="secondary">Адрес API: {apiBaseUrl}</Typography.Text>
+            {metaQuery.data?.revision ? <Typography.Text type="secondary">Версия кода: {metaQuery.data.revision.slice(0, 12)}</Typography.Text> : null}
+            {metaQuery.data?.buildDate ? <Typography.Text type="secondary">Дата сборки: {metaQuery.data.buildDate}</Typography.Text> : null}
+            {metaQuery.data?.imageSource ? <Typography.Text type="secondary">Источник сборки: {metaQuery.data.imageSource}</Typography.Text> : null}
+            <Typography.Text type="secondary">Подключено модулей: {metaQuery.data?.modules.length ?? 0}</Typography.Text>
+          </Space>
+        </details>
       </Space>
     </div>
   );

@@ -668,7 +668,10 @@ function EmployeeShiftWeekBoard({
           <Button icon={<RightOutlined />} onClick={() => onMoveWeek(1)} aria-label="Следующая неделя" />
         </Space>
       </div>
-      <div className="shift-week-grid">
+      <Typography.Text type="secondary" className="schedule-scroll-hint">
+        Проведите в сторону, чтобы увидеть остальные дни недели
+      </Typography.Text>
+      <div className="shift-week-grid" role="region" aria-label="Смены по дням недели" tabIndex={0}>
         {days.map((day) => {
           const dayShifts = shiftsByDay.get(day.value) ?? [];
 

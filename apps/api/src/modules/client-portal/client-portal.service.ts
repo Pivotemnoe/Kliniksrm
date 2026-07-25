@@ -6,6 +6,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CreatePortalOnlineRequestDto } from './dto/create-portal-online-request.dto';
 import { RequestPortalCodeDto } from './dto/request-portal-code.dto';
 import { VerifyPortalCodeDto } from './dto/verify-portal-code.dto';
+import { shouldExposePortalDebugCode } from '../../config/runtime-config';
 
 const PORTAL_CODE_TTL_MINUTES = Number(process.env.CLIENT_PORTAL_CODE_TTL_MINUTES ?? 10);
 const PORTAL_CODE_MAX_ATTEMPTS = Number(process.env.CLIENT_PORTAL_CODE_MAX_ATTEMPTS ?? 5);
@@ -45,7 +46,7 @@ export class ClientPortalService {
       ok: true,
       expiresAt,
       deliveryChannel: getPortalDeliveryChannel(owner),
-      debugCode: shouldExposePortalCode() ? code : undefined,
+      debugCode: shouldExposePortalDebugCode() ? code : undefined,
     };
   }
 
@@ -448,10 +449,6 @@ function getPortalDeliveryChannel(owner: Pick<PortalOwnerForLogin, 'allowTelegra
   }
 
   return 'LOCAL';
-}
-
-function shouldExposePortalCode() {
-  return process.env.CLIENT_PORTAL_DEBUG_CODES === 'true' || process.env.NODE_ENV !== 'production';
 }
 
 function addMinutes(date: Date, minutes: number) {

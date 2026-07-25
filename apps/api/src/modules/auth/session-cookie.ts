@@ -1,3 +1,5 @@
+import { shouldUseSecureSessionCookie } from '../../config/runtime-config';
+
 export const SESSION_COOKIE_NAME = process.env.SESSION_COOKIE_NAME ?? 'clinic_crm_session';
 
 export function parseCookie(cookieHeader: string | string[] | undefined, name: string) {
@@ -21,10 +23,9 @@ export function parseCookie(cookieHeader: string | string[] | undefined, name: s
 export function getCookieOptions(maxAgeMs?: number) {
   return {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: shouldUseSecureSessionCookie(),
     sameSite: 'strict' as const,
     path: '/',
     ...(maxAgeMs ? { maxAge: maxAgeMs } : {}),
   };
 }
-

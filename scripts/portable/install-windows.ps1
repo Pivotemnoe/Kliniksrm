@@ -6,6 +6,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$Utf8NoBom = New-Object System.Text.UTF8Encoding -ArgumentList $false
 
 $PortableRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $SourceDir = Join-Path $PortableRoot "CRM"
@@ -100,9 +101,9 @@ function Set-InstalledEnvValue($Key, $Value) {
 
   if ($content -match "(?m)^$([Regex]::Escape($Key))=") {
     $content = [Regex]::Replace($content, "(?m)^$([Regex]::Escape($Key))=.*$", $line)
-    Set-Content -Path $InstalledEnvFile -Value $content -NoNewline -Encoding UTF8
+    [IO.File]::WriteAllText($InstalledEnvFile, $content, $Utf8NoBom)
   } else {
-    Add-Content -Path $InstalledEnvFile -Value $line -Encoding UTF8
+    [IO.File]::AppendAllText($InstalledEnvFile, [Environment]::NewLine + $line, $Utf8NoBom)
   }
 }
 
@@ -115,6 +116,34 @@ function Set-InstalledEnvDefault($Key, $Value) {
   if ([string]::IsNullOrWhiteSpace($current)) {
     Set-InstalledEnvValue $Key $Value
   }
+}
+
+function New-InstalledRandomSecret {
+  $bytes = New-Object byte[] 48
+  $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+  try {
+    $rng.GetBytes($bytes)
+  } finally {
+    if ($rng -is [System.IDisposable]) {
+      $rng.Dispose()
+    }
+  }
+
+  return [Convert]::ToBase64String($bytes)
+}
+
+function New-InstalledRandomPassword {
+  $bytes = New-Object byte[] 12
+  $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+  try {
+    $rng.GetBytes($bytes)
+  } finally {
+    if ($rng -is [System.IDisposable]) {
+      $rng.Dispose()
+    }
+  }
+
+  return "Tv!$(([BitConverter]::ToString($bytes)).Replace('-', '').ToLowerInvariant())"
 }
 
 function Initialize-InstalledEnvFile {
@@ -456,6 +485,12 @@ if (Test-Path $PortableVersionFile) {
 }
 
 Initialize-InstalledEnvFile
+if ((Get-ExistingEnvValue "SESSION_SECRET" "") -eq "change-me") {
+  Set-InstalledEnvValue "SESSION_SECRET" (New-InstalledRandomSecret)
+} else {
+  Set-InstalledEnvDefault "SESSION_SECRET" (New-InstalledRandomSecret)
+}
+Set-InstalledEnvDefault "BOOTSTRAP_DIRECTOR_PASSWORD" (New-InstalledRandomPassword)
 Import-PortableConnectivity
 Set-InstalledSourceVersion
 

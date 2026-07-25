@@ -88,10 +88,11 @@ export function LoginPage() {
               render={({ field, fieldState }) => (
                 <Form.Item
                   label="Телефон или email"
+                  htmlFor="employee-login"
                   validateStatus={fieldState.error ? 'error' : undefined}
                   help={fieldState.error?.message}
                 >
-                  <Input autoComplete="username" size="large" {...field} />
+                  <Input id="employee-login" autoComplete="username" inputMode="email" size="large" {...field} />
                 </Form.Item>
               )}
             />
@@ -101,10 +102,11 @@ export function LoginPage() {
               render={({ field, fieldState }) => (
                 <Form.Item
                   label="Пароль"
+                  htmlFor="employee-password"
                   validateStatus={fieldState.error ? 'error' : undefined}
                   help={fieldState.error?.message}
                 >
-                  <Input.Password autoComplete="current-password" size="large" {...field} />
+                  <Input.Password id="employee-password" autoComplete="current-password" size="large" {...field} />
                 </Form.Item>
               )}
             />

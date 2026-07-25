@@ -336,7 +336,10 @@ function AppointmentsWeekBoard({
           ) : null}
         </Space>
       </div>
-      <div className="schedule-week-grid">
+      <Typography.Text type="secondary" className="schedule-scroll-hint">
+        Проведите в сторону, чтобы увидеть остальные дни недели
+      </Typography.Text>
+      <div className="schedule-week-grid" role="region" aria-label="Записи по дням недели" tabIndex={0}>
         {days.map((day) => {
           const dayAppointments = appointmentsByDay.get(day.value) ?? [];
           const dayShifts = shiftsByDay.get(day.value) ?? [];

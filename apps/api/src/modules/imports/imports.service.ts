@@ -185,7 +185,7 @@ export class ImportsService {
               microchip: row.microchip,
               color: row.color,
               comment: row.animalComment,
-              status: 'Импорт ВетаФ',
+              status: 'Перенесён из другой системы',
             },
           });
           summary.animalsCreated += 1;
@@ -205,7 +205,7 @@ export class ImportsService {
 
     await this.auditService.log({
       actorId,
-      action: 'imports.vetaf.clients',
+      action: 'imports.transfer.clients',
       entityType: 'Import',
       metadata: summary,
     });
@@ -283,7 +283,7 @@ export class ImportsService {
             warehouseId: warehouse.id,
             type: StockMovementType.SUPPLY,
             quantity: row.quantity,
-            comment: 'Импорт остатков из ВетаФ',
+            comment: 'Перенос остатков из другой системы',
           },
         });
 
@@ -300,7 +300,7 @@ export class ImportsService {
 
     await this.auditService.log({
       actorId,
-      action: 'imports.vetaf.stock',
+      action: 'imports.transfer.stock',
       entityType: 'Import',
       metadata: summary,
     });
@@ -335,14 +335,14 @@ export class ImportsService {
     if (!existing) {
       const owner = await this.prisma.owner.create({
         data: {
-          fullName: row.ownerName ?? row.phone ?? 'Владелец из ВетаФ',
-          fullNameNormalized: normalizePersonNameKey(row.ownerName ?? row.phone ?? 'Владелец из ВетаФ'),
+          fullName: row.ownerName ?? row.phone ?? 'Владелец из другой системы',
+          fullNameNormalized: normalizePersonNameKey(row.ownerName ?? row.phone ?? 'Владелец из другой системы'),
           phone: row.phone,
           phoneNormalized: row.phoneNormalized,
           extraPhone: row.extraPhone,
           email: row.email,
           address: row.address,
-          source: 'Импорт ВетаФ',
+          source: 'Перенос данных',
           comment: row.ownerComment,
         },
       });

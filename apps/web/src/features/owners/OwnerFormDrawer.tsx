@@ -200,26 +200,13 @@ export function OwnerFormDrawer({ open, title, initialOwner, submitError, isSubm
             </Form.Item>
           )}
         />
-        <div className="form-grid two-columns">
-          <Controller
-            control={control}
-            name="telegramChatId"
-            render={({ field, fieldState }) => (
-              <Form.Item label="Telegram chat id" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
-                <Input {...field} value={field.value ?? ''} />
-              </Form.Item>
-            )}
-          />
-          <Controller
-            control={control}
-            name="maxUserId"
-            render={({ field, fieldState }) => (
-              <Form.Item label="MAX user id" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
-                <Input {...field} value={field.value ?? ''} />
-              </Form.Item>
-            )}
-          />
-        </div>
+        <Alert
+          type="info"
+          showIcon
+          className="form-alert"
+          message="MAX и Telegram подключаются на вкладке «Связь»"
+          description="MAX и Telegram подключаются самим владельцем через приглашение на вкладке «Связь»."
+        />
         <Space direction="vertical" size={8} className="full-width">
           <Controller
             control={control}

@@ -10,8 +10,8 @@ export function SystemSettingsPage() {
   return (
     <div className="page">
       <PageHeader
-        title="Система и backup"
-        description="Контроль backend, базы данных, локальных обновлений и автоматических резервных копий."
+        title="Система и резервные копии"
+        description="Состояние CRM, защита данных и безопасные обновления программы."
       />
 
       <Space direction="vertical" size={16} className="full-width">
@@ -23,16 +23,16 @@ export function SystemSettingsPage() {
           title={
             <Space>
               <SafetyOutlined />
-              Автоматический backup
+              Автоматические резервные копии
             </Space>
           }
         >
           <Space direction="vertical" size={14} className="full-width">
             <Alert
-              type="success"
+              type="info"
               showIcon
-              message="Backup выполняется автоматически"
-              description="Отдельный Docker-контейнер clinic-crm-backup создаёт архив без участия администратора, чтобы не зависеть от человеческого фактора."
+              message="Автоматическое создание резервных копий настроено"
+              description="CRM сохраняет базу и файлы клиники без участия сотрудника. Ниже указан заданный режим хранения."
             />
             <Descriptions bordered column={{ xs: 1, md: 2 }}>
               <Descriptions.Item label="Интервал">
@@ -41,14 +41,14 @@ export function SystemSettingsPage() {
               <Descriptions.Item label="Хранение">
                 <Tag>{backupRetentionDays} дней</Tag>
               </Descriptions.Item>
-              <Descriptions.Item label="Папка на сервере">backups</Descriptions.Item>
-              <Descriptions.Item label="Контейнер">clinic-crm-backup</Descriptions.Item>
-              <Descriptions.Item label="Содержимое архива" span={2}>
-                PostgreSQL dump, данные Redis и локальные файлы MinIO.
+              <Descriptions.Item label="Место хранения">Папка резервных копий на сервере</Descriptions.Item>
+              <Descriptions.Item label="Контроль копий">Требуется периодическая проверка восстановления</Descriptions.Item>
+              <Descriptions.Item label="Содержимое архива">
+                База данных, документы и локальные файлы клиники.
               </Descriptions.Item>
             </Descriptions>
             <Typography.Text type="secondary">
-              На сервере должно быть достаточно места на диске. Архивы старше срока хранения удаляются автоматически.
+              Архивы старше срока хранения удаляются автоматически. Для защиты от поломки компьютера нужна дополнительная копия на отдельном диске.
             </Typography.Text>
           </Space>
         </Card>
@@ -68,33 +68,32 @@ export function SystemSettingsPage() {
                 данные клиники не удаляются
               </Space>
             </Descriptions.Item>
-            <Descriptions.Item label="Перед обновлением">создаётся backup базы</Descriptions.Item>
+            <Descriptions.Item label="Перед обновлением">создаётся резервная копия базы</Descriptions.Item>
             <Descriptions.Item label="Windows">Обновить TemichevVet - Windows.bat</Descriptions.Item>
             <Descriptions.Item label="Mac">Обновить TemichevVet - Mac.command</Descriptions.Item>
             <Descriptions.Item label="Linux">Обновить TemichevVet - Linux.sh</Descriptions.Item>
-            <Descriptions.Item label="Что обновляется" span={2}>
-              код CRM и Docker-образы. Файл .env, Docker volumes, клиенты, пациенты, приёмы, счета и документы сохраняются.
+            <Descriptions.Item label="Что обновляется">
+              Программа TemichevVet. Настройки, клиенты, пациенты, приёмы, счета и документы сохраняются.
             </Descriptions.Item>
           </Descriptions>
         </Card>
 
-        <Card
-          title={
-            <Space>
-              <DatabaseOutlined />
-              Что проверять на рабочем сервере
-            </Space>
-          }
-        >
-          <Descriptions bordered column={{ xs: 1, md: 2 }}>
-            <Descriptions.Item label="CRM">clinic-crm-web</Descriptions.Item>
-            <Descriptions.Item label="API">clinic-crm-api</Descriptions.Item>
-            <Descriptions.Item label="База">clinic-crm-postgres</Descriptions.Item>
-            <Descriptions.Item label="Backup">clinic-crm-backup</Descriptions.Item>
-            <Descriptions.Item label="Файлы">clinic-crm-minio</Descriptions.Item>
-            <Descriptions.Item label="Redis">clinic-crm-redis</Descriptions.Item>
-          </Descriptions>
-        </Card>
+        <details className="technical-card-details">
+          <summary>
+            <DatabaseOutlined />
+            Техническая информация
+          </summary>
+          <Card>
+            <Descriptions bordered column={{ xs: 1, md: 2 }}>
+              <Descriptions.Item label="CRM">clinic-crm-web</Descriptions.Item>
+              <Descriptions.Item label="API">clinic-crm-api</Descriptions.Item>
+              <Descriptions.Item label="База данных">clinic-crm-postgres</Descriptions.Item>
+              <Descriptions.Item label="Резервные копии">clinic-crm-backup</Descriptions.Item>
+              <Descriptions.Item label="Файлы">clinic-crm-minio</Descriptions.Item>
+              <Descriptions.Item label="Очередь задач">clinic-crm-redis</Descriptions.Item>
+            </Descriptions>
+          </Card>
+        </details>
       </Space>
     </div>
   );

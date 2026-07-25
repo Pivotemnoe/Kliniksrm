@@ -183,17 +183,35 @@ export function CrmLayout() {
           <Space size={12} className="header-actions">
             {canReadNotifications ? (
               <Tooltip title="Сообщения">
-                <Button type="text" shape="circle" icon={<MessageOutlined />} onClick={() => navigate('/messages')} />
+                <Button
+                  type="text"
+                  shape="circle"
+                  icon={<MessageOutlined />}
+                  aria-label="Сообщения"
+                  onClick={() => navigate('/messages')}
+                />
               </Tooltip>
             ) : null}
             {canReadOnlineRequests ? (
               <Tooltip title="Онлайн-запись">
-                <Button type="text" shape="circle" icon={<CalendarOutlined />} onClick={() => navigate('/online-requests')} />
+                <Button
+                  type="text"
+                  shape="circle"
+                  icon={<CalendarOutlined />}
+                  aria-label="Заявки на приём"
+                  onClick={() => navigate('/online-requests')}
+                />
               </Tooltip>
             ) : null}
             <Tooltip title={headerAlertTooltip}>
               <Badge count={headerAlertCount || undefined} size="small">
-                <Button type="text" shape="circle" icon={<BellOutlined />} onClick={() => navigate(headerAlertTarget)} />
+                <Button
+                  type="text"
+                  shape="circle"
+                  icon={<BellOutlined />}
+                  aria-label="Уведомления и важные события"
+                  onClick={() => navigate(headerAlertTarget)}
+                />
               </Badge>
             </Tooltip>
             {hasPermission(employee, 'settings.read') ? (
@@ -204,7 +222,7 @@ export function CrmLayout() {
               </Tooltip>
             ) : null}
             <Dropdown menu={{ items: employeeMenuItems }} trigger={['click']} placement="bottomRight">
-              <button className="employee-menu-button" type="button">
+              <button className="employee-menu-button" type="button" aria-label="Меню текущего сотрудника">
                 <span className="employee-block">
                   <Typography.Text strong className="employee-name">
                     {employee?.fullName ?? 'Сотрудник'}

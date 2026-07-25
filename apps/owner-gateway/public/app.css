@@ -44,6 +44,7 @@ button { font: inherit; }
 .browser-button { padding: 9px 12px; font-size: 13px; }
 .push-button { padding: 9px 12px; font-size: 13px; }
 .push-button:disabled { cursor: default; opacity: .78; }
+.push-status { max-width: 340px; color: #526978; font-weight: 600; line-height: 1.4; }
 .browser-hint { max-width: 260px; color: #246a73; font-weight: 700; line-height: 1.35; }
 
 .tabs { display: flex; gap: 8px; margin: 20px 0 14px; overflow-x: auto; padding: 2px; }

@@ -63,7 +63,7 @@ export const menuItems: MenuProps['items'] = [
       { key: '/settings/finance', icon: <DollarOutlined />, label: 'Финансы' },
       { key: '/settings/audit', icon: <AuditOutlined />, label: 'Журнал аудита' },
       { key: '/settings/system', icon: <DatabaseOutlined />, label: 'Система' },
-      { key: '/settings/import', icon: <ExportOutlined />, label: 'Импорт ВетаФ' },
+      { key: '/settings/import', icon: <ExportOutlined />, label: 'Перенос данных' },
     ],
   },
 ];
@@ -98,7 +98,7 @@ export const pageTitles: Record<string, string> = {
   finance: 'Финансы',
   audit: 'Журнал аудита',
   system: 'Система',
-  import: 'Импорт ВетаФ',
+  import: 'Перенос данных',
 };
 
 export const pageDescriptions: Record<string, string> = {
@@ -126,8 +126,8 @@ export const pageDescriptions: Record<string, string> = {
   laboratories: 'Внутренняя лаборатория, профили анализов и интеграции.',
   finance: 'Баланс клиники, тарифы, кассы и финансовые настройки.',
   audit: 'Действия сотрудников и системные события CRM.',
-  system: 'Состояние CRM, автоматический backup и безопасное обновление.',
-  import: 'Перенос клиентов, пациентов, товаров и остатков из ВетаФ.',
+  system: 'Состояние CRM, автоматические резервные копии и безопасное обновление.',
+  import: 'Перенос клиентов, пациентов, товаров и остатков из другой системы.',
 };
 
 export type PageKey = keyof typeof pageTitles;

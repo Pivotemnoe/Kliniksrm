@@ -127,15 +127,29 @@ function New-RandomSecret {
   return [Convert]::ToBase64String($bytes)
 }
 
+function New-RandomPassword {
+  $bytes = New-Object byte[] 12
+  $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+  try {
+    $rng.GetBytes($bytes)
+  } finally {
+    if ($rng -is [System.IDisposable]) {
+      $rng.Dispose()
+    }
+  }
+
+  return "Tv!$(([BitConverter]::ToString($bytes)).Replace('-', '').ToLowerInvariant())"
+}
+
 function Set-EnvValue($Key, $Value) {
   $content = Get-Content $EnvFile -Raw
   $line = "$Key=$Value"
 
   if ($content -match "(?m)^$([Regex]::Escape($Key))=") {
     $content = [Regex]::Replace($content, "(?m)^$([Regex]::Escape($Key))=.*$", $line)
-    Set-Content -Path $EnvFile -Value $content -NoNewline -Encoding UTF8
+    [IO.File]::WriteAllText($EnvFile, $content, $Utf8NoBom)
   } else {
-    Add-Content -Path $EnvFile -Value $line -Encoding UTF8
+    [IO.File]::AppendAllText($EnvFile, [Environment]::NewLine + $line, $Utf8NoBom)
   }
 }
 
@@ -426,6 +440,7 @@ if (!(Test-Path $EnvFile)) {
   Set-EnvValue "WEB_BIND_ADDR" "0.0.0.0"
   Set-EnvValue "APP_URL" "http://$localIp`:3000"
   Set-EnvValue "SESSION_SECRET" (New-RandomSecret)
+  Set-EnvValue "BOOTSTRAP_DIRECTOR_PASSWORD" (New-RandomPassword)
   Write-Host "Settings file created: $EnvFile"
 }
 
@@ -435,6 +450,11 @@ $postgresPort = Ensure-PortSetting "POSTGRES_PORT" "5433" "15433" "clinic-crm-po
 $redisPort = Ensure-PortSetting "REDIS_PORT" "6379" "16379" "clinic-crm-redis" "6379/tcp"
 $minioApiPort = Ensure-PortSetting "MINIO_API_PORT" "9000" "9100" "clinic-crm-minio" "9000/tcp"
 $minioConsolePort = Ensure-PortSetting "MINIO_CONSOLE_PORT" "9001" "9101" "clinic-crm-minio" "9001/tcp"
+$currentSessionSecret = Get-EnvValue "SESSION_SECRET" ""
+if ([string]::IsNullOrWhiteSpace($currentSessionSecret) -or $currentSessionSecret -eq "change-me") {
+  Set-EnvValue "SESSION_SECRET" (New-RandomSecret)
+  Write-Host "Небезопасный стандартный секрет входа заменён на случайный. Данные клиники не изменены."
+}
 Set-EnvValue "APP_URL" "http://$localIp`:$webPort"
 Set-EnvValue "S3_ENDPOINT" "http://localhost:$minioApiPort"
 $directorPhone = Get-EnvValue "BOOTSTRAP_DIRECTOR_PHONE" "+70000000001"
@@ -474,8 +494,8 @@ $networkUrl = "http://$localIp`:$webPort/login"
 $networkBaseUrl = "http://$localIp`:$webPort"
 
 if ($localIp -ne "THIS_COMPUTER_IP") {
-  Set-Content -Path (Join-Path $RootDir "server-url.txt") -Value $networkBaseUrl -Encoding UTF8
-  Set-Content -Path (Join-Path $RootDir "TemichevVet-server-url.txt") -Value $networkBaseUrl -Encoding UTF8
+  [IO.File]::WriteAllText((Join-Path $RootDir "server-url.txt"), $networkBaseUrl, $Utf8NoBom)
+  [IO.File]::WriteAllText((Join-Path $RootDir "TemichevVet-server-url.txt"), $networkBaseUrl, $Utf8NoBom)
 }
 
 Write-Host ""

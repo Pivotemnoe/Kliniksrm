@@ -71,14 +71,14 @@ export function VetafImportPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = kind === 'clients' ? 'vetaf-clients-template.csv' : 'vetaf-stock-template.csv';
+    link.download = kind === 'clients' ? 'transfer-clients-template.csv' : 'transfer-stock-template.csv';
     link.click();
     URL.revokeObjectURL(url);
   }
 
   return (
     <div className="page">
-      <PageHeader title="Импорт ВетаФ" description="Перенос клиентской базы, пациентов, товаров и остатков через Excel, CSV или TSV файл." />
+      <PageHeader title="Перенос данных" description="Загрузка клиентской базы, пациентов, товаров и остатков из другой системы через Excel, CSV или TSV." />
       <div className="list-panel">
         <div className="list-panel-body">
           <Space direction="vertical" size={16} className="full-width">
@@ -136,7 +136,7 @@ export function VetafImportPage() {
             ) : null}
 
             <Typography.Text type="secondary">
-              Для клиентов нужны колонки: владелец или ФИО, телефон. Email, адрес и дополнительный телефон сохраняются в карточке владельца, если они есть в файле. Большие файлы отправляются на сервер пакетами по {importBatchSize} строк.
+              Для клиентов нужны колонки: владелец или ФИО, телефон. Email, адрес и дополнительный телефон сохраняются в карточке владельца, если они есть в файле. Большие файлы обрабатываются частями по {importBatchSize} строк.
             </Typography.Text>
           </Space>
         </div>

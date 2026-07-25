@@ -13,7 +13,7 @@ export class TelegramWebhookService {
 
   async handle(secret: string | undefined, update: unknown) {
     assertSecret(secret, process.env.TELEGRAM_WEBHOOK_SECRET, 'Секрет webhook Telegram не настроен');
-    const botStarted = parseBotStarted(update);
+    const botStarted = parseTelegramBotStarted(update);
 
     if (!botStarted) {
       return { ok: true, handled: false };
@@ -70,7 +70,7 @@ export class TelegramWebhookService {
   }
 }
 
-function parseBotStarted(update: unknown) {
+export function parseTelegramBotStarted(update: unknown) {
   if (!isRecord(update) || !isRecord(update.message)) {
     return null;
   }

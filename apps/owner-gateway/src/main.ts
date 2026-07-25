@@ -3,8 +3,10 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NextFunction, Request, Response } from 'express';
 import { AppModule } from './app.module';
+import { assertGatewaySecurityConfiguration } from './runtime-config';
 
 async function bootstrap() {
+  assertGatewaySecurityConfiguration();
   const app = await NestFactory.create(AppModule);
   app.use((_request: Request, response: Response, next: NextFunction) => {
     response.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");

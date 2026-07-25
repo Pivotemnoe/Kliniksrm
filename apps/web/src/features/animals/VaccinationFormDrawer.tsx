@@ -233,7 +233,7 @@ export function VaccinationFormDrawer({
                 disabled={!expiresAt}
                 onChange={(event) => field.onChange(event.target.checked)}
               >
-                Напомнить владельцу в MAX или Telegram за 7 дней и за 1 день
+                Напомнить владельцу за 7 дней и за 1 день (личный кабинет и подключённый мессенджер)
               </Checkbox>
             )}
           />

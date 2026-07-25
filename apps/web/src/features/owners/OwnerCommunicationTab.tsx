@@ -161,6 +161,7 @@ export function OwnerCommunicationTab({ owner }: OwnerCommunicationTabProps) {
   ];
 
   const portalAccess = portalQuery.data;
+  const connectionStatusLoading = portalQuery.isLoading;
   const maxLinked = Boolean(portalAccess?.gatewayStatus?.maxLinked || owner.maxUserId);
   const telegramLinked = Boolean(portalAccess?.gatewayStatus?.telegramLinked || owner.telegramChatId);
   const portalCanReceive = Boolean(
@@ -206,10 +207,16 @@ export function OwnerCommunicationTab({ owner }: OwnerCommunicationTabProps) {
         </div>
         <div className="list-panel-body">
           <Space wrap size={12}>
-            <Tag color={maxLinked ? 'green' : 'default'}>MAX: {maxLinked ? 'подключён' : 'не подключён'}</Tag>
-            <Tag color={telegramLinked ? 'green' : 'default'}>Telegram: {telegramLinked ? 'подключён' : 'не подключён'}</Tag>
+            <Tag color={maxLinked ? 'green' : 'default'}>
+              MAX: {connectionStatusLoading ? 'проверяем' : maxLinked ? 'подключён' : 'не подключён'}
+            </Tag>
+            <Tag color={telegramLinked ? 'green' : 'default'}>
+              Telegram: {connectionStatusLoading ? 'проверяем' : telegramLinked ? 'подключён' : 'не подключён'}
+            </Tag>
             <Typography.Text strong>
-              {portalCanReceive
+              {connectionStatusLoading
+                ? 'Проверяем доступ к личному кабинету…'
+                : portalCanReceive
                 ? `Личный кабинет доступен${additionalDeliveryChannels ? `. Дополнительно подключены: ${additionalDeliveryChannels}` : ''}`
                 : 'Сначала создайте владельцу личный кабинет'}
             </Typography.Text>
@@ -344,20 +351,29 @@ export function OwnerCommunicationTab({ owner }: OwnerCommunicationTabProps) {
                 Открыть приглашение
               </Button>
             ) : null}
-            <Button
-              icon={<StopOutlined />}
-              loading={portalMutation.isPending}
-              onClick={() => portalMutation.mutate({ status: 'DISABLED' })}
+            <Popconfirm
+              title="Приостановить личный кабинет?"
+              description="Владелец временно потеряет доступ. Данные владельца и пациентов сохранятся."
+              okText="Приостановить"
+              cancelText="Отмена"
+              onConfirm={() => portalMutation.mutate({ status: 'DISABLED' })}
             >
-              Выключить
-            </Button>
-            <Button
-              icon={<LockOutlined />}
-              loading={portalMutation.isPending}
-              onClick={() => portalMutation.mutate({ status: 'BLOCKED', blockedReason: 'Заблокировано сотрудником клиники' })}
+              <Button icon={<StopOutlined />} loading={portalMutation.isPending}>
+                Приостановить кабинет
+              </Button>
+            </Popconfirm>
+            <Popconfirm
+              title="Заблокировать личный кабинет?"
+              description="Все активные входы владельца будут запрещены до решения клиники. Данные не удаляются."
+              okText="Заблокировать"
+              cancelText="Отмена"
+              okButtonProps={{ danger: true }}
+              onConfirm={() => portalMutation.mutate({ status: 'BLOCKED', blockedReason: 'Заблокировано сотрудником клиники' })}
             >
-              Заблокировать
-            </Button>
+              <Button danger icon={<LockOutlined />} loading={portalMutation.isPending}>
+                Заблокировать
+              </Button>
+            </Popconfirm>
             <Popconfirm
               title="Сбросить подключение MAX?"
               description="Старые приглашения и все текущие входы в кабинет перестанут работать. Данные владельца и пациентов сохранятся."
@@ -515,14 +531,21 @@ function formatOutboxDelivery(channel: NotificationChannel, item: NotificationOu
   }
 
   const metadataDelivery = item.metadata?.delivery;
-  const messengerChannels = metadataDelivery && typeof metadataDelivery === 'object' && !Array.isArray(metadataDelivery)
-    ? (metadataDelivery as { messengerChannels?: unknown }).messengerChannels
+  const delivery = metadataDelivery && typeof metadataDelivery === 'object' && !Array.isArray(metadataDelivery)
+    ? metadataDelivery as { messengerChannels?: unknown; deliveredMessengerChannels?: unknown }
     : null;
-  const labels = Array.isArray(messengerChannels)
-    ? messengerChannels.filter((value): value is 'MAX' | 'TELEGRAM' => value === 'MAX' || value === 'TELEGRAM')
-    : [];
+  const labels = Array.from(new Set([
+    ...readMessengerChannels(delivery?.messengerChannels),
+    ...readMessengerChannels(delivery?.deliveredMessengerChannels),
+  ]));
 
   return labels.length ? `Личный кабинет + ${labels.map((value) => notificationChannelLabels[value]).join(' + ')}` : 'Личный кабинет';
+}
+
+function readMessengerChannels(value: unknown): Array<'MAX' | 'TELEGRAM'> {
+  return Array.isArray(value)
+    ? value.filter((channel): channel is 'MAX' | 'TELEGRAM' => channel === 'MAX' || channel === 'TELEGRAM')
+    : [];
 }
 
 const portalBaseUrlStorageKey = 'temichevvet.portalBaseUrl';

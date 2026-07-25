@@ -341,7 +341,7 @@ async function runTaskStatusFlow() {
 }
 
 async function runVaccinationRevaccinationTaskFlow() {
-  const { animal } = await createOwnerAnimal('Vaccination Task');
+  const { owner, animal } = await createOwnerAnimal('Vaccination Task');
   const vaccination = await request('doctor', 'POST', `/api/v1/animals/${animal.id}/vaccinations`, {
     title: `${e2eMarker} Nobivac`,
     status: 'Плановая',
@@ -351,6 +351,7 @@ async function runVaccinationRevaccinationTaskFlow() {
     vaccineSeries: 'A1',
     vaccineExpiresAt: '2027-12-31',
     smsReminder: true,
+    ownerReminderEnabled: true,
     notes: e2eMarker,
     createRevaccinationTask: true,
     revaccinationAssigneeRoleCode: 'doctor',
@@ -361,6 +362,15 @@ async function runVaccinationRevaccinationTaskFlow() {
   }
   assertEqual(vaccination.revaccinationTask.status, 'OPEN', 'revaccination task created');
   assertEqual(vaccination.revaccinationTask.assigneeRoleCode, 'doctor', 'revaccination task role');
+
+  const createdReminders = await request('doctor', 'GET', `/api/v1/notifications/outbox?ownerId=${owner.id}&limit=20`);
+  const vaccinationReminders = createdReminders.items.filter(
+    (item) => item.metadata?.source === 'vaccination' && item.metadata?.vaccinationId === vaccination.id,
+  );
+  assertEqual(vaccinationReminders.length, 2, 'vaccination owner reminders created');
+  if (!vaccinationReminders.every((item) => item.channel === 'MESSENGER' && item.status === 'QUEUED')) {
+    throw new Error('vaccination owner reminders are not queued for owner portal delivery');
+  }
 
   const updatedVaccination = await request('doctor', 'PATCH', `/api/v1/animals/${animal.id}/vaccinations/${vaccination.id}`, {
     expiresAt: '2027-07-04',
@@ -381,6 +391,14 @@ async function runVaccinationRevaccinationTaskFlow() {
     createRevaccinationTask: false,
   });
   assertEqual(clearedVaccination.revaccinationTask.status, 'CANCELLED', 'revaccination task cancelled after date clear');
+
+  const cancelledReminders = await request('doctor', 'GET', `/api/v1/notifications/outbox?ownerId=${owner.id}&limit=20`);
+  const activeVaccinationReminders = cancelledReminders.items.filter(
+    (item) => item.metadata?.source === 'vaccination'
+      && item.metadata?.vaccinationId === vaccination.id
+      && item.status !== 'CANCELLED',
+  );
+  assertEqual(activeVaccinationReminders.length, 0, 'vaccination reminders cancelled after date clear');
 }
 
 async function runNotificationArchitectureFlow() {

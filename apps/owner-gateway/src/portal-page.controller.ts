@@ -1,9 +1,15 @@
-import { Controller, Get, NotFoundException, Param, Res } from '@nestjs/common';
+import { Controller, Get, NotFoundException, Param, Redirect, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { resolve } from 'node:path';
 
 @Controller()
 export class PortalPageController {
+  @Get()
+  @Redirect('/portal', 302)
+  root() {
+    return undefined;
+  }
+
   @Get(['portal', 'portal/', 'portal/activate'])
   portal(@Res() response: Response) {
     response.setHeader('Cache-Control', 'no-store');

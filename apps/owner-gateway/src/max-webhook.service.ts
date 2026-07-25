@@ -13,7 +13,7 @@ export class MaxWebhookService {
 
   async handle(secret: string | undefined, update: unknown) {
     assertSecret(secret, process.env.MAX_WEBHOOK_SECRET, 'Секрет webhook MAX не настроен');
-    const botStarted = parseBotStarted(update);
+    const botStarted = parseMaxBotStarted(update);
 
     if (!botStarted) {
       return { ok: true, handled: false };
@@ -78,7 +78,7 @@ export class MaxWebhookService {
   }
 }
 
-function parseBotStarted(update: unknown) {
+export function parseMaxBotStarted(update: unknown) {
   if (!isRecord(update) || update.update_type !== 'bot_started') {
     return null;
   }
@@ -88,7 +88,7 @@ function parseBotStarted(update: unknown) {
   const maxUserId = normalizeIntegerId(user?.user_id);
   const chatId = normalizeIntegerId(update.chat_id);
 
-  if (!payload || payload.length > 128 || !maxUserId) {
+  if (!/^[A-Za-z0-9_-]{32,128}$/.test(payload) || !maxUserId) {
     return null;
   }
 
