@@ -1,5 +1,7 @@
 # Дорожная карта TemichevVet
 
+> Историческая дорожная карта ранних этапов. Актуальное состояние перед выпуском `1.0.0-rc.1`, сравнение с VetAF и оставшиеся выпускные проверки зафиксированы в `docs/audits/2026-07-26-release/FULL_PRODUCT_AUDIT_RU.md`.
+
 Цель: сделать TemichevVet лучшей версией Vetaf под работу клиники, но на нашем стеке: React, Vite, TypeScript, Ant Design, TanStack Query, NestJS, Prisma, PostgreSQL, Redis, Docker Compose, OpenAPI.
 
 ## Принцип разработки

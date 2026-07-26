@@ -74,3 +74,24 @@ test('экран отчётов не содержит технических с�
   assert.doesNotMatch(settingsPage, />В работе</);
   assert.doesNotMatch(settingsPage, />Работает</);
 });
+
+test('выпускной интерфейс группирует финансы и выравнивает меню и карточки настроек', async () => {
+  const [menu, layout, styles, settingsPage, errors] = await Promise.all([
+    readFile(new URL('../apps/web/src/layouts/menu.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../apps/web/src/layouts/CrmLayout.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../apps/web/src/styles.css', import.meta.url), 'utf8'),
+    readFile(new URL('../apps/web/src/features/settings/SettingsOverviewPage.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../apps/web/src/api/errors.ts', import.meta.url), 'utf8'),
+  ]);
+  assert.match(menu, /key: '\/finance-workspace'/);
+  for (const label of ['Отчёты', 'Закрытие дня', 'Бизнес', 'Зарплата', 'Счета', 'Продажи']) {
+    assert.match(menu, new RegExp(`label: '${label}'`));
+  }
+  assert.match(styles, /\.crm-sider \.ant-menu-submenu-title/);
+  assert.match(styles, /\.ant-menu-submenu-selected > \.ant-menu-submenu-title/);
+  assert.match(settingsPage, /settings-overview-card-body/);
+  assert.match(settingsPage, /settings-overview-card-copy/);
+  assert.match(layout, /canReadBusiness \? '\/business' : '\/settings\/finance'/);
+  assert.match(layout, /Финансы и отчётность клиники/);
+  assert.match(errors, /Нет связи с CRM\. Проверьте подключение и повторите попытку/);
+});

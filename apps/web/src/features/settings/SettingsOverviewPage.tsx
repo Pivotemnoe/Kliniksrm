@@ -12,7 +12,7 @@ import {
   RightOutlined,
   UserOutlined,
 } from '@ant-design/icons';
-import { Button, Card, Space, Typography } from 'antd';
+import { Button, Card, Typography } from 'antd';
 import { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { hasPermission } from '../../auth/permissions';
@@ -132,11 +132,11 @@ export function SettingsOverviewPage() {
       <div className="settings-overview-grid">
         {visibleSections.map((section) => (
           <Card key={section.path} className="settings-overview-card" onClick={() => navigate(section.path)}>
-            <Space direction="vertical" size={12} className="full-width">
+            <div className="settings-overview-card-body">
               <div className="settings-overview-card-head">
                 <span className="settings-overview-icon">{section.icon}</span>
               </div>
-              <div>
+              <div className="settings-overview-card-copy">
                 <Typography.Title level={4} className="compact-title">
                   {section.title}
                 </Typography.Title>
@@ -145,7 +145,7 @@ export function SettingsOverviewPage() {
               <Button type="link" className="table-link" icon={<RightOutlined />}>
                 Открыть раздел
               </Button>
-            </Space>
+            </div>
           </Card>
         ))}
       </div>

@@ -149,20 +149,25 @@ body {
   background: transparent;
 }
 
-.crm-sider .ant-menu-item {
+.crm-sider .ant-menu-item,
+.crm-sider .ant-menu-submenu-title {
   width: 48px;
-  height: 48px;
-  margin: 4px 12px;
+  height: 44px;
+  margin: 2px 12px !important;
+  padding-inline: 14px !important;
   border-radius: 8px;
+  line-height: 44px;
 }
 
-.crm-sider .ant-menu-item .anticon {
+.crm-sider .ant-menu-item .anticon,
+.crm-sider .ant-menu-submenu-title .anticon {
   font-size: 19px;
 }
 
-.crm-sider .ant-menu-item-selected {
+.crm-sider .ant-menu-item-selected,
+.crm-sider .ant-menu-submenu-selected > .ant-menu-submenu-title {
   color: #ffffff;
-  background: #2a9d8f !important;
+  background: #2563eb !important;
 }
 
 .brand {
@@ -445,6 +450,27 @@ body {
   min-height: 190px;
   border-radius: 8px;
   cursor: pointer;
+}
+
+.settings-overview-card > .ant-card-body {
+  height: 100%;
+}
+
+.settings-overview-card-body {
+  display: flex;
+  height: 100%;
+  min-height: 142px;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-overview-card-copy {
+  flex: 1;
+}
+
+.settings-overview-card .table-link {
+  align-self: flex-start;
+  margin-top: auto;
 }
 
 .settings-overview-card:hover {

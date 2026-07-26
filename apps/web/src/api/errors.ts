@@ -23,6 +23,9 @@ export function getErrorMessage(error: unknown) {
   }
 
   if (error instanceof Error) {
+    if (error.name === 'TypeError' && /failed to fetch|networkerror|network request failed/i.test(error.message)) {
+      return 'Нет связи с CRM. Проверьте подключение и повторите попытку';
+    }
     return error.message;
   }
 

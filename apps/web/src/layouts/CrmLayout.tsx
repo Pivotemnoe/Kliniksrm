@@ -56,6 +56,8 @@ export function CrmLayout() {
   const canReadOnlineRequests = hasPermission(employee, 'appointments.read');
   const canReadStock = hasPermission(employee, 'stock.read');
   const canReadBilling = hasPermission(employee, 'billing.read');
+  const canReadBusiness = hasPermission(employee, 'business.read');
+  const canReadFinanceSettings = hasPermission(employee, 'settings.read');
   const unreadNewsQuery = useQuery({
     queryKey: ['news', 'header-unread'],
     queryFn: () => listNewsPosts({ unreadOnly: true, limit: 1, offset: 0 }),
@@ -214,9 +216,13 @@ export function CrmLayout() {
                 />
               </Badge>
             </Tooltip>
-            {hasPermission(employee, 'settings.read') ? (
-              <Tooltip title="Финансы клиники">
-                <Button type="text" icon={<WalletOutlined />} onClick={() => navigate('/settings/finance')}>
+            {canReadBusiness || canReadFinanceSettings ? (
+              <Tooltip title={canReadBusiness ? 'Финансы и отчётность клиники' : 'Финансовые настройки'}>
+                <Button
+                  type="text"
+                  icon={<WalletOutlined />}
+                  onClick={() => navigate(canReadBusiness ? '/business' : '/settings/finance')}
+                >
                   Финансы
                 </Button>
               </Tooltip>

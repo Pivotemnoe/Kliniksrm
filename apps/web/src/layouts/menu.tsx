@@ -26,6 +26,7 @@ import {
   TeamOutlined,
   UserOutlined,
   SwapOutlined,
+  WalletOutlined,
 } from '@ant-design/icons';
 import { MenuProps } from 'antd';
 import { canAccessPath } from '../auth/access';
@@ -34,10 +35,19 @@ import type { Employee } from '../shared/types/auth';
 export const menuItems: MenuProps['items'] = [
   { key: '/news', icon: <NotificationOutlined />, label: 'Новости' },
   { key: '/dashboard', icon: <DashboardOutlined />, label: 'Сводка' },
-  { key: '/reports', icon: <BarChartOutlined />, label: 'Отчёты' },
-  { key: '/payroll', icon: <DollarOutlined />, label: 'Зарплата' },
-  { key: '/daily-finance', icon: <CalculatorOutlined />, label: 'Закрытие дня' },
-  { key: '/business', icon: <BankOutlined />, label: 'Бизнес' },
+  {
+    key: '/finance-workspace',
+    icon: <WalletOutlined />,
+    label: 'Финансы',
+    children: [
+      { key: '/reports', icon: <BarChartOutlined />, label: 'Отчёты' },
+      { key: '/daily-finance', icon: <CalculatorOutlined />, label: 'Закрытие дня' },
+      { key: '/business', icon: <BankOutlined />, label: 'Бизнес' },
+      { key: '/payroll', icon: <DollarOutlined />, label: 'Зарплата' },
+      { key: '/bills', icon: <IdcardOutlined />, label: 'Счета' },
+      { key: '/sales', icon: <ShopOutlined />, label: 'Продажи' },
+    ],
+  },
   { key: '/schedule', icon: <CalendarOutlined />, label: 'Расписание' },
   { key: '/queue', icon: <OrderedListOutlined />, label: 'Очередь' },
   { key: '/tasks', icon: <AuditOutlined />, label: 'Задачи' },
@@ -45,8 +55,6 @@ export const menuItems: MenuProps['items'] = [
   { key: '/patients', icon: <MedicineBoxOutlined />, label: 'Пациенты' },
   { key: '/visits', icon: <FileTextOutlined />, label: 'Приёмы' },
   { key: '/laboratory', icon: <ExperimentOutlined />, label: 'Лаборатория' },
-  { key: '/bills', icon: <IdcardOutlined />, label: 'Счета' },
-  { key: '/sales', icon: <ShopOutlined />, label: 'Продажи' },
   { key: '/hospital', icon: <HomeOutlined />, label: 'Стационар' },
   {
     key: '/stock',
