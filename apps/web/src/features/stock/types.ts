@@ -155,3 +155,86 @@ export type SupplyInvoiceMutationInput = {
     shelfNumber?: string;
   }>;
 };
+
+export type StockDocumentType = 'INVENTORY' | 'TRANSFER' | 'SUPPLIER_RETURN' | 'WRITE_OFF' | 'RESORTING' | 'CORRECTION';
+export type StockDocumentStatus = 'DRAFT' | 'POSTED' | 'CANCELLED';
+
+export type StockDocumentItem = {
+  id: string;
+  productId: string;
+  targetProductId: string | null;
+  sourceBatchId: string | null;
+  targetBatchId: string | null;
+  expectedQuantity: DecimalValue | null;
+  actualQuantity: DecimalValue | null;
+  quantity: DecimalValue | null;
+  unitCost: DecimalValue | null;
+  comment: string | null;
+  product?: Pick<Product, 'id' | 'title' | 'stockUnit' | 'barcode'>;
+  targetProduct?: Pick<Product, 'id' | 'title' | 'stockUnit' | 'barcode'> | null;
+  sourceBatch?: Pick<StockBatch, 'id' | 'series' | 'expiresAt' | 'rest' | 'purchasePrice'> | null;
+  targetBatch?: Pick<StockBatch, 'id' | 'series' | 'expiresAt' | 'rest' | 'purchasePrice'> | null;
+};
+
+export type StockDocument = {
+  id: string;
+  number: string | null;
+  type: StockDocumentType;
+  status: StockDocumentStatus;
+  warehouseId: string | null;
+  toWarehouseId: string | null;
+  supplierId: string | null;
+  occurredAt: string;
+  comment: string | null;
+  postedAt: string | null;
+  warehouse?: Pick<Warehouse, 'id' | 'name'> | null;
+  toWarehouse?: Pick<Warehouse, 'id' | 'name'> | null;
+  supplier?: Pick<Supplier, 'id' | 'title'> | null;
+  createdBy?: { id: string; fullName: string } | null;
+  postedBy?: { id: string; fullName: string } | null;
+  items: StockDocumentItem[];
+};
+
+export type StockDocumentMutationInput = {
+  type: StockDocumentType;
+  number?: string;
+  warehouseId?: string;
+  toWarehouseId?: string;
+  supplierId?: string;
+  occurredAt?: string;
+  comment?: string;
+  items: Array<{
+    productId: string;
+    targetProductId?: string;
+    sourceBatchId: string;
+    actualQuantity?: number;
+    quantity?: number;
+    comment?: string;
+  }>;
+};
+
+export type StockMovement = {
+  id: string;
+  type: string;
+  quantity: DecimalValue;
+  unitCost: DecimalValue | null;
+  createdAt: string;
+  comment: string | null;
+  product: Pick<Product, 'id' | 'title' | 'stockUnit'>;
+  warehouse?: Pick<Warehouse, 'id' | 'name'> | null;
+  toWarehouse?: Pick<Warehouse, 'id' | 'name'> | null;
+  stockBatch?: { id: string; series: string | null; purchasePrice: DecimalValue } | null;
+  targetStockBatch?: { id: string; series: string | null } | null;
+  stockDocument?: { id: string; number: string | null; type: StockDocumentType } | null;
+};
+
+export type SupplierBalance = {
+  id: string;
+  title: string;
+  suppliedAmount: DecimalValue;
+  returnedAmount: DecimalValue;
+  paidAmount: DecimalValue;
+  balance: DecimalValue;
+  invoices: Array<{ id: string; number: string | null; suppliedAt: string; totalAmount: DecimalValue }>;
+  payments: Array<{ id: string; amount: DecimalValue; paidAt: string; supplyInvoiceId: string | null; comment: string | null }>;
+};

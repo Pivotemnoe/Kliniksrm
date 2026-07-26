@@ -91,6 +91,17 @@ export type ClinicReport = {
     expiredBatches: number;
     expiringBatches: number;
     lowStockItems: Array<{ id: string; title: string; rest: number; minStock: number | null; unit: string | null }>;
+    expiryItems: Array<{
+      id: string;
+      productTitle: string;
+      warehouseName: string;
+      series: string | null;
+      expiresAt: string;
+      rest: number;
+      unit: string | null;
+      purchasePrice: number;
+      status: 'EXPIRED' | 'EXPIRING';
+    }>;
   };
   profit: {
     revenue: number;

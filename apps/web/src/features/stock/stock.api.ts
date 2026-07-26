@@ -10,6 +10,10 @@ import {
   StockResources,
   SupplyInvoice,
   SupplyInvoiceMutationInput,
+  StockDocument,
+  StockDocumentMutationInput,
+  StockMovement,
+  SupplierBalance,
 } from './types';
 
 type StockListQuery = {
@@ -54,4 +58,32 @@ export function listSupplyInvoices(query: StockListQuery) {
 
 export function createSupplyInvoice(input: SupplyInvoiceMutationInput) {
   return apiRequest<SupplyInvoice>('/v1/stock/supply-invoices', { method: 'POST', body: input });
+}
+
+export function listStockDocuments(query: StockListQuery & { type?: string; status?: string }) {
+  return apiRequest<PaginatedResponse<StockDocument>>(`/v1/stock/documents${buildQuery(query)}`);
+}
+
+export function createStockDocument(input: StockDocumentMutationInput) {
+  return apiRequest<StockDocument>('/v1/stock/documents', { method: 'POST', body: input });
+}
+
+export function postStockDocument(documentId: string) {
+  return apiRequest<StockDocument>(`/v1/stock/documents/${documentId}/post`, { method: 'POST' });
+}
+
+export function cancelStockDocument(documentId: string) {
+  return apiRequest<StockDocument>(`/v1/stock/documents/${documentId}/cancel`, { method: 'POST' });
+}
+
+export function listStockMovements(query: StockListQuery) {
+  return apiRequest<PaginatedResponse<StockMovement>>(`/v1/stock/movements${buildQuery(query)}`);
+}
+
+export function listSupplierBalances() {
+  return apiRequest<SupplierBalance[]>('/v1/stock/supplier-balances');
+}
+
+export function createSupplierPayment(input: { supplierId: string; supplyInvoiceId?: string; amount: number; paidAt?: string; comment?: string }) {
+  return apiRequest('/v1/stock/supplier-payments', { method: 'POST', body: input });
 }

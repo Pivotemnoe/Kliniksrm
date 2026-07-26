@@ -39,6 +39,7 @@ const routeAccessRules: RouteAccessRule[] = [
   { path: '/online-requests', anyOf: ['appointments.read'] },
   { path: '/messages', anyOf: ['notifications.read'] },
   { path: '/reports', anyOf: ['settings.read', 'settings.manage'] },
+  { path: '/payroll', anyOf: ['payroll.read', 'payroll.manage', 'payroll.approve'] },
   { path: '/employees', anyOf: ['employees.read', 'employees.manage'] },
   { path: '/laboratory', anyOf: ['laboratory.read'] },
   { path: '/hospital', anyOf: ['hospital.read'] },
@@ -59,6 +60,7 @@ const routeAccessRules: RouteAccessRule[] = [
 const fallbackRouteCandidates = [
   '/dashboard',
   '/reports',
+  '/payroll',
   '/queue',
   '/schedule',
   '/visits',

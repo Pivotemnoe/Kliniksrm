@@ -26,11 +26,13 @@ import { QueueCardPage } from '../features/queue/QueueCardPage';
 import { QueuePage } from '../features/queue/QueuePage';
 import { QueueTvPage } from '../features/queue/QueueTvPage';
 import { ReportsPage } from '../features/reports/ReportsPage';
+import { PayrollPage } from '../features/payroll/PayrollPage';
 import { SaleCardPage } from '../features/sales/SaleCardPage';
 import { SalesPage } from '../features/sales/SalesPage';
 import { ClinicResourcesPage } from '../features/scheduling/ClinicResourcesPage';
 import { SettingsOverviewPage } from '../features/settings/SettingsOverviewPage';
 import { StockPage } from '../features/stock/StockPage';
+import { StockOperationsPage } from '../features/stock/StockOperationsPage';
 import { SystemSettingsPage } from '../features/system/SystemSettingsPage';
 import { TaskCardPage } from '../features/tasks/TaskCardPage';
 import { TasksPage } from '../features/tasks/TasksPage';
@@ -72,6 +74,7 @@ export const routes: RouteObject[] = [
           { index: true, element: <DefaultRouteRedirect /> },
           { path: '/dashboard', element: <DashboardPage /> },
           { path: '/reports', element: <ReportsPage /> },
+          { path: '/payroll', element: <PayrollPage /> },
           { path: '/profile', element: <ProfilePage /> },
           { path: '/news', element: <NewsPage /> },
           { path: '/schedule', element: <AppointmentsPage /> },
@@ -97,6 +100,7 @@ export const routes: RouteObject[] = [
           { path: '/stock/services', element: <StockPage /> },
           { path: '/stock/supplies', element: <StockPage /> },
           { path: '/stock/invoices', element: <StockPage /> },
+          { path: '/stock/operations', element: <StockOperationsPage /> },
           { path: '/employees', element: <EmployeesPage /> },
           { path: '/settings', element: <SettingsOverviewPage /> },
           { path: '/settings/organization', element: <OrganizationSettingsPage /> },

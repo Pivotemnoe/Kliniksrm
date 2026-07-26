@@ -1,4 +1,4 @@
-import { PlusOutlined, PrinterOutlined, SearchOutlined } from '@ant-design/icons';
+import { PlusOutlined, PrinterOutlined, ScanOutlined, SearchOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Button, Form, Input, InputNumber, Modal, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
@@ -38,6 +38,7 @@ export function StockPage() {
   const [productOpen, setProductOpen] = useState(false);
   const [serviceOpen, setServiceOpen] = useState(false);
   const [supplyOpen, setSupplyOpen] = useState(false);
+  const [scannerMode, setScannerMode] = useState(false);
   const resourcesQuery = useQuery({ queryKey: ['stock', 'resources'], queryFn: getStockResources });
 
   useEffect(() => {
@@ -85,13 +86,24 @@ export function StockPage() {
             navigate(stockTabPaths[key] ?? '/stock');
           }}
           tabBarExtraContent={
-            <Input.Search
-              allowClear
-              enterButton={<SearchOutlined />}
-              placeholder="Поиск"
-              className="search-input"
-              onSearch={handleSearch}
-            />
+            <Space wrap>
+              <Button
+                type={scannerMode ? 'primary' : 'default'}
+                icon={<ScanOutlined />}
+                onClick={() => setScannerMode((value) => !value)}
+              >
+                Сканер
+              </Button>
+              <Input.Search
+                key={scannerMode ? 'scanner' : 'search'}
+                allowClear
+                autoFocus={scannerMode}
+                enterButton={<SearchOutlined />}
+                placeholder={scannerMode ? 'Сканируйте штрих-код' : 'Название, SKU или штрих-код'}
+                className="search-input"
+                onSearch={handleSearch}
+              />
+            </Space>
           }
           items={[
             {

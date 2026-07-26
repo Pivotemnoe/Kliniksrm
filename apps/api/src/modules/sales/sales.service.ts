@@ -84,6 +84,7 @@ export class SalesService {
         data: {
           ownerId,
           animalId: dto.animalId,
+          employeeId: actorId,
           totalAmount,
         },
       });

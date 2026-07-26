@@ -301,6 +301,9 @@ export class StockService {
         ? {
             OR: [
               { product: { title: { contains: search, mode: 'insensitive' } } },
+              { product: { sku: { contains: search, mode: 'insensitive' } } },
+              { product: { gtin: { contains: search, mode: 'insensitive' } } },
+              { product: { barcode: { contains: search, mode: 'insensitive' } } },
               { supplier: { title: { contains: search, mode: 'insensitive' } } },
               { series: { contains: search, mode: 'insensitive' } },
             ],
@@ -441,6 +444,7 @@ export class StockService {
             warehouseId,
             type: StockMovementType.SUPPLY,
             quantity,
+            unitCost: purchasePrice,
             comment: createdInvoice.number ? `Приёмка по накладной ${createdInvoice.number}` : 'Приёмка на склад',
           },
         });

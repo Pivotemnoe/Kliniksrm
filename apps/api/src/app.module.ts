@@ -22,6 +22,7 @@ import { OrganizationModule } from './modules/organization/organization.module';
 import { OwnersModule } from './modules/owners/owners.module';
 import { QueueModule } from './modules/queue/queue.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { PayrollModule } from './modules/payroll/payroll.module';
 import { SalesModule } from './modules/sales/sales.module';
 import { SchedulingModule } from './modules/scheduling/scheduling.module';
 import { StockModule } from './modules/stock/stock.module';
@@ -54,6 +55,7 @@ import { PrismaModule } from './prisma/prisma.module';
     ClientPortalModule,
     DashboardModule,
     ReportsModule,
+    PayrollModule,
     SalesModule,
     StockModule,
     HospitalModule,

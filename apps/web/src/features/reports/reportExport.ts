@@ -37,8 +37,9 @@ export function exportReportToExcel(report: ClinicReport) {
       ...report.vaccinations.overdueItems.map((item) => ['Просрочено', item.title, item.animal.nickname, item.animal.owner.fullName, item.animal.owner.phone, date(item.expiresAt)]),
     ]),
     sheet('Склад', [
-      ['Товар с низким остатком', 'Остаток', 'Минимум', 'Единица'],
-      ...report.stock.lowStockItems.map((item) => [item.title, item.rest, item.minStock, item.unit]),
+      ['Раздел', 'Статус', 'Товар', 'Склад', 'Серия', 'Срок годности', 'Остаток', 'Единица', 'Закупочная цена', 'Минимум'],
+      ...report.stock.lowStockItems.map((item) => ['Низкий остаток', '', item.title, '', '', '', item.rest, item.unit, '', item.minStock]),
+      ...report.stock.expiryItems.map((item) => ['Срок годности', item.status === 'EXPIRED' ? 'Просрочено' : 'Истекает', item.productTitle, item.warehouseName, item.series, date(item.expiresAt), item.rest, item.unit, item.purchasePrice, '']),
     ]),
   ].join('');
   const workbook = `<?xml version="1.0" encoding="UTF-8"?><?mso-application progid="Excel.Sheet"?>\n<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">${sheets}</Workbook>`;

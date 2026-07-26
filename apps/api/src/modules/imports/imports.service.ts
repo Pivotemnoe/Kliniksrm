@@ -283,6 +283,7 @@ export class ImportsService {
             warehouseId: warehouse.id,
             type: StockMovementType.SUPPLY,
             quantity: row.quantity,
+            unitCost: row.purchasePrice,
             comment: 'Перенос остатков из другой системы',
           },
         });

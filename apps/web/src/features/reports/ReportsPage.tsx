@@ -337,6 +337,25 @@ function StockReport({ report }: { report: ClinicReport }) {
           ]}
         />
       </Card>
+      <Card title="Сроки годности партий" className="report-wide-card">
+        <Table
+          rowKey="id"
+          size="small"
+          pagination={{ pageSize: 15, hideOnSinglePage: true }}
+          dataSource={report.stock.expiryItems}
+          locale={{ emptyText: 'Просроченных и истекающих партий нет' }}
+          columns={[
+            { title: 'Статус', dataIndex: 'status', render: (value) => value === 'EXPIRED' ? <Tag color="red">Просрочено</Tag> : <Tag color="orange">Истекает</Tag> },
+            { title: 'Годен до', dataIndex: 'expiresAt', render: formatDate },
+            { title: 'Товар', dataIndex: 'productTitle' },
+            { title: 'Склад', dataIndex: 'warehouseName' },
+            { title: 'Серия', dataIndex: 'series', render: textOrDash },
+            { title: 'Остаток', dataIndex: 'rest', align: 'right', render: formatQuantity },
+            { title: 'Единица', dataIndex: 'unit', render: textOrDash },
+            { title: 'Закупочная цена', dataIndex: 'purchasePrice', align: 'right', render: formatMoney },
+          ]}
+        />
+      </Card>
     </div>
   );
 }

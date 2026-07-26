@@ -22,6 +22,7 @@ import {
   TagsOutlined,
   TeamOutlined,
   UserOutlined,
+  SwapOutlined,
 } from '@ant-design/icons';
 import { MenuProps } from 'antd';
 import { canAccessPath } from '../auth/access';
@@ -31,6 +32,7 @@ export const menuItems: MenuProps['items'] = [
   { key: '/news', icon: <NotificationOutlined />, label: 'Новости' },
   { key: '/dashboard', icon: <DashboardOutlined />, label: 'Сводка' },
   { key: '/reports', icon: <BarChartOutlined />, label: 'Отчёты' },
+  { key: '/payroll', icon: <DollarOutlined />, label: 'Зарплата' },
   { key: '/schedule', icon: <CalendarOutlined />, label: 'Расписание' },
   { key: '/queue', icon: <OrderedListOutlined />, label: 'Очередь' },
   { key: '/tasks', icon: <AuditOutlined />, label: 'Задачи' },
@@ -49,6 +51,7 @@ export const menuItems: MenuProps['items'] = [
       { key: '/stock/goods', icon: <TagsOutlined />, label: 'Товары' },
       { key: '/stock/services', icon: <SolutionOutlined />, label: 'Услуги' },
       { key: '/stock/supplies', icon: <DatabaseOutlined />, label: 'Учёт' },
+      { key: '/stock/operations', icon: <SwapOutlined />, label: 'Операции' },
     ],
   },
   {
@@ -78,6 +81,7 @@ export const pageTitles: Record<string, string> = {
   news: 'Новости',
   dashboard: 'Сводка',
   reports: 'Отчёты',
+  payroll: 'Зарплата',
   schedule: 'Расписание',
   queue: 'Очередь',
   tasks: 'Календарь задач',
@@ -108,6 +112,7 @@ export const pageDescriptions: Record<string, string> = {
   news: 'Внутренние новости и обновления работы клиники.',
   dashboard: 'Рабочая сводка клиники на день.',
   reports: 'Финансы, посещаемость, услуги, сотрудники, вакцинации и склад.',
+  payroll: 'Настройки начислений, расчётные периоды и утверждённые ведомости.',
   schedule: 'Календарь записей и загрузка врачей.',
   queue: 'Живая очередь пациентов в клинике.',
   tasks: 'Задачи сотрудникам, должностям и напоминания по пациентам.',

@@ -1147,6 +1147,7 @@ export class DataTransferService {
         warehouseId: warehouse.id,
         type: StockMovementType.SUPPLY,
         quantity,
+        unitCost: batch.purchasePrice,
         comment: 'Перенос данных',
       },
     });

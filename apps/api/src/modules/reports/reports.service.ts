@@ -134,6 +134,7 @@ export class ReportsService {
           rest: true,
           purchasePrice: true,
           expiresAt: true,
+          series: true,
           product: { select: { id: true, title: true, retailPrice: true, minStock: true, stockUnit: true } },
           warehouse: { select: { id: true, name: true } },
         },
@@ -148,6 +149,7 @@ export class ReportsService {
         select: {
           type: true,
           quantity: true,
+          unitCost: true,
           billItemId: true,
           visitId: true,
           saleId: true,
@@ -194,7 +196,7 @@ export class ReportsService {
           const isDocumentedCorrection = movement.type === StockMovementType.CORRECTION
             && Boolean(movement.billItemId || movement.visitId || movement.saleId);
           if (movement.type === StockMovementType.CORRECTION && !isDocumentedCorrection) return total;
-          return total - number(movement.quantity) * number(movement.stockBatch?.purchasePrice);
+          return total - number(movement.quantity) * number(movement.unitCost ?? movement.stockBatch?.purchasePrice);
         },
         0,
       ),
@@ -373,6 +375,20 @@ function aggregateStock(batches: ReportStockBatch[], now: Date, expiresSoon: Dat
   const lowStockItems = [...products.values()]
     .filter((item) => item.minStock !== null && item.rest <= item.minStock)
     .sort((left, right) => left.rest - right.rest);
+  const expiryItems = batches
+    .filter((batch) => batch.expiresAt && batch.expiresAt <= expiresSoon)
+    .map((batch) => ({
+      id: batch.id,
+      productTitle: batch.product.title,
+      warehouseName: batch.warehouse.name,
+      series: batch.series,
+      expiresAt: batch.expiresAt!,
+      rest: number(batch.rest),
+      unit: batch.product.stockUnit,
+      purchasePrice: number(batch.purchasePrice),
+      status: batch.expiresAt! < now ? 'EXPIRED' as const : 'EXPIRING' as const,
+    }))
+    .sort((left, right) => left.expiresAt.getTime() - right.expiresAt.getTime());
 
   return {
     purchaseValue,
@@ -384,6 +400,7 @@ function aggregateStock(batches: ReportStockBatch[], now: Date, expiresSoon: Dat
     expiredBatches,
     expiringBatches,
     lowStockItems: lowStockItems.slice(0, 100),
+    expiryItems: expiryItems.slice(0, 500),
   };
 }
 
@@ -482,6 +499,7 @@ type ReportStockBatch = {
   rest: Prisma.Decimal;
   purchasePrice: Prisma.Decimal;
   expiresAt: Date | null;
+  series: string | null;
   product: { id: string; title: string; retailPrice: Prisma.Decimal; minStock: Prisma.Decimal | null; stockUnit: string | null };
   warehouse: { id: string; name: string };
 };
