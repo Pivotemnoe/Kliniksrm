@@ -11,7 +11,7 @@ async function bootstrap() {
   assertRuntimeSecurityConfiguration();
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false });
   const appUrl = process.env.APP_URL ?? 'http://127.0.0.1:3000';
-  const bodyLimit = process.env.API_BODY_LIMIT ?? '10mb';
+  const bodyLimit = process.env.API_BODY_LIMIT ?? '25mb';
 
   app.useBodyParser('json', { limit: bodyLimit });
   app.useBodyParser('urlencoded', { limit: bodyLimit, extended: true });

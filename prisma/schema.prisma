@@ -157,6 +157,32 @@ enum JobStatus {
   CANCELLED
 }
 
+enum DataTransferStatus {
+  DRAFT
+  PREVIEWED
+  IMPORTING
+  COMPLETED
+  COMPLETED_WITH_ERRORS
+  ROLLING_BACK
+  ROLLED_BACK
+  ROLLBACK_BLOCKED
+  FAILED
+}
+
+enum DataTransferRowStatus {
+  PENDING
+  READY
+  SKIPPED
+  IMPORTED
+  FAILED
+  ROLLED_BACK
+}
+
+enum DataTransferAction {
+  CREATED
+  MATCHED
+}
+
 enum NewsPriority {
   INFO
   IMPORTANT
@@ -213,6 +239,7 @@ model Employee {
   auditLogs            AuditLog[]                   @relation("AuditActor")
   payments             Payment[]
   medicalPhrases       MedicalPhrase[]
+  dataTransferBatches  DataTransferBatch[]          @relation("DataTransferCreator")
   createdAt            DateTime                     @default(now())
   updatedAt            DateTime                     @updatedAt
 
@@ -1403,4 +1430,90 @@ model BackgroundJob {
   updatedAt DateTime  @updatedAt
 
   @@index([queueName, status])
+}
+
+model DataTransferBatch {
+  id                String                 @id @default(uuid())
+  sourceSystem      String
+  kind              String
+  originalFileName  String?
+  fileChecksum      String
+  status            DataTransferStatus     @default(DRAFT)
+  totalRows         Int                    @default(0)
+  readyRows         Int                    @default(0)
+  importedRows      Int                    @default(0)
+  skippedRows       Int                    @default(0)
+  failedRows        Int                    @default(0)
+  createdById       String?
+  createdBy         Employee?              @relation("DataTransferCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  startedAt         DateTime?
+  completedAt       DateTime?
+  rolledBackAt      DateTime?
+  errorSummary      String?
+  metadata          Json?
+  rows              DataTransferRow[]
+  fieldMappings     DataTransferFieldMapping[]
+  entityLinks       DataTransferEntityLink[]
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+
+  @@unique([sourceSystem, kind, fileChecksum])
+  @@index([status, createdAt])
+  @@index([createdById])
+}
+
+model DataTransferRow {
+  id             String                @id @default(uuid())
+  batchId        String
+  batch          DataTransferBatch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  rowNumber      Int
+  sourceId       String?
+  fingerprint    String
+  status         DataTransferRowStatus @default(PENDING)
+  rawData        Json
+  normalizedData Json?
+  result         Json?
+  error          String?
+  entityLinks    DataTransferEntityLink[]
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  @@unique([batchId, rowNumber])
+  @@index([batchId, status])
+  @@index([fingerprint])
+}
+
+model DataTransferFieldMapping {
+  id           String            @id @default(uuid())
+  batchId      String
+  batch        DataTransferBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  sourceColumn String
+  targetField  String
+  transform    String?
+  required     Boolean           @default(false)
+  createdAt    DateTime          @default(now())
+
+  @@unique([batchId, sourceColumn])
+  @@index([batchId, targetField])
+}
+
+model DataTransferEntityLink {
+  id               String             @id @default(uuid())
+  batchId          String
+  batch            DataTransferBatch  @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  rowId            String?
+  row              DataTransferRow?   @relation(fields: [rowId], references: [id], onDelete: SetNull)
+  sourceEntityType String
+  sourceEntityId   String?
+  targetEntityType String
+  targetEntityId   String
+  action           DataTransferAction
+  rollbackEligible Boolean            @default(false)
+  rolledBackAt     DateTime?
+  createdAt        DateTime           @default(now())
+
+  @@index([batchId, action])
+  @@index([rowId])
+  @@index([targetEntityType, targetEntityId])
+  @@index([sourceEntityType, sourceEntityId])
 }

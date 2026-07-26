@@ -3,6 +3,7 @@ import { AnimalsModule } from './modules/animals/animals.module';
 import { AppointmentsModule } from './modules/appointments/appointments.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { BillingModule } from './modules/billing/billing.module';
+import { BackupsModule } from './modules/backups/backups.module';
 import { ClientPortalModule } from './modules/client-portal/client-portal.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { DocumentsModule } from './modules/documents/documents.module';
@@ -30,6 +31,7 @@ import { PrismaModule } from './prisma/prisma.module';
 @Module({
   imports: [
     PrismaModule,
+    BackupsModule,
     AuthModule,
     HealthModule,
     MetaModule,

@@ -23,3 +23,29 @@ export function getHealth() {
 export function getMeta() {
   return apiRequest<MetaResponse>('/v1/meta');
 }
+
+export type BackupStatusResponse = {
+  state: 'ok' | 'warning';
+  storage: string;
+  lastDatabaseBackupAt: string | null;
+  lastFilesBackupAt: string | null;
+  lastIntegrityCheckAt: string | null;
+  lastRestoreTestAt: string | null;
+  lastRestoreTestState: 'ok' | 'failed' | null;
+  databaseBytes: number | null;
+  filesBytes: number | null;
+  freeBytes: number | null;
+  totalBytes: number | null;
+  warnings: string[];
+  schedule: {
+    database: string;
+    files: string;
+    dailyRetentionDays: number;
+    weeklyRetentionDays: number;
+    monthlyRetentionDays: number;
+  };
+};
+
+export function getBackupStatus() {
+  return apiRequest<BackupStatusResponse>('/v1/backups/status');
+}

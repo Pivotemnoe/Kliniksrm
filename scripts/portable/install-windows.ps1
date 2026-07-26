@@ -7,6 +7,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $Utf8NoBom = New-Object System.Text.UTF8Encoding -ArgumentList $false
+$Utf8Bom = New-Object System.Text.UTF8Encoding -ArgumentList $true
 
 $PortableRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $SourceDir = Join-Path $PortableRoot "CRM"
@@ -15,6 +16,11 @@ $ImagesTar = Join-Path $PortableRoot "docker-images\temichevvet-images.tar"
 $InstalledEnvFile = Join-Path $InstallDir ".env"
 $PortableVersionFile = Join-Path $PortableRoot "VERSION.txt"
 $PortableConnectivityFile = Join-Path $PortableRoot "portable\clinic-connectivity.env"
+$UpdateTimestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+$PreviousApiId = $null
+$PreviousWebId = $null
+$RollbackApi = "temichevvet-api:rollback-$UpdateTimestamp"
+$RollbackWeb = "temichevvet-web:rollback-$UpdateTimestamp"
 $PortableConnectivityKeys = @(
   "OWNER_GATEWAY_URL",
   "OWNER_GATEWAY_SYNC_SECRET",
@@ -67,6 +73,99 @@ function Test-DockerImage($Image) {
   return $LASTEXITCODE -eq 0
 }
 
+function Assert-FreeSpace {
+  $driveName = [IO.Path]::GetPathRoot($InstallDir).Substring(0, 1)
+  $drive = Get-PSDrive -Name $driveName
+  if ($drive.Free -lt 10GB) {
+    throw "На диске установки свободно меньше 10 ГБ. Установка или обновление остановлено."
+  }
+  Write-Host "Свободное место: $([Math]::Round($drive.Free / 1GB, 1)) ГБ."
+}
+
+function Save-CurrentApplicationImages {
+  docker container inspect clinic-crm-api *> $null
+  if ($LASTEXITCODE -eq 0) {
+    $script:PreviousApiId = (docker inspect --format '{{.Image}}' clinic-crm-api | Select-Object -Last 1)
+    docker tag $script:PreviousApiId $RollbackApi
+  }
+  docker container inspect clinic-crm-web *> $null
+  if ($LASTEXITCODE -eq 0) {
+    $script:PreviousWebId = (docker inspect --format '{{.Image}}' clinic-crm-web | Select-Object -Last 1)
+    docker tag $script:PreviousWebId $RollbackWeb
+  }
+}
+
+function Assert-WindowsImageArchitecture($Image) {
+  $architecture = (docker image inspect --format '{{.Architecture}}' $Image | Select-Object -Last 1).Trim()
+  if ($LASTEXITCODE -ne 0 -or $architecture -ne "amd64") {
+    throw "Образ $Image не подходит серверу Windows: требуется linux/amd64, найдено $architecture."
+  }
+}
+
+function Show-PendingInstalledMigrations {
+  $migrationsDir = Join-Path $InstallDir "prisma\migrations"
+  if (!(Test-Path $migrationsDir -PathType Container)) {
+    throw "В комплекте не найден каталог миграций: $migrationsDir"
+  }
+  docker container inspect clinic-crm-postgres *> $null
+  if ($LASTEXITCODE -ne 0) {
+    Write-Host "Это первая установка: база будет создана штатными миграциями из комплекта."
+    return
+  }
+  $dbUser = Get-ExistingEnvValue "POSTGRES_USER" "clinic_crm"
+  $dbName = Get-ExistingEnvValue "POSTGRES_DB" "clinic_crm"
+  $available = @(Get-ChildItem $migrationsDir -Directory | Where-Object { $_.Name -match '^\d' } | Sort-Object Name)
+  $failedMigrations = @(docker exec clinic-crm-postgres psql -U $dbUser -d $dbName -At -c 'SELECT migration_name FROM "_prisma_migrations" WHERE finished_at IS NULL AND rolled_back_at IS NULL;' 2>$null)
+  if ($LASTEXITCODE -ne 0) { throw "Не удалось проверить журнал миграций существующей базы." }
+  if ($failedMigrations.Count -gt 0) {
+    throw "В базе есть незавершённая миграция ($($failedMigrations -join ', ')). Автоматическое обновление остановлено для ручной проверки."
+  }
+  $applied = @(docker exec clinic-crm-postgres psql -U $dbUser -d $dbName -At -c 'SELECT migration_name FROM "_prisma_migrations" WHERE finished_at IS NOT NULL;' 2>$null)
+  if ($LASTEXITCODE -ne 0) { throw "Не удалось прочитать журнал миграций существующей базы." }
+  $pending = @($available | Where-Object { $applied -notcontains $_.Name })
+  if ($pending.Count -eq 0) {
+    Write-Host "Новых миграций базы нет."
+    return
+  }
+  Write-Host "Штатные миграции, которые будут применены при запуске:"
+  foreach ($migration in $pending) {
+    Write-Host "  $($migration.Name)"
+    $sqlFile = Join-Path $migration.FullName "migration.sql"
+    if (!(Test-Path $sqlFile -PathType Leaf)) { throw "В миграции $($migration.Name) отсутствует migration.sql." }
+    $sql = Get-Content $sqlFile -Raw
+    if ($sql -match '(?is)\b(?:DROP\s+(?:TABLE|COLUMN|TYPE)|TRUNCATE\s+TABLE|DELETE\s+FROM|ALTER\s+TABLE\b.*?ALTER\s+COLUMN\b.*?TYPE\b)') {
+      throw "Миграция $($migration.Name) содержит потенциально разрушительную операцию. Автоматическое обновление остановлено для ручной проверки."
+    }
+  }
+  Write-Host "Проверка миграций пройдена: потенциально разрушительных операций не найдено."
+}
+
+function Write-InstalledUpdateLog($State, $ErrorMessage) {
+  $logDir = Join-Path $InstallDir "logs"
+  New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+  $entry = [ordered]@{
+    at = (Get-Date).ToUniversalTime().ToString("o")
+    state = $State
+    previousApi = $PreviousApiId
+    previousWeb = $PreviousWebId
+    configuredApi = Get-DockerImageDescriptor (Get-ExistingEnvValue "TEMICHEVVET_API_IMAGE" "")
+    configuredWeb = Get-DockerImageDescriptor (Get-ExistingEnvValue "TEMICHEVVET_WEB_IMAGE" "")
+    portableVersion = $(if (Test-Path $PortableVersionFile) { (Get-Content $PortableVersionFile -Raw).Trim() } else { $null })
+    error = $ErrorMessage
+  } | ConvertTo-Json -Compress
+  [IO.File]::AppendAllText((Join-Path $logDir "update-history.jsonl"), $entry + [Environment]::NewLine, $Utf8NoBom)
+}
+
+function Get-DockerImageDescriptor($Image) {
+  if ([string]::IsNullOrWhiteSpace($Image)) { return $null }
+  $raw = docker image inspect $Image 2>$null
+  if ($LASTEXITCODE -ne 0 -or !$raw) { return [ordered]@{ reference = $Image; available = $false } }
+  $item = @($raw | ConvertFrom-Json)[0]
+  $revision = $null
+  if ($item.Config -and $item.Config.Labels) { $revision = $item.Config.Labels.'org.opencontainers.image.revision' }
+  return [ordered]@{ reference = $Image; available = $true; id = $item.Id; revision = $revision }
+}
+
 function Assert-DockerImage($Image) {
   if (!(Test-DockerImage $Image)) {
     throw "Docker image was not loaded: $Image. Recreate the flash drive with --include-images or check that docker-images\temichevvet-images.tar is not corrupted."
@@ -100,7 +199,11 @@ function Set-InstalledEnvValue($Key, $Value) {
   $line = "$Key=$Value"
 
   if ($content -match "(?m)^$([Regex]::Escape($Key))=") {
-    $content = [Regex]::Replace($content, "(?m)^$([Regex]::Escape($Key))=.*$", $line)
+    $content = [Regex]::Replace(
+      $content,
+      "(?m)^$([Regex]::Escape($Key))=.*$",
+      [Text.RegularExpressions.MatchEvaluator]{ param($match) $line }
+    )
     [IO.File]::WriteAllText($InstalledEnvFile, $content, $Utf8NoBom)
   } else {
     [IO.File]::AppendAllText($InstalledEnvFile, [Environment]::NewLine + $line, $Utf8NoBom)
@@ -144,6 +247,12 @@ function New-InstalledRandomPassword {
   }
 
   return "Tv!$(([BitConverter]::ToString($bytes)).Replace('-', '').ToLowerInvariant())"
+}
+
+function Get-InstalledBackupDirectory {
+  $configured = Get-ExistingEnvValue "BACKUP_DIR_HOST" "./backups"
+  if ([IO.Path]::IsPathRooted($configured)) { return $configured }
+  return Join-Path $InstallDir ($configured -replace '^\.[/\\]', '')
 }
 
 function Initialize-InstalledEnvFile {
@@ -220,25 +329,31 @@ function Backup-CurrentDatabase {
 
   docker container inspect clinic-crm-postgres *> $null
   if ($LASTEXITCODE -ne 0) {
-    Write-Host "Existing PostgreSQL container was not found. Data volumes will not be touched."
-    return
+    throw "Существующая установка найдена, но контейнер PostgreSQL недоступен. Без проверяемой копии базы обновление остановлено; для осознанного обхода существует только параметр -NoBackup."
   }
 
   $dbUser = Get-ExistingEnvValue "POSTGRES_USER" "clinic_crm"
   $dbName = Get-ExistingEnvValue "POSTGRES_DB" "clinic_crm"
-  $backupDir = Join-Path $InstallDir "backups"
+  $backupDir = Get-InstalledBackupDirectory
   $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-  $backupFile = Join-Path $backupDir "pre-update-$timestamp.sql"
+  $backupFile = Join-Path $backupDir "pre-update-$timestamp.dump"
 
   New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
 
   Write-Host "Creating database backup before update..."
   Write-Host "  $backupFile"
-  & docker exec clinic-crm-postgres pg_dump -U $dbUser -d $dbName > $backupFile
+  docker exec clinic-crm-postgres pg_dump -U $dbUser -d $dbName --format=custom --no-owner --no-privileges -f /tmp/pre-update.dump
   if ($LASTEXITCODE -ne 0) {
-    Remove-Item -Force -ErrorAction SilentlyContinue $backupFile
     throw "Could not create database backup. Update stopped so clinic data is not put at risk."
   }
+  docker exec clinic-crm-postgres pg_restore --list /tmp/pre-update.dump *> $null
+  if ($LASTEXITCODE -ne 0) { throw "Созданная копия базы не прошла проверку структуры. Обновление остановлено." }
+  docker cp "clinic-crm-postgres:/tmp/pre-update.dump" $backupFile
+  docker exec clinic-crm-postgres rm -f /tmp/pre-update.dump *> $null
+  if (!(Test-Path $backupFile)) { throw "Копия базы не записана на диск. Обновление остановлено." }
+  $hash = (Get-FileHash $backupFile -Algorithm SHA256).Hash.ToLowerInvariant()
+  [IO.File]::WriteAllText("$backupFile.sha256", "$hash  $([IO.Path]::GetFileName($backupFile))`r`n", $Utf8NoBom)
+  if (Test-Path $InstalledEnvFile) { Copy-Item $InstalledEnvFile (Join-Path $backupDir "pre-update-$timestamp.env") }
 }
 
 function New-LauncherShortcut {
@@ -329,6 +444,52 @@ function New-VersionCheckCommand {
   Set-Content -Path $CommandPath -Value $content -Encoding ASCII
 }
 
+function Write-Utf8BatchFile($CommandPath, $Lines) {
+  [IO.File]::WriteAllLines($CommandPath, [string[]]$Lines, $Utf8Bom)
+}
+
+function New-ExportTransferCommand($CommandPath) {
+  Write-Utf8BatchFile $CommandPath @(
+    "@echo off",
+    "chcp 65001 >nul",
+    "setlocal",
+    "echo Создание проверяемого комплекта переноса TemichevVet.",
+    "set /p TARGET=Введите полный путь к отдельному диску или папке: ",
+    "if not defined TARGET exit /b 1",
+    "powershell -NoProfile -ExecutionPolicy Bypass -File ""%USERPROFILE%\TemichevVet\scripts\export-clinic-transfer.ps1"" -Destination ""%TARGET%""",
+    "echo.",
+    "pause"
+  )
+}
+
+function New-ConfigureBackupCommand($CommandPath) {
+  Write-Utf8BatchFile $CommandPath @(
+    "@echo off",
+    "chcp 65001 >nul",
+    "setlocal",
+    "echo Настройка отдельного диска резервных копий TemichevVet.",
+    "set /p TARGET=Введите полный путь к папке на отдельном диске: ",
+    "if not defined TARGET exit /b 1",
+    "powershell -NoProfile -ExecutionPolicy Bypass -File ""%USERPROFILE%\TemichevVet\scripts\configure-backup-storage.ps1"" -Destination ""%TARGET%""",
+    "echo.",
+    "pause"
+  )
+}
+
+function New-VerifyBackupCommand($CommandPath) {
+  Write-Utf8BatchFile $CommandPath @(
+    "@echo off",
+    "chcp 65001 >nul",
+    "setlocal",
+    "echo Изолированная проверка резервной копии TemichevVet.",
+    "set /p ARCHIVE=Введите полный путь к архиву базы: ",
+    "if not defined ARCHIVE exit /b 1",
+    "powershell -NoProfile -ExecutionPolicy Bypass -File ""%USERPROFILE%\TemichevVet\scripts\verify-backup.ps1"" -Archive ""%ARCHIVE%""",
+    "echo.",
+    "pause"
+  )
+}
+
 function Install-PortableAssets {
   $sourceIcon = Join-Path $PortableRoot "installers\temichevvet.ico"
   if (!(Test-Path $sourceIcon)) {
@@ -349,6 +510,9 @@ function Install-LauncherShortcuts {
   $internetUpdater = Join-Path $InstallDir "Обновить TemichevVet через интернет.cmd"
   $githubConfigurator = Join-Path $InstallDir "Настроить обновления GitHub.cmd"
   $versionChecker = Join-Path $InstallDir "Проверить версию TemichevVet.cmd"
+  $transferExporter = Join-Path $InstallDir "Создать комплект переноса TemichevVet.cmd"
+  $backupConfigurator = Join-Path $InstallDir "Настроить отдельный диск резервных копий.cmd"
+  $backupVerifier = Join-Path $InstallDir "Проверить резервную копию TemichevVet.cmd"
   $desktop = [Environment]::GetFolderPath("Desktop")
   $startMenu = [Environment]::GetFolderPath("Programs")
   $startMenuDir = Join-Path $startMenu "TemichevVet"
@@ -357,6 +521,9 @@ function Install-LauncherShortcuts {
   New-InternetUpdateCommand $internetUpdater
   New-GithubUpdatesCommand $githubConfigurator
   New-VersionCheckCommand $versionChecker
+  New-ExportTransferCommand $transferExporter
+  New-ConfigureBackupCommand $backupConfigurator
+  New-VerifyBackupCommand $backupVerifier
 
   try {
     New-LauncherShortcut (Join-Path $desktop "TemichevVet.lnk") $launcher
@@ -397,6 +564,12 @@ function Install-LauncherShortcuts {
   Copy-Item -Force -Path $githubConfigurator -Destination (Join-Path $startMenuDir "Настроить обновления GitHub.cmd")
   Copy-Item -Force -Path $versionChecker -Destination (Join-Path $desktop "Проверить версию TemichevVet.cmd")
   Copy-Item -Force -Path $versionChecker -Destination (Join-Path $startMenuDir "Проверить версию TemichevVet.cmd")
+  Copy-Item -Force -Path $transferExporter -Destination (Join-Path $desktop "Создать комплект переноса TemichevVet.cmd")
+  Copy-Item -Force -Path $transferExporter -Destination (Join-Path $startMenuDir "Создать комплект переноса TemichevVet.cmd")
+  Copy-Item -Force -Path $backupConfigurator -Destination (Join-Path $desktop "Настроить отдельный диск резервных копий.cmd")
+  Copy-Item -Force -Path $backupConfigurator -Destination (Join-Path $startMenuDir "Настроить отдельный диск резервных копий.cmd")
+  Copy-Item -Force -Path $backupVerifier -Destination (Join-Path $desktop "Проверить резервную копию TemichevVet.cmd")
+  Copy-Item -Force -Path $backupVerifier -Destination (Join-Path $startMenuDir "Проверить резервную копию TemichevVet.cmd")
   Write-Host "Created launchers: Desktop and Start menu."
 }
 
@@ -418,6 +591,10 @@ function Test-VirtualizationEnabled {
 if (!(Test-Path $SourceDir)) {
   throw "CRM folder was not found on the portable drive: $SourceDir"
 }
+
+Write-Host "Цель действия: $(if ($Update -or (Test-Path $InstallDir)) { 'обновить приложение TemichevVet на этом серверном компьютере Windows' } else { 'установить TemichevVet на этот серверный компьютер Windows' })."
+Write-Host "Точная папка приложения: $InstallDir"
+Write-Host "Docker volumes и клинические данные не удаляются."
 
 if (!(Test-VirtualizationEnabled)) {
   Write-Host "Hardware virtualization is disabled or unavailable."
@@ -456,8 +633,11 @@ if ($LASTEXITCODE -ne 0) {
   }
 }
 
+Assert-FreeSpace
+
 $isExistingInstall = Test-Path $InstallDir
 if ($Update -or $isExistingInstall) {
+  Save-CurrentApplicationImages
   Backup-CurrentDatabase
 }
 
@@ -496,21 +676,45 @@ Set-InstalledSourceVersion
 
 Set-InstalledEnvDefault "TEMICHEVVET_REMOTE_API_IMAGE" "ghcr.io/pivotemnoe/kliniksrm-api:stable"
 Set-InstalledEnvDefault "TEMICHEVVET_REMOTE_WEB_IMAGE" "ghcr.io/pivotemnoe/kliniksrm-web:stable"
-Set-InstalledEnvValue "TEMICHEVVET_AUTO_PULL_IMAGES" "true"
+Set-InstalledEnvDefault "TEMICHEVVET_AUTO_PULL_IMAGES" "true"
 
-if (Test-Path $ImagesTar) {
-  Write-Host "Загружаю Docker-образы с флешки..."
-  Invoke-Native -Command "docker" -Arguments @("load", "--input", $ImagesTar)
-  Assert-DockerImage "temichevvet-api:local"
-  Assert-DockerImage "temichevvet-web:local"
-  Set-InstalledEnvValue "TEMICHEVVET_API_IMAGE" "temichevvet-api:local"
-  Set-InstalledEnvValue "TEMICHEVVET_WEB_IMAGE" "temichevvet-web:local"
-} else {
-  Write-Host "Готовые Docker-образы на этой флешке не найдены."
-  Write-Host "Первый запуск попробует скачать образы из GitHub Container Registry и может упасть на медленной или заблокированной сети."
-  Write-Host "Для установки почти без интернета пересоздайте флешку с режимом --include-images."
-  Set-InstalledEnvValue "TEMICHEVVET_API_IMAGE" (Get-ExistingEnvValue "TEMICHEVVET_REMOTE_API_IMAGE" "ghcr.io/pivotemnoe/kliniksrm-api:stable")
-  Set-InstalledEnvValue "TEMICHEVVET_WEB_IMAGE" (Get-ExistingEnvValue "TEMICHEVVET_REMOTE_WEB_IMAGE" "ghcr.io/pivotemnoe/kliniksrm-web:stable")
+$previousConfiguredApi = Get-ExistingEnvValue "TEMICHEVVET_API_IMAGE" ""
+$previousConfiguredWeb = Get-ExistingEnvValue "TEMICHEVVET_WEB_IMAGE" ""
+
+try {
+  if (Test-Path $ImagesTar) {
+    Write-Host "Загружаю Docker-образы с флешки..."
+    Invoke-Native -Command "docker" -Arguments @("load", "--input", $ImagesTar)
+    Assert-DockerImage "temichevvet-api:local"
+    Assert-DockerImage "temichevvet-web:local"
+    Assert-WindowsImageArchitecture "temichevvet-api:local"
+    Assert-WindowsImageArchitecture "temichevvet-web:local"
+  } else {
+    Write-Host "Готовые Docker-образы на этой флешке не найдены."
+    Write-Host "Первый запуск попробует скачать образы из GitHub Container Registry и может упасть на медленной или заблокированной сети."
+    Write-Host "Для установки почти без интернета пересоздайте флешку с режимом --include-images."
+  }
+
+  Show-PendingInstalledMigrations
+
+  if (Test-Path $ImagesTar) {
+    Set-InstalledEnvValue "TEMICHEVVET_API_IMAGE" "temichevvet-api:local"
+    Set-InstalledEnvValue "TEMICHEVVET_WEB_IMAGE" "temichevvet-web:local"
+  } else {
+    Set-InstalledEnvValue "TEMICHEVVET_API_IMAGE" (Get-ExistingEnvValue "TEMICHEVVET_REMOTE_API_IMAGE" "ghcr.io/pivotemnoe/kliniksrm-api:stable")
+    Set-InstalledEnvValue "TEMICHEVVET_WEB_IMAGE" (Get-ExistingEnvValue "TEMICHEVVET_REMOTE_WEB_IMAGE" "ghcr.io/pivotemnoe/kliniksrm-web:stable")
+  }
+} catch {
+  if ($isExistingInstall) {
+    if (![string]::IsNullOrWhiteSpace($previousConfiguredApi)) { Set-InstalledEnvValue "TEMICHEVVET_API_IMAGE" $previousConfiguredApi }
+    if (![string]::IsNullOrWhiteSpace($previousConfiguredWeb)) { Set-InstalledEnvValue "TEMICHEVVET_WEB_IMAGE" $previousConfiguredWeb }
+    if ((Test-Path $ImagesTar) -and $PreviousApiId -and $PreviousWebId) {
+      docker tag $PreviousApiId "temichevvet-api:local" *> $null
+      docker tag $PreviousWebId "temichevvet-web:local" *> $null
+    }
+  }
+  Write-InstalledUpdateLog "preflight_failed" $_.Exception.Message
+  throw
 }
 
 Install-LauncherShortcuts
@@ -522,9 +726,23 @@ if (!$NoStart) {
   }
 
   Write-Host "Starting TemichevVet..."
-  if (Test-Path $ImagesTar) {
-    cmd /c "`"$launcher`" -ForceRecreate -NoImageUpdate"
-  } else {
-    cmd /c "`"$launcher`" -ForceRecreate -UpdateImages"
+  try {
+    if (Test-Path $ImagesTar) {
+      cmd /c "`"$launcher`" -ForceRecreate -NoImageUpdate"
+    } else {
+      cmd /c "`"$launcher`" -ForceRecreate -UpdateImages"
+    }
+    if ($LASTEXITCODE -ne 0) { throw "Новая версия не запустилась." }
+    Write-InstalledUpdateLog "success" $null
+  } catch {
+    $startError = $_.Exception.Message
+    if ($PreviousApiId -and $PreviousWebId) {
+      Write-Host "Возвращаю только предыдущие образы приложения; база назад не откатывается."
+      Set-InstalledEnvValue "TEMICHEVVET_API_IMAGE" $RollbackApi
+      Set-InstalledEnvValue "TEMICHEVVET_WEB_IMAGE" $RollbackWeb
+      cmd /c "`"$launcher`" -ForceRecreate -NoImageUpdate"
+    }
+    Write-InstalledUpdateLog "rolled_back_app" $startError
+    throw "Обновление остановлено: $startError"
   }
 }

@@ -14,6 +14,9 @@ $RootDir = Resolve-Path (Join-Path $PSScriptRoot "..")
 $EnvFile = Join-Path $RootDir ".env"
 $EnvExample = Join-Path $RootDir ".env.example"
 $StarterScript = Join-Path $RootDir "scripts\start-clinic-server.ps1"
+$UpdateLogDir = Join-Path $RootDir "logs"
+$UpdateLogFile = Join-Path $UpdateLogDir "update-history.jsonl"
+$UpdateTimestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 
 function Test-Command($Name) {
   return [bool](Get-Command $Name -ErrorAction SilentlyContinue)
@@ -50,11 +53,97 @@ function Set-EnvValue($Key, $Value) {
   $line = "$Key=$Value"
 
   if ($content -match "(?m)^$([Regex]::Escape($Key))=") {
-    $content = [Regex]::Replace($content, "(?m)^$([Regex]::Escape($Key))=.*$", $line)
-    Set-Content -Path $EnvFile -Value $content -NoNewline -Encoding UTF8
+    $content = [Regex]::Replace(
+      $content,
+      "(?m)^$([Regex]::Escape($Key))=.*$",
+      [Text.RegularExpressions.MatchEvaluator]{ param($match) $line }
+    )
+    [IO.File]::WriteAllText($EnvFile, $content, $Utf8NoBom)
   } else {
-    Add-Content -Path $EnvFile -Value $line -Encoding UTF8
+    [IO.File]::AppendAllText($EnvFile, [Environment]::NewLine + $line, $Utf8NoBom)
   }
+}
+
+function Assert-FreeSpace {
+  $drive = Get-PSDrive -Name ([IO.Path]::GetPathRoot($RootDir.Path).Substring(0, 1))
+  $minimum = 10GB
+  if ($drive.Free -lt $minimum) {
+    throw "На диске программы свободно меньше 10 ГБ. Обновление остановлено до освобождения места."
+  }
+  Write-Host "Свободное место: $([Math]::Round($drive.Free / 1GB, 1)) ГБ."
+}
+
+function Get-BackupDirectory {
+  $configured = Get-EnvValue "BACKUP_DIR_HOST" "./backups"
+  if ([IO.Path]::IsPathRooted($configured)) { return $configured }
+  return Join-Path $RootDir.Path ($configured -replace '^\.[/\\]', '')
+}
+
+function Get-CurrentContainerImage($Container) {
+  docker container inspect $Container *> $null
+  if ($LASTEXITCODE -ne 0) { return $null }
+  return (docker inspect --format '{{.Image}}' $Container | Select-Object -Last 1)
+}
+
+function Assert-WindowsImageArchitecture($Image, $Label) {
+  $architecture = (docker image inspect --format '{{.Architecture}}' $Image | Select-Object -Last 1).Trim()
+  if ($LASTEXITCODE -ne 0) { throw "Не удалось проверить архитектуру образа $Label." }
+  if ($architecture -ne "amd64") {
+    throw "Образ $Label имеет архитектуру $architecture, а сервер Windows требует linux/amd64. Обновление остановлено."
+  }
+}
+
+function Show-PendingMigrations($ApiImage) {
+  $imageMigrations = @(docker run --rm --entrypoint sh $ApiImage -c "ls -1 /app/prisma/migrations 2>/dev/null" | Where-Object { $_ -match '^\d' })
+  if ($LASTEXITCODE -ne 0) { throw "Не удалось прочитать список миграций из нового API-образа." }
+  $dbUser = Get-EnvValue "POSTGRES_USER" "clinic_crm"
+  $dbName = Get-EnvValue "POSTGRES_DB" "clinic_crm"
+  $failedMigrations = @(docker exec clinic-crm-postgres psql -U $dbUser -d $dbName -At -c 'SELECT migration_name FROM "_prisma_migrations" WHERE finished_at IS NULL AND rolled_back_at IS NULL;' 2>$null)
+  if ($LASTEXITCODE -ne 0) { throw "Не удалось проверить журнал миграций существующей базы." }
+  if ($failedMigrations.Count -gt 0) {
+    throw "В базе есть незавершённая миграция ($($failedMigrations -join ', ')). Автоматическое обновление остановлено для ручной проверки."
+  }
+  $applied = @(docker exec clinic-crm-postgres psql -U $dbUser -d $dbName -At -c 'SELECT migration_name FROM "_prisma_migrations" WHERE finished_at IS NOT NULL;' 2>$null)
+  if ($LASTEXITCODE -ne 0) { throw "Не удалось прочитать список применённых миграций." }
+  $pending = @($imageMigrations | Where-Object { $applied -notcontains $_ })
+  if ($pending.Count -eq 0) {
+    Write-Host "Новых миграций базы нет."
+  } else {
+    Write-Host "Штатные миграции, которые будут применены при запуске:"
+    foreach ($migration in $pending) {
+      Write-Host "  $migration"
+      $sql = docker run --rm --entrypoint sh $ApiImage -c "cat /app/prisma/migrations/$migration/migration.sql 2>/dev/null"
+      if ($LASTEXITCODE -ne 0) { throw "Не удалось проверить migration.sql для $migration." }
+      if (($sql -join [Environment]::NewLine) -match '(?is)\b(?:DROP\s+(?:TABLE|COLUMN|TYPE)|TRUNCATE\s+TABLE|DELETE\s+FROM|ALTER\s+TABLE\b.*?ALTER\s+COLUMN\b.*?TYPE\b)') {
+        throw "Миграция $migration содержит потенциально разрушительную операцию. Автоматическое обновление остановлено для ручной проверки."
+      }
+    }
+    Write-Host "Проверка миграций пройдена: потенциально разрушительных операций не найдено."
+  }
+}
+
+function Write-UpdateLog($State, $PreviousApi, $PreviousWeb, $NextApi, $NextWeb, $ErrorMessage) {
+  New-Item -ItemType Directory -Force -Path $UpdateLogDir | Out-Null
+  $entry = [ordered]@{
+    at = (Get-Date).ToUniversalTime().ToString("o")
+    state = $State
+    previousApi = Get-ImageDescriptor $PreviousApi
+    previousWeb = Get-ImageDescriptor $PreviousWeb
+    nextApi = Get-ImageDescriptor $NextApi
+    nextWeb = Get-ImageDescriptor $NextWeb
+    error = $ErrorMessage
+  } | ConvertTo-Json -Compress
+  [IO.File]::AppendAllText($UpdateLogFile, $entry + [Environment]::NewLine, $Utf8NoBom)
+}
+
+function Get-ImageDescriptor($Image) {
+  if ([string]::IsNullOrWhiteSpace($Image)) { return $null }
+  $raw = docker image inspect $Image 2>$null
+  if ($LASTEXITCODE -ne 0 -or !$raw) { return [ordered]@{ reference = $Image; available = $false } }
+  $item = @($raw | ConvertFrom-Json)[0]
+  $revision = $null
+  if ($item.Config -and $item.Config.Labels) { $revision = $item.Config.Labels.'org.opencontainers.image.revision' }
+  return [ordered]@{ reference = $Image; available = $true; id = $item.Id; revision = $revision }
 }
 
 function Backup-CurrentDatabase {
@@ -65,25 +154,31 @@ function Backup-CurrentDatabase {
 
   docker container inspect clinic-crm-postgres *> $null
   if ($LASTEXITCODE -ne 0) {
-    Write-Host "Existing PostgreSQL container was not found. Skipping pre-update backup."
-    return
+    throw "Контейнер PostgreSQL не найден. Без проверяемой копии базы обновление остановлено; для осознанного обхода существует только параметр -NoBackup."
   }
 
   $dbUser = Get-EnvValue "POSTGRES_USER" "clinic_crm"
   $dbName = Get-EnvValue "POSTGRES_DB" "clinic_crm"
-  $backupDir = Join-Path $RootDir "backups"
+  $backupDir = Get-BackupDirectory
   $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-  $backupFile = Join-Path $backupDir "pre-internet-update-$timestamp.sql"
+  $backupFile = Join-Path $backupDir "pre-internet-update-$timestamp.dump"
 
   New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
 
   Write-Host "Creating database backup before internet update..."
   Write-Host "  $backupFile"
-  & docker exec clinic-crm-postgres pg_dump -U $dbUser -d $dbName > $backupFile
+  docker exec clinic-crm-postgres pg_dump -U $dbUser -d $dbName --format=custom --no-owner --no-privileges -f /tmp/pre-internet-update.dump
   if ($LASTEXITCODE -ne 0) {
-    Remove-Item -Force -ErrorAction SilentlyContinue $backupFile
     throw "Could not create database backup. Update stopped so clinic data is not put at risk."
   }
+  docker exec clinic-crm-postgres pg_restore --list /tmp/pre-internet-update.dump *> $null
+  if ($LASTEXITCODE -ne 0) { throw "Созданная копия базы не прошла проверку структуры. Обновление остановлено." }
+  docker cp "clinic-crm-postgres:/tmp/pre-internet-update.dump" $backupFile
+  docker exec clinic-crm-postgres rm -f /tmp/pre-internet-update.dump *> $null
+  if ($LASTEXITCODE -ne 0 -or !(Test-Path $backupFile)) { throw "Копия базы не перенесена на диск. Обновление остановлено." }
+  $hash = (Get-FileHash $backupFile -Algorithm SHA256).Hash.ToLowerInvariant()
+  [IO.File]::WriteAllText("$backupFile.sha256", "$hash  $([IO.Path]::GetFileName($backupFile))`r`n", $Utf8NoBom)
+  if (Test-Path $EnvFile) { Copy-Item $EnvFile (Join-Path $backupDir "pre-internet-update-$timestamp.env") }
 }
 
 function Invoke-DockerPullWithRetry {
@@ -128,6 +223,11 @@ if (!(Test-Command "docker")) {
   throw "Docker was not found. Install Docker Desktop and try again."
 }
 
+Write-Host "Цель действия: обновить только приложение TemichevVet на этом серверном компьютере Windows."
+Write-Host "Точная папка приложения: $($RootDir.Path)"
+Write-Host "База данных, документы и Docker volumes не удаляются."
+Assert-FreeSpace
+
 $remoteApi = Get-EnvValue "TEMICHEVVET_REMOTE_API_IMAGE" ""
 $remoteWeb = Get-EnvValue "TEMICHEVVET_REMOTE_WEB_IMAGE" ""
 
@@ -142,15 +242,31 @@ if ([string]::IsNullOrWhiteSpace($remoteApi) -or [string]::IsNullOrWhiteSpace($r
 
 Backup-CurrentDatabase
 
-Write-Host "Скачиваю обновлённые Docker-образы..."
-if (!(Invoke-DockerPullWithRetry -Image $remoteApi -Label "API")) {
-  Show-DockerPullHelp "API"
-  exit 1
-}
+$previousApiId = Get-CurrentContainerImage "clinic-crm-api"
+$previousWebId = Get-CurrentContainerImage "clinic-crm-web"
+$rollbackApi = "temichevvet-api:rollback-$UpdateTimestamp"
+$rollbackWeb = "temichevvet-web:rollback-$UpdateTimestamp"
+if ($previousApiId) { docker tag $previousApiId $rollbackApi }
+if ($previousWebId) { docker tag $previousWebId $rollbackWeb }
 
-if (!(Invoke-DockerPullWithRetry -Image $remoteWeb -Label "web")) {
-  Show-DockerPullHelp "web"
-  exit 1
+Write-Host "Скачиваю обновлённые Docker-образы..."
+try {
+  if (!(Invoke-DockerPullWithRetry -Image $remoteApi -Label "API")) {
+    Show-DockerPullHelp "API"
+    throw "Не удалось скачать Docker-образ API."
+  }
+
+  if (!(Invoke-DockerPullWithRetry -Image $remoteWeb -Label "web")) {
+    Show-DockerPullHelp "web"
+    throw "Не удалось скачать Docker-образ web."
+  }
+
+  Assert-WindowsImageArchitecture $remoteApi "API"
+  Assert-WindowsImageArchitecture $remoteWeb "web"
+  Show-PendingMigrations $remoteApi
+} catch {
+  Write-UpdateLog "preflight_failed" $previousApiId $previousWebId $remoteApi $remoteWeb $_.Exception.Message
+  throw
 }
 
 Set-EnvValue "TEMICHEVVET_API_IMAGE" $remoteApi
@@ -163,4 +279,23 @@ if (!$NoOpen) {
 }
 
 Write-Host "Starting updated TemichevVet..."
-& $StarterScript @arguments
+try {
+  & $StarterScript @arguments
+  if ($LASTEXITCODE -ne 0) { throw "Запуск новой версии завершился ошибкой." }
+  Write-UpdateLog "success" $previousApiId $previousWebId $remoteApi $remoteWeb $null
+  Write-Host "Обновление завершено. Версия записана в журнал: $UpdateLogFile"
+} catch {
+  $startError = $_.Exception.Message
+  Write-Host "Новая версия не запустилась. Возвращаю только предыдущие образы приложения."
+  if ($previousApiId -and $previousWebId) {
+    Set-EnvValue "TEMICHEVVET_API_IMAGE" $rollbackApi
+    Set-EnvValue "TEMICHEVVET_WEB_IMAGE" $rollbackWeb
+    try {
+      & $StarterScript -ForceRecreate -NoImageUpdate
+    } catch {
+      Write-Host "Автоматический возврат приложения тоже не запустился. Резервная копия и журнал сохранены."
+    }
+  }
+  Write-UpdateLog "rolled_back_app" $previousApiId $previousWebId $remoteApi $remoteWeb $startError
+  throw "Обновление отменено: $startError. База данных автоматически назад не откатывалась."
+}

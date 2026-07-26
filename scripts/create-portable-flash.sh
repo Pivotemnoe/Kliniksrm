@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INCLUDE_IMAGES="false"
 SKIP_IMAGE_BUILD="false"
+SKIP_CONNECTIVITY="false"
 PLATFORM="${DOCKER_DEFAULT_PLATFORM:-linux/amd64}"
 DESTINATION=""
 
@@ -15,11 +16,13 @@ usage() {
   scripts/create-portable-flash.sh /Volumes/FLASH
   scripts/create-portable-flash.sh --include-images /Volumes/FLASH
   scripts/create-portable-flash.sh --include-images --skip-image-build /Volumes/FLASH
+  scripts/create-portable-flash.sh --skip-connectivity /path/to/empty-test-folder
   scripts/create-portable-flash.sh --include-images --platform linux/amd64 /Volumes/FLASH
 
 Опции:
   --include-images  собрать и положить Docker-образы на флешку для установки почти без интернета
   --skip-image-build  не пересобирать api/web, а сохранить уже готовые локальные образы
+  --skip-connectivity  не добавлять секреты личного кабинета и мессенджеров
   --platform VALUE  платформа Docker-образов, по умолчанию linux/amd64 для Windows/Linux ПК
   --help            показать справку
 
@@ -35,6 +38,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-image-build)
       SKIP_IMAGE_BUILD="true"
+      shift
+      ;;
+    --skip-connectivity)
+      SKIP_CONNECTIVITY="true"
       shift
       ;;
     --platform)
@@ -83,6 +90,14 @@ PORTABLE_DIR="$DESTINATION/TemichevVet-Portable"
 TMP_DIR="$DESTINATION/TemichevVet-Portable.tmp"
 BACKUP_DIR="$DESTINATION/TemichevVet-Portable.old-$(date +%Y%m%d-%H%M%S)"
 BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+echo "Цель действия: создать переносной комплект TemichevVet для Windows/Linux в указанной папке."
+echo "Точная папка назначения: $PORTABLE_DIR"
+echo "Рабочая база клиники и Docker volumes не изменяются и не удаляются."
+if [[ -e "$PORTABLE_DIR" ]]; then
+  echo "Существующий комплект будет сохранён отдельно: $BACKUP_DIR"
+fi
+
 GIT_COMMIT="local"
 if command -v git >/dev/null 2>&1 && git -C "$ROOT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   GIT_COMMIT="$(git -C "$ROOT_DIR" rev-parse HEAD 2>/dev/null || echo local)"
@@ -191,6 +206,10 @@ write_windows_text "$ROOT_DIR/scripts/portable/update-windows.bat" "$TMP_DIR/О�
 write_windows_text "$ROOT_DIR/scripts/portable/update-online-windows.bat" "$TMP_DIR/Обновить TemichevVet через интернет - Windows.bat"
 write_windows_text "$ROOT_DIR/scripts/portable/configure-github-updates-windows.bat" "$TMP_DIR/Настроить обновления GitHub - Windows.bat"
 write_windows_text "$ROOT_DIR/scripts/portable/check-version-windows.bat" "$TMP_DIR/Проверить версию TemichevVet - Windows.bat"
+write_windows_text "$ROOT_DIR/scripts/portable/export-transfer-windows.bat" "$TMP_DIR/Создать комплект переноса TemichevVet - Windows.bat"
+write_windows_text "$ROOT_DIR/scripts/portable/restore-transfer-windows.bat" "$TMP_DIR/Восстановить TemichevVet на новом компьютере - Windows.bat"
+write_windows_text "$ROOT_DIR/scripts/portable/verify-backup-windows.bat" "$TMP_DIR/Проверить резервную копию TemichevVet - Windows.bat"
+write_windows_text "$ROOT_DIR/scripts/portable/configure-backup-storage-windows.bat" "$TMP_DIR/Настроить отдельный диск резервных копий - Windows.bat"
 write_windows_text "$ROOT_DIR/scripts/portable/start-workstation-windows.bat" "$TMP_DIR/Подключить рабочее место - Windows.bat"
 cp "$ROOT_DIR/scripts/portable/start-mac.command" "$TMP_DIR/Установить TemichevVet - Mac.command"
 cp "$ROOT_DIR/scripts/portable/update-mac.command" "$TMP_DIR/Обновить TemichevVet - Mac.command"
@@ -209,7 +228,9 @@ while IFS= read -r -d '' batch_file; do
   mv "$normalized_file" "$batch_file"
 done < <(find "$TMP_DIR/CRM" -type f \( -name '*.bat' -o -name '*.cmd' \) -print0)
 
-if [[ -f "$CONNECTIVITY_ENV_SOURCE" ]]; then
+if [[ "$SKIP_CONNECTIVITY" == "true" ]]; then
+  echo "Настройки связи личного кабинета пропущены по параметру --skip-connectivity."
+elif [[ -f "$CONNECTIVITY_ENV_SOURCE" ]]; then
   connectivity_count=0
   {
     echo "# TemichevVet clinic connectivity settings. Keep this flash drive protected."
@@ -342,6 +363,10 @@ echo "  Обновить TemichevVet - Windows.bat"
 echo "  Обновить TemichevVet через интернет - Windows.bat"
 echo "  Настроить обновления GitHub - Windows.bat"
 echo "  Проверить версию TemichevVet - Windows.bat"
+echo "  Создать комплект переноса TemichevVet - Windows.bat"
+echo "  Восстановить TemichevVet на новом компьютере - Windows.bat"
+echo "  Проверить резервную копию TemichevVet - Windows.bat"
+echo "  Настроить отдельный диск резервных копий - Windows.bat"
 echo "  Подключить рабочее место - Windows.bat"
 echo "  Установить TemichevVet - Mac.command"
 echo "  Обновить TemichevVet - Mac.command"
