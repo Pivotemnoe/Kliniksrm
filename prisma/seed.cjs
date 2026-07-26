@@ -31,6 +31,12 @@ const permissions = [
   ['payroll.read', 'Просмотр расчётов зарплаты'],
   ['payroll.manage', 'Настройка и расчёт зарплаты'],
   ['payroll.approve', 'Утверждение зарплаты'],
+  ['daily_finance.read', 'Просмотр закрытия дня'],
+  ['daily_finance.manage', 'Внесение ежедневной выручки и расходов'],
+  ['daily_finance.submit', 'Отправка закрытия дня директору'],
+  ['business.read', 'Просмотр управленческой отчётности'],
+  ['business.manage', 'Управление доходами и расходами'],
+  ['business.approve', 'Утверждение закрытия дня'],
   ['laboratory.read', 'Просмотр лаборатории'],
   ['laboratory.manage', 'Управление лабораторией'],
   ['hospital.read', 'Просмотр стационара'],
@@ -84,6 +90,9 @@ const roles = [
       'documents.read',
       'documents.print',
       'documents.manage',
+      'daily_finance.read',
+      'daily_finance.manage',
+      'daily_finance.submit',
     ],
   ],
   [
@@ -147,6 +156,26 @@ const roles = [
     ],
   ],
   ['stock', 'Складской сотрудник', ['dashboard.read', 'news.read', 'stock.read', 'stock.manage']],
+];
+
+const businessCategories = [
+  ['unrecorded_revenue', 'Выручка, не проведённая через CRM', 'INCOME', 'REVENUE', true, true, 10],
+  ['other_income', 'Прочий доход', 'INCOME', 'REVENUE', true, true, 20],
+  ['owner_contribution', 'Вклад собственника', 'INCOME', 'OWNER', false, false, 30],
+  ['loan_received', 'Полученный заём', 'INCOME', 'FINANCE', false, false, 40],
+  ['petty_expense', 'Мелкие расходы дня', 'EXPENSE', 'OPERATING', true, true, 110],
+  ['rent', 'Аренда', 'EXPENSE', 'OPERATING', true, false, 120],
+  ['utilities', 'Коммунальные услуги', 'EXPENSE', 'OPERATING', true, false, 130],
+  ['payroll', 'Выплата зарплаты', 'EXPENSE', 'PAYROLL', false, false, 140],
+  ['taxes', 'Налоги и обязательные платежи', 'EXPENSE', 'TAX', true, false, 150],
+  ['marketing', 'Реклама и маркетинг', 'EXPENSE', 'OPERATING', true, false, 160],
+  ['repairs', 'Ремонт и обслуживание', 'EXPENSE', 'OPERATING', true, false, 170],
+  ['training', 'Обучение сотрудников', 'EXPENSE', 'OPERATING', true, false, 180],
+  ['bank_fees', 'Банковские комиссии', 'EXPENSE', 'FINANCE', true, false, 190],
+  ['other_expense', 'Прочий расход', 'EXPENSE', 'OPERATING', true, false, 200],
+  ['owner_withdrawal', 'Изъятие собственником', 'EXPENSE', 'OWNER', false, false, 210],
+  ['asset_purchase', 'Покупка оборудования', 'EXPENSE', 'INVESTMENT', false, false, 220],
+  ['loan_repayment', 'Погашение займа', 'EXPENSE', 'FINANCE', false, false, 230],
 ];
 
 const animalCatalog = [
@@ -735,6 +764,14 @@ async function main() {
         },
       });
     }
+  }
+
+  for (const [code, title, type, groupCode, affectsProfit, administratorAllowed, sortOrder] of businessCategories) {
+    await prisma.businessCategory.upsert({
+      where: { code },
+      update: { title, type, groupCode, affectsProfit, administratorAllowed, sortOrder },
+      create: { code, title, type, groupCode, affectsProfit, administratorAllowed, sortOrder },
+    });
   }
 
   await prisma.role.deleteMany({

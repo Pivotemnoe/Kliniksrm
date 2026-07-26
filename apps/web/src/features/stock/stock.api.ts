@@ -84,6 +84,6 @@ export function listSupplierBalances() {
   return apiRequest<SupplierBalance[]>('/v1/stock/supplier-balances');
 }
 
-export function createSupplierPayment(input: { supplierId: string; supplyInvoiceId?: string; amount: number; paidAt?: string; comment?: string }) {
+export function createSupplierPayment(input: { supplierId: string; supplyInvoiceId?: string; cashboxId?: string; paymentMethodId?: string; amount: number; paidAt?: string; comment?: string }) {
   return apiRequest('/v1/stock/supplier-payments', { method: 'POST', body: input });
 }

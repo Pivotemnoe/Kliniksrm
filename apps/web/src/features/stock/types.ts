@@ -108,6 +108,8 @@ export type StockResources = {
   productCategories: ProductCategory[];
   serviceCategories: ServiceCategory[];
   suppliers: Supplier[];
+  cashboxes: Array<{ id: string; officeId: string | null; title: string }>;
+  paymentMethods: Array<{ id: string; title: string; type: string }>;
 };
 
 export type ProductMutationInput = {

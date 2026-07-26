@@ -21,7 +21,7 @@ export class StockService {
 
   async getResources(actorId: string) {
     const warehouseScope = await this.getWarehouseScope(actorId);
-    const [warehouses, productCategories, serviceCategories, suppliers] = await this.prisma.$transaction([
+    const [warehouses, productCategories, serviceCategories, suppliers, cashboxes, paymentMethods] = await this.prisma.$transaction([
       this.prisma.warehouse.findMany({
         where: warehouseScope ? { id: { in: warehouseScope } } : undefined,
         orderBy: { name: 'asc' },
@@ -30,9 +30,18 @@ export class StockService {
       this.prisma.productCategory.findMany({ orderBy: { title: 'asc' } }),
       this.prisma.serviceCategory.findMany({ orderBy: { title: 'asc' } }),
       this.prisma.supplier.findMany({ orderBy: { title: 'asc' }, take: 200 }),
+      this.prisma.cashbox.findMany({
+        where: {
+          isActive: true,
+          ...(warehouseScope ? { OR: [{ officeId: null }, { office: { warehouses: { some: { id: { in: warehouseScope } } } } }] } : {}),
+        },
+        orderBy: { title: 'asc' },
+        select: { id: true, officeId: true, title: true },
+      }),
+      this.prisma.paymentMethod.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: 'asc' }, { title: 'asc' }], select: { id: true, title: true, type: true } }),
     ]);
 
-    return { warehouses, productCategories, serviceCategories, suppliers };
+    return { warehouses, productCategories, serviceCategories, suppliers, cashboxes, paymentMethods };
   }
 
   async listProducts(query: ListStockQueryDto, actorId: string) {

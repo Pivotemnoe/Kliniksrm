@@ -290,11 +290,21 @@ export class StockDocumentsService {
       const invoice = await this.prisma.supplyInvoice.findUnique({ where: { id: dto.supplyInvoiceId }, select: { supplierId: true } });
       if (!invoice || invoice.supplierId !== dto.supplierId) throw new BadRequestException('Накладная не относится к выбранному поставщику');
     }
+    if (dto.cashboxId) {
+      const cashbox = await this.prisma.cashbox.findUnique({ where: { id: dto.cashboxId }, select: { id: true, isActive: true } });
+      if (!cashbox?.isActive) throw new BadRequestException('Выбранная касса недоступна');
+    }
+    if (dto.paymentMethodId) {
+      const method = await this.prisma.paymentMethod.findUnique({ where: { id: dto.paymentMethodId }, select: { id: true, isActive: true } });
+      if (!method?.isActive) throw new BadRequestException('Выбранный способ оплаты недоступен');
+    }
     const payment = await this.prisma.supplierPayment.create({
       data: {
         supplierId: dto.supplierId,
         supplyInvoiceId: dto.supplyInvoiceId,
         amount: dto.amount,
+        cashboxId: dto.cashboxId,
+        paymentMethodId: dto.paymentMethodId,
         paidAt: dto.paidAt ? new Date(dto.paidAt) : undefined,
         comment: clean(dto.comment),
         createdById: actorId,
@@ -305,7 +315,7 @@ export class StockDocumentsService {
       action: 'stock.supplier_payment.create',
       entityType: 'SupplierPayment',
       entityId: payment.id,
-      metadata: { supplierId: dto.supplierId, amount: dto.amount },
+      metadata: { supplierId: dto.supplierId, amount: dto.amount, cashboxId: dto.cashboxId, paymentMethodId: dto.paymentMethodId },
     });
     return payment;
   }

@@ -8,6 +8,14 @@ export class CreateSupplierPaymentDto {
   @IsUUID()
   supplyInvoiceId?: string;
 
+  @IsOptional()
+  @IsUUID()
+  cashboxId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  paymentMethodId?: string;
+
   @IsNumber()
   @Min(0.01)
   amount!: number;

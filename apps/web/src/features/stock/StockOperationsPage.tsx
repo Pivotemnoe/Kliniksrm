@@ -22,7 +22,7 @@ import {
   listSupplierBalances,
   postStockDocument,
 } from './stock.api';
-import { StockDocument, StockDocumentMutationInput, StockDocumentType, StockMovement, SupplierBalance } from './types';
+import { StockDocument, StockDocumentMutationInput, StockDocumentType, StockMovement, StockResources, SupplierBalance } from './types';
 
 const historyPageSize = 20;
 
@@ -108,7 +108,7 @@ export function StockOperationsPage() {
       ...(canManage ? [{ key: 'suppliers', label: 'Поставщики и расчёты', children: <Table rowKey="id" columns={supplierColumns} dataSource={suppliersQuery.data ?? []} loading={suppliersQuery.isLoading} pagination={false} scroll={{ x: 850 }} /> }] : []),
     ]} /></div>
     <StockDocumentModal open={documentOpen} resources={resourcesQuery.data} onClose={() => setDocumentOpen(false)} onSaved={refresh} />
-    <SupplierPaymentModal supplier={paymentSupplier} onClose={() => setPaymentSupplier(null)} onSaved={refresh} />
+    <SupplierPaymentModal supplier={paymentSupplier} resources={resourcesQuery.data} onClose={() => setPaymentSupplier(null)} onSaved={refresh} />
   </div>;
 }
 
@@ -186,9 +186,9 @@ function StockDocumentModal({ open, resources, onClose, onSaved }: { open: boole
   </Modal>;
 }
 
-function SupplierPaymentModal({ supplier, onClose, onSaved }: { supplier: SupplierBalance | null; onClose: () => void; onSaved: () => Promise<void> }) {
+function SupplierPaymentModal({ supplier, resources, onClose, onSaved }: { supplier: SupplierBalance | null; resources?: StockResources; onClose: () => void; onSaved: () => Promise<void> }) {
   const { message } = App.useApp();
-  const [form] = Form.useForm<{ amount: number; paidAt: Dayjs; supplyInvoiceId?: string; comment?: string }>();
-  const mutation = useMutation({ mutationFn: (values: { amount: number; paidAt: Dayjs; supplyInvoiceId?: string; comment?: string }) => createSupplierPayment({ supplierId: supplier!.id, amount: values.amount, paidAt: values.paidAt.toISOString(), supplyInvoiceId: values.supplyInvoiceId, comment: values.comment }), onSuccess: async () => { await onSaved(); message.success('Оплата поставщику зарегистрирована'); form.resetFields(); onClose(); }, onError: (error) => message.error(getErrorMessage(error)) });
-  return <Modal open={Boolean(supplier)} title={`Оплата поставщику: ${supplier?.title ?? ''}`} onCancel={onClose} okText="Зарегистрировать" cancelText="Отмена" confirmLoading={mutation.isPending} onOk={() => form.submit()} destroyOnHidden><Form form={form} layout="vertical" initialValues={{ paidAt: dayjs() }} onFinish={(values) => mutation.mutate(values)}><Form.Item name="amount" label="Сумма" rules={[{ required: true }]}><InputNumber min={0.01} precision={2} addonAfter="₽" style={{ width: '100%' }} /></Form.Item><Form.Item name="supplyInvoiceId" label="Накладная (необязательно)"><Select allowClear options={supplier?.invoices.map((item) => ({ value: item.id, label: `${item.number || 'Без номера'} · ${formatDate(item.suppliedAt)} · ${formatMoney(item.totalAmount)}` }))} /></Form.Item><Form.Item name="paidAt" label="Дата оплаты" rules={[{ required: true }]}><DatePicker format="DD.MM.YYYY" /></Form.Item><Form.Item name="comment" label="Комментарий"><Input.TextArea rows={2} /></Form.Item></Form></Modal>;
+  const [form] = Form.useForm<{ amount: number; paidAt: Dayjs; supplyInvoiceId?: string; cashboxId?: string; paymentMethodId?: string; comment?: string }>();
+  const mutation = useMutation({ mutationFn: (values: { amount: number; paidAt: Dayjs; supplyInvoiceId?: string; cashboxId?: string; paymentMethodId?: string; comment?: string }) => createSupplierPayment({ supplierId: supplier!.id, amount: values.amount, paidAt: values.paidAt.toISOString(), supplyInvoiceId: values.supplyInvoiceId, cashboxId: values.cashboxId, paymentMethodId: values.paymentMethodId, comment: values.comment }), onSuccess: async () => { await onSaved(); message.success('Оплата поставщику зарегистрирована'); form.resetFields(); onClose(); }, onError: (error) => message.error(getErrorMessage(error)) });
+  return <Modal open={Boolean(supplier)} title={`Оплата поставщику: ${supplier?.title ?? ''}`} onCancel={onClose} okText="Зарегистрировать" cancelText="Отмена" confirmLoading={mutation.isPending} onOk={() => form.submit()} destroyOnHidden><Form form={form} layout="vertical" initialValues={{ paidAt: dayjs() }} onFinish={(values) => mutation.mutate(values)}><Form.Item name="amount" label="Сумма" rules={[{ required: true }]}><InputNumber min={0.01} precision={2} addonAfter="₽" style={{ width: '100%' }} /></Form.Item><Form.Item name="supplyInvoiceId" label="Накладная (необязательно)"><Select allowClear options={supplier?.invoices.map((item) => ({ value: item.id, label: `${item.number || 'Без номера'} · ${formatDate(item.suppliedAt)} · ${formatMoney(item.totalAmount)}` }))} /></Form.Item><Space wrap align="start"><Form.Item name="cashboxId" label="Из кассы" rules={[{ required: true, message: 'Выберите кассу' }]}><Select style={{ width: 220 }} options={resources?.cashboxes.map((item) => ({ value: item.id, label: item.title }))} /></Form.Item><Form.Item name="paymentMethodId" label="Способ оплаты" rules={[{ required: true, message: 'Выберите способ оплаты' }]}><Select style={{ width: 220 }} options={resources?.paymentMethods.map((item) => ({ value: item.id, label: item.title }))} /></Form.Item></Space><Typography.Paragraph type="secondary">Касса и способ оплаты нужны, чтобы расход автоматически попал в закрытие дня.</Typography.Paragraph><Form.Item name="paidAt" label="Дата оплаты" rules={[{ required: true }]}><DatePicker format="DD.MM.YYYY" /></Form.Item><Form.Item name="comment" label="Комментарий"><Input.TextArea rows={2} /></Form.Item></Form></Modal>;
 }
