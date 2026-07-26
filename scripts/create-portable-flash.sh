@@ -308,6 +308,7 @@ if [[ "$INCLUDE_IMAGES" == "true" ]]; then
   IMAGES="$(
     TEMICHEVVET_API_IMAGE=temichevvet-api:local \
     TEMICHEVVET_WEB_IMAGE=temichevvet-web:local \
+    TEMICHEVVET_INFRA_PLATFORM="$PLATFORM" \
       docker compose config --images | tr '\n' ' '
   )"
   if [[ -z "$IMAGES" ]]; then
@@ -316,7 +317,7 @@ if [[ "$INCLUDE_IMAGES" == "true" ]]; then
   fi
 
   echo "Скачиваю базовые образы postgres, redis и minio..."
-  if ! DOCKER_DEFAULT_PLATFORM="$PLATFORM" docker compose pull postgres redis minio; then
+  if ! DOCKER_DEFAULT_PLATFORM="$PLATFORM" TEMICHEVVET_INFRA_PLATFORM="$PLATFORM" docker compose pull postgres redis minio; then
     echo "Не удалось скачать один из базовых образов. Проверяю локальные Docker-образы..."
     for image in $IMAGES; do
       if ! docker image inspect "$image" >/dev/null 2>&1; then
