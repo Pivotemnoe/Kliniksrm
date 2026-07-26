@@ -27,6 +27,8 @@ storage/
 uploads/
 tmp/
 /backups/
+/private-license-keys/
+*license-private*.pem
 
 # Large offline installers stay local and are copied to the flash drive when present.
 installers/*.exe

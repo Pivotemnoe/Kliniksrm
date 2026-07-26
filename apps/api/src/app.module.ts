@@ -27,6 +27,7 @@ import { PayrollModule } from './modules/payroll/payroll.module';
 import { SalesModule } from './modules/sales/sales.module';
 import { SchedulingModule } from './modules/scheduling/scheduling.module';
 import { StockModule } from './modules/stock/stock.module';
+import { SupportModule } from './modules/support/support.module';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { VisitsModule } from './modules/visits/visits.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -60,6 +61,7 @@ import { PrismaModule } from './prisma/prisma.module';
     PayrollModule,
     SalesModule,
     StockModule,
+    SupportModule,
     HospitalModule,
     LaboratoryModule,
     ImportsModule,

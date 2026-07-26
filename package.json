@@ -31,6 +31,8 @@
     "backup:local": "scripts/backup-local.sh",
     "backup:postgres": "scripts/backup-postgres.sh",
     "restore:local": "scripts/restore-local.sh",
+    "license:generate-keys": "node scripts/generate-license-keypair.mjs",
+    "license:issue": "node scripts/issue-offline-license.mjs",
     "infra:up": "docker compose up -d postgres redis minio",
     "infra:down": "docker compose down",
     "check": "npm run prototype:check && npm run api:build"

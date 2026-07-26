@@ -9,6 +9,8 @@ on:
 permissions:
   contents: read
   packages: write
+  id-token: write
+  attestations: write
 
 jobs:
   publish:
@@ -45,12 +47,15 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and publish API image
+        id: build-api
         uses: docker/build-push-action@v6
         with:
           context: .
           file: apps/api/Dockerfile
           platforms: linux/amd64
           push: true
+          provenance: true
+          sbom: true
           build-args: |
             TEMICHEVVET_GIT_COMMIT=${{ github.sha }}
             TEMICHEVVET_BUILD_DATE=${{ steps.metadata.outputs.date }}
@@ -60,12 +65,15 @@ jobs:
             ${{ steps.images.outputs.api }}:${{ github.sha }}
 
       - name: Build and publish web image
+        id: build-web
         uses: docker/build-push-action@v6
         with:
           context: .
           file: apps/web/Dockerfile
           platforms: linux/amd64
           push: true
+          provenance: true
+          sbom: true
           build-args: |
             TEMICHEVVET_GIT_COMMIT=${{ github.sha }}
             TEMICHEVVET_BUILD_DATE=${{ steps.metadata.outputs.date }}
@@ -73,3 +81,17 @@ jobs:
           tags: |
             ${{ steps.images.outputs.web }}:stable
             ${{ steps.images.outputs.web }}:${{ github.sha }}
+
+      - name: Attest API image provenance
+        uses: actions/attest@v4
+        with:
+          subject-name: ${{ steps.images.outputs.api }}
+          subject-digest: ${{ steps.build-api.outputs.digest }}
+          push-to-registry: true
+
+      - name: Attest web image provenance
+        uses: actions/attest@v4
+        with:
+          subject-name: ${{ steps.images.outputs.web }}
+          subject-digest: ${{ steps.build-web.outputs.digest }}
+          push-to-registry: true

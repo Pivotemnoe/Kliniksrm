@@ -5,6 +5,7 @@ import {
   BankOutlined,
   CalculatorOutlined,
   CalendarOutlined,
+  CustomerServiceOutlined,
   DashboardOutlined,
   DatabaseOutlined,
   DollarOutlined,
@@ -72,6 +73,7 @@ export const menuItems: MenuProps['items'] = [
       { key: '/settings/finance', icon: <DollarOutlined />, label: 'Финансы' },
       { key: '/settings/audit', icon: <AuditOutlined />, label: 'Журнал аудита' },
       { key: '/settings/system', icon: <DatabaseOutlined />, label: 'Система' },
+      { key: '/settings/support', icon: <CustomerServiceOutlined />, label: 'Поддержка и лицензия' },
       { key: '/settings/import', icon: <ExportOutlined />, label: 'Перенос данных' },
     ],
   },
@@ -111,6 +113,7 @@ export const pageTitles: Record<string, string> = {
   finance: 'Финансы',
   audit: 'Журнал аудита',
   system: 'Система',
+  support: 'Поддержка и лицензия',
   import: 'Перенос данных',
 };
 
@@ -144,6 +147,7 @@ export const pageDescriptions: Record<string, string> = {
   finance: 'Баланс клиники, тарифы, кассы и финансовые настройки.',
   audit: 'Действия сотрудников и системные события CRM.',
   system: 'Состояние CRM, автоматические резервные копии и безопасное обновление.',
+  support: 'Обращения, лицензия установки и финальная приёмка нового сервера.',
   import: 'Перенос клиентов, пациентов, товаров и остатков из другой системы.',
 };
 

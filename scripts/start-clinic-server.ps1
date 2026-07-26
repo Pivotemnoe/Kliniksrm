@@ -141,6 +141,24 @@ function New-RandomPassword {
   return "Tv!$(([BitConverter]::ToString($bytes)).Replace('-', '').ToLowerInvariant())"
 }
 
+function Set-TemichevVetHostFingerprint {
+  try {
+    $machineGuid = (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Cryptography" -Name "MachineGuid" -ErrorAction Stop).MachineGuid
+    if ([string]::IsNullOrWhiteSpace($machineGuid)) { throw "MachineGuid is empty" }
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+      $bytes = [Text.Encoding]::UTF8.GetBytes("TemichevVet|$machineGuid")
+      $hash = $sha.ComputeHash($bytes)
+      $env:TEMICHEVVET_HOST_FINGERPRINT = ([BitConverter]::ToString($hash)).Replace('-', '').ToLowerInvariant()
+    } finally {
+      $sha.Dispose()
+    }
+  } catch {
+    $env:TEMICHEVVET_HOST_FINGERPRINT = ""
+    Write-Host "Не удалось получить код серверного компьютера. Текущая клиника продолжит работать в режиме совместимости."
+  }
+}
+
 function Set-EnvValue($Key, $Value) {
   $content = Get-Content $EnvFile -Raw
   $line = "$Key=$Value"
@@ -429,6 +447,7 @@ if (!(Test-DockerRunning)) {
 }
 
 Set-Location $RootDir
+Set-TemichevVetHostFingerprint
 $localIp = Get-LocalIp
 
 if (!(Test-Path $EnvFile)) {

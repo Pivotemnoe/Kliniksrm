@@ -35,6 +35,7 @@ import { ClinicResourcesPage } from '../features/scheduling/ClinicResourcesPage'
 import { SettingsOverviewPage } from '../features/settings/SettingsOverviewPage';
 import { StockPage } from '../features/stock/StockPage';
 import { StockOperationsPage } from '../features/stock/StockOperationsPage';
+import { SupportPage } from '../features/support/SupportPage';
 import { SystemSettingsPage } from '../features/system/SystemSettingsPage';
 import { TaskCardPage } from '../features/tasks/TaskCardPage';
 import { TasksPage } from '../features/tasks/TasksPage';
@@ -126,6 +127,7 @@ export const routes: RouteObject[] = [
           { path: '/settings/finance', element: <FinanceSettingsPage /> },
           { path: '/settings/audit', element: <AuditLogsPage /> },
           { path: '/settings/system', element: <SystemSettingsPage /> },
+          { path: '/settings/support', element: <SupportPage /> },
           { path: '/settings/import', element: <VetafImportPage /> },
           { path: '/messages', element: <MessagesPage /> },
           { path: '/online-requests', element: <OnlineRequestsPage /> },

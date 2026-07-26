@@ -5,5 +5,6 @@ import { BackupsService } from './backups.service';
 @Module({
   controllers: [BackupsController],
   providers: [BackupsService],
+  exports: [BackupsService],
 })
 export class BackupsModule {}

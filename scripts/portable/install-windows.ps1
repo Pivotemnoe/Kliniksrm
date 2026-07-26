@@ -13,6 +13,7 @@ $PortableRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $SourceDir = Join-Path $PortableRoot "CRM"
 $InstallDir = Join-Path $Env:USERPROFILE "TemichevVet"
 $ImagesTar = Join-Path $PortableRoot "docker-images\temichevvet-images.tar"
+$ImagesChecksum = "$ImagesTar.sha256"
 $InstalledEnvFile = Join-Path $InstallDir ".env"
 $PortableVersionFile = Join-Path $PortableRoot "VERSION.txt"
 $PortableConnectivityFile = Join-Path $PortableRoot "portable\clinic-connectivity.env"
@@ -33,7 +34,11 @@ $PortableConnectivityKeys = @(
   "TELEGRAM_BOT_USERNAME",
   "TELEGRAM_BOT_TOKEN",
   "TELEGRAM_WEBHOOK_SECRET",
-  "TELEGRAM_API_BASE_URL"
+  "TELEGRAM_API_BASE_URL",
+  "TEMICHEVVET_LICENSE_MODE",
+  "TEMICHEVVET_LICENSE_PUBLIC_KEY_B64",
+  "TEMICHEVVET_SUPPORT_URL",
+  "TEMICHEVVET_SUPPORT_EMAIL"
 )
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -170,6 +175,18 @@ function Assert-DockerImage($Image) {
   if (!(Test-DockerImage $Image)) {
     throw "Docker image was not loaded: $Image. Recreate the flash drive with --include-images or check that docker-images\temichevvet-images.tar is not corrupted."
   }
+}
+
+function Assert-ImagesArchiveChecksum {
+  if (!(Test-Path $ImagesChecksum -PathType Leaf)) {
+    throw "Рядом с архивом Docker-образов нет файла SHA-256: $ImagesChecksum"
+  }
+  $expected = ((Get-Content $ImagesChecksum -First 1) -split '\s+')[0].ToLowerInvariant()
+  $actual = (Get-FileHash $ImagesTar -Algorithm SHA256).Hash.ToLowerInvariant()
+  if ($expected -ne $actual) {
+    throw "SHA-256 архива Docker-образов не совпал. Обновление остановлено до загрузки образов."
+  }
+  Write-Host "SHA-256 архива Docker-образов проверен."
 }
 
 function Get-ExistingEnvValue($Key, $Fallback) {
@@ -683,6 +700,7 @@ $previousConfiguredWeb = Get-ExistingEnvValue "TEMICHEVVET_WEB_IMAGE" ""
 
 try {
   if (Test-Path $ImagesTar) {
+    Assert-ImagesArchiveChecksum
     Write-Host "Загружаю Docker-образы с флешки..."
     Invoke-Native -Command "docker" -Arguments @("load", "--input", $ImagesTar)
     Assert-DockerImage "temichevvet-api:local"

@@ -118,6 +118,10 @@ CONNECTIVITY_KEYS=(
   TELEGRAM_BOT_TOKEN
   TELEGRAM_WEBHOOK_SECRET
   TELEGRAM_API_BASE_URL
+  TEMICHEVVET_LICENSE_MODE
+  TEMICHEVVET_LICENSE_PUBLIC_KEY_B64
+  TEMICHEVVET_SUPPORT_URL
+  TEMICHEVVET_SUPPORT_EMAIL
 )
 
 if ! command -v rsync >/dev/null 2>&1; then
@@ -157,6 +161,14 @@ write_windows_powershell() {
 
   printf '\xef\xbb\xbf' > "$target"
   LC_ALL=C awk '{ sub(/\r$/, ""); printf "%s\r\n", $0 }' "$source" >> "$target"
+}
+
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
 }
 
 rm -rf "$TMP_DIR"
@@ -340,6 +352,20 @@ if [[ "$INCLUDE_IMAGES" == "true" ]]; then
 
   echo "Сохраняю Docker-образы на флешку строго для платформы $PLATFORM..."
   docker save --platform "$PLATFORM" -o "$TMP_DIR/docker-images/temichevvet-images.tar" $IMAGES
+  IMAGES_ARCHIVE_SHA256="$(sha256_file "$TMP_DIR/docker-images/temichevvet-images.tar")"
+  printf '%s  %s\n' "$IMAGES_ARCHIVE_SHA256" "temichevvet-images.tar" > "$TMP_DIR/docker-images/temichevvet-images.tar.sha256"
+  {
+    echo "format=temichevvet-portable-release-v1"
+    echo "created_at=$BUILD_DATE"
+    echo "git_commit=$GIT_COMMIT"
+    echo "platform=$PLATFORM"
+    echo "images_archive_sha256=$IMAGES_ARCHIVE_SHA256"
+    for image in $IMAGES; do
+      image_id="$(docker image inspect --format '{{.Id}}' "$image")"
+      repo_digests="$(docker image inspect --format '{{join .RepoDigests ","}}' "$image")"
+      echo "image=$image|id=$image_id|repo_digests=$repo_digests"
+    done
+  } > "$TMP_DIR/RELEASE-MANIFEST.txt"
 fi
 
 cleanup_macos_metadata "$TMP_DIR"

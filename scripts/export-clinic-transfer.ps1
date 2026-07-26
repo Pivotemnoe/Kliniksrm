@@ -79,15 +79,19 @@ try {
     Copy-Item $EnvFile (Join-Path $staging "source-clinic.env")
   }
 
-  $countsQuery = 'SELECT json_build_object(''owners'',(SELECT count(*) FROM "Owner"),''animals'',(SELECT count(*) FROM "Animal"),''visits'',(SELECT count(*) FROM "Visit"),''vaccinations'',(SELECT count(*) FROM "Vaccination"),''appointments'',(SELECT count(*) FROM "Appointment"),''queueEntries'',(SELECT count(*) FROM "QueueEntry"),''bills'',(SELECT count(*) FROM "Bill"),''payments'',(SELECT count(*) FROM "Payment"),''sales'',(SELECT count(*) FROM "Sale"),''products'',(SELECT count(*) FROM "Product"),''stockBatches'',(SELECT count(*) FROM "StockBatch"),''stockMovements'',(SELECT count(*) FROM "StockMovement"),''files'',(SELECT count(*) FROM "FileObject"),''notifications'',(SELECT count(*) FROM "NotificationOutbox"));'
+  $countsQuery = 'SELECT json_build_object(''owners'',(SELECT count(*) FROM "Owner"),''animals'',(SELECT count(*) FROM "Animal"),''visits'',(SELECT count(*) FROM "Visit"),''vaccinations'',(SELECT count(*) FROM "Vaccination"),''appointments'',(SELECT count(*) FROM "Appointment"),''queueEntries'',(SELECT count(*) FROM "QueueEntry"),''bills'',(SELECT count(*) FROM "Bill"),''payments'',(SELECT count(*) FROM "Payment"),''sales'',(SELECT count(*) FROM "Sale"),''products'',(SELECT count(*) FROM "Product"),''stockBatches'',(SELECT count(*) FROM "StockBatch"),''stockMovements'',(SELECT count(*) FROM "StockMovement"),''files'',(SELECT count(*) FROM "FileObject"),''notifications'',(SELECT count(*) FROM "NotificationOutbox"),''employees'',(SELECT count(*) FROM "Employee"),''tasks'',(SELECT count(*) FROM "Task"),''visitDocuments'',(SELECT count(*) FROM "VisitDocument"),''suppliers'',(SELECT count(*) FROM "Supplier"),''supplyInvoices'',(SELECT count(*) FROM "SupplyInvoice"),''payrollPeriods'',(SELECT count(*) FROM "PayrollPeriod"),''businessEntries'',(SELECT count(*) FROM "BusinessEntry"),''supportRequests'',(SELECT count(*) FROM "SupportRequest"));'
   $countsJson = (docker exec clinic-crm-postgres psql -U $dbUser -d $dbName -At -c $countsQuery | Select-Object -Last 1)
   if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($countsJson)) { throw "Не удалось получить контрольные количества записей." }
 
   $images = @{}
+  $imageDetails = @{}
   foreach ($container in @("clinic-crm-api", "clinic-crm-web", "clinic-crm-postgres", "clinic-crm-redis", "clinic-crm-minio")) {
     docker container inspect $container *> $null
     if ($LASTEXITCODE -eq 0) {
       $images[$container] = (docker inspect --format '{{.Config.Image}}' $container | Select-Object -Last 1)
+      $details = @(docker image inspect $images[$container] | ConvertFrom-Json)[0]
+      $revision = if ($details.Config -and $details.Config.Labels) { $details.Config.Labels.'org.opencontainers.image.revision' } else { $null }
+      $imageDetails[$container] = [ordered]@{ reference = $images[$container]; id = $details.Id; repoDigests = @($details.RepoDigests); revision = $revision }
     }
   }
 
@@ -95,11 +99,14 @@ try {
     format = "temichevvet-computer-transfer-v2"
     createdAt = (Get-Date).ToUniversalTime().ToString("o")
     sourceComputer = $env:COMPUTERNAME
+    releaseVersion = (Get-EnvValue "CRM_SOURCE_VERSION" "local")
+    releaseRevision = $imageDetails["clinic-crm-api"].revision
     database = $dbName
     counts = ($countsJson | ConvertFrom-Json)
     minioUserFiles = $minioFileCount
     minioUserBytes = $minioBytes
     images = $images
+    imageDetails = $imageDetails
     files = @("postgres.dump", "redis-dump.rdb", "minio-data", "source-clinic.env")
     warning = "Содержит конфиденциальные данные клиники. Хранить на защищённом диске."
   }

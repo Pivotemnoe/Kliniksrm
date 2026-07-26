@@ -33,7 +33,11 @@ $ApplicationSettingKeys = @(
   "SESSION_SECRET",
   "SESSION_COOKIE_SECURE",
   "SESSION_TTL_HOURS",
-  "SESSION_IDLE_TIMEOUT_MINUTES"
+  "SESSION_IDLE_TIMEOUT_MINUTES",
+  "TEMICHEVVET_LICENSE_MODE",
+  "TEMICHEVVET_LICENSE_PUBLIC_KEY_B64",
+  "TEMICHEVVET_SUPPORT_URL",
+  "TEMICHEVVET_SUPPORT_EMAIL"
 )
 
 function Get-EnvValue($Key, $Fallback) {
@@ -108,15 +112,18 @@ foreach ($container in @("clinic-crm-postgres", "clinic-crm-redis", "clinic-crm-
 
 $dbUser = Get-EnvValue "POSTGRES_USER" "clinic_crm"
 $dbName = Get-EnvValue "POSTGRES_DB" "clinic_crm"
-$BusinessCountFields = @(
+$TargetMustBeEmptyFields = @(
   "owners", "animals", "visits", "vaccinations", "appointments", "queueEntries",
   "bills", "payments", "sales", "products", "stockBatches", "stockMovements", "files", "notifications"
 )
-$countsQuery = 'SELECT json_build_object(''owners'',(SELECT count(*) FROM "Owner"),''animals'',(SELECT count(*) FROM "Animal"),''visits'',(SELECT count(*) FROM "Visit"),''vaccinations'',(SELECT count(*) FROM "Vaccination"),''appointments'',(SELECT count(*) FROM "Appointment"),''queueEntries'',(SELECT count(*) FROM "QueueEntry"),''bills'',(SELECT count(*) FROM "Bill"),''payments'',(SELECT count(*) FROM "Payment"),''sales'',(SELECT count(*) FROM "Sale"),''products'',(SELECT count(*) FROM "Product"),''stockBatches'',(SELECT count(*) FROM "StockBatch"),''stockMovements'',(SELECT count(*) FROM "StockMovement"),''files'',(SELECT count(*) FROM "FileObject"),''notifications'',(SELECT count(*) FROM "NotificationOutbox"));'
+$ComparisonCountFields = @(
+  $TargetMustBeEmptyFields + @("employees", "tasks", "visitDocuments", "suppliers", "supplyInvoices", "payrollPeriods", "businessEntries", "supportRequests")
+)
+$countsQuery = 'SELECT json_build_object(''owners'',(SELECT count(*) FROM "Owner"),''animals'',(SELECT count(*) FROM "Animal"),''visits'',(SELECT count(*) FROM "Visit"),''vaccinations'',(SELECT count(*) FROM "Vaccination"),''appointments'',(SELECT count(*) FROM "Appointment"),''queueEntries'',(SELECT count(*) FROM "QueueEntry"),''bills'',(SELECT count(*) FROM "Bill"),''payments'',(SELECT count(*) FROM "Payment"),''sales'',(SELECT count(*) FROM "Sale"),''products'',(SELECT count(*) FROM "Product"),''stockBatches'',(SELECT count(*) FROM "StockBatch"),''stockMovements'',(SELECT count(*) FROM "StockMovement"),''files'',(SELECT count(*) FROM "FileObject"),''notifications'',(SELECT count(*) FROM "NotificationOutbox"),''employees'',(SELECT count(*) FROM "Employee"),''tasks'',(SELECT count(*) FROM "Task"),''visitDocuments'',(SELECT count(*) FROM "VisitDocument"),''suppliers'',(SELECT count(*) FROM "Supplier"),''supplyInvoices'',(SELECT count(*) FROM "SupplyInvoice"),''payrollPeriods'',(SELECT count(*) FROM "PayrollPeriod"),''businessEntries'',(SELECT count(*) FROM "BusinessEntry"),''supportRequests'',(SELECT count(*) FROM "SupportRequest"));'
 $targetCountsJson = (docker exec clinic-crm-postgres psql -U $dbUser -d $dbName -At -c $countsQuery | Select-Object -Last 1)
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($targetCountsJson)) { throw "Не удалось проверить целевую базу." }
 $targetCountsBefore = $targetCountsJson | ConvertFrom-Json
-$nonEmptyTargetFields = @($BusinessCountFields | Where-Object { [long]$targetCountsBefore.$_ -gt 0 })
+$nonEmptyTargetFields = @($TargetMustBeEmptyFields | Where-Object { [long]$targetCountsBefore.$_ -gt 0 })
 if ($nonEmptyTargetFields.Count -gt 0) {
   throw "На целевом компьютере уже есть рабочие данные ($($nonEmptyTargetFields -join ', ')). Восстановление разрешено только в новую пустую базу."
 }
@@ -192,14 +199,20 @@ try {
 
   $actualCounts = (docker exec clinic-crm-postgres psql -U $dbUser -d $dbName -At -c $countsQuery | Select-Object -Last 1) | ConvertFrom-Json
   $countMismatches = @()
-  foreach ($field in $BusinessCountFields) {
+  foreach ($field in $ComparisonCountFields) {
     if ([long]$manifest.counts.$field -ne [long]$actualCounts.$field) { $countMismatches += $field }
   }
   $targetMinioFiles = [long]((docker exec clinic-crm-minio sh -c 'find /data -type f ! -path "/data/.minio.sys/*" | wc -l' | Select-Object -Last 1).Trim())
   if ($LASTEXITCODE -ne 0) { throw "Не удалось проверить количество восстановленных документов MinIO." }
   $minioCountMatches = [long]$manifest.minioUserFiles -eq $targetMinioFiles
   $report = [ordered]@{
+    reportFormat = "temichevvet-restore-report-v1"
+    status = "VERIFIED"
     restoredAt = (Get-Date).ToUniversalTime().ToString('o')
+    sourceServer = $manifest.sourceComputer
+    targetServer = $env:COMPUTERNAME
+    releaseVersion = $manifest.releaseVersion
+    releaseRevision = $manifest.releaseRevision
     source = $manifest.counts
     target = $actualCounts
     countMismatches = $countMismatches
@@ -209,8 +222,13 @@ try {
     settingsImported = $settingsImported
     redisRestored = $false
     archive = $Archive
+    archiveName = [IO.Path]::GetFileName($Archive)
+    archiveSha256 = $actualHash
     targetDatabaseSnapshot = $targetDatabaseSnapshot
     targetEnvSnapshot = $targetEnvSnapshot
+    sampleChecksPending = $true
+    oldServerRetained = $true
+    dockerVolumesDeleted = $false
   }
   $reportPath = Join-Path $RootDir "transfer-restore-report.json"
   [IO.File]::WriteAllText($reportPath, ($report | ConvertTo-Json -Depth 6), $Utf8NoBom)

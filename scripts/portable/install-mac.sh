@@ -5,6 +5,7 @@ PORTABLE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SOURCE_DIR="$PORTABLE_ROOT/CRM"
 INSTALL_DIR="$HOME/TemichevVet"
 IMAGES_TAR="$PORTABLE_ROOT/docker-images/temichevvet-images.tar"
+IMAGES_SHA256="$IMAGES_TAR.sha256"
 NO_START="false"
 SKIP_COPY="false"
 UPDATE="false"
@@ -145,6 +146,8 @@ fi
 chmod +x "$INSTALL_DIR"/scripts/*.sh "$INSTALL_DIR"/start-temichevvet.command 2>/dev/null || true
 
 if [[ -f "$IMAGES_TAR" ]]; then
+  [[ -f "$IMAGES_SHA256" ]] || { echo "Не найден SHA-256 архива Docker-образов." >&2; exit 1; }
+  (cd "$(dirname "$IMAGES_TAR")" && shasum -a 256 -c "$(basename "$IMAGES_SHA256")")
   echo "Загружаю Docker-образы из комплекта..."
   docker load --input "$IMAGES_TAR"
 fi

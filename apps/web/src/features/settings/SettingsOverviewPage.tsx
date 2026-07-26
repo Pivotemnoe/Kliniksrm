@@ -2,6 +2,7 @@ import {
   ApartmentOutlined,
   AuditOutlined,
   DatabaseOutlined,
+  CustomerServiceOutlined,
   DollarOutlined,
   ExportOutlined,
   ExperimentOutlined,
@@ -104,6 +105,13 @@ const settingsSections: SettingsSection[] = [
     path: '/messages',
     icon: <MessageOutlined />,
     permission: 'notifications.read',
+  },
+  {
+    title: 'Поддержка и лицензия',
+    description: 'Обращения, безопасная диагностика, лицензия установки и приёмка нового сервера.',
+    path: '/settings/support',
+    icon: <CustomerServiceOutlined />,
+    permission: 'support.read',
   },
 ];
 

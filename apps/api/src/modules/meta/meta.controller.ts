@@ -27,6 +27,11 @@ const modules = [
   'online-requests',
   'client-portal',
   'reports',
+  'payroll',
+  'business',
+  'support',
+  'license',
+  'server-acceptance',
 ];
 
 @ApiTags('meta')

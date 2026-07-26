@@ -247,6 +247,36 @@ enum MedicalPhraseSource {
   DIAGNOSIS_TEMPLATE
 }
 
+enum SupportRequestStatus {
+  NEW
+  IN_PROGRESS
+  WAITING_CLINIC
+  RESOLVED
+  CLOSED
+}
+
+enum SupportRequestPriority {
+  NORMAL
+  HIGH
+  CRITICAL
+}
+
+enum ClinicLicenseStatus {
+  COMPATIBILITY
+  UNLICENSED
+  VALID
+  EXPIRED
+  INVALID
+  MISMATCH
+}
+
+enum ServerAcceptanceStatus {
+  PREPARED
+  VERIFIED
+  ACCEPTED
+  REJECTED
+}
+
 model User {
   id              String    @id @default(uuid())
   email           String?   @unique
@@ -303,6 +333,10 @@ model Employee {
   approvedBusinessCloses    BusinessDailyClose[]         @relation("BusinessDailyCloseApprover")
   medicalPhrases            MedicalPhrase[]
   dataTransferBatches       DataTransferBatch[]          @relation("DataTransferCreator")
+  createdSupportRequests    SupportRequest[]             @relation("SupportRequestCreator")
+  handledSupportRequests    SupportRequest[]             @relation("SupportRequestHandler")
+  preparedAcceptances       ServerAcceptance[]           @relation("ServerAcceptancePreparer")
+  acceptedAcceptances       ServerAcceptance[]           @relation("ServerAcceptanceAcceptor")
   createdAt                 DateTime                     @default(now())
   updatedAt                 DateTime                     @updatedAt
 
@@ -423,8 +457,84 @@ model Organization {
   defaultBillDueDays  Int?
   offices             ClinicOffice[]
   businessDailyCloses BusinessDailyClose[]
+  installation        ClinicInstallation?
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
+}
+
+model ClinicInstallation {
+  id                String              @id @default(uuid())
+  installationId    String              @unique @default(uuid())
+  organizationId    String?             @unique
+  organization      Organization?       @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  licenseId         String?
+  licenseCustomer   String?
+  licensePayload    Json?
+  licenseSignature  String?
+  licenseStatus     ClinicLicenseStatus @default(COMPATIBILITY)
+  licenseValidUntil DateTime?
+  licenseCheckedAt  DateTime?
+  licenseMessage    String?
+  supportRequests   SupportRequest[]
+  serverAcceptances ServerAcceptance[]
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@index([licenseStatus])
+  @@index([licenseValidUntil])
+}
+
+model SupportRequest {
+  id                  String                 @id @default(uuid())
+  installationId      String
+  installation        ClinicInstallation     @relation(fields: [installationId], references: [id], onDelete: Restrict)
+  createdById         String?
+  createdBy           Employee?              @relation("SupportRequestCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  handledById         String?
+  handledBy           Employee?              @relation("SupportRequestHandler", fields: [handledById], references: [id], onDelete: SetNull)
+  status              SupportRequestStatus   @default(NEW)
+  priority            SupportRequestPriority @default(NORMAL)
+  subject             String
+  message             String
+  contact             String?
+  diagnosticConsentAt DateTime?
+  diagnosticSnapshot  Json?
+  diagnosticSha256    String?
+  externalReference   String?
+  response            String?
+  resolvedAt          DateTime?
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  @@index([installationId, status, createdAt])
+  @@index([createdById, createdAt])
+}
+
+model ServerAcceptance {
+  id                 String                 @id @default(uuid())
+  installationId     String
+  installation       ClinicInstallation     @relation(fields: [installationId], references: [id], onDelete: Restrict)
+  preparedById       String?
+  preparedBy         Employee?              @relation("ServerAcceptancePreparer", fields: [preparedById], references: [id], onDelete: SetNull)
+  acceptedById       String?
+  acceptedBy         Employee?              @relation("ServerAcceptanceAcceptor", fields: [acceptedById], references: [id], onDelete: SetNull)
+  status             ServerAcceptanceStatus @default(PREPARED)
+  releaseVersion     String
+  releaseRevision    String?
+  sourceServer       String?
+  targetServer       String?
+  archiveName        String
+  archiveSha256      String
+  sourceCounts       Json
+  targetCounts       Json?
+  verificationReport Json
+  notes              String?
+  acceptedAt         DateTime?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+
+  @@index([installationId, status, createdAt])
+  @@index([archiveSha256])
 }
 
 model ClinicOffice {
