@@ -36,13 +36,17 @@ type PreviewMatchResult = {
 const targetFields: Record<DataTransferKind, Array<{ value: string; label: string; required?: boolean }>> = {
   clients: [
     { value: 'source_id', label: 'ID в прежней системе' },
+    { value: 'owner_source_id', label: 'ID владельца в прежней системе' },
+    { value: 'animal_source_id', label: 'ID пациента в прежней системе' },
     { value: 'owner_name', label: 'ФИО владельца' },
     { value: 'phone', label: 'Телефон' },
+    { value: 'extra_phone', label: 'Дополнительный телефон' },
     { value: 'email', label: 'Email' },
     { value: 'address', label: 'Адрес' },
     { value: 'owner_comment', label: 'Комментарий владельца' },
     { value: 'animal_name', label: 'Кличка пациента' },
     { value: 'species', label: 'Вид' },
+    { value: 'animal_status', label: 'Статус пациента' },
     { value: 'breed', label: 'Порода' },
     { value: 'sex', label: 'Пол' },
     { value: 'birth_date', label: 'Дата рождения' },
@@ -788,12 +792,22 @@ export class DataTransferService {
   }
 
   private async resolveOwner(tx: Tx, batchId: string, rowId: string, row: NormalizedRow) {
+    const ownerSourceId = clean(row.owner_source_id);
+    if (ownerSourceId) {
+      const linkedOwnerIds = await this.findLinkedEntityIds(tx, batchId, 'Owner', ownerSourceId);
+      if (linkedOwnerIds.length > 1) throw new Error('Один ID владельца связан с несколькими карточками; автоматический перенос остановлен');
+      if (linkedOwnerIds.length === 1) {
+        const linkedOwner = await tx.owner.findUnique({ where: { id: linkedOwnerIds[0] } });
+        if (!linkedOwner) throw new Error('Связь с владельцем повреждена; автоматический перенос остановлен');
+        return { owner: linkedOwner, created: 0, matched: 1 };
+      }
+    }
     const phoneNormalized = safePhone(row.phone);
     const suppliedPhone = clean(row.phone);
     const ownerName = clean(row.owner_name);
     // A supplied phone is the stronger identifier. Never merge a person with
     // another owner merely because their names match while phones differ.
-    const ownerCandidates = phoneNormalized
+    let ownerCandidates = phoneNormalized
       ? await tx.owner.findMany({
           where: { OR: [{ phoneNormalized }, { phone: formatNormalizedRussianPhone(phoneNormalized) }] },
           take: 2,
@@ -809,10 +823,20 @@ export class DataTransferService {
             take: 2,
           })
         : [];
+    if (ownerSourceId && ownerCandidates.length) {
+      const conflictingIds = await this.findEntitiesLinkedToOtherSourceIds(
+        tx,
+        batchId,
+        'Owner',
+        ownerCandidates.map((owner) => owner.id),
+        ownerSourceId,
+      );
+      ownerCandidates = ownerCandidates.filter((owner) => !conflictingIds.has(owner.id));
+    }
     if (ownerCandidates.length > 1) throw new Error('Найдено несколько похожих владельцев; автоматическое объединение остановлено');
     const owner = ownerCandidates[0] ?? null;
     if (owner) {
-      await this.link(tx, batchId, rowId, 'Owner', owner.id, DataTransferAction.MATCHED, row.source_id);
+      await this.link(tx, batchId, rowId, 'Owner', owner.id, DataTransferAction.MATCHED, ownerSourceId || row.source_id);
       return { owner, created: 0, matched: 1 };
     }
     const created = await tx.owner.create({
@@ -821,13 +845,14 @@ export class DataTransferService {
         fullNameNormalized: normalizePersonNameKey(ownerName || formatNormalizedRussianPhone(phoneNormalized) || 'Владелец из переноса'),
         phone: formatNormalizedRussianPhone(phoneNormalized),
         phoneNormalized,
+        extraPhone: clean(row.extra_phone),
         email: clean(row.email),
         address: clean(row.address),
         comment: clean(row.owner_comment),
         source: 'Перенос данных',
       },
     });
-    await this.link(tx, batchId, rowId, 'Owner', created.id, DataTransferAction.CREATED, row.source_id, true);
+    await this.link(tx, batchId, rowId, 'Owner', created.id, DataTransferAction.CREATED, ownerSourceId || row.source_id, true);
     return { owner: created, created: 1, matched: 0 };
   }
 
@@ -835,20 +860,42 @@ export class DataTransferService {
     const animalName = clean(row.animal_name);
     const microchip = clean(row.microchip);
     if (!animalName && !microchip) return { animal: null, created: 0, matched: 0 };
+    const animalSourceId = clean(row.animal_source_id);
+    if (animalSourceId) {
+      const linkedAnimalIds = await this.findLinkedEntityIds(tx, batchId, 'Animal', animalSourceId);
+      if (linkedAnimalIds.length > 1) throw new Error('Один ID пациента связан с несколькими карточками; автоматический перенос остановлен');
+      if (linkedAnimalIds.length === 1) {
+        const linkedAnimal = await tx.animal.findUnique({ where: { id: linkedAnimalIds[0] } });
+        if (!linkedAnimal || linkedAnimal.ownerId !== ownerId) {
+          throw new Error('Связь с пациентом повреждена или ведёт к другому владельцу; автоматический перенос остановлен');
+        }
+        return { animal: linkedAnimal, created: 0, matched: 1 };
+      }
+    }
     // A microchip is authoritative. A nickname is used only when no chip was
     // supplied, so two animals with the same nickname are not silently merged.
-    const animalCandidates = microchip
+    let animalCandidates = microchip
       ? await tx.animal.findMany({ where: { microchip }, take: 2 })
       : animalName
         ? await tx.animal.findMany({ where: { ownerId, nickname: { equals: animalName, mode: Prisma.QueryMode.insensitive } }, take: 2 })
         : [];
+    if (animalSourceId && animalCandidates.length) {
+      const conflictingIds = await this.findEntitiesLinkedToOtherSourceIds(
+        tx,
+        batchId,
+        'Animal',
+        animalCandidates.map((animal) => animal.id),
+        animalSourceId,
+      );
+      animalCandidates = animalCandidates.filter((animal) => !conflictingIds.has(animal.id));
+    }
     if (animalCandidates.length > 1) throw new Error('Найдено несколько похожих пациентов; автоматическое объединение остановлено');
     const animal = animalCandidates[0] ?? null;
     if (microchip && animal && animal.ownerId !== ownerId) {
       throw new Error('Микрочип уже привязан к пациенту другого владельца; автоматическое объединение остановлено');
     }
     if (animal) {
-      await this.link(tx, batchId, rowId, 'Animal', animal.id, DataTransferAction.MATCHED, row.source_id);
+      await this.link(tx, batchId, rowId, 'Animal', animal.id, DataTransferAction.MATCHED, animalSourceId || row.source_id);
       return { animal, created: 0, matched: 1 };
     }
     const created = await tx.animal.create({
@@ -861,10 +908,10 @@ export class DataTransferService {
         birthDate: parseDate(row.birth_date) ?? undefined,
         microchip,
         comment: clean(row.animal_comment),
-        status: 'Перенесён из другой системы',
+        status: clean(row.animal_status) || 'Перенесён из другой системы',
       },
     });
-    await this.link(tx, batchId, rowId, 'Animal', created.id, DataTransferAction.CREATED, row.source_id, true);
+    await this.link(tx, batchId, rowId, 'Animal', created.id, DataTransferAction.CREATED, animalSourceId || row.source_id, true);
     return { animal: created, created: 1, matched: 0 };
   }
 
@@ -1135,6 +1182,41 @@ export class DataTransferService {
         rollbackEligible,
       },
     });
+  }
+
+  private async findLinkedEntityIds(
+    tx: Tx,
+    batchId: string,
+    targetEntityType: string,
+    sourceEntityId: string,
+  ) {
+    const links = await tx.dataTransferEntityLink.findMany({
+      where: { batchId, targetEntityType, sourceEntityId, rolledBackAt: null },
+      select: { targetEntityId: true },
+      take: 2,
+    });
+    return unique(links.map((link) => link.targetEntityId));
+  }
+
+  private async findEntitiesLinkedToOtherSourceIds(
+    tx: Tx,
+    batchId: string,
+    targetEntityType: string,
+    targetEntityIds: string[],
+    sourceEntityId: string,
+  ) {
+    if (!targetEntityIds.length) return new Set<string>();
+    const links = await tx.dataTransferEntityLink.findMany({
+      where: {
+        batchId,
+        targetEntityType,
+        targetEntityId: { in: targetEntityIds },
+        sourceEntityId: { not: sourceEntityId },
+        rolledBackAt: null,
+      },
+      select: { targetEntityId: true },
+    });
+    return new Set(links.map((link) => link.targetEntityId));
   }
 
   private async assertRollbackSafe(tx: Tx, type: string, id: string, created: Map<string, Set<string>>, completedAt: Date) {

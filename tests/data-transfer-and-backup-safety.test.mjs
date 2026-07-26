@@ -98,8 +98,8 @@ test('пустой новый диск резервных копий получ�
 
 test('поиск дублей использует сильный идентификатор и откат проверяет новые связи', async () => {
   const service = await read('apps/api/src/modules/imports/data-transfer.service.ts');
-  assert.match(service, /const ownerCandidates = phoneNormalized/);
-  assert.match(service, /const animalCandidates = microchip/);
+  assert.match(service, /let ownerCandidates = phoneNormalized/);
+  assert.match(service, /let animalCandidates = microchip/);
   assert.match(service, /const productCandidates = barcode/);
   assert.match(service, /firstFingerprintRow/);
   assert.match(service, /status: DataTransferRowStatus\.IMPORTED/);
@@ -118,6 +118,11 @@ test('поиск дублей использует сильный идентиф
   assert.match(service, /where: \{ kind: \{ in: allowedKinds \} \}/);
   assert.match(service, /await tx\.dataTransferRow\.update/);
   assert.match(service, /where: \{ id: batch\.id, status: DataTransferStatus\.ROLLING_BACK \}/);
+  assert.match(service, /owner_source_id/);
+  assert.match(service, /animal_source_id/);
+  assert.match(service, /extraPhone: clean\(row\.extra_phone\)/);
+  assert.match(service, /status: clean\(row\.animal_status\)/);
+  assert.match(service, /findEntitiesLinkedToOtherSourceIds/);
 });
 
 test('даты и числа переноса проверяются строго, без тихой нормализации', () => {

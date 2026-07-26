@@ -55,9 +55,11 @@ const kindOptions = [
 
 const localTargetFields: Record<DataTransferKind, DataTransferTargetField[]> = {
   clients: fields([
-    ['source_id', 'ID в прежней системе'], ['owner_name', 'ФИО владельца'], ['phone', 'Телефон'], ['email', 'Email'],
+    ['source_id', 'ID в прежней системе'], ['owner_source_id', 'ID владельца в прежней системе'],
+    ['animal_source_id', 'ID пациента в прежней системе'], ['owner_name', 'ФИО владельца'], ['phone', 'Телефон'],
+    ['extra_phone', 'Дополнительный телефон'], ['email', 'Email'],
     ['address', 'Адрес'], ['owner_comment', 'Комментарий владельца'], ['animal_name', 'Кличка пациента'], ['species', 'Вид'],
-    ['breed', 'Порода'], ['sex', 'Пол'], ['birth_date', 'Дата рождения'], ['microchip', 'Микрочип'],
+    ['animal_status', 'Статус пациента'], ['breed', 'Порода'], ['sex', 'Пол'], ['birth_date', 'Дата рождения'], ['microchip', 'Микрочип'],
     ['animal_comment', 'Комментарий пациента'], ['vaccination_title', 'Вакцинация'], ['vaccinated_at', 'Дата вакцинации'],
     ['vaccination_due_at', 'Следующая вакцинация'], ['vaccination_series', 'Серия вакцины'],
   ]),
@@ -580,9 +582,14 @@ function fields(items: Array<[string, string, boolean?]>): DataTransferTargetFie
 
 const aliasTargets: Record<string, string> = {
   id: 'source_id', sourceid: 'source_id', внешнийid: 'source_id',
+  idвладельца: 'owner_source_id', idвладельцавпрежнейсистеме: 'owner_source_id', ownersourceid: 'owner_source_id',
+  idпациента: 'animal_source_id', idпациентавпрежнейсистеме: 'animal_source_id', animalsourceid: 'animal_source_id',
   владелец: 'owner_name', фио: 'owner_name', фиовладельца: 'owner_name', клиент: 'owner_name',
-  телефон: 'phone', мобильный: 'phone', phone: 'phone', email: 'email', почта: 'email', адрес: 'address',
+  телефон: 'phone', мобильный: 'phone', phone: 'phone',
+  доптелефон: 'extra_phone', дополнительныйтелефон: 'extra_phone', extraphone: 'extra_phone',
+  email: 'email', почта: 'email', адрес: 'address',
   кличка: 'animal_name', пациент: 'animal_name', животное: 'animal_name', вид: 'species', порода: 'breed',
+  статуспациента: 'animal_status', статусживотного: 'animal_status', animalstatus: 'animal_status',
   пол: 'sex', датарождения: 'birth_date', микрочип: 'microchip', чип: 'microchip',
   вакцинация: 'vaccination_title', вакцина: 'vaccination_title', датавакцинации: 'vaccinated_at', следующаявакцинация: 'vaccination_due_at', сериявакцины: 'vaccination_series',
   датаприема: 'visit_date', прием: 'visit_date', врач: 'doctor', типприема: 'visit_type', причинаобращения: 'purpose',
@@ -596,7 +603,7 @@ const aliasTargets: Record<string, string> = {
 const knownAliases = new Set(Object.keys(aliasTargets));
 
 const templates: Record<DataTransferKind, string> = {
-  clients: 'владелец;телефон;email;адрес;кличка;вид;порода;пол;дата рождения;микрочип;вакцинация;дата вакцинации;следующая вакцинация\nИванов Иван;+7 900 000 00 00;client@example.ru;Армавир;Барсик;Кошка;Британская;самец;03.06.2022;643000000000000;Бешенство;01.07.2026;01.07.2027',
+  clients: 'id;id владельца;id пациента;владелец;телефон;дополнительный телефон;email;адрес;кличка;вид;статус пациента;порода;пол;дата рождения;микрочип;вакцинация;дата вакцинации;следующая вакцинация\nстрока-1;владелец-1;пациент-1;Иванов Иван;+7 900 000 00 00;;client@example.ru;Армавир;Барсик;Кошка;Здоров;Британская;самец;03.06.2022;643000000000000;Бешенство;01.07.2026;01.07.2027',
   history: 'владелец;телефон;кличка;вид;дата приёма;врач;тип приёма;причина обращения;анамнез;осмотр;диагноз;назначения;сумма счёта;статус оплаты\nИванов Иван;+7 900 000 00 00;Барсик;Кошка;24.07.2026 10:30;Петров Пётр;первичный;вялость;со слов владельца;осмотр проведён;Предварительный диагноз;Рекомендации;1500;оплачен',
   catalog: 'тип позиции;наименование;категория;артикул;штрихкод;цена;единица;минимальный остаток;описание\nтовар;Шприц 5 мл;Расходники;S-5;4600000000000;12;шт;20;\nуслуга;Первичный приём;Приёмы;;;1500;;;',
   stock: 'наименование;категория;артикул;штрихкод;единица;остаток;цена продажи;закупочная цена;склад;срок годности;серия;минимальный остаток\nШприц 5 мл;Расходники;S-5;4600000000000;шт;100;12;8;Основной склад;31.12.2027;A1;20',
