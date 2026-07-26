@@ -81,6 +81,7 @@ services:
 
   postgres:
     image: postgres:16-alpine
+    platform: ${TEMICHEVVET_INFRA_PLATFORM:-linux/amd64}
     container_name: clinic-crm-postgres
     restart: unless-stopped
     environment:
@@ -99,6 +100,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    platform: ${TEMICHEVVET_INFRA_PLATFORM:-linux/amd64}
     container_name: clinic-crm-redis
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
@@ -114,6 +116,7 @@ services:
 
   minio:
     image: ${MINIO_IMAGE:-minio/minio:latest}
+    platform: ${TEMICHEVVET_INFRA_PLATFORM:-linux/amd64}
     container_name: clinic-crm-minio
     restart: unless-stopped
     command: ["server", "/data", "--console-address", ":9001"]
@@ -128,6 +131,7 @@ services:
 
   backup:
     image: postgres:16-alpine
+    platform: ${TEMICHEVVET_INFRA_PLATFORM:-linux/amd64}
     container_name: clinic-crm-backup
     restart: unless-stopped
     depends_on:
