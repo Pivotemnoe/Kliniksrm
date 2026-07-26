@@ -36,7 +36,7 @@ export function SystemStatus() {
           <Tag color={healthQuery.data?.database === 'ok' ? 'green' : 'default'}>
             {healthQuery.data?.database === 'ok' ? 'База данных доступна' : 'База данных проверяется'}
           </Tag>
-          {metaQuery.data?.version ? <Tag color="blue">Версия {metaQuery.data.version}</Tag> : null}
+          {metaQuery.data?.version ? <Tag color="blue">Сборка {metaQuery.data.version}</Tag> : null}
         </Space>
         <details className="technical-details">
           <summary>Техническая информация</summary>

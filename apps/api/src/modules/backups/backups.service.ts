@@ -14,6 +14,9 @@ type BackupStatusFile = {
   filesArchive?: string | null;
   databaseBytes?: number | null;
   filesBytes?: number | null;
+  freeBytes?: number | null;
+  totalBytes?: number | null;
+  diskMeasuredAt?: string | null;
 };
 
 @Injectable()
@@ -34,14 +37,16 @@ export class BackupsService {
       statusReadable = false;
     }
 
-    let freeBytes: number | null = null;
-    let totalBytes: number | null = null;
-    try {
-      const stats = await statfs(dirname(statusFile));
-      freeBytes = Number(stats.bavail) * Number(stats.bsize);
-      totalBytes = Number(stats.blocks) * Number(stats.bsize);
-    } catch {
-      // The backup volume may not be mounted in development.
+    let freeBytes = validDiskBytes(status.freeBytes);
+    let totalBytes = validDiskBytes(status.totalBytes);
+    if (freeBytes === null || totalBytes === null) {
+      try {
+        const stats = await statfs(dirname(statusFile));
+        freeBytes = Number(stats.bavail) * Number(stats.bsize);
+        totalBytes = Number(stats.blocks) * Number(stats.bsize);
+      } catch {
+        // The backup volume may not be mounted in development.
+      }
     }
 
     const lastDatabaseAt = parseDate(status.lastDatabaseBackupAt);
@@ -82,6 +87,7 @@ export class BackupsService {
       filesBytes: status.filesBytes ?? null,
       freeBytes,
       totalBytes,
+      diskMeasuredAt: status.diskMeasuredAt ?? null,
       warnings,
       schedule: {
         database: 'ежедневно',
@@ -92,6 +98,10 @@ export class BackupsService {
       },
     };
   }
+}
+
+function validDiskBytes(value?: number | null) {
+  return Number.isFinite(value) && Number(value) > 0 ? Number(value) : null;
 }
 
 function parseDate(value?: string | null) {

@@ -26,6 +26,7 @@ const modules = [
   'notifications',
   'online-requests',
   'client-portal',
+  'reports',
 ];
 
 @ApiTags('meta')
@@ -36,11 +37,25 @@ export class MetaController {
   getMeta() {
     return {
       name: 'TemichevVet CRM API',
-      version: '0.1.0',
+      version: resolveReleaseVersion(),
       revision: process.env.TEMICHEVVET_GIT_COMMIT || 'local',
       buildDate: process.env.TEMICHEVVET_BUILD_DATE || null,
       imageSource: process.env.TEMICHEVVET_IMAGE_SOURCE || null,
       modules,
     };
   }
+}
+
+export function resolveReleaseVersion(env: NodeJS.ProcessEnv = process.env) {
+  const sourceVersion = env.CRM_SOURCE_VERSION?.trim();
+  if (sourceVersion && sourceVersion !== 'local') {
+    return sourceVersion.slice(0, 12);
+  }
+
+  const revision = env.TEMICHEVVET_GIT_COMMIT?.trim();
+  if (revision && revision !== 'local') {
+    return revision.slice(0, 12);
+  }
+
+  return 'локальная';
 }

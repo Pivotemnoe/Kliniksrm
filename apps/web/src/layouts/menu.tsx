@@ -1,6 +1,7 @@
 import {
   ApartmentOutlined,
   AuditOutlined,
+  BarChartOutlined,
   CalendarOutlined,
   DashboardOutlined,
   DatabaseOutlined,
@@ -29,6 +30,7 @@ import type { Employee } from '../shared/types/auth';
 export const menuItems: MenuProps['items'] = [
   { key: '/news', icon: <NotificationOutlined />, label: 'Новости' },
   { key: '/dashboard', icon: <DashboardOutlined />, label: 'Сводка' },
+  { key: '/reports', icon: <BarChartOutlined />, label: 'Отчёты' },
   { key: '/schedule', icon: <CalendarOutlined />, label: 'Расписание' },
   { key: '/queue', icon: <OrderedListOutlined />, label: 'Очередь' },
   { key: '/tasks', icon: <AuditOutlined />, label: 'Задачи' },
@@ -75,6 +77,7 @@ export function getAccessibleMenuItems(employee: Employee | undefined): MenuProp
 export const pageTitles: Record<string, string> = {
   news: 'Новости',
   dashboard: 'Сводка',
+  reports: 'Отчёты',
   schedule: 'Расписание',
   queue: 'Очередь',
   tasks: 'Календарь задач',
@@ -104,6 +107,7 @@ export const pageTitles: Record<string, string> = {
 export const pageDescriptions: Record<string, string> = {
   news: 'Внутренние новости и обновления работы клиники.',
   dashboard: 'Рабочая сводка клиники на день.',
+  reports: 'Финансы, посещаемость, услуги, сотрудники, вакцинации и склад.',
   schedule: 'Календарь записей и загрузка врачей.',
   queue: 'Живая очередь пациентов в клинике.',
   tasks: 'Задачи сотрудникам, должностям и напоминания по пациентам.',

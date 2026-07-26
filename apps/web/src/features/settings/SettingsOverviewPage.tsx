@@ -11,7 +11,7 @@ import {
   RightOutlined,
   UserOutlined,
 } from '@ant-design/icons';
-import { Button, Card, Space, Tag, Typography } from 'antd';
+import { Button, Card, Space, Typography } from 'antd';
 import { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { hasPermission } from '../../auth/permissions';
@@ -23,7 +23,6 @@ type SettingsSection = {
   description: string;
   path: string;
   icon: ReactNode;
-  status: 'ready' | 'partial';
   permission?: string;
   permissions?: string[];
 };
@@ -34,7 +33,6 @@ const settingsSections: SettingsSection[] = [
     description: 'Название клиники, юридические реквизиты и данные для печатных форм.',
     path: '/settings/organization',
     icon: <ProfileOutlined />,
-    status: 'partial',
     permission: 'settings.read',
   },
   {
@@ -42,7 +40,6 @@ const settingsSections: SettingsSection[] = [
     description: 'Профиль филиала, график работы, кабинеты, боксы стационара и склады.',
     path: '/settings/office',
     icon: <ApartmentOutlined />,
-    status: 'ready',
     permission: 'settings.read',
   },
   {
@@ -50,7 +47,6 @@ const settingsSections: SettingsSection[] = [
     description: 'Учётные записи, роли, точечные права и временные пароли сотрудников.',
     path: '/settings/employees',
     icon: <UserOutlined />,
-    status: 'ready',
     permission: 'employees.read',
   },
   {
@@ -58,7 +54,6 @@ const settingsSections: SettingsSection[] = [
     description: 'Шаблоны документов приёма, переменные и печатные тексты.',
     path: '/settings/documents',
     icon: <FileTextOutlined />,
-    status: 'partial',
     permission: 'documents.read',
   },
   {
@@ -66,7 +61,6 @@ const settingsSections: SettingsSection[] = [
     description: 'Фразы осмотра, рекомендации, шаблоны диагнозов и самообученные подсказки врачей.',
     path: '/settings/phrases',
     icon: <MessageOutlined />,
-    status: 'ready',
     permission: 'settings.manage',
   },
   {
@@ -74,7 +68,6 @@ const settingsSections: SettingsSection[] = [
     description: 'Справочник анализов, профили, единицы измерения и связанные услуги.',
     path: '/settings/laboratories',
     icon: <ExperimentOutlined />,
-    status: 'ready',
     permission: 'laboratory.read',
   },
   {
@@ -82,7 +75,6 @@ const settingsSections: SettingsSection[] = [
     description: 'Способы оплаты, кассы и настройки платежей по филиалам.',
     path: '/settings/finance',
     icon: <DollarOutlined />,
-    status: 'partial',
     permission: 'settings.read',
   },
   {
@@ -90,7 +82,6 @@ const settingsSections: SettingsSection[] = [
     description: 'Действия сотрудников, изменения карточек и системные события CRM.',
     path: '/settings/audit',
     icon: <AuditOutlined />,
-    status: 'ready',
     permission: 'audit.read',
   },
   {
@@ -98,7 +89,6 @@ const settingsSections: SettingsSection[] = [
     description: 'Загрузка владельцев, пациентов, товаров и складских остатков из другой системы.',
     path: '/settings/import',
     icon: <ExportOutlined />,
-    status: 'partial',
     permissions: ['owners.manage', 'stock.manage'],
   },
   {
@@ -106,7 +96,6 @@ const settingsSections: SettingsSection[] = [
     description: 'Состояние CRM, автоматические резервные копии и безопасные обновления.',
     path: '/settings/system',
     icon: <DatabaseOutlined />,
-    status: 'ready',
     permission: 'settings.read',
   },
   {
@@ -114,7 +103,6 @@ const settingsSections: SettingsSection[] = [
     description: 'Очередь отправки, ошибки доставки, повторная отправка и шаблоны уведомлений.',
     path: '/messages',
     icon: <MessageOutlined />,
-    status: 'partial',
     permission: 'notifications.read',
   },
 ];
@@ -139,9 +127,6 @@ export function SettingsOverviewPage() {
             <Space direction="vertical" size={12} className="full-width">
               <div className="settings-overview-card-head">
                 <span className="settings-overview-icon">{section.icon}</span>
-                <Tag color={section.status === 'ready' ? 'green' : 'blue'}>
-                  {section.status === 'ready' ? 'Работает' : 'В работе'}
-                </Tag>
               </div>
               <div>
                 <Typography.Title level={4} className="compact-title">

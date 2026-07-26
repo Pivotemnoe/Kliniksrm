@@ -61,6 +61,7 @@ test('резервирование разделяет ежедневную ба�
   assert.match(backup, /write_archive_checksum/);
   assert.match(backup, /BACKUP_STATUS_ONLY/);
   assert.match(backup, /BACKUP_INTEGRITY_INTERVAL_SECONDS:-86400/);
+  assert.match(backup, /measure_backup_disk/);
   assert.match(backup, /verify_latest_archives/);
   assert.match(backup, /latest_archive/);
   assert.match(backup, /ensure_monthly_copy/);
@@ -91,6 +92,9 @@ test('пустой новый диск резервных копий получ�
     assert.equal(status.lastFilesBackupAt, null);
     assert.equal(status.databaseBytes, 0);
     assert.equal(status.filesBytes, 0);
+    assert.ok(status.freeBytes > 0);
+    assert.ok(status.totalBytes >= status.freeBytes);
+    assert.match(status.diskMeasuredAt, /^\d{4}-\d{2}-\d{2}T/);
   } finally {
     await rm(backupDir, { recursive: true, force: true });
   }

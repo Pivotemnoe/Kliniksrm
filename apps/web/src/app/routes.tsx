@@ -25,6 +25,7 @@ import { OwnersPage } from '../features/owners/OwnersPage';
 import { QueueCardPage } from '../features/queue/QueueCardPage';
 import { QueuePage } from '../features/queue/QueuePage';
 import { QueueTvPage } from '../features/queue/QueueTvPage';
+import { ReportsPage } from '../features/reports/ReportsPage';
 import { SaleCardPage } from '../features/sales/SaleCardPage';
 import { SalesPage } from '../features/sales/SalesPage';
 import { ClinicResourcesPage } from '../features/scheduling/ClinicResourcesPage';
@@ -70,6 +71,7 @@ export const routes: RouteObject[] = [
         children: [
           { index: true, element: <DefaultRouteRedirect /> },
           { path: '/dashboard', element: <DashboardPage /> },
+          { path: '/reports', element: <ReportsPage /> },
           { path: '/profile', element: <ProfilePage /> },
           { path: '/news', element: <NewsPage /> },
           { path: '/schedule', element: <AppointmentsPage /> },

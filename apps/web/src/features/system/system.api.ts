@@ -36,6 +36,7 @@ export type BackupStatusResponse = {
   filesBytes: number | null;
   freeBytes: number | null;
   totalBytes: number | null;
+  diskMeasuredAt: string | null;
   warnings: string[];
   schedule: {
     database: string;

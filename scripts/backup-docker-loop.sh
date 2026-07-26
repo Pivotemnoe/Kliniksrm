@@ -28,6 +28,8 @@ LAST_FILES_AT=""
 LAST_INTEGRITY_AT=""
 DATABASE_BYTES=0
 FILES_BYTES=0
+FREE_BYTES=0
+TOTAL_BYTES=0
 LAST_FAILURE=""
 
 log() {
@@ -94,6 +96,21 @@ has_minimum_free_space() {
   [ "$available_kb" -ge $((HARD_STOP_GB * 1024 * 1024)) ]
 }
 
+measure_backup_disk() {
+  disk_values="$(df -Pk "$BACKUP_DIR" | awk 'NR == 2 { print $2 " " $4 }')"
+  total_kb="$(printf '%s' "$disk_values" | awk '{ print $1 }')"
+  available_kb="$(printf '%s' "$disk_values" | awk '{ print $2 }')"
+  case "$total_kb:$available_kb" in
+    *[!0-9:]*|:*)
+      FREE_BYTES=0
+      TOTAL_BYTES=0
+      return 1
+      ;;
+  esac
+  TOTAL_BYTES=$((total_kb * 1024))
+  FREE_BYTES=$((available_kb * 1024))
+}
+
 restore_test_value() {
   key="$1"
   [ -f "$RESTORE_TEST_FILE" ] || return 0
@@ -125,6 +142,7 @@ write_status() {
   error_json="$(json_string_or_null "$error_message")"
   database_archive_json="$(json_string_or_null "$LAST_DATABASE_ARCHIVE")"
   files_archive_json="$(json_string_or_null "$LAST_FILES_ARCHIVE")"
+  measure_backup_disk || true
   cat > "$temp_file" <<EOF
 {
   "state": $state_json,
@@ -137,7 +155,10 @@ write_status() {
   "databaseArchive": $database_archive_json,
   "filesArchive": $files_archive_json,
   "databaseBytes": $DATABASE_BYTES,
-  "filesBytes": $FILES_BYTES
+  "filesBytes": $FILES_BYTES,
+  "freeBytes": $FREE_BYTES,
+  "totalBytes": $TOTAL_BYTES,
+  "diskMeasuredAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 EOF
   mv "$temp_file" "$STATUS_FILE"
