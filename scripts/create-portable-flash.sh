@@ -189,6 +189,7 @@ rsync -a \
   --exclude 'TemichevVet-Portable/' \
   --exclude 'TemichevVet-Portable.tmp/' \
   --exclude '.env' \
+  --exclude '.env.runtime' \
   --exclude '.env.local' \
   --exclude '.env.development' \
   --exclude '.env.production' \

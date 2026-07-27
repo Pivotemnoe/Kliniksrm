@@ -33,3 +33,20 @@ test('готовые Windows-команды переключают консол�
     assert.match(source, /chcp 65001 >nul/i);
   }
 });
+
+test('Windows-запуск не зависит от возможности перезаписать защищённый .env', async () => {
+  const [launcher, updater, installer, batch] = await Promise.all([
+    readProjectFile('scripts/start-clinic-server.ps1'),
+    readProjectFile('scripts/update-clinic-server.ps1'),
+    readProjectFile('scripts/portable/install-windows.ps1'),
+    readProjectFile('start-temichevvet-windows.bat'),
+  ]);
+
+  for (const source of [launcher, updater, installer]) {
+    assert.match(source, /\.env\.runtime/);
+    assert.match(source, /UnauthorizedAccessException/);
+    assert.match(source, /SetEnvironmentVariable\([^\n]+"Process"\)/);
+  }
+
+  assert.match(batch, /-NoImageUpdate/);
+});

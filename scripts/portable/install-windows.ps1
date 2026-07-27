@@ -15,6 +15,7 @@ $InstallDir = Join-Path $Env:USERPROFILE "TemichevVet"
 $ImagesTar = Join-Path $PortableRoot "docker-images\temichevvet-images.tar"
 $ImagesChecksum = "$ImagesTar.sha256"
 $InstalledEnvFile = Join-Path $InstallDir ".env"
+$InstalledRuntimeEnvFile = Join-Path $InstallDir ".env.runtime"
 $PortableVersionFile = Join-Path $PortableRoot "VERSION.txt"
 $PortableConnectivityFile = Join-Path $PortableRoot "portable\clinic-connectivity.env"
 $UpdateTimestamp = Get-Date -Format "yyyyMMdd-HHmmss"
@@ -190,6 +191,11 @@ function Assert-ImagesArchiveChecksum {
 }
 
 function Get-ExistingEnvValue($Key, $Fallback) {
+  $processValue = [Environment]::GetEnvironmentVariable($Key, "Process")
+  if (![string]::IsNullOrWhiteSpace($processValue)) {
+    return $processValue
+  }
+
   if (!(Test-Path $InstalledEnvFile)) {
     return $Fallback
   }
@@ -207,6 +213,48 @@ function Get-ExistingEnvValue($Key, $Fallback) {
   return $value
 }
 
+function Import-InstalledRuntimeEnvOverrides {
+  if (!(Test-Path $InstalledRuntimeEnvFile -PathType Leaf)) { return }
+  foreach ($rawLine in Get-Content $InstalledRuntimeEnvFile) {
+    $line = $rawLine.Trim()
+    if ([string]::IsNullOrWhiteSpace($line) -or $line.StartsWith("#")) { continue }
+    $separator = $line.IndexOf("=")
+    if ($separator -le 0) { continue }
+    $key = $line.Substring(0, $separator).Trim()
+    if ($key -notmatch '^[A-Z][A-Z0-9_]*$') { continue }
+    [Environment]::SetEnvironmentVariable($key, $line.Substring($separator + 1), "Process")
+  }
+}
+
+function Set-InstalledRuntimeEnvValue($Key, $Value) {
+  $content = if (Test-Path $InstalledRuntimeEnvFile) { Get-Content $InstalledRuntimeEnvFile -Raw } else { "" }
+  $line = "$Key=$Value"
+  if ($content -match "(?m)^$([Regex]::Escape($Key))=") {
+    $content = [Regex]::Replace(
+      $content,
+      "(?m)^$([Regex]::Escape($Key))=.*$",
+      [Text.RegularExpressions.MatchEvaluator]{ param($match) $line }
+    )
+  } else {
+    if (![string]::IsNullOrEmpty($content) -and !$content.EndsWith([Environment]::NewLine)) {
+      $content += [Environment]::NewLine
+    }
+    $content += $line + [Environment]::NewLine
+  }
+  [IO.File]::WriteAllText($InstalledRuntimeEnvFile, $content, $Utf8NoBom)
+  [Environment]::SetEnvironmentVariable($Key, [string]$Value, "Process")
+}
+
+function Remove-InstalledRuntimeEnvValue($Key) {
+  if (!(Test-Path $InstalledRuntimeEnvFile -PathType Leaf)) { return }
+  $remaining = @(Get-Content $InstalledRuntimeEnvFile | Where-Object { $_ -notmatch "^$([Regex]::Escape($Key))=" })
+  if ($remaining.Count -eq 0) {
+    Remove-Item -LiteralPath $InstalledRuntimeEnvFile -Force
+    return
+  }
+  [IO.File]::WriteAllLines($InstalledRuntimeEnvFile, [string[]]$remaining, $Utf8NoBom)
+}
+
 function Set-InstalledEnvValue($Key, $Value) {
   if (!(Test-Path $InstalledEnvFile)) {
     return
@@ -215,15 +263,31 @@ function Set-InstalledEnvValue($Key, $Value) {
   $content = Get-Content $InstalledEnvFile -Raw
   $line = "$Key=$Value"
 
-  if ($content -match "(?m)^$([Regex]::Escape($Key))=") {
-    $content = [Regex]::Replace(
-      $content,
-      "(?m)^$([Regex]::Escape($Key))=.*$",
-      [Text.RegularExpressions.MatchEvaluator]{ param($match) $line }
-    )
-    [IO.File]::WriteAllText($InstalledEnvFile, $content, $Utf8NoBom)
-  } else {
-    [IO.File]::AppendAllText($InstalledEnvFile, [Environment]::NewLine + $line, $Utf8NoBom)
+  $existing = Get-Content $InstalledEnvFile | Where-Object { $_ -match "^$([Regex]::Escape($Key))=" } | Select-Object -Last 1
+  if ($existing -eq $line) {
+    [Environment]::SetEnvironmentVariable($Key, [string]$Value, "Process")
+    Remove-InstalledRuntimeEnvValue $Key
+    return
+  }
+
+  try {
+    $envItem = Get-Item -LiteralPath $InstalledEnvFile -Force
+    if ($envItem.IsReadOnly) { $envItem.IsReadOnly = $false }
+    if ($content -match "(?m)^$([Regex]::Escape($Key))=") {
+      $content = [Regex]::Replace(
+        $content,
+        "(?m)^$([Regex]::Escape($Key))=.*$",
+        [Text.RegularExpressions.MatchEvaluator]{ param($match) $line }
+      )
+      [IO.File]::WriteAllText($InstalledEnvFile, $content, $Utf8NoBom)
+    } else {
+      [IO.File]::AppendAllText($InstalledEnvFile, [Environment]::NewLine + $line, $Utf8NoBom)
+    }
+    [Environment]::SetEnvironmentVariable($Key, [string]$Value, "Process")
+    Remove-InstalledRuntimeEnvValue $Key
+  } catch [System.UnauthorizedAccessException] {
+    Set-InstalledRuntimeEnvValue $Key $Value
+    Write-Host "Файл .env защищён Windows. Параметр $Key безопасно сохранён в .env.runtime; существующий .env не изменён."
   }
 }
 
@@ -371,6 +435,7 @@ function Backup-CurrentDatabase {
   $hash = (Get-FileHash $backupFile -Algorithm SHA256).Hash.ToLowerInvariant()
   [IO.File]::WriteAllText("$backupFile.sha256", "$hash  $([IO.Path]::GetFileName($backupFile))`r`n", $Utf8NoBom)
   if (Test-Path $InstalledEnvFile) { Copy-Item $InstalledEnvFile (Join-Path $backupDir "pre-update-$timestamp.env") }
+  if (Test-Path $InstalledRuntimeEnvFile) { Copy-Item $InstalledRuntimeEnvFile (Join-Path $backupDir "pre-update-$timestamp.env.runtime") }
 }
 
 function New-LauncherShortcut {
@@ -653,6 +718,7 @@ if ($LASTEXITCODE -ne 0) {
 Assert-FreeSpace
 
 $isExistingInstall = Test-Path $InstallDir
+Import-InstalledRuntimeEnvOverrides
 if ($Update -or $isExistingInstall) {
   Save-CurrentApplicationImages
   Backup-CurrentDatabase
@@ -667,7 +733,7 @@ if (!$SkipCopy) {
     Write-Host "Copying TemichevVet to $InstallDir ..."
   }
 
-  robocopy $SourceDir $InstallDir /E /XD ".git" "node_modules" "backups" "dist" ".cache" ".tmp" "coverage" /XF ".env" ".env.local" ".env.development" ".env.production" ".env.test" "*.tsbuildinfo" "*.log" /NFL /NDL /NJH /NJS /NP
+  robocopy $SourceDir $InstallDir /E /XD ".git" "node_modules" "backups" "dist" ".cache" ".tmp" "coverage" /XF ".env" ".env.runtime" ".env.local" ".env.development" ".env.production" ".env.test" "*.tsbuildinfo" "*.log" /NFL /NDL /NJH /NJS /NP
   $code = $LASTEXITCODE
 
   if ($code -ge 8) {

@@ -40,6 +40,7 @@ if ($Help) {
 
 $RootDir = Resolve-Path (Join-Path $PSScriptRoot "..")
 $EnvFile = Join-Path $RootDir ".env"
+$RuntimeEnvFile = Join-Path $RootDir ".env.runtime"
 $EnvExample = Join-Path $RootDir ".env.example"
 
 function Test-Command($Name) {
@@ -159,19 +160,103 @@ function Set-TemichevVetHostFingerprint {
   }
 }
 
+function Import-RuntimeEnvOverrides {
+  if (!(Test-Path $RuntimeEnvFile -PathType Leaf)) {
+    return
+  }
+
+  foreach ($rawLine in Get-Content $RuntimeEnvFile) {
+    $line = $rawLine.Trim()
+    if ([string]::IsNullOrWhiteSpace($line) -or $line.StartsWith("#")) {
+      continue
+    }
+
+    $separator = $line.IndexOf("=")
+    if ($separator -le 0) {
+      continue
+    }
+
+    $key = $line.Substring(0, $separator).Trim()
+    if ($key -notmatch '^[A-Z][A-Z0-9_]*$') {
+      continue
+    }
+
+    [Environment]::SetEnvironmentVariable($key, $line.Substring($separator + 1), "Process")
+  }
+}
+
+function Set-RuntimeEnvValue($Key, $Value) {
+  $content = if (Test-Path $RuntimeEnvFile) { Get-Content $RuntimeEnvFile -Raw } else { "" }
+  $line = "$Key=$Value"
+
+  if ($content -match "(?m)^$([Regex]::Escape($Key))=") {
+    $content = [Regex]::Replace(
+      $content,
+      "(?m)^$([Regex]::Escape($Key))=.*$",
+      [Text.RegularExpressions.MatchEvaluator]{ param($match) $line }
+    )
+  } else {
+    if (![string]::IsNullOrEmpty($content) -and !$content.EndsWith([Environment]::NewLine)) {
+      $content += [Environment]::NewLine
+    }
+    $content += $line + [Environment]::NewLine
+  }
+
+  [IO.File]::WriteAllText($RuntimeEnvFile, $content, $Utf8NoBom)
+  [Environment]::SetEnvironmentVariable($Key, [string]$Value, "Process")
+}
+
+function Remove-RuntimeEnvValue($Key) {
+  if (!(Test-Path $RuntimeEnvFile -PathType Leaf)) {
+    return
+  }
+
+  $remaining = @(Get-Content $RuntimeEnvFile | Where-Object { $_ -notmatch "^$([Regex]::Escape($Key))=" })
+  if ($remaining.Count -eq 0) {
+    Remove-Item -LiteralPath $RuntimeEnvFile -Force
+    return
+  }
+
+  [IO.File]::WriteAllLines($RuntimeEnvFile, [string[]]$remaining, $Utf8NoBom)
+}
+
 function Set-EnvValue($Key, $Value) {
   $content = Get-Content $EnvFile -Raw
   $line = "$Key=$Value"
 
-  if ($content -match "(?m)^$([Regex]::Escape($Key))=") {
-    $content = [Regex]::Replace($content, "(?m)^$([Regex]::Escape($Key))=.*$", $line)
-    [IO.File]::WriteAllText($EnvFile, $content, $Utf8NoBom)
-  } else {
-    [IO.File]::AppendAllText($EnvFile, [Environment]::NewLine + $line, $Utf8NoBom)
+  $existing = Get-Content $EnvFile | Where-Object { $_ -match "^$([Regex]::Escape($Key))=" } | Select-Object -Last 1
+  if ($existing -eq $line) {
+    [Environment]::SetEnvironmentVariable($Key, [string]$Value, "Process")
+    Remove-RuntimeEnvValue $Key
+    return
+  }
+
+  try {
+    $envItem = Get-Item -LiteralPath $EnvFile -Force
+    if ($envItem.IsReadOnly) {
+      $envItem.IsReadOnly = $false
+    }
+
+    if ($content -match "(?m)^$([Regex]::Escape($Key))=") {
+      $content = [Regex]::Replace($content, "(?m)^$([Regex]::Escape($Key))=.*$", $line)
+      [IO.File]::WriteAllText($EnvFile, $content, $Utf8NoBom)
+    } else {
+      [IO.File]::AppendAllText($EnvFile, [Environment]::NewLine + $line, $Utf8NoBom)
+    }
+    [Environment]::SetEnvironmentVariable($Key, [string]$Value, "Process")
+    Remove-RuntimeEnvValue $Key
+  } catch [System.UnauthorizedAccessException] {
+    Set-RuntimeEnvValue $Key $Value
+    Write-Host "Файл .env защищён Windows. Параметр $Key безопасно сохранён в .env.runtime; существующий .env не изменён."
   }
 }
 
 function Get-EnvValue($Key, $Fallback) {
+  $processValue = [Environment]::GetEnvironmentVariable($Key, "Process")
+  if (![string]::IsNullOrWhiteSpace($processValue)) {
+    return $processValue
+  }
+
   if (!(Test-Path $EnvFile)) {
     return $Fallback
   }
@@ -447,6 +532,7 @@ if (!(Test-DockerRunning)) {
 }
 
 Set-Location $RootDir
+Import-RuntimeEnvOverrides
 Set-TemichevVetHostFingerprint
 $localIp = Get-LocalIp
 
