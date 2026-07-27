@@ -1,7 +1,7 @@
 import { apiRequest } from '../../api/client';
 import { PaginatedResponse } from '../../shared/types/api';
 import { buildQuery } from '../../shared/utils/query';
-import { AdmitHospitalInput, HospitalResources, HospitalStay } from './types';
+import { AdmitHospitalInput, CreateHospitalRecordInput, HospitalRecord, HospitalResources, HospitalStay } from './types';
 
 type HospitalListQuery = {
   search?: string;
@@ -17,6 +17,18 @@ export function listHospital(query: HospitalListQuery) {
 
 export function getHospitalResources() {
   return apiRequest<HospitalResources>('/v1/hospital/resources');
+}
+
+export function getHospitalStay(visitId: string) {
+  return apiRequest<HospitalStay>(`/v1/hospital/${visitId}`);
+}
+
+export function createHospitalRecord(visitId: string, input: CreateHospitalRecordInput) {
+  return apiRequest<HospitalRecord>(`/v1/hospital/${visitId}/records`, { method: 'POST', body: input });
+}
+
+export function admitExistingHospitalStay(visitId: string, input: Pick<AdmitHospitalInput, 'hospitalBoxId' | 'employeeId'>) {
+  return apiRequest<HospitalStay>(`/v1/hospital/${visitId}/admit`, { method: 'POST', body: input });
 }
 
 export function admitHospitalPatient(input: AdmitHospitalInput) {

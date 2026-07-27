@@ -308,6 +308,7 @@ model Employee {
   queueEntries              QueueEntry[]
   appointments              Appointment[]
   visits                    Visit[]
+  hospitalRecords           HospitalRecord[]             @relation("HospitalRecordAuthor")
   assignedTasks             Task[]                       @relation("TaskAssignee")
   createdTasks              Task[]                       @relation("TaskCreator")
   createdNotifications      NotificationOutbox[]         @relation("NotificationCreator")
@@ -940,6 +941,7 @@ model Visit {
   bill             Bill?
   laboratoryOrders LaboratoryOrder[]
   stockMovements   StockMovement[]
+  hospitalRecords  HospitalRecord[]
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
 
@@ -947,6 +949,25 @@ model Visit {
   @@index([animalId])
   @@index([employeeId])
   @@index([startedAt])
+}
+
+model HospitalRecord {
+  id           String    @id @default(uuid())
+  visitId      String
+  visit        Visit     @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  recordedById String?
+  recordedBy   Employee? @relation("HospitalRecordAuthor", fields: [recordedById], references: [id], onDelete: SetNull)
+  recordType   String
+  title        String
+  recordedAt   DateTime  @default(now())
+  temperatureC Decimal?  @db.Decimal(4, 1)
+  value        String?
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([visitId, recordedAt])
+  @@index([recordedById])
 }
 
 model VisitExam {

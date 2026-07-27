@@ -13,7 +13,7 @@ import { Visit, VisitType, visitTypeLabels } from './types';
 const examSchema = z.object({
   weightKg: optionalNumber(0, 300),
   temperatureC: optionalNumber(30, 45),
-  visitType: z.enum(['PRIMARY', 'FOLLOW_UP']),
+  visitType: z.enum(['PRIMARY', 'FOLLOW_UP']).optional(),
   anamnesis: optionalString(4000),
   examination: optionalString(4000),
   symptoms: optionalString(4000),
@@ -40,7 +40,7 @@ export function VisitExamTab({ visit, canManage, locked }: VisitExamTabProps) {
     mutationFn: async (values: ExamValues) => {
       const { visitType, ...examValues } = values;
 
-      if (visitType !== visit.visitType) {
+      if (visitType && visitType !== visit.visitType) {
         await updateVisit(visit.id, { visitType });
       }
 
@@ -87,18 +87,24 @@ export function VisitExamTab({ visit, canManage, locked }: VisitExamTabProps) {
             </Form.Item>
           )}
         />
-        <Controller
-          control={control}
-          name="visitType"
-          render={({ field }) => (
-            <Form.Item label="Прием">
-              <Select<VisitType>
-                {...field}
-                options={Object.entries(visitTypeLabels).map(([value, label]) => ({ value: value as VisitType, label }))}
-              />
-            </Form.Item>
-          )}
-        />
+        {visit.hospitalBoxId ? (
+          <Form.Item label="Тип обращения">
+            <Input value="Стационар" readOnly />
+          </Form.Item>
+        ) : (
+          <Controller
+            control={control}
+            name="visitType"
+            render={({ field }) => (
+              <Form.Item label="Приём">
+                <Select<VisitType>
+                  {...field}
+                  options={Object.entries(visitTypeLabels).map(([value, label]) => ({ value: value as VisitType, label }))}
+                />
+              </Form.Item>
+            )}
+          />
+        )}
       </div>
       <Controller
         control={control}
@@ -158,7 +164,7 @@ export function VisitExamTab({ visit, canManage, locked }: VisitExamTabProps) {
         render={({ field, fieldState }) => (
           <Form.Item label="Манипуляции" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
             <MedicalTextArea
-              rows={3}
+              rows={6}
               disabled={disabled}
               snippets={examSnippets.manipulations}
               fieldKey="visit.exam.manipulations"
@@ -235,7 +241,7 @@ function getDefaultValues(visit: Visit): ExamInput {
   return {
     weightKg: nullToEmpty(visit.exam?.weightKg ? String(visit.exam.weightKg) : undefined),
     temperatureC: nullToEmpty(visit.exam?.temperatureC ? String(visit.exam.temperatureC) : undefined),
-    visitType: visit.visitType ?? 'PRIMARY',
+    visitType: visit.hospitalBoxId ? undefined : visit.visitType ?? 'PRIMARY',
     anamnesis: mergeText(visit.exam?.purpose, visit.exam?.anamnesis),
     examination: nullToEmpty(visit.exam?.examination),
     symptoms: nullToEmpty(visit.exam?.symptoms),

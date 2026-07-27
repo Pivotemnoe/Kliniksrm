@@ -88,8 +88,8 @@ export function HospitalPage() {
         key: 'actions',
         render: (_, record) => (
           <Space wrap>
-            <Button size="small" onClick={() => navigate(`/visits/${record.id}`)}>
-              Приём
+            <Button size="small" type="primary" onClick={() => navigate(`/hospital/${record.id}`)}>
+              Карта стационара
             </Button>
             {canManage && ['DRAFT', 'IN_PROGRESS'].includes(record.status) ? (
               <>
@@ -172,7 +172,7 @@ export function HospitalPage() {
             loading={hospitalQuery.isLoading}
             pagination={{ current: offset / pageSize + 1, pageSize, total: hospitalQuery.data?.total ?? 0, showSizeChanger: false }}
             onChange={handleTableChange}
-            onRow={(record) => ({ onDoubleClick: () => navigate(`/visits/${record.id}`) })}
+            onRow={(record) => ({ onDoubleClick: () => navigate(`/hospital/${record.id}`) })}
           />
         </div>
       </div>
@@ -259,7 +259,7 @@ function AdmitModal({ open, onClose }: { open: boolean; onClose: () => void }) {
                   loading={animalsQuery.isLoading}
                   options={animals
                     .filter((animal) => !selectedOwnerId || animal.ownerId === selectedOwnerId)
-                    .map((animal) => ({ value: animal.id, label: `${animal.nickname}${animal.owner ? ` · ${animal.owner.fullName}` : ''}` }))}
+                    .map((animal) => ({ value: animal.id, label: animal.nickname }))}
                   placeholder="Выберите пациента"
                 />
               </Form.Item>

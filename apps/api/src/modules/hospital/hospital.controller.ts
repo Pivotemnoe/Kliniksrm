@@ -4,6 +4,8 @@ import { AuthEmployee } from '../auth/auth.types';
 import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { AdmitHospitalPatientDto } from './dto/admit-hospital-patient.dto';
+import { AdmitExistingHospitalStayDto } from './dto/admit-existing-hospital-stay.dto';
+import { CreateHospitalRecordDto } from './dto/create-hospital-record.dto';
 import { ListHospitalQueryDto } from './dto/list-hospital-query.dto';
 import { UpdateHospitalStayDto } from './dto/update-hospital-stay.dto';
 import { HospitalService } from './hospital.service';
@@ -39,6 +41,28 @@ export class HospitalController {
   @ApiOkResponse({ description: 'Hospital stay card.' })
   getHospitalStay(@Param('visitId') visitId: string) {
     return this.hospitalService.getHospitalStay(visitId);
+  }
+
+  @Post(':visitId/admit')
+  @RequirePermissions('hospital.manage')
+  @ApiOkResponse({ description: 'Existing active visit admitted to hospital.' })
+  admitExisting(
+    @Param('visitId') visitId: string,
+    @Body() dto: AdmitExistingHospitalStayDto,
+    @CurrentEmployee() actor: AuthEmployee,
+  ) {
+    return this.hospitalService.admitExisting(visitId, dto, actor.id);
+  }
+
+  @Post(':visitId/records')
+  @RequirePermissions('hospital.manage')
+  @ApiCreatedResponse({ description: 'A timestamped hospital journal record.' })
+  createRecord(
+    @Param('visitId') visitId: string,
+    @Body() dto: CreateHospitalRecordDto,
+    @CurrentEmployee() actor: AuthEmployee,
+  ) {
+    return this.hospitalService.createRecord(visitId, dto, actor.id);
   }
 
   @Patch(':visitId')

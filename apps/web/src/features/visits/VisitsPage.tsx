@@ -44,7 +44,7 @@ export function VisitsPage() {
 
   const visitsQuery = useQuery({
     queryKey: ['visits', { search, status, employeeId, limit: pageSize, offset }],
-    queryFn: () => listVisits({ search, status, employeeId, limit: pageSize, offset }),
+    queryFn: () => listVisits({ search, status, employeeId, excludeHospital: true, limit: pageSize, offset }),
   });
   const appointmentQuery = useQuery({
     queryKey: ['appointments', appointmentId],

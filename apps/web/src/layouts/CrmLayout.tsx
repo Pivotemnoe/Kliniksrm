@@ -217,13 +217,13 @@ export function CrmLayout() {
               </Badge>
             </Tooltip>
             {canReadBusiness || canReadFinanceSettings ? (
-              <Tooltip title={canReadBusiness ? 'Финансы и отчётность клиники' : 'Финансовые настройки'}>
+              <Tooltip title={canReadBusiness ? 'Финансы и отчётность клиники: прибыль, расходы и движение денег' : 'Финансовые настройки'}>
                 <Button
                   type="text"
                   icon={<WalletOutlined />}
                   onClick={() => navigate(canReadBusiness ? '/business' : '/settings/finance')}
                 >
-                  Финансы
+                  {canReadBusiness ? 'Бизнес' : 'Финансы'}
                 </Button>
               </Tooltip>
             ) : null}

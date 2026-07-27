@@ -47,7 +47,7 @@ export function SaleCardPage() {
   return (
     <div className="page">
       <PageHeader
-        title={sale ? `Продажа ${sale.id.slice(0, 8)}` : 'Продажа'}
+        title={sale ? `Продажа от ${formatDateTime(sale.createdAt)}` : 'Продажа'}
         description="Карточка продажи, позиции, связанный счёт и складские списания."
         extra={
           <Space wrap>
@@ -81,7 +81,7 @@ export function SaleCardPage() {
                 {sale?.animal ? <Typography.Link onClick={() => navigate(`/patients/${sale.animal?.id}`)}>{sale.animal.nickname}</Typography.Link> : '—'}
               </Descriptions.Item>
               <Descriptions.Item label="Счёт">
-                {sale?.bill ? <Typography.Link onClick={() => navigate(`/bills/${sale.bill?.id}`)}>{sale.bill.id.slice(0, 8)}</Typography.Link> : '—'}
+                {sale?.bill ? <Typography.Link onClick={() => navigate(`/bills/${sale.bill?.id}`)}>Открыть счёт</Typography.Link> : '—'}
               </Descriptions.Item>
             </Descriptions>
           </div>

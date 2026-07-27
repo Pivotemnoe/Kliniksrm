@@ -47,6 +47,7 @@ export class VisitsService {
     const { limit, offset } = parsePagination(query);
     const search = query.search?.trim();
     const where: Prisma.VisitWhereInput = {
+      ...(query.excludeHospital === 'true' ? { hospitalBoxId: null } : {}),
       ...(query.status ? { status: query.status } : {}),
       ...(query.ownerId ? { ownerId: query.ownerId } : {}),
       ...(query.animalId ? { animalId: query.animalId } : {}),

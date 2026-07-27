@@ -33,6 +33,7 @@ export function VisitDiagnosesTab({ visit, canManage, locked, compact = false, s
   const queryClient = useQueryClient();
   const [editingDiagnosis, setEditingDiagnosis] = useState<VisitDiagnosis | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [quickTitle, setQuickTitle] = useState('');
   const disabled = locked || !canManage;
   const saveMutation = useMutation({
     mutationFn: (values: VisitDiagnosisInput) =>
@@ -49,6 +50,14 @@ export function VisitDiagnosesTab({ visit, canManage, locked, compact = false, s
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['visits', visit.id] });
       await queryClient.invalidateQueries({ queryKey: ['visits'] });
+    },
+  });
+  const quickCreateMutation = useMutation({
+    mutationFn: (title: string) => createVisitDiagnosis(visit.id, { title }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['visits', visit.id] });
+      await queryClient.invalidateQueries({ queryKey: ['visits'] });
+      setQuickTitle('');
     },
   });
   const columns = useMemo<ColumnsType<VisitDiagnosis>>(
@@ -101,32 +110,82 @@ export function VisitDiagnosesTab({ visit, canManage, locked, compact = false, s
       {locked && showLockedAlert ? <Alert type="info" showIcon message="Редактирование закрыто: отменённый приём нельзя менять, завершённый доступен директору или в течение 30 минут после завершения." /> : null}
       {saveMutation.isError ? <Typography.Text type="danger">{getErrorMessage(saveMutation.error)}</Typography.Text> : null}
       {deleteMutation.isError ? <Typography.Text type="danger">{getErrorMessage(deleteMutation.error)}</Typography.Text> : null}
-      <div className="toolbar-row">
-        <Typography.Text strong={compact} type={compact ? undefined : 'secondary'}>
-          {compact ? 'Диагноз' : 'Диагнозы приёма'}
-        </Typography.Text>
-        {!disabled ? (
-          <Button
-            type="primary"
-            size={compact ? 'small' : 'middle'}
-            icon={<PlusOutlined />}
-            onClick={() => {
-              setEditingDiagnosis(null);
-              setDrawerOpen(true);
-            }}
-          >
-            Добавить диагноз
-          </Button>
-        ) : null}
-      </div>
-      <Table<VisitDiagnosis>
-        rowKey="id"
-        columns={columns}
-        dataSource={visit.diagnoses}
-        pagination={false}
-        size={compact ? 'small' : 'middle'}
-        className="dense-table"
-      />
+      {quickCreateMutation.isError ? <Typography.Text type="danger">{getErrorMessage(quickCreateMutation.error)}</Typography.Text> : null}
+      {compact ? (
+        <div className="visit-diagnosis-compact">
+          <Typography.Text strong>Диагноз</Typography.Text>
+          {!disabled ? (
+            <div className="visit-diagnosis-quick-entry">
+              <AutoComplete
+                value={quickTitle}
+                options={getDiagnosisOptions(visit.animal?.species).map((value) => ({ value }))}
+                filterOption={(input, option) => String(option?.value ?? '').toLowerCase().includes(input.toLowerCase())}
+                onChange={setQuickTitle}
+                onSelect={setQuickTitle}
+                placeholder="Выберите или введите диагноз"
+              />
+              <Button
+                type="primary"
+                size="small"
+                icon={<PlusOutlined />}
+                disabled={quickTitle.trim().length < 2}
+                loading={quickCreateMutation.isPending}
+                onClick={() => quickCreateMutation.mutate(quickTitle.trim())}
+              >
+                Добавить
+              </Button>
+            </div>
+          ) : null}
+          {visit.diagnoses.length ? (
+            <Space wrap size={[6, 6]}>
+              {visit.diagnoses.map((diagnosis) => (
+                <Space.Compact key={diagnosis.id}>
+                  <Button
+                    size="small"
+                    disabled={disabled}
+                    onClick={() => {
+                      setEditingDiagnosis(diagnosis);
+                      setDrawerOpen(true);
+                    }}
+                  >
+                    {diagnosis.title}
+                  </Button>
+                  {!disabled ? (
+                    <Popconfirm title="Убрать диагноз?" okText="Убрать" cancelText="Отмена" onConfirm={() => deleteMutation.mutate(diagnosis.id)}>
+                      <Button size="small" danger icon={<DeleteOutlined />} aria-label={`Убрать диагноз ${diagnosis.title}`} />
+                    </Popconfirm>
+                  ) : null}
+                </Space.Compact>
+              ))}
+            </Space>
+          ) : <Typography.Text type="secondary">Диагноз пока не указан</Typography.Text>}
+        </div>
+      ) : (
+        <>
+          <div className="toolbar-row">
+            <Typography.Text type="secondary">Диагнозы приёма</Typography.Text>
+            {!disabled ? (
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                onClick={() => {
+                  setEditingDiagnosis(null);
+                  setDrawerOpen(true);
+                }}
+              >
+                Добавить диагноз
+              </Button>
+            ) : null}
+          </div>
+          <Table<VisitDiagnosis>
+            rowKey="id"
+            columns={columns}
+            dataSource={visit.diagnoses}
+            pagination={false}
+            className="dense-table"
+          />
+        </>
+      )}
       <DiagnosisDrawer
         open={drawerOpen}
         visit={visit}

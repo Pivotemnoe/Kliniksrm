@@ -41,7 +41,7 @@ export function SalesPage() {
         key: 'sale',
         render: (_, record) => (
           <Button type="link" className="table-link" onClick={() => navigate(`/sales/${record.id}`)}>
-            {record.id.slice(0, 8)}
+            {formatDateTime(record.createdAt)}
           </Button>
         ),
       },
@@ -76,7 +76,6 @@ export function SalesPage() {
           ),
       },
       { title: 'Позиций', key: 'items', render: (_, record) => record._count?.items ?? 0 },
-      { title: 'Создана', dataIndex: 'createdAt', key: 'createdAt', render: formatDateTime },
       { title: 'Сумма', dataIndex: 'totalAmount', key: 'totalAmount', render: formatMoney },
       {
         title: 'Оплачено',

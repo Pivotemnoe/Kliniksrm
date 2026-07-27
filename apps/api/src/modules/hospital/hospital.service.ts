@@ -6,6 +6,8 @@ import { FinanceService } from '../finance/finance.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { AdmitHospitalPatientDto } from './dto/admit-hospital-patient.dto';
+import { AdmitExistingHospitalStayDto } from './dto/admit-existing-hospital-stay.dto';
+import { CreateHospitalRecordDto } from './dto/create-hospital-record.dto';
 import { ListHospitalQueryDto } from './dto/list-hospital-query.dto';
 import { UpdateHospitalStayDto } from './dto/update-hospital-stay.dto';
 
@@ -64,7 +66,7 @@ export class HospitalService {
   async getHospitalStay(visitId: string) {
     const visit = await this.prisma.visit.findFirst({
       where: { id: visitId, hospitalBoxId: { not: null } },
-      include: hospitalVisitInclude,
+      include: hospitalStayCardInclude,
     });
 
     if (!visit) {
@@ -72,6 +74,77 @@ export class HospitalService {
     }
 
     return visit;
+  }
+
+  async createRecord(visitId: string, dto: CreateHospitalRecordDto, actorId: string) {
+    const stay = await this.getExistingHospitalStay(visitId);
+
+    if (stay.status !== VisitStatus.DRAFT && stay.status !== VisitStatus.IN_PROGRESS) {
+      throw new BadRequestException('Hospital journal is closed after discharge or cancellation');
+    }
+
+    const record = await this.prisma.hospitalRecord.create({
+      data: {
+        visitId,
+        recordedById: actorId,
+        recordType: dto.recordType,
+        title: dto.title.trim(),
+        recordedAt: dto.recordedAt ? new Date(dto.recordedAt) : undefined,
+        temperatureC: dto.temperatureC,
+        value: dto.value?.trim() || null,
+        notes: dto.notes?.trim() || null,
+      },
+      include: hospitalRecordAuthorInclude,
+    });
+
+    await this.auditService.log({
+      actorId,
+      action: 'hospital.record.create',
+      entityType: 'HospitalRecord',
+      entityId: record.id,
+      metadata: { visitId, recordType: dto.recordType },
+    });
+
+    return record;
+  }
+
+  async admitExisting(visitId: string, dto: AdmitExistingHospitalStayDto, actorId: string) {
+    const visit = await this.prisma.visit.findUnique({
+      where: { id: visitId },
+      select: { id: true, status: true },
+    });
+
+    if (!visit) {
+      throw new NotFoundException('Visit not found');
+    }
+
+    if (visit.status !== VisitStatus.DRAFT && visit.status !== VisitStatus.IN_PROGRESS) {
+      throw new BadRequestException('Only an active visit can be admitted to hospital');
+    }
+
+    const box = await this.schedulingService.ensureHospitalBoxExists(dto.hospitalBoxId);
+
+    if (dto.employeeId) {
+      await this.schedulingService.ensureEmployeeActive(dto.employeeId);
+    }
+
+    await this.prisma.visit.update({
+      where: { id: visitId },
+      data: {
+        hospitalBoxId: box.id,
+        ...(dto.employeeId !== undefined ? { employeeId: dto.employeeId } : {}),
+      },
+    });
+
+    await this.auditService.log({
+      actorId,
+      action: 'hospital.admit.existing',
+      entityType: 'Visit',
+      entityId: visitId,
+      metadata: { hospitalBoxId: box.id },
+    });
+
+    return this.getHospitalStay(visitId);
   }
 
   async admit(dto: AdmitHospitalPatientDto, actorId: string) {
@@ -231,4 +304,16 @@ const hospitalVisitInclude = {
   exam: true,
   recommendation: true,
   bill: { select: { id: true, status: true, totalAmount: true, paidAmount: true } },
+} satisfies Prisma.VisitInclude;
+
+const hospitalRecordAuthorInclude = {
+  recordedBy: { select: { id: true, fullName: true, position: true } },
+} satisfies Prisma.HospitalRecordInclude;
+
+const hospitalStayCardInclude = {
+  ...hospitalVisitInclude,
+  hospitalRecords: {
+    orderBy: { recordedAt: 'desc' as const },
+    include: hospitalRecordAuthorInclude,
+  },
 } satisfies Prisma.VisitInclude;

@@ -10,6 +10,7 @@ import { DocumentTemplatesPage } from '../features/documents/DocumentTemplatesPa
 import { EmployeesPage } from '../features/employees/EmployeesPage';
 import { FinanceSettingsPage } from '../features/finance/FinanceSettingsPage';
 import { HospitalPage } from '../features/hospital/HospitalPage';
+import { HospitalCardPage } from '../features/hospital/HospitalCardPage';
 import { BillCardPage } from '../features/billing/BillCardPage';
 import { BillsPage } from '../features/billing/BillsPage';
 import { VetafImportPage } from '../features/imports/VetafImportPage';
@@ -96,6 +97,7 @@ export const routes: RouteObject[] = [
           { path: '/visits/:visitId', element: <VisitCardPage /> },
           { path: '/laboratory', element: <LaboratoryPage /> },
           { path: '/hospital', element: <HospitalPage /> },
+          { path: '/hospital/:visitId', element: <HospitalCardPage /> },
           { path: '/bills', element: <BillsPage /> },
           { path: '/bills/:billId', element: <BillCardPage /> },
           { path: '/sales', element: <SalesPage /> },

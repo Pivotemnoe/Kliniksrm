@@ -42,6 +42,35 @@ export type HospitalStay = {
     totalAmount: DecimalValue;
     paidAmount: DecimalValue;
   } | null;
+  hospitalRecords?: HospitalRecord[];
+};
+
+export type HospitalRecordType =
+  | 'TEMPERATURE'
+  | 'MEDICATION'
+  | 'PROCEDURE'
+  | 'OBSERVATION'
+  | 'FEEDING'
+  | 'CARE'
+  | 'OTHER';
+
+export type HospitalRecord = {
+  id: string;
+  visitId: string;
+  recordedById: string | null;
+  recordType: HospitalRecordType;
+  title: string;
+  recordedAt: string;
+  temperatureC: DecimalValue | null;
+  value: string | null;
+  notes: string | null;
+  recordedBy?: {
+    id: string;
+    fullName: string;
+    position: string | null;
+  } | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type AdmitHospitalInput = {
@@ -52,4 +81,13 @@ export type AdmitHospitalInput = {
   admittedAt?: string;
   status?: VisitStatus;
   purpose?: string;
+};
+
+export type CreateHospitalRecordInput = {
+  recordType: HospitalRecordType;
+  title: string;
+  recordedAt?: string;
+  temperatureC?: number;
+  value?: string;
+  notes?: string;
 };

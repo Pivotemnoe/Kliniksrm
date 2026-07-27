@@ -1620,6 +1620,34 @@ body {
   margin-bottom: 0;
 }
 
+.visit-diagnosis-compact {
+  display: grid;
+  gap: 8px;
+}
+
+.visit-diagnosis-quick-entry {
+  display: grid;
+  grid-template-columns: minmax(260px, 720px) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.visit-diagnosis-quick-entry .ant-select {
+  width: 100%;
+}
+
+.hospital-summary-panel {
+  margin-bottom: 16px;
+}
+
+.hospital-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 16px;
+}
+
 .visit-work-area .visit-action-row .ant-btn[disabled],
 .visit-work-area .visit-action-row .ant-btn[disabled]:hover {
   color: #8f98a3 !important;
@@ -2475,6 +2503,15 @@ body {
 
   .visit-exam-vitals-grid {
     grid-template-columns: 1fr;
+  }
+
+  .visit-diagnosis-quick-entry {
+    grid-template-columns: 1fr;
+  }
+
+  .hospital-card-actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .portal-invite-layout {

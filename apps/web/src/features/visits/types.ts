@@ -214,6 +214,7 @@ export type ListVisitsQuery = {
   employeeId?: string;
   dateFrom?: string;
   dateTo?: string;
+  excludeHospital?: boolean;
   limit?: number;
   offset?: number;
 };

@@ -1,7 +1,8 @@
-import { CheckOutlined, CloseOutlined, FileTextOutlined, LeftOutlined, PlayCircleOutlined, PrinterOutlined } from '@ant-design/icons';
+import { CheckOutlined, CloseOutlined, FileTextOutlined, HomeOutlined, LeftOutlined, PlayCircleOutlined, PrinterOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Card, Descriptions, Space, Tabs, Tag, Typography } from 'antd';
+import { Alert, App, Button, Card, Descriptions, Modal, Select, Space, Tabs, Tag, Typography } from 'antd';
 import type { ReactNode } from 'react';
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
@@ -12,10 +13,10 @@ import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDate, formatDateTime } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
 import { AnimalStatusTag } from '../animals/animalStatus';
+import { admitExistingHospitalStay, getHospitalResources } from '../hospital/hospital.api';
 import { VisitDocumentsTab } from './VisitDocumentsTab';
 import { VisitExamTab } from './VisitExamTab';
 import { VisitHistoryTab } from './VisitHistoryTab';
-import { VisitHospitalTab } from './VisitHospitalTab';
 import { VisitLaboratoryTab } from './VisitLaboratoryTab';
 import { VisitRecommendationTab } from './VisitRecommendationTab';
 import { VisitServicesTab } from './VisitServicesTab';
@@ -31,10 +32,34 @@ export function VisitCardPage() {
   const { data: auth } = useCurrentEmployee();
   const canManage = hasPermission(auth?.employee, 'visits.manage');
   const canReadBilling = hasPermission(auth?.employee, 'billing.read');
+  const canReadHospital = hasPermission(auth?.employee, 'hospital.read');
+  const canManageHospital = hasPermission(auth?.employee, 'hospital.manage');
+  const [hospitalModalOpen, setHospitalModalOpen] = useState(false);
+  const [hospitalBoxId, setHospitalBoxId] = useState<string>();
   const visitQuery = useQuery({
     queryKey: ['visits', visitId],
     queryFn: () => getVisit(visitId!),
     enabled: Boolean(visitId),
+  });
+  const hospitalResourcesQuery = useQuery({
+    queryKey: ['hospital', 'resources'],
+    queryFn: getHospitalResources,
+    enabled: canManageHospital,
+  });
+  const hospitalAdmissionMutation = useMutation({
+    mutationFn: (boxId: string) => admitExistingHospitalStay(visitId!, { hospitalBoxId: boxId }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['visits', visitId] }),
+        queryClient.invalidateQueries({ queryKey: ['visits'] }),
+        queryClient.invalidateQueries({ queryKey: ['hospital'] }),
+      ]);
+      setHospitalModalOpen(false);
+      setHospitalBoxId(undefined);
+      message.success('Пациент помещён в стационар');
+      navigate(`/hospital/${visitId}`);
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
   });
   const actionMutation = useMutation({
     mutationFn: (action: 'start' | 'complete' | 'cancel') => {
@@ -83,8 +108,8 @@ export function VisitCardPage() {
       <aside className="context-panel">
         <div className="context-section">
           <div className="context-section-header">
-            <button className="table-link" type="button" onClick={() => navigate('/visits')}>
-              <LeftOutlined /> К приёмам
+            <button className="table-link" type="button" onClick={() => navigate(visit?.hospitalBoxId ? '/hospital' : '/visits')}>
+              <LeftOutlined /> {visit?.hospitalBoxId ? 'К стационару' : 'К приёмам'}
             </button>
           </div>
           <div className="context-section-body context-grid">
@@ -143,7 +168,7 @@ export function VisitCardPage() {
               }
             />
             <ContextRow label="Температура" value={visit?.exam?.temperatureC ? `${visit.exam.temperatureC} °C` : '—'} />
-            <ContextRow label="Прием" value={visit?.visitType ? visitTypeLabels[visit.visitType] : '—'} />
+            <ContextRow label="Тип обращения" value={visit?.hospitalBoxId ? 'Стационар' : visit?.visitType ? visitTypeLabels[visit.visitType] : '—'} />
             <ContextRow
               label="Диагнозы"
               value={
@@ -194,6 +219,26 @@ export function VisitCardPage() {
                   Лист назначений
                 </Button>
               </Space>
+            </div>
+          </div>
+        ) : null}
+        {visit && canReadHospital ? (
+          <div className="context-section">
+            <div className="context-section-header">
+              <strong>Стационар</strong>
+            </div>
+            <div className="context-section-body">
+              {visit.hospitalBoxId ? (
+                <Button type="primary" icon={<HomeOutlined />} onClick={() => navigate(`/hospital/${visit.id}`)}>
+                  Открыть карту стационара
+                </Button>
+              ) : canManageHospital && (visit.status === 'DRAFT' || visit.status === 'IN_PROGRESS') ? (
+                <Button icon={<HomeOutlined />} onClick={() => setHospitalModalOpen(true)}>
+                  Поместить в стационар
+                </Button>
+              ) : (
+                <Typography.Text type="secondary">Пациент не находится в стационаре</Typography.Text>
+              )}
             </div>
           </div>
         ) : null}
@@ -264,11 +309,6 @@ export function VisitCardPage() {
                   children: <VisitDocumentsTab visit={visit} locked={Boolean(locked)} />,
                 },
                 {
-                  key: 'hospital',
-                  label: 'Стационар',
-                  children: <VisitHospitalTab visit={visit} locked={Boolean(locked)} />,
-                },
-                {
                   key: 'profile',
                   label: 'Основное',
                   children: (
@@ -282,8 +322,8 @@ export function VisitCardPage() {
                           'Прямой приём'
                         )}
                       </Descriptions.Item>
-                      <Descriptions.Item label="Кабинет/стационар">{visit.hospitalBox?.name ?? visit.hospitalBox?.title ?? '—'}</Descriptions.Item>
-                      <Descriptions.Item label="Прием">{visit.visitType ? visitTypeLabels[visit.visitType] : '—'}</Descriptions.Item>
+                      <Descriptions.Item label="Бокс стационара">{visit.hospitalBox?.name ?? visit.hospitalBox?.title ?? '—'}</Descriptions.Item>
+                      <Descriptions.Item label="Тип обращения">{visit.hospitalBoxId ? 'Стационар' : visit.visitType ? visitTypeLabels[visit.visitType] : '—'}</Descriptions.Item>
                       <Descriptions.Item label="Начат">{formatDateTime(visit.startedAt)}</Descriptions.Item>
                       <Descriptions.Item label="Завершён">{formatDateTime(visit.completedAt)}</Descriptions.Item>
                       <Descriptions.Item label="Счёт">
@@ -298,6 +338,31 @@ export function VisitCardPage() {
           ) : null}
         </div>
       </main>
+      <Modal
+        title="Поместить пациента в стационар"
+        open={hospitalModalOpen}
+        okText="Поместить"
+        cancelText="Отмена"
+        confirmLoading={hospitalAdmissionMutation.isPending}
+        okButtonProps={{ disabled: !hospitalBoxId }}
+        onCancel={() => {
+          setHospitalModalOpen(false);
+          setHospitalBoxId(undefined);
+        }}
+        onOk={() => hospitalBoxId && hospitalAdmissionMutation.mutate(hospitalBoxId)}
+      >
+        <Typography.Paragraph type="secondary">
+          После размещения наблюдения, температура, препараты и процедуры будут в отдельной карте стационара.
+        </Typography.Paragraph>
+        <Select
+          value={hospitalBoxId}
+          placeholder="Выберите свободный бокс"
+          loading={hospitalResourcesQuery.isLoading}
+          options={hospitalResourcesQuery.data?.boxes.map((box) => ({ value: box.id, label: box.name })) ?? []}
+          onChange={setHospitalBoxId}
+          className="full-width"
+        />
+      </Modal>
     </div>
   );
 }

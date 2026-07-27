@@ -1,4 +1,5 @@
 import {
+  BankOutlined,
   CalendarOutlined,
   ClockCircleOutlined,
   ExperimentOutlined,
@@ -63,6 +64,11 @@ export function DashboardPage() {
         description={`Рабочая картина клиники на ${formatDate(today)}.`}
         extra={
           <Space wrap>
+            {hasPermission(employee, 'business.read') ? (
+              <Button icon={<BankOutlined />} onClick={() => navigate('/business')}>
+                Бизнес и прибыль
+              </Button>
+            ) : null}
             <Button icon={<OrderedListOutlined />} onClick={() => navigate('/queue')}>
               Очередь
             </Button>
