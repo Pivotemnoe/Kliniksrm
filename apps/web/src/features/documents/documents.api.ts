@@ -43,3 +43,9 @@ export function updateVisitDocument(visitId: string, documentId: string, input: 
     body: input,
   });
 }
+
+export function deleteVisitDocument(visitId: string, documentId: string) {
+  return apiRequest<{ deleted: true }>(`/v1/visits/${visitId}/documents/${documentId}`, {
+    method: 'DELETE',
+  });
+}

@@ -163,6 +163,40 @@ export class DocumentsService {
     return document;
   }
 
+  async deleteVisitDocument(visitId: string, documentId: string, actorId: string) {
+    const document = await this.prisma.visitDocument.findFirst({
+      where: { id: documentId, visitId },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        generatedDocument: { select: { id: true } },
+      },
+    });
+
+    if (!document) {
+      throw new NotFoundException('Документ приёма не найден');
+    }
+
+    if (
+      document.generatedDocument ||
+      (document.status !== DocumentStatus.DRAFT && document.status !== DocumentStatus.CANCELLED)
+    ) {
+      throw new BadRequestException('Удалить можно только черновик или отменённый документ. Сформированные и подписанные документы сохраняются в истории.');
+    }
+
+    await this.prisma.visitDocument.delete({ where: { id: document.id } });
+    await this.auditService.log({
+      actorId,
+      action: 'visit_document.delete',
+      entityType: 'VisitDocument',
+      entityId: document.id,
+      metadata: { visitId, title: document.title, status: document.status },
+    });
+
+    return { deleted: true };
+  }
+
   private async ensureVisitExists(visitId: string) {
     const visit = await this.prisma.visit.findUnique({ where: { id: visitId }, select: { id: true } });
 

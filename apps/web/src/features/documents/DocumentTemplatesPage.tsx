@@ -563,7 +563,7 @@ function DocumentTemplatesPanel({ canManage }: { canManage: boolean }) {
         width: 230,
         render: (_, record) => (
           <Space wrap>
-            <Button size="small" icon={<PrinterOutlined />} onClick={() => printTemplate(record.title, record.body ?? '', record.category?.title)}>
+            <Button size="small" icon={<PrinterOutlined />} onClick={() => printTemplate(record.title, renderDocumentPreview(record.body ?? ''), record.category?.title)}>
               Печать
             </Button>
             {canManage ? (
@@ -638,7 +638,7 @@ function DocumentTemplatesPanel({ canManage }: { canManage: boolean }) {
         destroyOnHidden
         footer={
           <Space>
-            <Button icon={<PrinterOutlined />} onClick={() => printTemplate(previewTitle || 'Без названия', previewBody ?? '', getValues('categoryTitle'))}>
+            <Button icon={<PrinterOutlined />} onClick={() => printTemplate(previewTitle || 'Без названия', renderDocumentPreview(previewBody ?? ''), getValues('categoryTitle'))}>
               Печать образца
             </Button>
             <Button onClick={closeModal}>Отмена</Button>
@@ -682,11 +682,12 @@ function DocumentTemplatesPanel({ canManage }: { canManage: boolean }) {
             <Card size="small" title="Переменные">
               <DocumentVariablePalette onInsert={insertVariable} />
             </Card>
-            <Card size="small" title="Предпросмотр">
+            <Card size="small" title="Предпросмотр на примере">
               <div className="document-preview">
                 <h3>{previewTitle || 'Без названия'}</h3>
-                <div>{previewBody || 'Текст шаблона пока пустой'}</div>
+                <div>{renderDocumentPreview(previewBody ?? '') || 'Текст шаблона пока пустой'}</div>
               </div>
+              <Typography.Text type="secondary">В карточке приёма примерные данные заменятся на данные выбранного владельца, пациента и врача.</Typography.Text>
             </Card>
           </div>
         </Form>
@@ -1201,6 +1202,63 @@ function renderNotificationPreview(text: string) {
   });
 }
 
+export function renderDocumentPreview(text: string) {
+  const values: Record<string, string> = {
+    'organization.displayName': 'TemichevVet',
+    'organization.legalName': 'Ветеринарная клиника TemichevVet',
+    'organization.orgType': 'Ветеринарная клиника',
+    'organization.inn': '0000000000',
+    'organization.kpp': '000000000',
+    'organization.legalAddress': 'г. Армавир, адрес клиники',
+    'organization.postalAddress': 'г. Армавир, адрес клиники',
+    'organization.bankName': 'Банк клиники',
+    'organization.bik': '000000000',
+    'organization.account': '00000000000000000000',
+    'organization.corrAccount': '00000000000000000000',
+    'organization.requisites': 'Ветеринарная клиника TemichevVet, ИНН 0000000000, г. Армавир',
+    'clinic.name': 'TemichevVet',
+    'clinic.legalName': 'Ветеринарная клиника TemichevVet',
+    'clinic.inn': '0000000000',
+    'clinic.kpp': '000000000',
+    'clinic.address': 'г. Армавир, адрес клиники',
+    'office.name': 'Основная клиника',
+    'office.phone': '+7 (000) 000-00-00',
+    'office.address': 'г. Армавир, адрес клиники',
+    'office.timezone': 'Москва',
+    'owner.fullName': 'Иванова Анна Сергеевна',
+    'owner.phone': '+7 (900) 000-00-00',
+    'owner.extraPhone': '+7 (900) 000-00-01',
+    'owner.email': 'owner@example.ru',
+    'owner.address': 'г. Армавир, адрес владельца',
+    'animal.nickname': 'Барсик',
+    'animal.species': 'Кошка',
+    'animal.breed': 'Бенгальская',
+    'animal.sex': 'Самец',
+    'animal.birthDate': '12.07.2024',
+    'animal.microchip': '643000000000000',
+    'animal.status': 'Активен',
+    'visit.id': 'Номер приёма',
+    'visit.status': 'В работе',
+    'visit.startedAt': '27.07.2026, 10:30',
+    'visit.completedAt': '27.07.2026, 11:15',
+    'visit.totalAmount': '2 500,00 ₽',
+    'employee.fullName': 'Врач клиники',
+    'employee.position': 'Ветеринарный врач',
+    'employee.phone': '+7 (000) 000-00-00',
+    'hospitalBox.name': 'Бокс 1',
+    'appointment.startsAt': '27.07.2026, 10:30',
+    'appointment.endsAt': '27.07.2026, 11:00',
+    'queue.createdAt': '27.07.2026, 10:20',
+    currentDate: new Date().toLocaleDateString('ru-RU'),
+    currentDateTime: new Date().toLocaleString('ru-RU'),
+  };
+
+  return text.replace(/\{\{\s*([\w.]+)\s*\}\}|\{([\w.]+)\}/g, (_match, doubleBraceKey: string | undefined, singleBraceKey: string | undefined) => {
+    const key = singleBraceKey ?? doubleBraceKey;
+    return key ? (values[key] ?? '') : '';
+  });
+}
+
 function printTemplate(title: string, body: string, category?: string | null) {
   const printWindow = window.open('', '_blank', 'width=900,height=700');
   if (!printWindow) {
@@ -1234,7 +1292,7 @@ function printTemplate(title: string, body: string, category?: string | null) {
       <img class="logo" src="/brand/temichevvet-logo.jpg" alt="TemichevVet" />
       <div>
         <div class="brand">TemichevVet</div>
-        <div class="muted">Образец шаблона документа</div>
+        <div class="muted">Предпросмотр печатного документа</div>
       </div>
     </section>
     <h1>${escapeHtml(title)}</h1>

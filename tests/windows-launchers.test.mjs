@@ -49,4 +49,6 @@ test('Windows-запуск не зависит от возможности пе�
   }
 
   assert.match(batch, /-NoImageUpdate/);
+  assert.doesNotMatch(installer, /cmd \/c "`"\$launcher`" -ForceRecreate -NoImageUpdate"/);
+  assert.match(installer, /& \$starter -Open -ForceRecreate -NoImageUpdate/);
 });

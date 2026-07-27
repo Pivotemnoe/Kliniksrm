@@ -7,6 +7,7 @@ SKIP_IMAGE_BUILD="false"
 SKIP_CONNECTIVITY="false"
 PLATFORM="${DOCKER_DEFAULT_PLATFORM:-linux/amd64}"
 DESTINATION=""
+TRANSFER_DATA_SOURCE=""
 
 usage() {
   cat <<'USAGE'
@@ -18,11 +19,13 @@ usage() {
   scripts/create-portable-flash.sh --include-images --skip-image-build /Volumes/FLASH
   scripts/create-portable-flash.sh --skip-connectivity /path/to/empty-test-folder
   scripts/create-portable-flash.sh --include-images --platform linux/amd64 /Volumes/FLASH
+  scripts/create-portable-flash.sh --include-transfer-data /path/to/checked-import /Volumes/FLASH
 
 Опции:
   --include-images  собрать и положить Docker-образы на флешку для установки почти без интернета
   --skip-image-build  не пересобирать api/web, а сохранить уже готовые локальные образы
   --skip-connectivity  не добавлять секреты личного кабинета и мессенджеров
+  --include-transfer-data PATH  добавить отдельно проверенные файлы владельцев и пациентов без автоматического импорта
   --platform VALUE  платформа Docker-образов, по умолчанию linux/amd64 для Windows/Linux ПК
   --help            показать справку
 
@@ -43,6 +46,14 @@ while [[ $# -gt 0 ]]; do
     --skip-connectivity)
       SKIP_CONNECTIVITY="true"
       shift
+      ;;
+    --include-transfer-data)
+      if [[ $# -lt 2 ]]; then
+        echo "После --include-transfer-data нужно указать папку с проверенными файлами импорта." >&2
+        exit 1
+      fi
+      TRANSFER_DATA_SOURCE="$2"
+      shift 2
       ;;
     --platform)
       if [[ $# -lt 2 ]]; then
@@ -77,6 +88,18 @@ fi
 if [[ ! -d "$DESTINATION" ]]; then
   echo "Путь не найден: $DESTINATION" >&2
   exit 1
+fi
+
+if [[ -n "$TRANSFER_DATA_SOURCE" ]]; then
+  if [[ ! -d "$TRANSFER_DATA_SOURCE" ]]; then
+    echo "Папка с файлами импорта не найдена: $TRANSFER_DATA_SOURCE" >&2
+    exit 1
+  fi
+  TRANSFER_DATA_SOURCE="$(cd "$TRANSFER_DATA_SOURCE" && pwd)"
+  if [[ ! -f "$TRANSFER_DATA_SOURCE/clients-import.csv" || ! -f "$TRANSFER_DATA_SOURCE/manifest.json" ]]; then
+    echo "В папке импорта нужны проверенные файлы clients-import.csv и manifest.json." >&2
+    exit 1
+  fi
 fi
 
 DESTINATION="$(cd "$DESTINATION" && pwd)"
@@ -208,6 +231,36 @@ if command -v iconv >/dev/null 2>&1; then
 else
   cp "$ROOT_DIR/scripts/portable/README.txt" "$TMP_DIR/README.txt"
   cp "$ROOT_DIR/scripts/portable/README.txt" "$TMP_DIR/README-Windows.txt"
+fi
+
+if [[ -n "$TRANSFER_DATA_SOURCE" ]]; then
+  transfer_target="$TMP_DIR/Импорт владельцев и животных"
+  mkdir -p "$transfer_target"
+  rsync -a "${RSYNC_MACOS_EXCLUDES[@]}" "$TRANSFER_DATA_SOURCE/" "$transfer_target/"
+
+  transfer_instructions="$TMP_DIR/transfer-import-instructions.txt"
+  cat > "$transfer_instructions" <<'INSTRUCTIONS'
+ИМПОРТ ВЛАДЕЛЬЦЕВ И ЖИВОТНЫХ В TEMICHEVVET
+
+Обновление программы не заменяет базу клиники и не переносит клиентов автоматически.
+
+1. Запустите TemichevVet и войдите как директор или администратор.
+2. Откройте «Настройки» -> «Перенос данных».
+3. Выберите файл «clients-import.csv» из этой папки.
+4. Сначала нажмите «Проверить файл без записи».
+5. Проверьте количество новых записей, совпадений и ошибок.
+6. Только после проверки отдельно подтвердите перенос в базу.
+
+Файлы owners.csv и animals.csv оставлены для контроля. Файл visits-summary-reference-only.csv является только справочным и не должен загружаться как история лечения.
+INSTRUCTIONS
+  if command -v iconv >/dev/null 2>&1; then
+    printf '\xff\xfe' > "$transfer_target/КАК ИМПОРТИРОВАТЬ.txt"
+    iconv -f UTF-8 -t UTF-16LE "$transfer_instructions" >> "$transfer_target/КАК ИМПОРТИРОВАТЬ.txt"
+  else
+    cp "$transfer_instructions" "$transfer_target/КАК ИМПОРТИРОВАТЬ.txt"
+  fi
+  rm -f "$transfer_instructions"
+  echo "Добавлены отдельные файлы импорта владельцев и животных. Автоматическая запись в БД отключена."
 fi
 
 write_windows_powershell "$ROOT_DIR/scripts/portable/install-windows.ps1" "$TMP_DIR/portable/install-windows.ps1"

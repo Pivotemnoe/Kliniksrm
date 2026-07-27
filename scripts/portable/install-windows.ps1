@@ -805,16 +805,20 @@ Install-LauncherShortcuts
 
 if (!$NoStart) {
   $launcher = Join-Path $InstallDir "start-temichevvet-windows.bat"
+  $starter = Join-Path $InstallDir "scripts\start-clinic-server.ps1"
   if (!(Test-Path $launcher)) {
     throw "CRM launcher was not found: $launcher"
+  }
+  if (!(Test-Path $starter)) {
+    throw "CRM start script was not found: $starter"
   }
 
   Write-Host "Starting TemichevVet..."
   try {
     if (Test-Path $ImagesTar) {
-      cmd /c "`"$launcher`" -ForceRecreate -NoImageUpdate"
+      & $starter -Open -ForceRecreate -NoImageUpdate
     } else {
-      cmd /c "`"$launcher`" -ForceRecreate -UpdateImages"
+      & $starter -Open -ForceRecreate -UpdateImages
     }
     if ($LASTEXITCODE -ne 0) { throw "Новая версия не запустилась." }
     Write-InstalledUpdateLog "success" $null
@@ -824,7 +828,7 @@ if (!$NoStart) {
       Write-Host "Возвращаю только предыдущие образы приложения; база назад не откатывается."
       Set-InstalledEnvValue "TEMICHEVVET_API_IMAGE" $RollbackApi
       Set-InstalledEnvValue "TEMICHEVVET_WEB_IMAGE" $RollbackWeb
-      cmd /c "`"$launcher`" -ForceRecreate -NoImageUpdate"
+      & $starter -Open -ForceRecreate -NoImageUpdate
     }
     Write-InstalledUpdateLog "rolled_back_app" $startError
     throw "Обновление остановлено: $startError"

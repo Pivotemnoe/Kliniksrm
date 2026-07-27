@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { AuthEmployee } from '../auth/auth.types';
 import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
@@ -67,5 +67,16 @@ export class DocumentsController {
     @CurrentEmployee() actor: AuthEmployee,
   ) {
     return this.documentsService.updateVisitDocument(visitId, documentId, dto, actor.id);
+  }
+
+  @Delete('visits/:visitId/documents/:documentId')
+  @RequirePermissions('documents.manage')
+  @ApiOkResponse({ description: 'Draft visit document deleted.' })
+  deleteVisitDocument(
+    @Param('visitId') visitId: string,
+    @Param('documentId') documentId: string,
+    @CurrentEmployee() actor: AuthEmployee,
+  ) {
+    return this.documentsService.deleteVisitDocument(visitId, documentId, actor.id);
   }
 }

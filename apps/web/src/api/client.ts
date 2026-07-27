@@ -50,6 +50,10 @@ async function parseResponse(response: Response): Promise<ApiErrorPayload | unkn
 }
 
 function extractMessage(payload: unknown, status: number) {
+  if (status === 502 || status === 503 || status === 504) {
+    return 'CRM ещё запускается. Подождите несколько секунд и повторите попытку';
+  }
+
   if (payload && typeof payload === 'object' && 'message' in payload) {
     const message = (payload as ApiErrorPayload).message;
 
@@ -57,7 +61,7 @@ function extractMessage(payload: unknown, status: number) {
       return message.join(', ');
     }
 
-    if (typeof message === 'string') {
+    if (typeof message === 'string' && !/<(?:!doctype|html|head|body)\b/i.test(message)) {
       return message;
     }
   }

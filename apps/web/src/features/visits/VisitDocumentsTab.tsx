@@ -1,4 +1,4 @@
-import { EditOutlined, PlusOutlined, PrinterOutlined, SendOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined, PlusOutlined, PrinterOutlined, SendOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Button, Card, Drawer, Form, Input, Select, Space, Table, Tag, Typography } from 'antd';
@@ -11,6 +11,7 @@ import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import {
   createVisitDocument,
+  deleteVisitDocument,
   listDocumentTemplates,
   listVisitDocuments,
   updateVisitDocument,
@@ -44,7 +45,7 @@ type DocumentFormValues = z.infer<typeof documentSchema>;
 
 export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boolean }) {
   const queryClient = useQueryClient();
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const { data: auth } = useCurrentEmployee();
   const canManage = hasPermission(auth?.employee, 'documents.manage') && !locked;
   const canPrint = hasPermission(auth?.employee, 'documents.print');
@@ -95,6 +96,15 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['notifications'] });
       message.success('Документ поставлен в очередь отправки');
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
+  const deleteMutation = useMutation({
+    mutationFn: (documentId: string) => deleteVisitDocument(visit.id, documentId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['visits', visit.id, 'documents'] });
+      message.success('Документ удалён');
+      closeDrawer();
     },
     onError: (error) => message.error(getErrorMessage(error)),
   });
@@ -161,12 +171,28 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
                   Открыть
                 </Button>
               ) : null}
+              {canManage && canDeleteVisitDocument(record) ? (
+                <Button danger size="small" icon={<DeleteOutlined />} loading={deleteMutation.isPending} onClick={() => confirmDelete(record)}>
+                  Удалить
+                </Button>
+              ) : null}
             </Space>
           ),
       },
     ],
-    [canManage, canPrint, canSend, notificationTarget, sendMutation],
+    [canManage, canPrint, canSend, deleteMutation.isPending, notificationTarget, sendMutation],
   );
+
+  function confirmDelete(document: VisitDocument) {
+    modal.confirm({
+      title: 'Удалить документ?',
+      content: `Черновик «${document.title}» будет удалён без возможности восстановления. Данные приёма не изменятся.`,
+      okText: 'Удалить',
+      cancelText: 'Отмена',
+      okButtonProps: { danger: true },
+      onOk: () => deleteMutation.mutateAsync(document.id),
+    });
+  }
 
   function openCreate() {
     setEditingDocument(null);
@@ -249,6 +275,11 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
                 Отправить
               </Button>
             ) : null}
+            {editingDocument && canManage && canDeleteVisitDocument(editingDocument) ? (
+              <Button danger icon={<DeleteOutlined />} loading={deleteMutation.isPending} onClick={() => confirmDelete(editingDocument)}>
+                Удалить
+              </Button>
+            ) : null}
             {canManage ? (
               <Button type="primary" loading={saveMutation.isPending} onClick={handleSubmit((values) => saveMutation.mutate(values))}>
                 Сохранить
@@ -324,10 +355,10 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
                 <DocumentVariablePalette onInsert={insertVariable} />
               )}
             </Card>
-            <Card size="small" title="Предпросмотр">
+            <Card size="small" title={editingDocument ? 'Печатный вид' : 'Предпросмотр с данными приёма'}>
               <div className="document-preview">
                 <h3>{previewTitle || 'Без названия'}</h3>
-                <div>{previewBody || 'Текст документа пока пустой'}</div>
+                <div>{renderVisitDocumentPreview(previewBody ?? '', visit) || 'Текст документа пока пустой'}</div>
               </div>
             </Card>
           </div>
@@ -405,6 +436,43 @@ function printDocument(document: VisitDocument, visit: Visit) {
   printWindow.document.close();
 }
 
+export function renderVisitDocumentPreview(text: string, visit: Visit) {
+  const values: Record<string, string> = {
+    'organization.displayName': 'TemichevVet',
+    'organization.legalName': 'Ветеринарная клиника TemichevVet',
+    'organization.requisites': 'Реквизиты клиники будут подставлены при сохранении',
+    'clinic.name': 'TemichevVet',
+    'clinic.address': 'Адрес клиники будет подставлен при сохранении',
+    'office.phone': 'Телефон клиники будет подставлен при сохранении',
+    'owner.fullName': visit.owner.fullName,
+    'owner.phone': visit.owner.phone ?? '',
+    'owner.extraPhone': visit.owner.extraPhone ?? '',
+    'owner.email': visit.owner.email ?? '',
+    'owner.address': visit.owner.address ?? '',
+    'animal.nickname': visit.animal.nickname,
+    'animal.species': visit.animal.species ?? '',
+    'animal.breed': visit.animal.breed ?? '',
+    'animal.sex': visit.animal.sex === 'MALE' ? 'Самец' : visit.animal.sex === 'FEMALE' ? 'Самка' : '',
+    'animal.birthDate': visit.animal.birthDate ? new Date(visit.animal.birthDate).toLocaleDateString('ru-RU') : '',
+    'animal.microchip': visit.animal.microchip ?? '',
+    'animal.status': visit.animal.status ?? '',
+    'visit.id': visit.id,
+    'visit.status': visit.status,
+    'visit.startedAt': new Date(visit.startedAt).toLocaleString('ru-RU'),
+    'visit.completedAt': visit.completedAt ? new Date(visit.completedAt).toLocaleString('ru-RU') : '',
+    'visit.totalAmount': `${Number(visit.totalAmount).toLocaleString('ru-RU')} ₽`,
+    'employee.fullName': visit.employee?.fullName ?? '',
+    'employee.position': visit.employee?.position ?? '',
+    'currentDate': new Date().toLocaleDateString('ru-RU'),
+    'currentDateTime': new Date().toLocaleString('ru-RU'),
+  };
+
+  return text.replace(/\{\{\s*([\w.]+)\s*\}\}|\{([\w.]+)\}/g, (_match, doubleBraceKey: string | undefined, singleBraceKey: string | undefined) => {
+    const key = singleBraceKey ?? doubleBraceKey;
+    return key ? (values[key] ?? '') : '';
+  });
+}
+
 type NotificationTarget = {
   channel: NotificationChannel;
   recipient: string;
@@ -412,6 +480,10 @@ type NotificationTarget = {
 
 function canQueueDocument(document: VisitDocument) {
   return document.status === 'GENERATED' || document.status === 'SIGNED';
+}
+
+function canDeleteVisitDocument(document: VisitDocument) {
+  return !document.generatedDocument && (document.status === 'DRAFT' || document.status === 'CANCELLED');
 }
 
 function resolveOwnerNotificationTarget(visit: Visit): NotificationTarget | null {
