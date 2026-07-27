@@ -160,7 +160,7 @@ test('обновления Windows проверяют amd64 и сохраняю�
   assert.match(portable, /Настроить отдельный диск резервных копий\.cmd/);
   assert.match(portable, /preflight_failed/);
   assert.match(portable, /Set-InstalledEnvDefault "TEMICHEVVET_AUTO_PULL_IMAGES"/);
-  assert.ok(portable.indexOf('Цель действия:') < portable.lastIndexOf('docker version *> $null'));
+  assert.ok(portable.indexOf('Цель действия:') < portable.indexOf('if (!(Test-DockerCommand -Arguments @("version")))'));
 });
 
 test('пользовательский экран переноса не содержит название сторонней CRM', async () => {

@@ -48,10 +48,76 @@ function Test-Command($Name) {
   return [bool](Get-Command $Name -ErrorAction SilentlyContinue)
 }
 
+function Test-DockerCommand {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string[]]$Arguments
+  )
+
+  $previousErrorActionPreference = $ErrorActionPreference
+  try {
+    # Windows PowerShell remoting turns native stderr into a terminating
+    # NativeCommandError when the global preference is Stop. Missing Docker
+    # objects are expected during a clean install, so inspect them quietly and
+    # decide from the native exit code instead of printing a red error.
+    $ErrorActionPreference = "SilentlyContinue"
+    docker @Arguments *> $null
+    return $LASTEXITCODE -eq 0
+  } finally {
+    $ErrorActionPreference = $previousErrorActionPreference
+  }
+}
+
+function Test-DockerContainer($Container) {
+  return Test-DockerCommand -Arguments @("container", "inspect", $Container)
+}
+
+function Ensure-ClinicLanAccess($WebPort) {
+  if (!(Test-Command "Get-NetFirewallRule") -or !(Test-Command "New-NetFirewallRule")) {
+    throw "Windows Firewall cmdlets are unavailable. Local-network access to TemichevVet cannot be configured safely."
+  }
+
+  $ruleName = "TemichevVet CRM (Private network)"
+  try {
+    $existingRule = Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($existingRule) {
+      Set-NetFirewallRule -Name $existingRule.Name -Enabled True -Profile Private -Direction Inbound -Action Allow | Out-Null
+      $existingRule | Get-NetFirewallAddressFilter | Set-NetFirewallAddressFilter -RemoteAddress LocalSubnet | Out-Null
+      $existingRule | Get-NetFirewallPortFilter | Set-NetFirewallPortFilter -Protocol TCP -LocalPort $WebPort | Out-Null
+    } else {
+      New-NetFirewallRule `
+        -DisplayName $ruleName `
+        -Direction Inbound `
+        -Action Allow `
+        -Protocol TCP `
+        -LocalPort $WebPort `
+        -RemoteAddress LocalSubnet `
+        -Profile Private | Out-Null
+    }
+
+    # If the Docker firewall prompt was denied once, Windows creates a broad
+    # inbound block rule for com.docker.backend.exe. A block rule overrides the
+    # narrow allow rule above. Keep that block for Public networks, but remove
+    # its conflict on the trusted Private clinic LAN. Only the explicitly
+    # allowed web port remains reachable; all other services stay on 127.0.0.1.
+    $dockerBlockRules = Get-NetFirewallRule -DisplayName "Docker Desktop Backend" -ErrorAction SilentlyContinue |
+      Where-Object { $_.Enabled -eq "True" -and $_.Action -eq "Block" -and $_.Direction -eq "Inbound" }
+    foreach ($dockerRule in $dockerBlockRules) {
+      $portFilter = $dockerRule | Get-NetFirewallPortFilter -ErrorAction SilentlyContinue
+      if ($portFilter.Protocol -eq "TCP") {
+        Set-NetFirewallRule -Name $dockerRule.Name -Profile Public | Out-Null
+      }
+    }
+
+    Write-Host "Доступ к CRM разрешён только из локальной частной сети по TCP $WebPort."
+  } catch {
+    throw "Не удалось безопасно настроить доступ к CRM в локальной сети. Запустите установщик от имени администратора. $($_.Exception.Message)"
+  }
+}
+
 function Wait-Docker {
   for ($i = 1; $i -le 60; $i++) {
-    docker version *> $null
-    if ($LASTEXITCODE -eq 0) {
+    if (Test-DockerCommand -Arguments @("version")) {
       return $true
     }
 
@@ -75,8 +141,7 @@ function Invoke-Native {
 }
 
 function Test-DockerImage($Image) {
-  docker image inspect $Image *> $null
-  return $LASTEXITCODE -eq 0
+  return Test-DockerCommand -Arguments @("image", "inspect", $Image)
 }
 
 function Assert-FreeSpace {
@@ -89,13 +154,11 @@ function Assert-FreeSpace {
 }
 
 function Save-CurrentApplicationImages {
-  docker container inspect clinic-crm-api *> $null
-  if ($LASTEXITCODE -eq 0) {
+  if (Test-DockerContainer "clinic-crm-api") {
     $script:PreviousApiId = (docker inspect --format '{{.Image}}' clinic-crm-api | Select-Object -Last 1)
     docker tag $script:PreviousApiId $RollbackApi
   }
-  docker container inspect clinic-crm-web *> $null
-  if ($LASTEXITCODE -eq 0) {
+  if (Test-DockerContainer "clinic-crm-web") {
     $script:PreviousWebId = (docker inspect --format '{{.Image}}' clinic-crm-web | Select-Object -Last 1)
     docker tag $script:PreviousWebId $RollbackWeb
   }
@@ -113,8 +176,7 @@ function Show-PendingInstalledMigrations {
   if (!(Test-Path $migrationsDir -PathType Container)) {
     throw "В комплекте не найден каталог миграций: $migrationsDir"
   }
-  docker container inspect clinic-crm-postgres *> $null
-  if ($LASTEXITCODE -ne 0) {
+  if (!(Test-DockerContainer "clinic-crm-postgres")) {
     Write-Host "Это первая установка: база будет создана штатными миграциями из комплекта."
     return
   }
@@ -408,8 +470,7 @@ function Backup-CurrentDatabase {
     return
   }
 
-  docker container inspect clinic-crm-postgres *> $null
-  if ($LASTEXITCODE -ne 0) {
+  if (!(Test-DockerContainer "clinic-crm-postgres")) {
     throw "Существующая установка найдена, но контейнер PostgreSQL недоступен. Без проверяемой копии базы обновление остановлено; для осознанного обхода существует только параметр -NoBackup."
   }
 
@@ -700,8 +761,7 @@ if (!(Test-Command "docker")) {
   exit 1
 }
 
-docker version *> $null
-if ($LASTEXITCODE -ne 0) {
+if (!(Test-DockerCommand -Arguments @("version"))) {
   Write-Host "Docker is installed but is not running. Trying to open Docker Desktop..."
   $dockerDesktopPath = "$Env:ProgramFiles\Docker\Docker\Docker Desktop.exe"
   if (Test-Path $dockerDesktopPath) {
@@ -748,6 +808,12 @@ if (Test-Path $PortableVersionFile) {
 }
 
 Initialize-InstalledEnvFile
+if (!$isExistingInstall) {
+  # The Windows machine is the clinic server. Publish only the web frontend to
+  # the local network; API, PostgreSQL, Redis and MinIO remain bound to
+  # 127.0.0.1 in docker-compose.yml.
+  Set-InstalledEnvValue "WEB_BIND_ADDR" "0.0.0.0"
+}
 if ((Get-ExistingEnvValue "SESSION_SECRET" "") -eq "change-me") {
   Set-InstalledEnvValue "SESSION_SECRET" (New-InstalledRandomSecret)
 } else {
@@ -760,6 +826,10 @@ Set-InstalledSourceVersion
 Set-InstalledEnvDefault "TEMICHEVVET_REMOTE_API_IMAGE" "ghcr.io/pivotemnoe/kliniksrm-api:stable"
 Set-InstalledEnvDefault "TEMICHEVVET_REMOTE_WEB_IMAGE" "ghcr.io/pivotemnoe/kliniksrm-web:stable"
 Set-InstalledEnvDefault "TEMICHEVVET_AUTO_PULL_IMAGES" "true"
+
+if ((Get-ExistingEnvValue "WEB_BIND_ADDR" "127.0.0.1") -eq "0.0.0.0") {
+  Ensure-ClinicLanAccess (Get-ExistingEnvValue "WEB_PORT" "3000")
+}
 
 $previousConfiguredApi = Get-ExistingEnvValue "TEMICHEVVET_API_IMAGE" ""
 $previousConfiguredWeb = Get-ExistingEnvValue "TEMICHEVVET_WEB_IMAGE" ""
