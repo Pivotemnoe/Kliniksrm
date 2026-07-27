@@ -168,6 +168,12 @@ cleanup_macos_metadata() {
 
   if [[ -e "$target" ]]; then
     find "$target" \( -name '._*' -o -name '.DS_Store' \) -type f -exec rm -f {} +
+    # exFAT may expose decomposed Unicode AppleDouble names that cannot be
+    # unlinked through the exact path returned by find. A directory glob
+    # removes only macOS metadata files and works for those names as well.
+    while IFS= read -r -d '' directory; do
+      rm -f "$directory"/._* "$directory"/.DS_Store 2>/dev/null || true
+    done < <(find "$target" -type d -print0)
   fi
 }
 

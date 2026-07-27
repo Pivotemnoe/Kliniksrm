@@ -46,5 +46,6 @@ test('переносной комплект добавляет данные то
   assert.match(portable, /--include-transfer-data PATH/);
   assert.match(portable, /Проверить файл без записи/);
   assert.match(portable, /Автоматическая запись в БД отключена/);
+  assert.match(portable, /rm -f "\$directory"\/\._\*/);
   assert.doesNotMatch(portable, /prisma[^\n]+clients-import\.csv/i);
 });
