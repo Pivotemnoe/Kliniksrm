@@ -381,7 +381,7 @@ if [[ "$INCLUDE_IMAGES" == "true" ]]; then
     TEMICHEVVET_API_IMAGE=temichevvet-api:local \
     TEMICHEVVET_WEB_IMAGE=temichevvet-web:local \
     TEMICHEVVET_INFRA_PLATFORM="$PLATFORM" \
-      docker compose config --images | tr '\n' ' '
+      docker compose config --images | sort -u | tr '\n' ' '
   )"
   if [[ -z "$IMAGES" ]]; then
     echo "Не удалось получить список Docker-образов." >&2
@@ -392,8 +392,8 @@ if [[ "$INCLUDE_IMAGES" == "true" ]]; then
   if ! DOCKER_DEFAULT_PLATFORM="$PLATFORM" TEMICHEVVET_INFRA_PLATFORM="$PLATFORM" docker compose pull postgres redis minio; then
     echo "Не удалось скачать один из базовых образов. Проверяю локальные Docker-образы..."
     for image in $IMAGES; do
-      if ! docker image inspect "$image" >/dev/null 2>&1; then
-        echo "Локально не найден образ: $image" >&2
+      if ! docker image inspect --platform "$PLATFORM" "$image" >/dev/null 2>&1; then
+        echo "Локально не найден образ $image для платформы $PLATFORM." >&2
         echo "Повторите сборку при стабильном интернете или заранее скачайте этот образ." >&2
         exit 1
       fi
@@ -403,8 +403,8 @@ if [[ "$INCLUDE_IMAGES" == "true" ]]; then
 
   echo "Проверяю, что Docker-образы доступны для платформы $PLATFORM..."
   for image in $IMAGES; do
-    if ! docker image inspect "$image" >/dev/null 2>&1; then
-      echo "Локально не найден образ: $image" >&2
+    if ! docker image inspect --platform "$PLATFORM" "$image" >/dev/null 2>&1; then
+      echo "Локально не найден образ $image для платформы $PLATFORM." >&2
       echo "Повторите сборку при стабильном интернете или заранее скачайте этот образ." >&2
       exit 1
     fi
@@ -421,8 +421,8 @@ if [[ "$INCLUDE_IMAGES" == "true" ]]; then
     echo "platform=$PLATFORM"
     echo "images_archive_sha256=$IMAGES_ARCHIVE_SHA256"
     for image in $IMAGES; do
-      image_id="$(docker image inspect --format '{{.Id}}' "$image")"
-      repo_digests="$(docker image inspect --format '{{join .RepoDigests ","}}' "$image")"
+      image_id="$(docker image inspect --platform "$PLATFORM" --format '{{.Id}}' "$image")"
+      repo_digests="$(docker image inspect --platform "$PLATFORM" --format '{{join .RepoDigests ","}}' "$image")"
       echo "image=$image|id=$image_id|repo_digests=$repo_digests"
     done
   } > "$TMP_DIR/RELEASE-MANIFEST.txt"

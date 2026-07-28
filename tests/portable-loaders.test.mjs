@@ -108,3 +108,12 @@ test('Windows-обновление проверяет архив, архитек
   const removeApplicationBlock = starter.slice(removeApplicationStart, removeApplicationEnd);
   assert.doesNotMatch(removeApplicationBlock, /clinic-crm-(?:postgres|redis|minio)/);
 });
+
+test('сборщик Windows-комплекта проверяет именно amd64-варианты без дублей', async () => {
+  const creator = await read('scripts/create-portable-flash.sh');
+
+  assert.match(creator, /docker compose config --images \| sort -u/);
+  assert.match(creator, /docker image inspect --platform "\$PLATFORM" "\$image"/);
+  assert.match(creator, /docker image inspect --platform "\$PLATFORM" --format '\{\{\.Id\}\}'/);
+  assert.match(creator, /docker save --platform "\$PLATFORM"/);
+});
