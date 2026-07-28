@@ -43,6 +43,8 @@ test('быстрая запись на флешку не заменяет раб
 
   assert.match(writer, /TMP_TARGET="\$DESTINATION\/TemichevVet-Portable\.tmp"/);
   assert.match(writer, /rsync -rlt/);
+  assert.match(writer, /cleanup_macos_metadata "\$READY_DIR"/);
+  assert.match(writer, /xattr -cr "\$target"/);
   assert.match(writer, /shasum -a 256 -c temichevvet-images\.tar\.sha256/);
   assert.match(writer, /SOURCE_FILE_COUNT/);
   assert.ok(writer.indexOf('mv "$TARGET" "$BACKUP"') > writer.indexOf('shasum -a 256 -c'));
@@ -116,6 +118,7 @@ test('сборщик Windows-комплекта проверяет именно 
   const creator = await read('scripts/create-portable-flash.sh');
 
   assert.match(creator, /git -C "\$ROOT_DIR" archive --format=tar HEAD \| tar -xf - -C "\$TMP_DIR\/CRM"/);
+  assert.match(creator, /xattr -cr "\$target"/);
   assert.match(creator, /docker compose config --images \| sort -u/);
   assert.match(creator, /docker image inspect --platform "\$PLATFORM" "\$image"/);
   assert.match(creator, /docker image inspect --platform "\$PLATFORM" --format '\{\{\.Id\}\}'/);

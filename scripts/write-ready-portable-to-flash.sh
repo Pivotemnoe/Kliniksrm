@@ -55,6 +55,9 @@ cleanup_macos_metadata() {
   local target="$1"
 
   if [[ -e "$target" ]]; then
+    if command -v xattr >/dev/null 2>&1; then
+      xattr -cr "$target" 2>/dev/null || true
+    fi
     find "$target" \( -name '._*' -o -name '.DS_Store' \) -type f -exec rm -f {} +
     while IFS= read -r -d '' directory; do
       rm -f "$directory"/._* "$directory"/.DS_Store 2>/dev/null || true
@@ -75,6 +78,7 @@ if [[ -e "$TMP_TARGET" ]]; then
 fi
 
 echo "Копирую новый комплект во временную папку; действующий комплект пока не изменяется..."
+cleanup_macos_metadata "$READY_DIR"
 if rsync --help 2>/dev/null | grep -q -- '--info='; then
   rsync -rlt --info=progress2 "${RSYNC_MACOS_EXCLUDES[@]}" "$READY_DIR/" "$TMP_TARGET/"
 else

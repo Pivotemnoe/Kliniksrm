@@ -167,6 +167,9 @@ cleanup_macos_metadata() {
   local target="$1"
 
   if [[ -e "$target" ]]; then
+    if command -v xattr >/dev/null 2>&1; then
+      xattr -cr "$target" 2>/dev/null || true
+    fi
     find "$target" \( -name '._*' -o -name '.DS_Store' \) -type f -exec rm -f {} +
     # exFAT may expose decomposed Unicode AppleDouble names that cannot be
     # unlinked through the exact path returned by find. A directory glob
