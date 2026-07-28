@@ -8,6 +8,7 @@ FORCE_BUILD="false"
 UPDATE_IMAGES="false"
 SKIP_IMAGE_UPDATE="false"
 OPEN_BROWSER="false"
+APP_ONLY="false"
 DOCKER_PLATFORM="${DOCKER_DEFAULT_PLATFORM:-}"
 
 usage() {
@@ -19,11 +20,13 @@ usage() {
   scripts/start-clinic-server.sh --build
   scripts/start-clinic-server.sh --update-images
   scripts/start-clinic-server.sh --open
+  scripts/start-clinic-server.sh --app-only --no-image-update
 
 Опции:
   --build            пересобрать api и web перед запуском
   --update-images    подтянуть свежие api/web образы из настроенного реестра
   --no-image-update  не подтягивать образы
+  --app-only         пересоздать только api и web; не трогать PostgreSQL, Redis и MinIO
   --open             открыть CRM в браузере на этом компьютере
   --help             показать справку
 USAGE
@@ -45,6 +48,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --open)
       OPEN_BROWSER="true"
+      shift
+      ;;
+    --app-only)
+      APP_ONLY="true"
       shift
       ;;
     --help|-h)
@@ -349,7 +356,27 @@ fi
 API_IMAGE="$(load_env_value TEMICHEVVET_API_IMAGE temichevvet-api:local)"
 WEB_IMAGE="$(load_env_value TEMICHEVVET_WEB_IMAGE temichevvet-web:local)"
 
-if [[ "$FORCE_BUILD" != "true" ]] && has_docker_image "$API_IMAGE" && has_docker_image "$WEB_IMAGE"; then
+if [[ "$APP_ONLY" == "true" ]]; then
+  if [[ "$FORCE_BUILD" == "true" ]]; then
+    echo "Режим --app-only нельзя совмещать с --build." >&2
+    exit 1
+  fi
+
+  if ! has_docker_image "$API_IMAGE" || ! has_docker_image "$WEB_IMAGE"; then
+    echo "Для безопасного обновления только приложения не найдены готовые api/web-образы:" >&2
+    echo "  api: $API_IMAGE" >&2
+    echo "  web: $WEB_IMAGE" >&2
+    echo "PostgreSQL, Redis и MinIO не запускались и не изменялись." >&2
+    exit 1
+  fi
+
+  echo "Цель действия: заменить только контейнеры приложения TemichevVet."
+  echo "  api: $API_IMAGE"
+  echo "  web: $WEB_IMAGE"
+  echo "PostgreSQL, Redis, MinIO, backup-контейнер и Docker volumes не перезапускаются и не удаляются."
+  report_selected_image_platforms "$API_IMAGE" "$WEB_IMAGE"
+  docker_compose up -d --no-build --no-deps --force-recreate api web
+elif [[ "$FORCE_BUILD" != "true" ]] && has_docker_image "$API_IMAGE" && has_docker_image "$WEB_IMAGE"; then
   echo "Найдены готовые Docker-образы. Запускаю без пересборки:"
   echo "  api: $API_IMAGE"
   echo "  web: $WEB_IMAGE"

@@ -72,6 +72,12 @@ function Test-DockerContainer($Container) {
   return Test-DockerCommand -Arguments @("container", "inspect", $Container)
 }
 
+function Test-DockerContainerRunning($Container) {
+  if (!(Test-DockerContainer $Container)) { return $false }
+  $running = (docker container inspect --format '{{.State.Running}}' $Container 2>$null | Select-Object -Last 1)
+  return ($LASTEXITCODE -eq 0 -and $running.Trim().ToLowerInvariant() -eq "true")
+}
+
 function Ensure-ClinicLanAccess($WebPort) {
   if (!(Test-Command "Get-NetFirewallRule") -or !(Test-Command "New-NetFirewallRule")) {
     throw "Windows Firewall cmdlets are unavailable. Local-network access to TemichevVet cannot be configured safely."
@@ -778,6 +784,12 @@ if (!(Test-DockerCommand -Arguments @("version"))) {
 Assert-FreeSpace
 
 $isExistingInstall = Test-Path $InstallDir
+$useApplicationOnlyUpdate = (
+  $isExistingInstall -and
+  (Test-DockerContainerRunning "clinic-crm-postgres") -and
+  (Test-DockerContainerRunning "clinic-crm-redis") -and
+  (Test-DockerContainerRunning "clinic-crm-minio")
+)
 Import-InstalledRuntimeEnvOverrides
 if ($Update -or $isExistingInstall) {
   Save-CurrentApplicationImages
@@ -885,7 +897,11 @@ if (!$NoStart) {
 
   Write-Host "Starting TemichevVet..."
   try {
-    if (Test-Path $ImagesTar) {
+    if ($useApplicationOnlyUpdate -and (Test-Path $ImagesTar)) {
+      & $starter -Open -AppOnly -NoImageUpdate
+    } elseif ($useApplicationOnlyUpdate) {
+      & $starter -Open -AppOnly -UpdateImages
+    } elseif (Test-Path $ImagesTar) {
       & $starter -Open -ForceRecreate -NoImageUpdate
     } else {
       & $starter -Open -ForceRecreate -UpdateImages
@@ -898,7 +914,11 @@ if (!$NoStart) {
       Write-Host "Возвращаю только предыдущие образы приложения; база назад не откатывается."
       Set-InstalledEnvValue "TEMICHEVVET_API_IMAGE" $RollbackApi
       Set-InstalledEnvValue "TEMICHEVVET_WEB_IMAGE" $RollbackWeb
-      & $starter -Open -ForceRecreate -NoImageUpdate
+      if ($useApplicationOnlyUpdate) {
+        & $starter -Open -AppOnly -NoImageUpdate
+      } else {
+        & $starter -Open -ForceRecreate -NoImageUpdate
+      }
     }
     Write-InstalledUpdateLog "rolled_back_app" $startError
     throw "Обновление остановлено: $startError"

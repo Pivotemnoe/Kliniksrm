@@ -3,6 +3,7 @@ param(
   [switch]$UpdateImages,
   [switch]$NoImageUpdate,
   [switch]$ForceRecreate,
+  [switch]$AppOnly,
   [switch]$Open,
   [switch]$Help
 )
@@ -22,6 +23,7 @@ function Show-Usage {
   Write-Host "  powershell -ExecutionPolicy Bypass -File scripts\start-clinic-server.ps1 -Build"
   Write-Host "  powershell -ExecutionPolicy Bypass -File scripts\start-clinic-server.ps1 -UpdateImages"
   Write-Host "  powershell -ExecutionPolicy Bypass -File scripts\start-clinic-server.ps1 -ForceRecreate"
+  Write-Host "  powershell -ExecutionPolicy Bypass -File scripts\start-clinic-server.ps1 -AppOnly -NoImageUpdate"
   Write-Host "  powershell -ExecutionPolicy Bypass -File scripts\start-clinic-server.ps1 -Open"
   Write-Host ""
   Write-Host "Options:"
@@ -29,6 +31,7 @@ function Show-Usage {
   Write-Host "  -UpdateImages   pull fresh api/web images from configured registry"
   Write-Host "  -NoImageUpdate  skip image pull"
   Write-Host "  -ForceRecreate  recreate containers from current images"
+  Write-Host "  -AppOnly        recreate only api and web; keep PostgreSQL, Redis and MinIO running"
   Write-Host "  -Open           open CRM in browser on this computer"
   Write-Host "  -Help           show help"
 }
@@ -457,13 +460,10 @@ function Ensure-PortSetting($Key, $DefaultPort, $FallbackStartPort, $ContainerNa
   return $next
 }
 
-function Remove-AppContainers {
+function Remove-ApplicationContainers {
   $containerNames = @(
     "clinic-crm-web",
-    "clinic-crm-api",
-    "clinic-crm-postgres",
-    "clinic-crm-redis",
-    "clinic-crm-minio"
+    "clinic-crm-api"
   )
 
   foreach ($containerName in $containerNames) {
@@ -480,6 +480,20 @@ function Start-ComposeServices {
     [bool]$NoBuild
   )
 
+  if ($AppOnly) {
+    $arguments = @("compose", "up", "-d", "--no-build", "--no-deps", "--force-recreate", "api", "web")
+    Write-Host "Цель действия: заменить только контейнеры приложения TemichevVet (api и web)."
+    Write-Host "PostgreSQL, Redis, MinIO, backup-контейнер и Docker volumes не перезапускаются и не удаляются."
+    try {
+      Invoke-Native -Command "docker" -Arguments $arguments
+    } catch {
+      Write-Host "Повторяю замену только api и web после удаления старых контейнеров приложения..."
+      Remove-ApplicationContainers
+      Invoke-Native -Command "docker" -Arguments $arguments
+    }
+    return
+  }
+
   $arguments = @("compose", "up", "-d")
   if ($NoBuild) {
     $arguments += "--no-build"
@@ -489,13 +503,7 @@ function Start-ComposeServices {
   }
   $arguments += @("postgres", "redis", "minio", "api", "web")
 
-  try {
-    Invoke-Native -Command "docker" -Arguments $arguments
-  } catch {
-    Write-Host "Docker Compose start failed. Removing old TemichevVet containers and retrying..."
-    Remove-AppContainers
-    Invoke-Native -Command "docker" -Arguments $arguments
-  }
+  Invoke-Native -Command "docker" -Arguments $arguments
 }
 
 if (!(Test-Command "docker")) {

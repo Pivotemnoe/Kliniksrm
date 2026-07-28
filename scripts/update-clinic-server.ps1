@@ -337,7 +337,7 @@ Set-EnvValue "TEMICHEVVET_API_IMAGE" $remoteApi
 Set-EnvValue "TEMICHEVVET_WEB_IMAGE" $remoteWeb
 Set-EnvValue "TEMICHEVVET_AUTO_PULL_IMAGES" "true"
 
-$arguments = @("-ForceRecreate", "-NoImageUpdate")
+$arguments = @("-AppOnly", "-NoImageUpdate")
 if (!$NoOpen) {
   $arguments += "-Open"
 }
@@ -355,7 +355,7 @@ try {
     Set-EnvValue "TEMICHEVVET_API_IMAGE" $rollbackApi
     Set-EnvValue "TEMICHEVVET_WEB_IMAGE" $rollbackWeb
     try {
-      & $StarterScript -ForceRecreate -NoImageUpdate
+      & $StarterScript -AppOnly -NoImageUpdate
     } catch {
       Write-Host "Автоматический возврат приложения тоже не запустился. Резервная копия и журнал сохранены."
     }

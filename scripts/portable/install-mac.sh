@@ -3,13 +3,19 @@ set -euo pipefail
 
 PORTABLE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SOURCE_DIR="$PORTABLE_ROOT/CRM"
-INSTALL_DIR="$HOME/TemichevVet"
+DEFAULT_INSTALL_DIR="$HOME/TemichevVet"
+INSTALL_DIR="$DEFAULT_INSTALL_DIR"
 IMAGES_TAR="$PORTABLE_ROOT/docker-images/temichevvet-images.tar"
 IMAGES_SHA256="$IMAGES_TAR.sha256"
 NO_START="false"
 SKIP_COPY="false"
 UPDATE="false"
 NO_BACKUP="false"
+EXISTING_INFRASTRUCTURE="false"
+POSTGRES_IMAGE_ID=""
+REDIS_IMAGE_ID=""
+MINIO_IMAGE_ID=""
+EXISTING_COMPOSE_PROJECT=""
 
 for arg in "$@"; do
   case "$arg" in
@@ -112,6 +118,62 @@ backup_current_database() {
   fi
 }
 
+capture_existing_infrastructure() {
+  if ! docker container inspect clinic-crm-postgres clinic-crm-redis clinic-crm-minio >/dev/null 2>&1; then
+    return
+  fi
+
+  POSTGRES_IMAGE_ID="$(docker container inspect --format '{{.Image}}' clinic-crm-postgres)"
+  REDIS_IMAGE_ID="$(docker container inspect --format '{{.Image}}' clinic-crm-redis)"
+  MINIO_IMAGE_ID="$(docker container inspect --format '{{.Image}}' clinic-crm-minio)"
+  EXISTING_INFRASTRUCTURE="true"
+
+  local existing_working_dir
+  existing_working_dir="$(docker container inspect --format '{{ index .Config.Labels "com.docker.compose.project.working_dir" }}' clinic-crm-postgres 2>/dev/null || true)"
+  EXISTING_COMPOSE_PROJECT="$(docker container inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' clinic-crm-postgres 2>/dev/null || true)"
+  if [[ -n "$existing_working_dir" && -f "$existing_working_dir/docker-compose.yml" ]]; then
+    INSTALL_DIR="$existing_working_dir"
+  fi
+
+  echo "Найдена действующая локальная база. Обновятся только api и web."
+  echo "Рабочая папка: $INSTALL_DIR"
+  echo "PostgreSQL, Redis, MinIO и Docker volumes перезапускаться или удаляться не будут."
+}
+
+restore_existing_infrastructure_tags() {
+  if [[ "$EXISTING_INFRASTRUCTURE" != "true" ]]; then
+    return
+  fi
+
+  # Windows-архив содержит одноимённые amd64-образы инфраструктуры. После
+  # docker load возвращаем стандартные теги образам, которые уже обслуживают
+  # этот Apple Silicon Mac, не пересоздавая сами контейнеры.
+  docker tag "$POSTGRES_IMAGE_ID" postgres:16-alpine
+  docker tag "$REDIS_IMAGE_ID" redis:7-alpine
+  docker tag "$MINIO_IMAGE_ID" minio/minio:latest
+}
+
+select_portable_application_images() {
+  local env_file="$INSTALL_DIR/.env"
+  if [[ ! -f "$env_file" ]]; then
+    return
+  fi
+
+  for setting in \
+    "TEMICHEVVET_API_IMAGE=temichevvet-api:local" \
+    "TEMICHEVVET_WEB_IMAGE=temichevvet-web:local"; do
+    local key="${setting%%=*}"
+    if grep -q "^${key}=" "$env_file"; then
+      sed -i.bak "s|^${key}=.*|${setting}|" "$env_file"
+      rm -f "$env_file.bak"
+    else
+      printf '\n%s\n' "$setting" >> "$env_file"
+    fi
+  done
+}
+
+capture_existing_infrastructure
+
 if [[ "$UPDATE" == "true" || -d "$INSTALL_DIR" ]]; then
   backup_current_database
 fi
@@ -149,9 +211,24 @@ if [[ -f "$IMAGES_TAR" ]]; then
   [[ -f "$IMAGES_SHA256" ]] || { echo "Не найден SHA-256 архива Docker-образов." >&2; exit 1; }
   (cd "$(dirname "$IMAGES_TAR")" && shasum -a 256 -c "$(basename "$IMAGES_SHA256")")
   echo "Загружаю Docker-образы из комплекта..."
-  docker load --input "$IMAGES_TAR"
+  if ! docker load --input "$IMAGES_TAR"; then
+    restore_existing_infrastructure_tags
+    echo "Не удалось загрузить Docker-образы. Теги действующей базы восстановлены; контейнеры не перезапускались." >&2
+    exit 1
+  fi
+  restore_existing_infrastructure_tags
+  select_portable_application_images
 fi
 
 if [[ "$NO_START" != "true" ]]; then
-  "$INSTALL_DIR/scripts/start-clinic-server.sh" --open --no-image-update
+  if [[ "$EXISTING_INFRASTRUCTURE" == "true" ]]; then
+    if [[ -n "$EXISTING_COMPOSE_PROJECT" ]]; then
+      COMPOSE_PROJECT_NAME="$EXISTING_COMPOSE_PROJECT" \
+        "$INSTALL_DIR/scripts/start-clinic-server.sh" --app-only --open --no-image-update
+    else
+      "$INSTALL_DIR/scripts/start-clinic-server.sh" --app-only --open --no-image-update
+    fi
+  else
+    "$INSTALL_DIR/scripts/start-clinic-server.sh" --open --no-image-update
+  fi
 fi
