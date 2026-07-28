@@ -23,7 +23,6 @@ import {
   Typography,
 } from 'antd';
 import { useMemo, useRef, useState } from 'react';
-import type { Row } from 'read-excel-file/browser';
 import { getErrorMessage } from '../../api/errors';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import {
@@ -36,14 +35,18 @@ import {
   previewDataTransfer,
   rollbackDataTransfer,
   VetafImportIssue,
-  VetafImportRow,
 } from './imports.api';
+import {
+  ColumnMappingSuggestion,
+  ParsedImportFile,
+  parseImportFile,
+  prepareTransferPayload,
+  suggestColumnMappings,
+} from './import-file-parser';
 
-type ParsedFile = {
+type ParsedFile = ParsedImportFile & {
   fileName: string;
   checksum: string;
-  columns: string[];
-  rows: VetafImportRow[];
 };
 
 const kindOptions = [
@@ -74,8 +77,9 @@ const localTargetFields: Record<DataTransferKind, DataTransferTargetField[]> = {
   ]),
   catalog: fields([
     ['source_id', 'ID в прежней системе'], ['item_type', 'Тип: товар или услуга'], ['title', 'Наименование', true],
-    ['category', 'Категория'], ['sku', 'Артикул'], ['barcode', 'Штрихкод'], ['price', 'Цена'], ['unit', 'Единица'],
-    ['min_stock', 'Минимальный остаток'], ['description', 'Описание'],
+    ['category', 'Категория'], ['sku', 'Артикул'], ['barcode', 'Штрихкод'], ['price', 'Цена'], ['minimum_price', 'Минимальная цена'],
+    ['price_type', 'Тип цены'], ['unit', 'Единица'], ['min_stock', 'Минимальный остаток'], ['description', 'Описание'], ['price_note', 'Цена в исходном файле'],
+    ['review_status', 'Отметка «требует проверки»'],
   ]),
   stock: fields([
     ['source_id', 'ID в прежней системе'], ['title', 'Наименование', true], ['category', 'Категория'], ['sku', 'Артикул'],
@@ -94,6 +98,7 @@ export function VetafImportPage() {
   const [sourceSystem, setSourceSystem] = useState('Другая система');
   const [parsedFile, setParsedFile] = useState<ParsedFile | null>(null);
   const [mapping, setMapping] = useState<Record<string, string>>({});
+  const [mappingSuggestions, setMappingSuggestions] = useState<Record<string, ColumnMappingSuggestion>>({});
   const [parseError, setParseError] = useState<string | null>(null);
   const [result, setResult] = useState<DataTransferBatch | null>(null);
   const transfersQuery = useQuery({ queryKey: ['data-transfers'], queryFn: getDataTransfers });
@@ -101,14 +106,17 @@ export function VetafImportPage() {
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['data-transfers'] });
 
   const previewMutation = useMutation({
-    mutationFn: () => previewDataTransfer({
-      kind,
-      sourceSystem,
-      fileName: parsedFile?.fileName ?? '',
-      fileChecksum: parsedFile?.checksum ?? '',
-      rows: parsedFile?.rows ?? [],
-      mappings: toMappings(mapping),
-    }),
+    mutationFn: () => {
+      const prepared = prepareTransferPayload(kind, parsedFile?.rows ?? [], mapping);
+      return previewDataTransfer({
+        kind,
+        sourceSystem,
+        fileName: parsedFile?.fileName ?? '',
+        fileChecksum: parsedFile?.checksum ?? '',
+        rows: prepared.rows,
+        mappings: prepared.mappings,
+      });
+    },
     onSuccess: (batch) => {
       setResult(batch);
       refresh();
@@ -147,12 +155,17 @@ export function VetafImportPage() {
       if (parsed.rows.length > 30_000) throw new Error('В файле больше 30 000 строк. Разделите перенос на несколько партий');
       const checksum = await sha256(file);
       const next = { fileName: file.name, checksum, ...parsed };
+      const nextKind = parsed.detectedKind ?? kind;
+      const suggestions = suggestColumnMappings(nextKind, next.columns, next.rows);
+      setKind(nextKind);
       setParsedFile(next);
-      setMapping(autoMapColumns(kind, next.columns));
-      message.success(`Файл прочитан: ${next.rows.length} строк`);
+      setMapping(Object.fromEntries(suggestions.map((item) => [item.sourceColumn, item.targetField])));
+      setMappingSuggestions(Object.fromEntries(suggestions.map((item) => [item.sourceColumn, item])));
+      message.success(`Файл прочитан: ${next.rows.length} строк. Проверьте предложенное сопоставление`);
     } catch (error) {
       setParsedFile(null);
       setMapping({});
+      setMappingSuggestions({});
       setParseError(error instanceof Error ? error.message : 'Не удалось прочитать файл');
     }
   }
@@ -160,10 +173,14 @@ export function VetafImportPage() {
   function changeKind(nextKind: DataTransferKind) {
     setKind(nextKind);
     setResult(null);
-    if (parsedFile) setMapping(autoMapColumns(nextKind, parsedFile.columns));
+    if (parsedFile) {
+      const suggestions = suggestColumnMappings(nextKind, parsedFile.columns, parsedFile.rows);
+      setMapping(Object.fromEntries(suggestions.map((item) => [item.sourceColumn, item.targetField])));
+      setMappingSuggestions(Object.fromEntries(suggestions.map((item) => [item.sourceColumn, item])));
+    }
   }
 
-  const mappingRows = useMemo(() => parsedFile?.columns.map((column) => ({ column, target: mapping[column] || '' })) ?? [], [parsedFile, mapping]);
+  const mappingRows = useMemo(() => parsedFile?.columns.map((column) => ({ column, target: mapping[column] || '', suggestion: mappingSuggestions[column] })) ?? [], [parsedFile, mapping, mappingSuggestions]);
   const missingRequired = targetFields.filter((field) => field.required && !Object.values(mapping).includes(field.value));
   const canPreview = Boolean(parsedFile?.rows.length && sourceSystem.trim() && toMappings(mapping).length && !missingRequired.length);
   const issues = [
@@ -175,7 +192,7 @@ export function VetafImportPage() {
     <div className="page">
       <PageHeader
         title="Перенос данных"
-        description="Проверяемый перенос из Excel, CSV или TSV с защитой от дублей, журналом партий и безопасной отменой."
+        description="Универсальный перенос из Excel, Word и текстовых таблиц с распознаванием колонок, защитой от дублей и безопасной отменой."
       />
       <Space direction="vertical" size={16} className="full-width">
         <Alert
@@ -185,7 +202,7 @@ export function VetafImportPage() {
           message="Сначала проверка, затем перенос"
           description="Проверка файла не меняет карточки клиники. Существующие записи не перезаписываются: система связывает найденные совпадения и создаёт только отсутствующие данные."
         />
-        <Card title="1. Файл и раздел">
+        <Card title="1. Файл и распознанный раздел">
           <Space direction="vertical" size={14} className="full-width">
             {screens.md ? (
               <Segmented<DataTransferKind> block value={kind} options={kindOptions} onChange={changeKind} />
@@ -208,15 +225,32 @@ export function VetafImportPage() {
               />
               <Button icon={<DownloadOutlined />} onClick={() => downloadTemplate(kind)}>Скачать шаблон</Button>
               <Button icon={<ImportOutlined />} onClick={() => inputRef.current?.click()}>Выбрать файл</Button>
-              <input ref={inputRef} type="file" accept=".xlsx,.csv,.tsv,.txt" style={{ display: 'none' }} onChange={handleFileChange} />
+              <input ref={inputRef} type="file" accept=".xls,.xlsx,.csv,.tsv,.txt,.docx" style={{ display: 'none' }} onChange={handleFileChange} />
             </Space>
             {parseError ? <Alert type="error" showIcon message={parseError} /> : null}
             {parsedFile ? (
-              <Descriptions bordered size="small" column={{ xs: 1, md: 3 }}>
+              <>
+                <Descriptions bordered size="small" column={{ xs: 1, md: 4 }}>
                 <Descriptions.Item label="Файл">{parsedFile.fileName}</Descriptions.Item>
+                <Descriptions.Item label="Формат">{parsedFile.formatLabel}</Descriptions.Item>
                 <Descriptions.Item label="Строк">{parsedFile.rows.length}</Descriptions.Item>
                 <Descriptions.Item label="Контрольная сумма">{parsedFile.checksum.slice(0, 12)}</Descriptions.Item>
-              </Descriptions>
+                {parsedFile.sheetName ? <Descriptions.Item label="Лист Excel">{parsedFile.sheetName}</Descriptions.Item> : null}
+                </Descriptions>
+                <Alert
+                  style={{ marginTop: 12 }}
+                  type={parsedFile.detectedKind ? 'success' : 'warning'}
+                  showIcon
+                  message={parsedFile.detectedKind
+                    ? `Распознано: ${kindOptions.find((option) => option.value === parsedFile.detectedKind)?.label}`
+                    : 'Раздел не удалось определить однозначно'}
+                  description={parsedFile.detectedKind
+                    ? parsedFile.kindCandidates[0]?.reasons.join('. ') || 'Проверьте выбранный раздел и поля перед переносом.'
+                    : 'Выберите раздел вручную и проверьте сопоставление колонок.'}
+                />
+                {parsedFile.detectedKind && parsedFile.detectedKind !== kind ? <Alert style={{ marginTop: 12 }} type="info" showIcon message="Раздел изменён вручную" /> : null}
+                {parsedFile.warnings.map((warning) => <Alert key={warning} style={{ marginTop: 12 }} type="warning" showIcon message={warning} />)}
+              </>
             ) : null}
           </Space>
         </Card>
@@ -247,9 +281,27 @@ export function VetafImportPage() {
                         label: `${field.label}${field.required ? ' *' : ''}`,
                         disabled: Object.entries(mapping).some(([column, target]) => column !== record.column && target === field.value),
                       }))}
-                      onChange={(target) => setMapping((current) => ({ ...current, [record.column]: target || '' }))}
+                      onChange={(target) => {
+                        const targetField = target || '';
+                        setMapping((current) => ({ ...current, [record.column]: targetField }));
+                        setMappingSuggestions((current) => ({
+                          ...current,
+                          [record.column]: {
+                            sourceColumn: record.column,
+                            targetField,
+                            confidence: targetField ? 1 : 0,
+                            reason: targetField ? 'Выбрано вручную' : 'Колонка исключена вручную',
+                          },
+                        }));
+                      }}
                     />
                   ),
+                },
+                {
+                  title: 'Распознавание',
+                  key: 'confidence',
+                  width: 190,
+                  render: (_value, record) => <MappingConfidence suggestion={record.suggestion} mapped={Boolean(record.target)} />,
                 },
               ]}
             />
@@ -426,74 +478,12 @@ function PreviewSamples({
   );
 }
 
-async function parseImportFile(file: File): Promise<{ columns: string[]; rows: VetafImportRow[] }> {
-  if (/\.xlsx$/i.test(file.name) || file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
-    const { readSheet } = await import('read-excel-file/browser');
-    return parseSpreadsheetTable(await readSheet(file));
-  }
-  return parseDelimitedTable(await file.text());
-}
-
-function parseSpreadsheetTable(sheetRows: Row[]) {
-  const table = sheetRows.map((row) => row.map(cellToText));
-  const headerIndex = findHeaderRow(table);
-  const headers = buildHeaders(table[headerIndex]);
-  if (!headers.length) throw new Error('В Excel не найдены заголовки колонок');
-  const rows: VetafImportRow[] = [];
-  for (let rowIndex = headerIndex + 1; rowIndex < table.length; rowIndex += 1) {
-    const data = Object.fromEntries(headers.map(({ index, title }) => [title, table[rowIndex]?.[index]?.trim() ?? '']));
-    if (Object.values(data).some(Boolean)) rows.push({ rowNumber: rowIndex + 1, data });
-  }
-  if (!rows.length) throw new Error('После заголовков нет строк данных');
-  return { columns: headers.map((header) => header.title), rows };
-}
-
-function parseDelimitedTable(text: string) {
-  const normalizedText = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
-  if (!normalizedText) throw new Error('Файл пустой');
-  const delimiter = detectDelimiter(normalizedText);
-  const table = parseDelimitedRows(normalizedText, delimiter).filter((row) => row.some((cell) => cell.trim()));
-  const columns = uniqueHeaders((table[0] ?? []).map((header) => header.trim()));
-  const rows = table.slice(1).map((cells, index) => {
-    return { rowNumber: index + 2, data: Object.fromEntries(columns.map((header, cellIndex) => [header, cells[cellIndex]?.trim() ?? ''])) };
-  });
-  if (!rows.length) throw new Error('После заголовков нет строк данных');
-  return { columns, rows };
-}
-
-function findHeaderRow(rows: string[][]) {
-  let best = { index: -1, score: 0 };
-  rows.slice(0, 100).forEach((row, index) => {
-    const score = row.filter((cell) => knownAliases.has(normalizeHeader(cell))).length;
-    if (score > best.score) best = { index, score };
-  });
-  if (best.index < 0 || best.score < 1) throw new Error('Не удалось найти строку с заголовками');
-  return best.index;
-}
-
-function buildHeaders(row: string[]) {
-  return uniqueHeaders(row.map((title) => title.trim())).map((title, index) => ({ index, title })).filter((item) => item.title);
-}
-
-function uniqueHeaders(headers: string[]) {
-  const seen = new Map<string, number>();
-  return headers.map((header) => {
-    if (!header) return header;
-    const count = seen.get(header) ?? 0;
-    seen.set(header, count + 1);
-    return count ? `${header} ${count + 1}` : header;
-  });
-}
-
-function autoMapColumns(kind: DataTransferKind, columns: string[]) {
-  const allowed = new Set(localTargetFields[kind].map((field) => field.value));
-  const used = new Set<string>();
-  return Object.fromEntries(columns.map((column) => {
-    const target = aliasTargets[normalizeHeader(column)] || '';
-    if (!allowed.has(target) || used.has(target)) return [column, ''];
-    used.add(target);
-    return [column, target];
-  }));
+function MappingConfidence({ suggestion, mapped }: { suggestion?: ColumnMappingSuggestion; mapped: boolean }) {
+  if (!suggestion || !mapped) return <Tag>Не переносить</Tag>;
+  if (suggestion.reason.includes('вручную')) return <Tag color="blue">Выбрано вручную</Tag>;
+  if (suggestion.confidence >= 0.9) return <Tag color="green">Высокая уверенность</Tag>;
+  if (suggestion.confidence >= 0.72) return <Tag color="gold">Нужно проверить</Tag>;
+  return <Tag color="orange">Низкая уверенность</Tag>;
 }
 
 function toMappings(mapping: Record<string, string>): DataTransferMapping[] {
@@ -534,44 +524,6 @@ function csvCell(value: string) {
   return `"${value.replace(/"/g, '""')}"`;
 }
 
-function cellToText(value: Row[number]) {
-  if (value === null || value === undefined) return '';
-  if (value instanceof Date) return `${String(value.getDate()).padStart(2, '0')}.${String(value.getMonth() + 1).padStart(2, '0')}.${value.getFullYear()}`;
-  return String(value).trim();
-}
-
-function normalizeHeader(value: string) {
-  return value.toLocaleLowerCase('ru-RU').replace(/ё/g, 'е').replace(/[^a-zа-я0-9]+/g, '');
-}
-
-function detectDelimiter(text: string) {
-  const firstLine = text.split('\n')[0] ?? '';
-  return [';', '\t', ','].map((delimiter) => ({ delimiter, count: parseDelimitedLine(firstLine, delimiter).length })).sort((a, b) => b.count - a.count)[0].delimiter;
-}
-
-function parseDelimitedLine(line: string, delimiter: string) {
-  return parseDelimitedRows(line, delimiter)[0] ?? [];
-}
-
-function parseDelimitedRows(text: string, delimiter: string) {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let current = '';
-  let quoted = false;
-  for (let index = 0; index < text.length; index += 1) {
-    const char = text[index];
-    if (char === '"' && quoted && text[index + 1] === '"') { current += '"'; index += 1; continue; }
-    if (char === '"') { quoted = !quoted; continue; }
-    if (char === delimiter && !quoted) { row.push(current); current = ''; continue; }
-    if (char === '\n' && !quoted) { row.push(current); rows.push(row); row = []; current = ''; continue; }
-    current += char;
-  }
-  if (quoted) throw new Error('В CSV/TSV есть незакрытая кавычка');
-  row.push(current);
-  rows.push(row);
-  return rows;
-}
-
 function formatDate(value: string) {
   return new Intl.DateTimeFormat('ru-RU', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value));
 }
@@ -580,31 +532,9 @@ function fields(items: Array<[string, string, boolean?]>): DataTransferTargetFie
   return items.map(([value, label, required]) => ({ value, label, required }));
 }
 
-const aliasTargets: Record<string, string> = {
-  id: 'source_id', sourceid: 'source_id', внешнийid: 'source_id',
-  idвладельца: 'owner_source_id', idвладельцавпрежнейсистеме: 'owner_source_id', ownersourceid: 'owner_source_id',
-  idпациента: 'animal_source_id', idпациентавпрежнейсистеме: 'animal_source_id', animalsourceid: 'animal_source_id',
-  владелец: 'owner_name', фио: 'owner_name', фиовладельца: 'owner_name', клиент: 'owner_name',
-  телефон: 'phone', мобильный: 'phone', phone: 'phone',
-  доптелефон: 'extra_phone', дополнительныйтелефон: 'extra_phone', extraphone: 'extra_phone',
-  email: 'email', почта: 'email', адрес: 'address',
-  кличка: 'animal_name', пациент: 'animal_name', животное: 'animal_name', вид: 'species', порода: 'breed',
-  статуспациента: 'animal_status', статусживотного: 'animal_status', animalstatus: 'animal_status',
-  пол: 'sex', датарождения: 'birth_date', микрочип: 'microchip', чип: 'microchip',
-  вакцинация: 'vaccination_title', вакцина: 'vaccination_title', датавакцинации: 'vaccinated_at', следующаявакцинация: 'vaccination_due_at', сериявакцины: 'vaccination_series',
-  датаприема: 'visit_date', прием: 'visit_date', врач: 'doctor', типприема: 'visit_type', причинаобращения: 'purpose',
-  анамнез: 'anamnesis', осмотр: 'examination', симптомы: 'symptoms', манипуляции: 'manipulations', диагноз: 'diagnosis',
-  описаниедиагноза: 'diagnosis_description', назначения: 'treatment_plan', рекомендации: 'care_notes', суммасчета: 'amount', статусоплаты: 'bill_status',
-  тип: 'item_type', типпозиции: 'item_type', наименование: 'title', название: 'title', товар: 'title', категория: 'category',
-  артикул: 'sku', штрихкод: 'barcode', цена: 'price', ценапродажи: 'price', единица: 'unit', минимальныйостаток: 'min_stock',
-  остаток: 'quantity', количество: 'quantity', закупочнаяцена: 'purchase_price', склад: 'warehouse', срокгодности: 'expires_at', серия: 'series', описание: 'description',
-};
-
-const knownAliases = new Set(Object.keys(aliasTargets));
-
 const templates: Record<DataTransferKind, string> = {
   clients: 'id;id владельца;id пациента;владелец;телефон;дополнительный телефон;email;адрес;кличка;вид;статус пациента;порода;пол;дата рождения;микрочип;вакцинация;дата вакцинации;следующая вакцинация\nстрока-1;владелец-1;пациент-1;Иванов Иван;+7 900 000 00 00;;client@example.ru;Армавир;Барсик;Кошка;Здоров;Британская;самец;03.06.2022;643000000000000;Бешенство;01.07.2026;01.07.2027',
   history: 'владелец;телефон;кличка;вид;дата приёма;врач;тип приёма;причина обращения;анамнез;осмотр;диагноз;назначения;сумма счёта;статус оплаты\nИванов Иван;+7 900 000 00 00;Барсик;Кошка;24.07.2026 10:30;Петров Пётр;первичный;вялость;со слов владельца;осмотр проведён;Предварительный диагноз;Рекомендации;1500;оплачен',
-  catalog: 'тип позиции;наименование;категория;артикул;штрихкод;цена;единица;минимальный остаток;описание\nтовар;Шприц 5 мл;Расходники;S-5;4600000000000;12;шт;20;\nуслуга;Первичный приём;Приёмы;;;1500;;;',
+  catalog: 'тип позиции;наименование;категория;артикул;штрихкод;цена;минимальная цена;тип цены;единица;минимальный остаток;описание;исходная цена\nтовар;Шприц 5 мл;Расходники;S-5;4600000000000;12;;Фиксированная;шт;20;;\nуслуга;Первичный приём;Приёмы;;;1500;;Фиксированная;;;;\nуслуга;Сложная перевязка;Процедуры;;;;;Плавающая;;;Цена зависит от сложности;от 575',
   stock: 'наименование;категория;артикул;штрихкод;единица;остаток;цена продажи;закупочная цена;склад;срок годности;серия;минимальный остаток\nШприц 5 мл;Расходники;S-5;4600000000000;шт;100;12;8;Основной склад;31.12.2027;A1;20',
 };

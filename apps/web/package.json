@@ -15,11 +15,12 @@
     "@hookform/resolvers": "^5.0.0",
     "@tanstack/react-query": "^5.0.0",
     "antd": "^5.0.0",
+    "fflate": "^0.8.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.0.0",
     "react-router-dom": "^7.18.1",
-    "read-excel-file": "^9.2.0",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zod": "^4.0.0"
   },
   "devDependencies": {

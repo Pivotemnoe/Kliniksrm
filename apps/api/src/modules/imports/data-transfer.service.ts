@@ -90,9 +90,13 @@ const targetFields: Record<DataTransferKind, Array<{ value: string; label: strin
     { value: 'sku', label: 'Артикул' },
     { value: 'barcode', label: 'Штрихкод' },
     { value: 'price', label: 'Цена' },
+    { value: 'minimum_price', label: 'Минимальная цена' },
+    { value: 'price_type', label: 'Тип цены' },
     { value: 'unit', label: 'Единица' },
     { value: 'min_stock', label: 'Минимальный остаток' },
     { value: 'description', label: 'Описание' },
+    { value: 'price_note', label: 'Цена в исходном файле' },
+    { value: 'review_status', label: 'Отметка «требует проверки»' },
   ],
   stock: [
     { value: 'source_id', label: 'ID в прежней системе' },
@@ -628,9 +632,24 @@ export class DataTransferService {
       }
     } else {
       const serviceRows = kind === 'catalog'
-        ? rows.filter((row) => normalize(row.normalizedData.item_type).includes('услуг') || normalize(row.normalizedData.item_type) === 'service')
+        ? rows.filter((row) => isServiceItemType(row.normalizedData.item_type))
         : [];
       const serviceRowNumbers = new Set(serviceRows.map((row) => row.rowNumber));
+      const serviceRowsByTitle = groupBy(
+        serviceRows.filter((row) => clean(row.normalizedData.title)),
+        (row) => normalize(row.normalizedData.title),
+      );
+      for (const sameTitleRows of serviceRowsByTitle.values()) {
+        if (sameTitleRows.length < 2) continue;
+        const sourceRows = sameTitleRows.map((row) => row.rowNumber).join(', ');
+        for (const row of sameTitleRows) {
+          addAmbiguous(
+            row.rowNumber,
+            'title',
+            `В файле несколько услуг с таким названием (строки ${sourceRows}). Добавьте к названию вид животного или раздел`,
+          );
+        }
+      }
       const serviceTitles = unique(serviceRows.map((row) => clean(row.normalizedData.title)).filter(isPresent));
       const services = serviceTitles.length
         ? await this.prisma.service.findMany({
@@ -1016,7 +1035,7 @@ export class DataTransferService {
   }
 
   private async importCatalogRow(tx: Tx, batchId: string, rowId: string, row: NormalizedRow) {
-    const isService = normalize(row.item_type).includes('услуг') || normalize(row.item_type) === 'service';
+    const isService = isServiceItemType(row.item_type);
     if (isService) {
       const serviceCandidates = await tx.service.findMany({ where: { title: { equals: clean(row.title)!, mode: 'insensitive' } }, take: 2 });
       if (serviceCandidates.length > 1) throw new Error('Найдено несколько услуг с одинаковым названием; автоматическое объединение остановлено');
@@ -1027,7 +1046,13 @@ export class DataTransferService {
       }
       const categoryResult = await this.resolveServiceCategory(tx, batchId, rowId, row);
       const service = await tx.service.create({
-        data: { title: clean(row.title)!, categoryId: categoryResult.categoryId, price: parseDecimal(row.price, 0), description: clean(row.description) },
+        data: {
+          title: clean(row.title)!,
+          categoryId: categoryResult.categoryId,
+          price: catalogPrice(row),
+          priceType: parseServicePriceType(row),
+          description: catalogDescription(row),
+        },
       });
       await this.link(tx, batchId, rowId, 'Service', service.id, DataTransferAction.CREATED, row.source_id, true);
       return { created: 1 + categoryResult.created, matched: 0 };
@@ -1058,11 +1083,11 @@ export class DataTransferService {
         categoryId: categoryResult.categoryId,
         sku: clean(row.sku),
         barcode: clean(row.barcode),
-        retailPrice: parseDecimal(row.price, 0),
+        retailPrice: catalogPrice(row),
         stockUnit: clean(row.unit) || 'шт',
         writeOffUnit: clean(row.unit) || 'шт',
         minStock: parseOptionalDecimal(row.min_stock),
-        description: clean(row.description),
+        description: catalogDescription(row),
       },
     });
     await this.link(tx, batchId, rowId, 'Product', product.id, DataTransferAction.CREATED, row.source_id, true);
@@ -1394,6 +1419,16 @@ function validateRow(kind: DataTransferKind, rowNumber: number, row: NormalizedR
   if (kind === 'history' && !clean(row.animal_name) && !clean(row.microchip)) error('animal_name', 'Нет клички пациента или микрочипа');
   if (kind === 'history' && !parseDateTime(row.visit_date)) error('visit_date', 'Некорректная дата приёма');
   if ((kind === 'catalog' || kind === 'stock') && !clean(row.title)) error('title', 'Нет наименования');
+  if (kind === 'catalog') {
+    if (!clean(row.item_type)) warning('item_type', 'Тип позиции не указан: по умолчанию будет создан товар');
+    if (!clean(row.price) && clean(row.minimum_price)) warning('price', 'Основная цена пуста: будет использована минимальная цена');
+    if (isReviewRequired(row.review_status) || (!clean(row.price) && clean(row.price_note))) {
+      warning('price', 'Цена требует подтверждения; для услуги будет создана плавающая цена, которую сотрудник укажет в счёте');
+    }
+    if (!isServiceItemType(row.item_type) && looksLikeServiceTitle(row.title)) {
+      warning('item_type', 'Наименование похоже на услугу, но в файле указано как товар. Проверьте тип позиции');
+    }
+  }
   if (kind === 'stock' && !clean(row.quantity)) {
     error('quantity', 'Не указан остаток');
   } else if (kind === 'stock' && !parseOptionalDecimal(row.quantity)) {
@@ -1416,7 +1451,7 @@ function validateRow(kind: DataTransferKind, rowNumber: number, row: NormalizedR
 const numericFields: Record<DataTransferKind, Array<[string, string]>> = {
   clients: [],
   history: [['amount', 'сумма счёта']],
-  catalog: [['price', 'цена'], ['min_stock', 'минимальный остаток']],
+  catalog: [['price', 'цена'], ['minimum_price', 'минимальная цена'], ['min_stock', 'минимальный остаток']],
   stock: [['price', 'цена продажи'], ['purchase_price', 'закупочная цена'], ['min_stock', 'минимальный остаток']],
 };
 
@@ -1448,6 +1483,40 @@ function clean(value?: string | null) {
 
 function normalize(value?: string | null) {
   return (clean(value) || '').toLocaleLowerCase('ru-RU').replace(/ё/g, 'е');
+}
+
+function isServiceItemType(value?: string | null) {
+  const normalized = normalize(value);
+  return normalized.includes('услуг') || normalized.includes('работ') || normalized === 'service' || normalized === 'work';
+}
+
+function isReviewRequired(value?: string | null) {
+  return ['да', 'yes', 'true', '1', 'проверить', 'требует проверки'].includes(normalize(value));
+}
+
+function parseServicePriceType(row: NormalizedRow) {
+  const explicit = normalize(row.price_type);
+  if (explicit.includes('плава') || explicit.includes('динамич') || explicit.includes('договор') || explicit === 'floating') return 'FLOATING';
+  if (explicit.includes('фикс') || explicit === 'fixed') return 'FIXED';
+  if (isReviewRequired(row.review_status) || (!clean(row.price) && clean(row.price_note))) return 'FLOATING';
+  return 'FIXED';
+}
+
+function catalogPrice(row: NormalizedRow) {
+  return parseDecimal(row.price || row.minimum_price, 0);
+}
+
+function catalogDescription(row: NormalizedRow) {
+  const description = clean(row.description);
+  const priceNote = clean(row.price_note);
+  if (!priceNote || description?.toLocaleLowerCase('ru-RU').includes(priceNote.toLocaleLowerCase('ru-RU'))) return description;
+  return [description, `Цена в исходном файле: ${priceNote}`].filter(isPresent).join('. ');
+}
+
+function looksLikeServiceTitle(value?: string | null) {
+  const title = normalize(value);
+  return /^(стационар|вакцинация|груминг|обработка)$/u.test(title)
+    || /(анализ крови|лабораторн.*исследован|консультац|прием врача|приём врача)/u.test(title);
 }
 
 function parseSex(value?: string | null): AnimalSex {
