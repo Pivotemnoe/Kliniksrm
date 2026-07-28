@@ -145,6 +145,7 @@ export class DataTransferService {
 
   async preview(dto: PreviewDataTransferDto, actor: AuthEmployee) {
     this.ensurePermission(dto.kind, actor);
+    ensureImportFileAllowed(dto.fileName);
     if (!dto.sourceSystem.trim()) {
       throw new BadRequestException('Укажите, откуда переносятся данные');
     }
@@ -247,6 +248,7 @@ export class DataTransferService {
         matchedRecords: matchResult.matchedRecords,
         matchedByType: matchResult.matchedByType,
         repeatedRows: repeatedRows.size,
+        sourceEntitiesByType: countSourceEntitiesByType(dto.kind, baseRows.map((row) => row.normalizedData)),
       },
     };
 
@@ -277,11 +279,13 @@ export class DataTransferService {
       await tx.dataTransferFieldMapping.createMany({
         data: mappings.map((mapping) => ({ batchId: current.id, ...mapping })),
       });
-      await tx.dataTransferRow.createMany({
-        data: preparedRows.map((row) => ({ batchId: current.id, ...row })),
-      });
+      for (const rows of chunks(preparedRows, 500)) {
+        await tx.dataTransferRow.createMany({
+          data: rows.map((row) => ({ batchId: current.id, ...row })),
+        });
+      }
       return tx.dataTransferBatch.findUniqueOrThrow({ where: { id: current.id }, include: { fieldMappings: true } });
-    });
+    }, { maxWait: 10_000, timeout: 60_000 });
 
     return { ...this.presentBatch(batch), repeatProtected: false };
   }
@@ -295,6 +299,7 @@ export class DataTransferService {
       throw new NotFoundException('Партия переноса не найдена');
     }
     this.ensurePermission(batch.kind as DataTransferKind, actor);
+    ensureImportFileAllowed(batch.originalFileName);
     if (batch.status === DataTransferStatus.COMPLETED || batch.status === DataTransferStatus.COMPLETED_WITH_ERRORS) {
       return { ...this.presentBatch(batch), repeatProtected: true };
     }
@@ -1602,10 +1607,35 @@ function parseDecimal(value: string | null | undefined, fallback: number) {
 }
 
 export function parseOptionalDecimal(value?: string | null) {
-  const normalized = clean(value)?.replace(/\s/g, '').replace(',', '.');
+  const normalized = clean(value)?.replace(/(?:₽|руб\.?)/gi, '').replace(/\s/g, '').replace(',', '.');
   if (!normalized) return null;
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? new Prisma.Decimal(parsed) : null;
+}
+
+export function countSourceEntitiesByType(kind: DataTransferKind, rows: NormalizedRow[]) {
+  if (kind !== 'clients') return {};
+  const owners = unique(rows.map((row) => clean(row.owner_source_id)).filter(isPresent));
+  const animals = unique(rows.map((row) => clean(row.animal_source_id)).filter(isPresent));
+  return {
+    ...(owners.length ? { owners: owners.length } : {}),
+    ...(animals.length ? { animals: animals.length } : {}),
+  };
+}
+
+function ensureImportFileAllowed(fileName?: string | null) {
+  const normalized = (fileName ?? '').toLocaleLowerCase('ru-RU').replace(/ё/g, 'е');
+  const isControlReport = normalized.includes('проверк')
+    && (normalized.includes('клиент') || normalized.includes('пациент') || normalized.includes('свод'));
+  if (isControlReport) {
+    throw new BadRequestException('Это контрольный отчёт, а не файл с карточками. Выберите файл «Клиенты-и-пациенты.csv»');
+  }
+}
+
+function chunks<T>(items: T[], size: number) {
+  const result: T[][] = [];
+  for (let index = 0; index < items.length; index += size) result.push(items.slice(index, index + size));
+  return result;
 }
 
 function hasAny(row: NormalizedRow, fields: string[]) {

@@ -42,6 +42,7 @@ export type DataTransferBatch = {
       matchedRecords?: number;
       matchedByType?: Record<string, number>;
       repeatedRows?: number;
+      sourceEntitiesByType?: Record<string, number>;
     };
     commit?: { createdRecords?: number; matchedRecords?: number; errors?: VetafImportIssue[] };
   } | null;

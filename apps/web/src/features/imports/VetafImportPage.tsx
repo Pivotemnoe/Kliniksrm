@@ -23,7 +23,7 @@ import {
   Typography,
 } from 'antd';
 import { useMemo, useRef, useState } from 'react';
-import { getErrorMessage } from '../../api/errors';
+import { ApiError, getErrorMessage } from '../../api/errors';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import {
   commitDataTransfer,
@@ -48,6 +48,8 @@ type ParsedFile = ParsedImportFile & {
   fileName: string;
   checksum: string;
 };
+
+type PreviewTransferBody = Parameters<typeof previewDataTransfer>[0];
 
 const kindOptions = [
   { label: 'Клиенты и пациенты', value: 'clients' },
@@ -101,22 +103,14 @@ export function VetafImportPage() {
   const [mappingSuggestions, setMappingSuggestions] = useState<Record<string, ColumnMappingSuggestion>>({});
   const [parseError, setParseError] = useState<string | null>(null);
   const [result, setResult] = useState<DataTransferBatch | null>(null);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const transfersQuery = useQuery({ queryKey: ['data-transfers'], queryFn: getDataTransfers });
+  const transferLoadError = describeTransferLoadError(transfersQuery.error);
   const targetFields = transfersQuery.data?.targetFields[kind] ?? localTargetFields[kind];
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['data-transfers'] });
 
   const previewMutation = useMutation({
-    mutationFn: () => {
-      const prepared = prepareTransferPayload(kind, parsedFile?.rows ?? [], mapping);
-      return previewDataTransfer({
-        kind,
-        sourceSystem,
-        fileName: parsedFile?.fileName ?? '',
-        fileChecksum: parsedFile?.checksum ?? '',
-        rows: prepared.rows,
-        mappings: prepared.mappings,
-      });
-    },
+    mutationFn: (body: PreviewTransferBody) => previewDataTransfer(body),
     onSuccess: (batch) => {
       setResult(batch);
       refresh();
@@ -148,6 +142,7 @@ export function VetafImportPage() {
     event.target.value = '';
     setResult(null);
     setParseError(null);
+    setAdvancedOpen(false);
     if (!file) return;
     try {
       if (file.size > 15 * 1024 * 1024) throw new Error('Файл больше 15 МБ. Разделите перенос на несколько партий');
@@ -157,11 +152,31 @@ export function VetafImportPage() {
       const next = { fileName: file.name, checksum, ...parsed };
       const nextKind = parsed.detectedKind ?? kind;
       const suggestions = suggestColumnMappings(nextKind, next.columns, next.rows);
+      const nextMapping = Object.fromEntries(suggestions.map((item) => [item.sourceColumn, item.targetField]));
       setKind(nextKind);
       setParsedFile(next);
-      setMapping(Object.fromEntries(suggestions.map((item) => [item.sourceColumn, item.targetField])));
+      setMapping(nextMapping);
       setMappingSuggestions(Object.fromEntries(suggestions.map((item) => [item.sourceColumn, item])));
-      message.success(`Файл прочитан: ${next.rows.length} строк. Проверьте предложенное сопоставление`);
+      if (next.blockedReason) {
+        message.warning('Выбран контрольный отчёт. Перенос заблокирован');
+        return;
+      }
+      const problems = mappingProblems(nextKind, nextMapping, localTargetFields[nextKind]);
+      if (!parsed.detectedKind || problems.length) {
+        setAdvancedOpen(true);
+        message.warning('Файл прочитан, но для безопасной проверки нужны уточнения');
+        return;
+      }
+      const prepared = prepareTransferPayload(nextKind, next.rows, nextMapping);
+      message.success(`Файл распознан: ${next.rows.length} строк. Запускаю безопасную проверку`);
+      previewMutation.mutate({
+        kind: nextKind,
+        sourceSystem: sourceSystem.trim() || 'Другая система',
+        fileName: next.fileName,
+        fileChecksum: next.checksum,
+        rows: prepared.rows,
+        mappings: prepared.mappings,
+      });
     } catch (error) {
       setParsedFile(null);
       setMapping({});
@@ -180,83 +195,102 @@ export function VetafImportPage() {
     }
   }
 
+  function runPreview() {
+    if (!parsedFile || !canPreview) return;
+    const prepared = prepareTransferPayload(kind, parsedFile.rows, mapping);
+    setResult(null);
+    previewMutation.mutate({
+      kind,
+      sourceSystem: sourceSystem.trim(),
+      fileName: parsedFile.fileName,
+      fileChecksum: parsedFile.checksum,
+      rows: prepared.rows,
+      mappings: prepared.mappings,
+    });
+  }
+
   const mappingRows = useMemo(() => parsedFile?.columns.map((column) => ({ column, target: mapping[column] || '', suggestion: mappingSuggestions[column] })) ?? [], [parsedFile, mapping, mappingSuggestions]);
-  const missingRequired = targetFields.filter((field) => field.required && !Object.values(mapping).includes(field.value));
-  const canPreview = Boolean(parsedFile?.rows.length && sourceSystem.trim() && toMappings(mapping).length && !missingRequired.length);
+  const problems = mappingProblems(kind, mapping, targetFields);
+  const canPreview = Boolean(parsedFile?.rows.length && !parsedFile.blockedReason && sourceSystem.trim() && toMappings(mapping).length && !problems.length);
   const issues = [
     ...(result?.metadata?.issues ?? []),
     ...(result?.metadata?.commit?.errors ?? []),
   ];
+  const resultBlocked = isControlReportFileName(result?.originalFileName);
+  const resultFinished = Boolean(result && ['COMPLETED', 'COMPLETED_WITH_ERRORS'].includes(result.status));
+  const resultAlreadyImported = Boolean(result?.repeatProtected || resultFinished);
+  const canCommitResult = Boolean(result?.canCommit && result.readyRows > 0 && !resultAlreadyImported && !resultBlocked);
 
   return (
     <div className="page">
       <PageHeader
         title="Перенос данных"
-        description="Универсальный перенос из Excel, Word и текстовых таблиц с распознаванием колонок, защитой от дублей и безопасной отменой."
+        description="Загрузите файл — CRM сама определит данные, проверит дубли и покажет итог до записи в базу."
       />
       <Space direction="vertical" size={16} className="full-width">
         <Alert
           type="info"
           showIcon
           icon={<SafetyCertificateOutlined />}
-          message="Сначала проверка, затем перенос"
-          description="Проверка файла не меняет карточки клиники. Существующие записи не перезаписываются: система связывает найденные совпадения и создаёт только отсутствующие данные."
+          message="Проверка безопасна"
+          description="Выбор файла не меняет базу. Существующие карточки не перезаписываются, а запись начнётся только после отдельного подтверждения."
         />
-        <Card title="1. Файл и распознанный раздел">
+        {transfersQuery.isError ? (
+          <Alert
+            type="error"
+            showIcon
+            message={transferLoadError.message}
+            description={transferLoadError.description}
+            action={<Button onClick={() => transfersQuery.refetch()}>Повторить</Button>}
+          />
+        ) : null}
+        <Card title="Загрузите файл">
           <Space direction="vertical" size={14} className="full-width">
-            {screens.md ? (
-              <Segmented<DataTransferKind> block value={kind} options={kindOptions} onChange={changeKind} />
-            ) : (
-              <Select<DataTransferKind>
-                aria-label="Раздел переносимых данных"
-                value={kind}
-                options={kindOptions}
-                onChange={changeKind}
-                style={{ width: '100%' }}
-              />
-            )}
             <Space wrap>
-              <Input
-                value={sourceSystem}
-                onChange={(event) => setSourceSystem(event.target.value)}
-                placeholder="Откуда переносим"
-                style={{ width: 260 }}
-                maxLength={120}
-              />
-              <Button icon={<DownloadOutlined />} onClick={() => downloadTemplate(kind)}>Скачать шаблон</Button>
-              <Button icon={<ImportOutlined />} onClick={() => inputRef.current?.click()}>Выбрать файл</Button>
+              <Button type="primary" size="large" icon={<ImportOutlined />} onClick={() => inputRef.current?.click()}>Выбрать файл</Button>
+              <Button icon={<DownloadOutlined />} onClick={() => downloadTemplate(kind)}>Скачать пустой шаблон</Button>
               <input ref={inputRef} type="file" accept=".xls,.xlsx,.csv,.tsv,.txt,.docx" style={{ display: 'none' }} onChange={handleFileChange} />
             </Space>
+            <Typography.Text type="secondary">
+              «Выбрать файл» открывает готовый файл с компьютера или флешки. Пустой шаблон нужен только для подготовки нового переноса.
+            </Typography.Text>
             {parseError ? <Alert type="error" showIcon message={parseError} /> : null}
             {parsedFile ? (
               <>
                 <Descriptions bordered size="small" column={{ xs: 1, md: 4 }}>
                 <Descriptions.Item label="Файл">{parsedFile.fileName}</Descriptions.Item>
                 <Descriptions.Item label="Формат">{parsedFile.formatLabel}</Descriptions.Item>
-                <Descriptions.Item label="Строк">{parsedFile.rows.length}</Descriptions.Item>
-                <Descriptions.Item label="Контрольная сумма">{parsedFile.checksum.slice(0, 12)}</Descriptions.Item>
+                <Descriptions.Item label="Строк">{parsedFile.rows.length.toLocaleString('ru-RU')}</Descriptions.Item>
                 {parsedFile.sheetName ? <Descriptions.Item label="Лист Excel">{parsedFile.sheetName}</Descriptions.Item> : null}
                 </Descriptions>
-                <Alert
-                  style={{ marginTop: 12 }}
-                  type={parsedFile.detectedKind ? 'success' : 'warning'}
-                  showIcon
-                  message={parsedFile.detectedKind
-                    ? `Распознано: ${kindOptions.find((option) => option.value === parsedFile.detectedKind)?.label}`
-                    : 'Раздел не удалось определить однозначно'}
-                  description={parsedFile.detectedKind
-                    ? parsedFile.kindCandidates[0]?.reasons.join('. ') || 'Проверьте выбранный раздел и поля перед переносом.'
-                    : 'Выберите раздел вручную и проверьте сопоставление колонок.'}
-                />
-                {parsedFile.detectedKind && parsedFile.detectedKind !== kind ? <Alert style={{ marginTop: 12 }} type="info" showIcon message="Раздел изменён вручную" /> : null}
-                {parsedFile.warnings.map((warning) => <Alert key={warning} style={{ marginTop: 12 }} type="warning" showIcon message={warning} />)}
+                {parsedFile.blockedReason ? (
+                  <Alert style={{ marginTop: 12 }} type="error" showIcon message="Этот файл не нужно добавлять в CRM" description={parsedFile.blockedReason} />
+                ) : (
+                  <Alert
+                    style={{ marginTop: 12 }}
+                    type={parsedFile.detectedKind && !problems.length ? 'success' : 'warning'}
+                    showIcon
+                    message={parsedFile.detectedKind ? `Файл распознан: ${kindOptions.find((option) => option.value === parsedFile.detectedKind)?.label}` : 'Содержимое не распознано однозначно'}
+                    description={previewMutation.isPending ? 'Идёт автоматическая проверка. Данные в базу не записываются.' : problems.length ? `Нужно уточнить: ${problems.join(', ')}.` : 'Колонки определены автоматически.'}
+                  />
+                )}
+                {parsedFile.warnings.map((warning) => <Alert key={warning} style={{ marginTop: 12 }} type="info" showIcon message={warning} />)}
+                {!parsedFile.blockedReason ? <Button type="link" onClick={() => setAdvancedOpen((current) => !current)}>{advancedOpen ? 'Скрыть дополнительные настройки' : 'Дополнительные настройки'}</Button> : null}
               </>
             ) : null}
           </Space>
         </Card>
 
-        {parsedFile ? (
-          <Card title="2. Сопоставление колонок">
+        {parsedFile && advancedOpen && !parsedFile.blockedReason ? (
+          <Card title="Дополнительные настройки">
+            <Space direction="vertical" size={12} className="full-width" style={{ marginBottom: 16 }}>
+              {screens.md ? (
+                <Segmented<DataTransferKind> block value={kind} options={kindOptions} onChange={changeKind} />
+              ) : (
+                <Select<DataTransferKind> aria-label="Раздел переноса" value={kind} options={kindOptions} onChange={changeKind} style={{ width: '100%' }} />
+              )}
+              <Input value={sourceSystem} onChange={(event) => setSourceSystem(event.target.value)} placeholder="Источник данных" maxLength={120} />
+            </Space>
             <Table
               rowKey="column"
               size="small"
@@ -306,38 +340,59 @@ export function VetafImportPage() {
               ]}
             />
             <Space direction="vertical" size={8} className="full-width" style={{ marginTop: 16 }}>
-              {missingRequired.length ? <Alert type="warning" showIcon message={`Нужно сопоставить: ${missingRequired.map((field) => field.label).join(', ')}`} /> : null}
+              {problems.length ? <Alert type="warning" showIcon message={`Нужно уточнить: ${problems.join(', ')}`} /> : null}
               <Button
                 type="primary"
                 icon={<FileSearchOutlined />}
                 disabled={!canPreview}
                 loading={previewMutation.isPending}
-                onClick={() => previewMutation.mutate()}
+                onClick={runPreview}
               >
-                Проверить файл без записи
+                Повторить проверку
               </Button>
             </Space>
           </Card>
         ) : null}
 
         {result ? (
-          <Card title="3. Результат проверки">
-            {result.repeatProtected ? <Alert type="warning" showIcon message="Повторный перенос остановлен" description="Партия с такой контрольной суммой уже есть в журнале." style={{ marginBottom: 16 }} /> : null}
-            {result.errorSummary ? <Alert type="error" showIcon message="Часть строк не перенесена" description="Скачайте журнал ошибок, исправьте исходный файл и выполните новую проверку." style={{ marginBottom: 16 }} /> : null}
+          <Card title="Результат проверки">
+            {resultBlocked ? <Alert type="error" showIcon message="Контрольный отчёт нельзя добавить в базу" description="Выберите файл с карточками клиентов и пациентов." style={{ marginBottom: 16 }} /> : null}
+            {resultAlreadyImported && !resultBlocked ? (
+              <Alert
+                type={result.status === 'COMPLETED_WITH_ERRORS' ? 'warning' : 'success'}
+                showIcon
+                message="Перенос уже завершён"
+                description={`В базу уже добавлено ${result.importedRows.toLocaleString('ru-RU')} строк. Повторно добавлять этот файл не нужно.`}
+                style={{ marginBottom: 16 }}
+              />
+            ) : null}
+            {!resultAlreadyImported && !resultBlocked ? (
+              <Alert
+                type={canCommitResult ? 'success' : 'warning'}
+                showIcon
+                message={canCommitResult ? 'Файл проверен и готов к добавлению' : 'Файл пока нельзя добавить'}
+                description={canCommitResult ? `CRM добавит ${result.readyRows.toLocaleString('ru-RU')} ${importTargetLabel(result.kind)}. Найденные карточки не будут дублироваться.` : 'Посмотрите сводку и исправьте блокирующие ошибки.'}
+                style={{ marginBottom: 16 }}
+              />
+            ) : null}
             <TransferSummary batch={result} />
-            {issues.length ? <IssuesTable issues={issues} /> : null}
-            {result.metadata?.samples?.length ? <PreviewSamples samples={result.metadata.samples} targetFields={targetFields} /> : null}
             <Space wrap style={{ marginTop: 16 }}>
-              {issues.length ? <Button icon={<DownloadOutlined />} onClick={() => downloadIssues(issues, result)}>Скачать журнал ошибок</Button> : null}
-              <Button
-                type="primary"
-                icon={<ImportOutlined />}
-                disabled={!result.canCommit || result.readyRows === 0 || result.repeatProtected}
-                loading={commitMutation.isPending}
-                onClick={() => commitMutation.mutate(result.id)}
-              >
-                Перенести {result.readyRows} строк
-              </Button>
+              {!resultAlreadyImported && !resultBlocked ? (
+                <Popconfirm
+                  title="Добавить данные в базу?"
+                  description="CRM создаст только отсутствующие записи. Существующие карточки не будут перезаписаны."
+                  okText="Добавить в базу"
+                  cancelText="Отмена"
+                  onConfirm={() => commitMutation.mutate(result.id)}
+                  disabled={!canCommitResult}
+                >
+                  <Button type="primary" size="large" icon={<ImportOutlined />} disabled={!canCommitResult} loading={commitMutation.isPending}>
+                    Добавить в базу {result.readyRows.toLocaleString('ru-RU')} {importTargetLabel(result.kind)}
+                  </Button>
+                </Popconfirm>
+              ) : null}
+              {issues.length ? <Button icon={<DownloadOutlined />} onClick={() => downloadIssues(issues, result)}>Скачать список проблемных строк</Button> : null}
+              {(issues.length || result.metadata?.samples?.length) ? <Button onClick={() => setAdvancedOpen((current) => !current)}>{advancedOpen ? 'Скрыть подробности' : 'Показать подробности'}</Button> : null}
               {result.canRollback ? (
                 <Popconfirm
                   title="Отменить эту партию?"
@@ -350,6 +405,8 @@ export function VetafImportPage() {
                 </Popconfirm>
               ) : null}
             </Space>
+            {advancedOpen && issues.length ? <IssuesTable issues={issues} /> : null}
+            {advancedOpen && result.metadata?.samples?.length ? <PreviewSamples samples={result.metadata.samples} targetFields={targetFields} /> : null}
           </Card>
         ) : null}
 
@@ -358,6 +415,7 @@ export function VetafImportPage() {
             rowKey="id"
             loading={transfersQuery.isLoading}
             dataSource={transfersQuery.data?.batches ?? []}
+            locale={{ emptyText: 'Переносов пока нет. Выберите файл выше, чтобы начать проверку.' }}
             pagination={{ pageSize: 10 }}
             scroll={{ x: 960 }}
             columns={[
@@ -390,18 +448,30 @@ export function VetafImportPage() {
 }
 
 function TransferSummary({ batch }: { batch: DataTransferBatch }) {
+  const matchedByType = batch.metadata?.preview?.matchedByType ?? {};
+  const sourceEntitiesByType = batch.metadata?.preview?.sourceEntitiesByType ?? {};
+  const transferFinished = batch.repeatProtected || ['COMPLETED', 'COMPLETED_WITH_ERRORS'].includes(batch.status);
+  const readyNow = transferFinished ? 0 : batch.readyRows;
   return (
     <Descriptions bordered size="small" column={{ xs: 1, sm: 2, lg: 4 }}>
-      <Descriptions.Item label="Всего строк">{batch.totalRows}</Descriptions.Item>
-      <Descriptions.Item label="Готово">{batch.readyRows}</Descriptions.Item>
-      <Descriptions.Item label="Пропущено">{batch.skippedRows}</Descriptions.Item>
-      <Descriptions.Item label="Ошибки выполнения">{batch.failedRows}</Descriptions.Item>
-      <Descriptions.Item label="Перенесено">{batch.importedRows}</Descriptions.Item>
+      <Descriptions.Item label="Всего строк">{batch.totalRows.toLocaleString('ru-RU')}</Descriptions.Item>
+      <Descriptions.Item label="Можно добавить сейчас">{readyNow.toLocaleString('ru-RU')}</Descriptions.Item>
+      <Descriptions.Item label="Не будут добавлены">{batch.skippedRows.toLocaleString('ru-RU')}</Descriptions.Item>
+      <Descriptions.Item label="Ошибки при добавлении">{batch.failedRows.toLocaleString('ru-RU')}</Descriptions.Item>
+      <Descriptions.Item label="Уже добавлено">{batch.importedRows.toLocaleString('ru-RU')}</Descriptions.Item>
       <Descriptions.Item label="Статус"><TransferStatus status={batch.status} /></Descriptions.Item>
+      {batch.kind === 'clients' ? (
+        <>
+          {sourceEntitiesByType.owners ? <Descriptions.Item label="Владельцев в файле">{sourceEntitiesByType.owners.toLocaleString('ru-RU')}</Descriptions.Item> : null}
+          {sourceEntitiesByType.animals ? <Descriptions.Item label="Пациентов в файле">{sourceEntitiesByType.animals.toLocaleString('ru-RU')}</Descriptions.Item> : null}
+          {typeof matchedByType.owners === 'number' ? <Descriptions.Item label="Строк, где владелец уже найден">{matchedByType.owners.toLocaleString('ru-RU')}</Descriptions.Item> : null}
+          {typeof matchedByType.animals === 'number' ? <Descriptions.Item label="Строк, где пациент уже найден">{matchedByType.animals.toLocaleString('ru-RU')}</Descriptions.Item> : null}
+        </>
+      ) : null}
       {batch.metadata?.preview ? (
         <>
-          <Descriptions.Item label="Совпадений найдено заранее">{batch.metadata.preview.matchedRecords ?? 0}</Descriptions.Item>
-          <Descriptions.Item label="Повторных строк пропущено">{batch.metadata.preview.repeatedRows ?? 0}</Descriptions.Item>
+          {batch.kind !== 'clients' ? <Descriptions.Item label="Совпадений уже найдено">{(batch.metadata.preview.matchedRecords ?? 0).toLocaleString('ru-RU')}</Descriptions.Item> : null}
+          <Descriptions.Item label="Повторных строк в файле">{(batch.metadata.preview.repeatedRows ?? 0).toLocaleString('ru-RU')}</Descriptions.Item>
         </>
       ) : null}
       {batch.metadata?.commit ? (
@@ -490,19 +560,69 @@ function toMappings(mapping: Record<string, string>): DataTransferMapping[] {
   return Object.entries(mapping).filter(([, targetField]) => targetField).map(([sourceColumn, targetField]) => ({ sourceColumn, targetField }));
 }
 
+function mappingProblems(
+  kind: DataTransferKind,
+  mapping: Record<string, string>,
+  targetFields: DataTransferTargetField[],
+) {
+  const mapped = new Set(Object.values(mapping).filter(Boolean));
+  const problems = targetFields.filter((field) => field.required && !mapped.has(field.value)).map((field) => field.label);
+  if (kind === 'clients' && !mapped.has('owner_name') && !mapped.has('phone')) problems.push('ФИО владельца или телефон');
+  return problems;
+}
+
+function isControlReportFileName(fileName?: string | null) {
+  const normalized = (fileName ?? '').toLocaleLowerCase('ru-RU').replace(/ё/g, 'е');
+  return normalized.includes('проверк') && (normalized.includes('клиент') || normalized.includes('пациент') || normalized.includes('свод'));
+}
+
+function importTargetLabel(kind: DataTransferKind) {
+  if (kind === 'clients') return 'записей владельцев и пациентов';
+  if (kind === 'history') return 'записей истории лечения';
+  if (kind === 'catalog') return 'товаров и услуг';
+  return 'складских остатков';
+}
+
+function describeTransferLoadError(error: unknown) {
+  if (error instanceof ApiError && error.status === 401) {
+    return {
+      message: 'Нужно войти в CRM',
+      description: 'Сессия сотрудника закончилась. Откройте страницу входа и войдите снова.',
+    };
+  }
+
+  if (error instanceof ApiError && error.status === 404) {
+    return {
+      message: 'Модуль переноса ещё не загружен',
+      description: 'На этом компьютере запущена более ранняя версия сервера CRM.',
+    };
+  }
+
+  return {
+    message: 'Не удалось загрузить журнал переноса',
+    description: getErrorMessage(error),
+  };
+}
+
 async function sha256(file: File) {
   const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 function downloadTemplate(kind: DataTransferKind) {
-  const blob = new Blob([templates[kind]], { type: 'text/csv;charset=utf-8' });
+  const contents = `\uFEFF${templates[kind].replace(/\r?\n/g, '\r\n')}`;
+  const blob = new Blob([contents], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
   link.download = `temichevvet-transfer-${kind}.csv`;
+  link.style.display = 'none';
+  document.body.appendChild(link);
   link.click();
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => {
+    link.remove();
+    URL.revokeObjectURL(url);
+  }, 1_000);
 }
 
 function downloadIssues(issues: VetafImportIssue[], batch: DataTransferBatch) {

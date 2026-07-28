@@ -138,6 +138,7 @@ test('даты и числа переноса проверяются строг�
   assert.equal(parseDateTime('2026-07-24T10:30:00+03:00')?.toISOString(), '2026-07-24T07:30:00.000Z');
   assert.equal(parseOptionalDecimal('не число'), null);
   assert.equal(parseOptionalDecimal('1 234,50')?.toString(), '1234.5');
+  assert.equal(parseOptionalDecimal('47.00 ₽')?.toString(), '47');
 });
 
 test('обновления Windows проверяют amd64 и сохраняют возврат только приложения', async () => {
@@ -169,7 +170,7 @@ test('пользовательский экран переноса не соде
   assert.match(page, /Перенос данных/);
   assert.match(page, /Журнал переноса/);
   assert.match(page, /Отменить эту партию/);
-  assert.match(page, /Совпадений найдено заранее/);
+  assert.match(page, /Строк, где владелец уже найден/);
 });
 
 test('проверочный переносной комплект можно собрать без секретов связи', async () => {

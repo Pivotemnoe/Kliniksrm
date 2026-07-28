@@ -19,6 +19,7 @@ export type ParsedImportFile = {
   formatLabel: string;
   sheetName?: string;
   warnings: string[];
+  blockedReason: string | null;
   detectedKind: DataTransferKind | null;
   kindCandidates: ImportKindCandidate[];
 };
@@ -34,7 +35,8 @@ export function prepareTransferPayload(
   if (kind !== 'catalog') return { rows, mappings: baseMappings };
   const sourceFor = (target: string) => baseMappings.find((item) => item.targetField === target)?.sourceColumn;
   const priceSource = sourceFor('price');
-  if (!priceSource) return { rows, mappings: baseMappings };
+  const minimumPriceSource = sourceFor('minimum_price');
+  if (!priceSource && !minimumPriceSource) return { rows, mappings: baseMappings };
 
   const internal = {
     priceNote: sourceFor('price_note') ?? '__TemichevVet: исходная цена',
@@ -43,17 +45,31 @@ export function prepareTransferPayload(
   };
   let hasFlexiblePrice = false;
   const preparedRows = rows.map((row) => {
-    const rawPrice = cleanText(row.data[priceSource] ?? '');
-    if (!rawPrice) return row;
+    const data = { ...row.data };
+    const rawMinimumPrice = minimumPriceSource ? cleanText(data[minimumPriceSource] ?? '') : '';
+    if (minimumPriceSource && rawMinimumPrice) {
+      const exactMinimumPrice = parseExactPrice(rawMinimumPrice);
+      if (exactMinimumPrice !== null) data[minimumPriceSource] = exactMinimumPrice;
+      else {
+        data[minimumPriceSource] = '';
+        hasFlexiblePrice = true;
+      }
+    }
+
+    const rawPrice = priceSource ? cleanText(data[priceSource] ?? '') : '';
+    if (!priceSource || !rawPrice) return { ...row, data };
     const exactPrice = parseExactPrice(rawPrice);
-    if (exactPrice !== null) return { ...row, data: { ...row.data, [priceSource]: exactPrice } };
+    if (exactPrice !== null) {
+      data[priceSource] = exactPrice;
+      return { ...row, data };
+    }
+    data[priceSource] = '';
     hasFlexiblePrice = true;
     const currentNote = cleanText(row.data[internal.priceNote] ?? '');
     return {
       ...row,
       data: {
-        ...row.data,
-        [priceSource]: '',
+        ...data,
         [internal.priceNote]: currentNote && currentNote !== rawPrice ? `${currentNote}; ${rawPrice}` : rawPrice,
         [internal.review]: 'Да',
         [internal.priceType]: 'Плавающая',
@@ -89,14 +105,50 @@ export async function parseImportFile(file: File): Promise<ParsedImportFile> {
     throw new Error('Поддерживаются Excel XLS/XLSX, CSV, TSV, TXT и таблицы Word DOCX');
   }
 
+  const blockedReason = detectNonImportReport(file.name, parsed.sheetName, parsed.columns, parsed.rows);
   const candidates = detectImportKind(parsed.columns, parsed.rows);
-  const detectedKind = candidates[0]?.confidence >= 0.42 ? candidates[0].kind : null;
+  const detectedKind = !blockedReason && candidates[0]?.confidence >= 0.42 ? candidates[0].kind : null;
   return {
     ...parsed,
     warnings: parsed.warnings ?? [],
+    blockedReason,
     detectedKind,
     kindCandidates: candidates,
   };
+}
+
+export function detectNonImportReport(
+  fileName: string,
+  sheetName: string | undefined,
+  columns: string[],
+  rows: VetafImportRow[],
+) {
+  const normalizedFile = normalizeHeader(fileName.replace(/\.[^.]+$/, ''));
+  const normalizedSheet = normalizeHeader(sheetName ?? '');
+  const normalizedColumns = new Set(columns.map(normalizeHeader));
+  const sampleText = rows
+    .slice(0, 80)
+    .flatMap((row) => Object.values(row.data))
+    .map(normalizeHeader)
+    .join(' ');
+  const hasSummaryColumns = normalizedColumns.has('показатель')
+    && normalizedColumns.has('количество')
+    && (normalizedColumns.has('контроль') || normalizedColumns.has('результат') || normalizedColumns.has('ожидается'));
+  const summaryMarkers = [
+    'владельцыспациентами',
+    'владельцыбезпациентов',
+    'блокирующиеошибки',
+    'строкифайладляпроверкивcrm',
+    'точныедатыпоследнегопосещения',
+    'неразрешенныедаты',
+  ].filter((marker) => sampleText.includes(marker)).length;
+  const looksLikePreparedCheck = normalizedFile.includes('проверк')
+    && (normalizedSheet.includes('сводк') || normalizedSheet.includes('проверк') || normalizedSheet.includes('пояснен'));
+
+  if ((hasSummaryColumns && summaryMarkers >= 2) || (looksLikePreparedCheck && summaryMarkers >= 1)) {
+    return 'Это контрольный отчёт, а не файл с карточками. Его не нужно переносить в CRM. Выберите файл «Клиенты-и-пациенты.csv» из этой же папки.';
+  }
+  return null;
 }
 
 export function detectImportKind(columns: string[], rows: VetafImportRow[]): ImportKindCandidate[] {
@@ -185,7 +237,7 @@ async function parseExcelWorkbook(file: File, formatLabel: 'Excel XLS' | 'Excel 
     const sheet = workbook.Sheets[sheetName];
     const table = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '', raw: false, dateNF: 'dd.mm.yyyy' })
       .map((row) => row.map(cellToText));
-    return { sheetName, table, score: headerTableScore(table) };
+    return { sheetName, table, score: headerTableScore(table, sheetName) };
   }).filter((candidate) => candidate.table.some((row) => row.some(Boolean)));
   const selected = candidates.sort((a, b) => b.score - a.score || b.table.length - a.table.length)[0];
   if (!selected) throw new Error('В Excel нет непустых листов');
@@ -333,7 +385,7 @@ function parseExactPrice(value: string) {
   if (/^(бесплатно|б\/п)$/i.test(normalized)) return '0';
   if (/(^|\s)(от|до|тариф|договорн)/i.test(normalized) || /\d\s*[-–—]\s*\d/.test(normalized)) return null;
   const groupedThousands = /^(?:\d{1,2}(?: \d{3})+|\d{1,3}(?:\.\d{3})+)$/.test(normalized);
-  if (!groupedThousands && !/^\d+(?:,\d{1,2})?$/.test(normalized)) return null;
+  if (!groupedThousands && !/^\d+(?:[.,]\d{1,2})?$/.test(normalized)) return null;
   return groupedThousands ? normalized.replace(/[ .]/g, '') : normalized.replace(',', '.');
 }
 
@@ -347,12 +399,19 @@ function findHeaderRow(rows: string[][]) {
   return best.index;
 }
 
-function headerTableScore(rows: string[][]) {
+function headerTableScore(rows: string[][], sheetName = '') {
   try {
     const index = findHeaderRow(rows);
-    return rows[index].filter((cell) => allKnownAliases.has(normalizeHeader(cell))).length * 100 + rows.length;
+    const normalizedSheet = normalizeHeader(sheetName);
+    const importBonus = /^(импорт|данные|клиентыипациенты|товарыиуслуги)$/.test(normalizedSheet) ? 5_000 : 0;
+    const reportPenalty = /(сводк|проверк|пояснен|инструк)/.test(normalizedSheet) ? 5_000 : 0;
+    return rows[index].filter((cell) => allKnownAliases.has(normalizeHeader(cell))).length * 100
+      + Math.min(rows.length, 2_000)
+      + importBonus
+      - reportPenalty;
   } catch {
-    return rows.length;
+    const normalizedSheet = normalizeHeader(sheetName);
+    return /(сводк|проверк|пояснен|инструк)/.test(normalizedSheet) ? -10_000 : rows.length;
   }
 }
 
@@ -445,7 +504,7 @@ const importKinds: DataTransferKind[] = ['clients', 'history', 'catalog', 'stock
 
 const targetAliases: Record<DataTransferKind, Record<string, string[]>> = {
   clients: {
-    source_id: ['id', 'внешний id', 'идентификатор', 'id строки'],
+    source_id: ['id', 'внешний id', 'id в прежней системе', 'идентификатор', 'id строки'],
     owner_source_id: ['id владельца', 'owner id'], animal_source_id: ['id пациента', 'id животного', 'animal id'],
     owner_name: ['владелец', 'фио', 'фио владельца', 'клиент', 'заказчик'], phone: ['телефон', 'мобильный', 'phone', 'номер телефона'],
     extra_phone: ['доп телефон', 'дополнительный телефон'], email: ['email', 'e-mail', 'почта'], address: ['адрес', 'место жительства'],
@@ -455,7 +514,7 @@ const targetAliases: Record<DataTransferKind, Record<string, string[]>> = {
     vaccination_title: ['вакцинация', 'вакцина'], vaccinated_at: ['дата вакцинации'], vaccination_due_at: ['следующая вакцинация', 'ревакцинация'], vaccination_series: ['серия вакцины'],
   },
   history: {
-    source_id: ['id', 'внешний id', 'id записи'], owner_name: ['владелец', 'фио владельца', 'клиент'], phone: ['телефон', 'phone'],
+    source_id: ['id', 'внешний id', 'id в прежней системе', 'id записи'], owner_name: ['владелец', 'фио владельца', 'клиент'], phone: ['телефон', 'phone'],
     animal_name: ['кличка', 'пациент', 'животное'], species: ['вид'], breed: ['порода'], microchip: ['микрочип', 'чип'],
     visit_date: ['дата приема', 'дата приёма', 'прием', 'визит', 'дата обращения'], doctor: ['врач', 'доктор'], visit_type: ['тип приема', 'тип приёма'],
     purpose: ['причина обращения', 'цель приема'], anamnesis: ['анамнез'], examination: ['осмотр'], symptoms: ['симптомы', 'жалобы'],
@@ -463,13 +522,13 @@ const targetAliases: Record<DataTransferKind, Record<string, string[]>> = {
     care_notes: ['рекомендации'], amount: ['сумма счета', 'стоимость'], bill_status: ['статус оплаты'], document_title: ['название документа'], document_body: ['текст документа'],
   },
   catalog: {
-    source_id: ['id', 'внешний id', 'код', 'id строки'], item_type: ['тип', 'тип позиции', 'вид позиции'], title: ['наименование', 'название', 'товар', 'услуга'],
+    source_id: ['id', 'внешний id', 'id в прежней системе', 'код', 'id строки'], item_type: ['тип', 'тип позиции', 'вид позиции'], title: ['наименование', 'название', 'товар', 'услуга'],
     category: ['категория', 'группа', 'раздел'], sku: ['артикул', 'sku'], barcode: ['штрихкод', 'штрих код', 'barcode'], price: ['цена', 'цена продажи', 'стоимость', 'цена в рублях'],
     minimum_price: ['минимальная цена', 'мин цена'], price_type: ['тип цены', 'вид цены', 'фиксированная цена', 'плавающая цена'], unit: ['единица', 'ед изм', 'ед. изм.', 'единица измерения'], min_stock: ['минимальный остаток', 'мин остаток'],
     description: ['описание', 'комментарий', 'примечание'], price_note: ['исходная цена', 'текст цены', 'тариф'], review_status: ['требует проверки', 'проверка цены'],
   },
   stock: {
-    source_id: ['id', 'внешний id', 'код'], title: ['наименование', 'название', 'товар'], category: ['категория', 'группа'], sku: ['артикул', 'sku'], barcode: ['штрихкод', 'barcode'],
+    source_id: ['id', 'внешний id', 'id в прежней системе', 'код'], title: ['наименование', 'название', 'товар'], category: ['категория', 'группа'], sku: ['артикул', 'sku'], barcode: ['штрихкод', 'barcode'],
     unit: ['единица', 'ед изм', 'единица измерения'], quantity: ['остаток', 'количество', 'количество на складе'], price: ['цена продажи', 'цена'],
     purchase_price: ['закупочная цена', 'себестоимость'], min_stock: ['минимальный остаток'], warehouse: ['склад', 'место хранения'],
     expires_at: ['срок годности', 'годен до'], series: ['серия', 'партия'], description: ['описание', 'комментарий'],
