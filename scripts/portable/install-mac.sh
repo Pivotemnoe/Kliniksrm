@@ -172,6 +172,23 @@ select_portable_application_images() {
   done
 }
 
+normalize_windows_scripts_for_mac() {
+  local file temporary_file permissions
+
+  # Windows-копия внутри portable-комплекта специально хранится в CRLF, а
+  # PowerShell-файлы ещё и с UTF-8 BOM. После копирования на Mac возвращаем
+  # исходный Unix-формат этих же файлов, чтобы обновление не меняло рабочее
+  # дерево проекта только из-за кодировки.
+  while IFS= read -r -d '' file; do
+    temporary_file="${file}.mac-normalized"
+    permissions="$(stat -f '%Lp' "$file" 2>/dev/null || printf '644')"
+    LC_ALL=C awk 'NR == 1 { sub(/^\357\273\277/, "") } { sub(/\r$/, ""); print }' \
+      "$file" > "$temporary_file"
+    chmod "$permissions" "$temporary_file"
+    mv "$temporary_file" "$file"
+  done < <(find "$INSTALL_DIR" -type f \( -name '*.ps1' -o -name '*.bat' -o -name '*.cmd' \) -print0)
+}
+
 capture_existing_infrastructure
 
 if [[ "$UPDATE" == "true" || -d "$INSTALL_DIR" ]]; then
@@ -203,9 +220,15 @@ if [[ "$SKIP_COPY" != "true" ]]; then
     --exclude '*.tsbuildinfo' \
     --exclude '*.log' \
     "$SOURCE_DIR/" "$INSTALL_DIR/"
+
+  normalize_windows_scripts_for_mac
 fi
 
-chmod +x "$INSTALL_DIR"/scripts/*.sh "$INSTALL_DIR"/start-temichevvet.command 2>/dev/null || true
+chmod +x \
+  "$INSTALL_DIR/scripts/portable/install-mac.sh" \
+  "$INSTALL_DIR/scripts/start-clinic-server.sh" \
+  "$INSTALL_DIR/start-temichevvet.command" \
+  2>/dev/null || true
 
 if [[ -f "$IMAGES_TAR" ]]; then
   [[ -f "$IMAGES_SHA256" ]] || { echo "Не найден SHA-256 архива Docker-образов." >&2; exit 1; }

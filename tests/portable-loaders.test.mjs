@@ -29,6 +29,9 @@ test('Mac-обновление существующей CRM меняет тол�
   assert.match(installer, /TEMICHEVVET_API_IMAGE=temichevvet-api:local/);
   assert.match(installer, /TEMICHEVVET_WEB_IMAGE=temichevvet-web:local/);
   assert.match(installer, /start-clinic-server\.sh" --app-only --open --no-image-update/);
+  assert.match(installer, /normalize_windows_scripts_for_mac/);
+  assert.match(installer, /sub\(\/\^\\357\\273\\277\//);
+  assert.doesNotMatch(installer, /chmod \+x "\$INSTALL_DIR"\/scripts\/\*\.sh/);
 
   assert.match(starter, /--app-only/);
   assert.match(starter, /docker_compose up -d --no-build --no-deps --force-recreate api web/);
