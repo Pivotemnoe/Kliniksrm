@@ -119,6 +119,8 @@ test('сборщик Windows-комплекта проверяет именно 
 
   assert.match(creator, /git -C "\$ROOT_DIR" archive --format=tar HEAD \| tar -xf - -C "\$TMP_DIR\/CRM"/);
   assert.match(creator, /xattr -cr "\$target"/);
+  assert.match(creator, /Настроить диск для резервного хранения - Windows\.bat/);
+  assert.doesNotMatch(creator, /Настроить отдельный диск резервных копий - Windows\.bat/);
   assert.match(creator, /docker compose config --images \| sort -u/);
   assert.match(creator, /docker image inspect --platform "\$PLATFORM" "\$image"/);
   assert.match(creator, /docker image inspect --platform "\$PLATFORM" --format '\{\{\.Id\}\}'/);
