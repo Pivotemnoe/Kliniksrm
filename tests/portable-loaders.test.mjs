@@ -115,6 +115,7 @@ test('Windows-обновление проверяет архив, архитек
 test('сборщик Windows-комплекта проверяет именно amd64-варианты без дублей', async () => {
   const creator = await read('scripts/create-portable-flash.sh');
 
+  assert.match(creator, /git -C "\$ROOT_DIR" archive --format=tar HEAD \| tar -xf - -C "\$TMP_DIR\/CRM"/);
   assert.match(creator, /docker compose config --images \| sort -u/);
   assert.match(creator, /docker image inspect --platform "\$PLATFORM" "\$image"/);
   assert.match(creator, /docker image inspect --platform "\$PLATFORM" --format '\{\{\.Id\}\}'/);

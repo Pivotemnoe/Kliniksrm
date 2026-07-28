@@ -204,28 +204,34 @@ rm -rf "$TMP_DIR"
 mkdir -p "$TMP_DIR/CRM" "$TMP_DIR/portable"
 
 echo "Копирую чистую CRM..."
-rsync -a \
-  "${RSYNC_MACOS_EXCLUDES[@]}" \
-  --exclude '.git/' \
-  --exclude 'node_modules/' \
-  --exclude 'backups/' \
-  --exclude 'dist/' \
-  --exclude '.cache/' \
-  --exclude '.tmp/' \
-  --exclude 'coverage/' \
-  --exclude 'installers/' \
-  --exclude 'docker-images/' \
-  --exclude 'TemichevVet-Portable/' \
-  --exclude 'TemichevVet-Portable.tmp/' \
-  --exclude '.env' \
-  --exclude '.env.runtime' \
-  --exclude '.env.local' \
-  --exclude '.env.development' \
-  --exclude '.env.production' \
-  --exclude '.env.test' \
-  --exclude '*.tsbuildinfo' \
-  --exclude '*.log' \
-  "$ROOT_DIR/" "$TMP_DIR/CRM/"
+if [[ "$GIT_COMMIT" != "local" ]] && command -v tar >/dev/null 2>&1; then
+  echo "Источник кода: зафиксированный Git-коммит $GIT_COMMIT"
+  git -C "$ROOT_DIR" archive --format=tar HEAD | tar -xf - -C "$TMP_DIR/CRM"
+else
+  echo "Предупреждение: Git-коммит недоступен; использую очищенную копию рабочей папки."
+  rsync -a \
+    "${RSYNC_MACOS_EXCLUDES[@]}" \
+    --exclude '.git/' \
+    --exclude 'node_modules/' \
+    --exclude 'backups/' \
+    --exclude 'dist/' \
+    --exclude '.cache/' \
+    --exclude '.tmp/' \
+    --exclude 'coverage/' \
+    --exclude 'installers/' \
+    --exclude 'docker-images/' \
+    --exclude 'TemichevVet-Portable/' \
+    --exclude 'TemichevVet-Portable.tmp/' \
+    --exclude '.env' \
+    --exclude '.env.runtime' \
+    --exclude '.env.local' \
+    --exclude '.env.development' \
+    --exclude '.env.production' \
+    --exclude '.env.test' \
+    --exclude '*.tsbuildinfo' \
+    --exclude '*.log' \
+    "$ROOT_DIR/" "$TMP_DIR/CRM/"
+fi
 
 cp "$ROOT_DIR/scripts/portable/README.txt" "$TMP_DIR/README-mac-linux.txt"
 
