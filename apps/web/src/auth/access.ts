@@ -61,6 +61,7 @@ const routeAccessRules: RouteAccessRule[] = [
   { path: '/stock', anyOf: ['stock.read'] },
   { path: '/news', anyOf: ['news.read'] },
   { path: '/dashboard', anyOf: ['dashboard.read'] },
+  { path: '/help' },
   { path: '/profile' },
 ];
 

@@ -7,6 +7,342 @@ body,
   margin: 0;
 }
 
+.help-page {
+  scroll-behavior: smooth;
+}
+
+.help-intro-alert {
+  margin-bottom: 16px;
+}
+
+.help-toolbar {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(520px, 0.9fr);
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.help-layout {
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.help-contents {
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 112px);
+  overflow: auto;
+  padding: 16px;
+  border: 1px solid #dfe3e8;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.help-contents-title {
+  margin-bottom: 4px;
+  color: #18202b;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.help-contents nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 12px;
+}
+
+.help-contents a {
+  padding: 7px 8px;
+  border-radius: 6px;
+  color: #4b5563;
+  font-size: 13px;
+  line-height: 1.35;
+  text-decoration: none;
+}
+
+.help-contents a:hover {
+  color: #1d4ed8;
+  background: #eff6ff;
+}
+
+.help-guides {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.help-guide-card {
+  scroll-margin-top: 16px;
+  border-radius: 8px;
+}
+
+.help-guide-card > .ant-card-body {
+  padding: 20px;
+}
+
+.help-guide-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.help-guide-heading h3.ant-typography {
+  margin: 0 0 6px;
+  font-size: 21px;
+}
+
+.help-guide-heading .ant-typography {
+  margin-bottom: 0;
+}
+
+.help-screen-map {
+  margin: 16px 0 20px;
+  overflow: hidden;
+  border: 1px solid #dbe5f1;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.help-screen-map-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 12px;
+  border-bottom: 1px solid #dbe5f1;
+  background: #edf4fc;
+}
+
+.help-screen-map-bar > span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #aab8c8;
+}
+
+.help-screen-map-bar strong {
+  margin-left: 6px;
+  color: #526273;
+  font-size: 12px;
+}
+
+.help-screen-map-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 14px;
+}
+
+.help-screen-map-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #334155;
+}
+
+.help-screen-map-step > span {
+  display: inline-flex;
+  width: 25px;
+  height: 25px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #ffffff;
+  background: #2563eb;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.help-screen-map-step > strong {
+  padding: 7px 10px;
+  border: 1px solid #d6e2ef;
+  border-radius: 6px;
+  background: #ffffff;
+  font-size: 13px;
+}
+
+.help-screen-map-step > .anticon {
+  color: #7b8a9a;
+}
+
+.help-guide-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr);
+  gap: 22px;
+}
+
+.help-guide-columns h4.ant-typography {
+  margin: 0 0 12px;
+  font-size: 16px;
+}
+
+.help-step-list {
+  margin: 0;
+  padding-left: 28px;
+}
+
+.help-step-list li {
+  margin-bottom: 9px;
+  padding-left: 4px;
+  color: #273444;
+  line-height: 1.55;
+}
+
+.help-step-list li::marker {
+  color: #2563eb;
+  font-weight: 700;
+}
+
+.help-check-panel {
+  padding: 15px;
+  border: 1px solid #dce9df;
+  border-radius: 8px;
+  background: #f7fcf8;
+}
+
+.help-check-panel ul {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+}
+
+.help-check-panel li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: #294437;
+  line-height: 1.45;
+}
+
+.help-check-panel li .anticon {
+  margin-top: 3px;
+  color: #22a35a;
+}
+
+.help-guide-action {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #edf0f3;
+}
+
+.help-empty-card {
+  min-height: 320px;
+}
+
+@media (max-width: 1100px) {
+  .help-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .help-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .help-contents {
+    position: static;
+    max-height: none;
+  }
+
+  .help-contents nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .help-toolbar .ant-segmented-group {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .help-contents nav,
+  .help-guide-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .help-guide-heading {
+    flex-direction: column;
+  }
+
+  .help-screen-map-body {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .help-screen-map-step {
+    display: grid;
+    grid-template-columns: 25px minmax(0, 1fr);
+  }
+
+  .help-screen-map-step > .anticon {
+    display: none;
+  }
+
+  .help-guide-action .ant-btn {
+    width: 100%;
+  }
+}
+
+@media print {
+  .crm-sider,
+  .crm-header,
+  .help-intro-alert,
+  .help-toolbar,
+  .help-contents,
+  .help-print-actions,
+  .help-guide-action {
+    display: none !important;
+  }
+
+  .crm-content {
+    height: auto;
+    overflow: visible;
+    background: #ffffff;
+  }
+
+  .page.help-page {
+    padding: 0;
+  }
+
+  .help-layout {
+    display: block;
+  }
+
+  .help-guides {
+    gap: 8mm;
+  }
+
+  .help-guide-card {
+    break-inside: auto;
+    border-color: #cbd5e1;
+    box-shadow: none !important;
+  }
+
+  .help-guide-card > .ant-card-body {
+    padding: 6mm;
+  }
+
+  .help-guide-heading h3.ant-typography {
+    font-size: 17pt;
+  }
+
+  .help-screen-map,
+  .help-check-panel {
+    break-inside: avoid;
+  }
+}
+
 body {
   color: #202226;
   background: #f2f4f6;

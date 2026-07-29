@@ -19,6 +19,7 @@ import {
   NotificationOutlined,
   OrderedListOutlined,
   ProfileOutlined,
+  ReadOutlined,
   SettingOutlined,
   ShopOutlined,
   SolutionOutlined,
@@ -85,6 +86,7 @@ export const menuItems: MenuProps['items'] = [
       { key: '/settings/import', icon: <ExportOutlined />, label: 'Перенос данных' },
     ],
   },
+  { key: '/help', icon: <ReadOutlined />, label: 'Инструкция' },
 ];
 
 export function getAccessibleMenuItems(employee: Employee | undefined): MenuProps['items'] {
@@ -123,6 +125,7 @@ export const pageTitles: Record<string, string> = {
   system: 'Система',
   support: 'Поддержка и лицензия',
   import: 'Перенос данных',
+  help: 'Инструкция',
 };
 
 export const pageDescriptions: Record<string, string> = {
@@ -157,6 +160,7 @@ export const pageDescriptions: Record<string, string> = {
   system: 'Состояние CRM, автоматические резервные копии и безопасное обновление.',
   support: 'Обращения, лицензия установки и финальная приёмка нового сервера.',
   import: 'Перенос клиентов, пациентов, товаров и остатков из другой системы.',
+  help: 'Подробная пошаговая инструкция для врачей, администраторов и директора.',
 };
 
 export type PageKey = keyof typeof pageTitles;

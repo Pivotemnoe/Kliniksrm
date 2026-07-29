@@ -11,6 +11,7 @@ import { EmployeesPage } from '../features/employees/EmployeesPage';
 import { FinanceSettingsPage } from '../features/finance/FinanceSettingsPage';
 import { HospitalPage } from '../features/hospital/HospitalPage';
 import { HospitalCardPage } from '../features/hospital/HospitalCardPage';
+import { HelpPage } from '../features/help/HelpPage';
 import { BillCardPage } from '../features/billing/BillCardPage';
 import { BillsPage } from '../features/billing/BillsPage';
 import { VetafImportPage } from '../features/imports/VetafImportPage';
@@ -82,6 +83,7 @@ export const routes: RouteObject[] = [
           { path: '/daily-finance', element: <DailyFinancePage /> },
           { path: '/business', element: <BusinessPage /> },
           { path: '/profile', element: <ProfilePage /> },
+          { path: '/help', element: <HelpPage /> },
           { path: '/news', element: <NewsPage /> },
           { path: '/schedule', element: <AppointmentsPage /> },
           { path: '/schedule/:appointmentId', element: <AppointmentCardPage /> },
