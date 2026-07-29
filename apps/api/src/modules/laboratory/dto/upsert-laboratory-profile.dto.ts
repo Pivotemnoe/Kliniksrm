@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { IsArray, IsBoolean, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 export class UpsertLaboratoryProfileDto {
   @ApiProperty()
@@ -38,6 +38,7 @@ export class UpsertLaboratoryProfileDto {
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(20)
   @IsUUID('4', { each: true })
   testIds?: string[];
 }

@@ -52,11 +52,12 @@ export type BillItem = {
   id: string;
   billId: string;
   productId: string | null;
-  product?: Pick<Product, 'id' | 'title' | 'retailPrice'> | null;
+  product?: Pick<Product, 'id' | 'title' | 'retailPrice' | 'stockUnit' | 'writeOffUnit' | 'billingUnit'> | null;
   serviceId: string | null;
   service?: Pick<ServiceItem, 'id' | 'title' | 'price'> | null;
   title: string;
   quantity: DecimalValue;
+  stockQuantity: DecimalValue | null;
   unitPrice: DecimalValue;
   discount: DecimalValue;
   totalAmount: DecimalValue;
@@ -151,6 +152,7 @@ export type BillItemMutationInput = {
   productId?: string;
   title?: string;
   quantity?: number;
+  stockQuantity?: number;
   unitPrice?: number;
   discount?: number;
 };

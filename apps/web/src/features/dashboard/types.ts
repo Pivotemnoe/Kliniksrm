@@ -130,7 +130,8 @@ export type DashboardVisitItem = {
   } | null;
 };
 
-export type DashboardHospitalItem = DashboardVisitItem & {
+export type DashboardHospitalItem = Omit<DashboardVisitItem, 'status'> & {
+  status: 'ACTIVE' | 'DISCHARGED' | 'CANCELLED';
   hospitalBox: { id: string; name: string } | null;
 };
 

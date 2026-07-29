@@ -87,7 +87,7 @@ export function VisitExamTab({ visit, canManage, locked }: VisitExamTabProps) {
             </Form.Item>
           )}
         />
-        {visit.hospitalBoxId ? (
+        {visit.hospitalStay ? (
           <Form.Item label="Тип обращения">
             <Input value="Стационар" readOnly />
           </Form.Item>
@@ -241,7 +241,7 @@ function getDefaultValues(visit: Visit): ExamInput {
   return {
     weightKg: nullToEmpty(visit.exam?.weightKg ? String(visit.exam.weightKg) : undefined),
     temperatureC: nullToEmpty(visit.exam?.temperatureC ? String(visit.exam.temperatureC) : undefined),
-    visitType: visit.hospitalBoxId ? undefined : visit.visitType ?? 'PRIMARY',
+    visitType: visit.hospitalStay ? undefined : visit.visitType ?? 'PRIMARY',
     anamnesis: mergeText(visit.exam?.purpose, visit.exam?.anamnesis),
     examination: nullToEmpty(visit.exam?.examination),
     symptoms: nullToEmpty(visit.exam?.symptoms),

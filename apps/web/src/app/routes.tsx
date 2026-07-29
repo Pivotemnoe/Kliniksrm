@@ -97,7 +97,7 @@ export const routes: RouteObject[] = [
           { path: '/visits/:visitId', element: <VisitCardPage /> },
           { path: '/laboratory', element: <LaboratoryPage /> },
           { path: '/hospital', element: <HospitalPage /> },
-          { path: '/hospital/:visitId', element: <HospitalCardPage /> },
+          { path: '/hospital/:stayId', element: <HospitalCardPage /> },
           { path: '/bills', element: <BillsPage /> },
           { path: '/bills/:billId', element: <BillCardPage /> },
           { path: '/sales', element: <SalesPage /> },

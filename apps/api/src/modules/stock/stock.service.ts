@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { randomInt } from 'node:crypto';
 import { Prisma, StockMovementType } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
 import { AuditService } from '../audit/audit.service';
@@ -9,6 +10,7 @@ import { UpdateProductDto } from './dto/update-product.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
 import { UpsertProductDto } from './dto/upsert-product.dto';
 import { UpsertServiceDto } from './dto/upsert-service.dto';
+import { unitsNeedConversion } from './stock-units';
 
 type WarehouseScope = string[] | null;
 
@@ -21,7 +23,7 @@ export class StockService {
 
   async getResources(actorId: string) {
     const warehouseScope = await this.getWarehouseScope(actorId);
-    const [warehouses, productCategories, serviceCategories, suppliers, cashboxes, paymentMethods] = await this.prisma.$transaction([
+    const [warehouses, productCategories, serviceCategories, suppliers, cashboxes, paymentMethods, organization] = await this.prisma.$transaction([
       this.prisma.warehouse.findMany({
         where: warehouseScope ? { id: { in: warehouseScope } } : undefined,
         orderBy: { name: 'asc' },
@@ -39,9 +41,13 @@ export class StockService {
         select: { id: true, officeId: true, title: true },
       }),
       this.prisma.paymentMethod.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: 'asc' }, { title: 'asc' }], select: { id: true, title: true, type: true } }),
+      this.prisma.organization.findFirst({
+        orderBy: { createdAt: 'asc' },
+        select: { displayName: true, legalName: true, orgType: true, inn: true },
+      }),
     ]);
 
-    return { warehouses, productCategories, serviceCategories, suppliers, cashboxes, paymentMethods };
+    return { warehouses, productCategories, serviceCategories, suppliers, cashboxes, paymentMethods, organization };
   }
 
   async listProducts(query: ListStockQueryDto, actorId: string) {
@@ -114,6 +120,8 @@ export class StockService {
 
   async createProduct(dto: UpsertProductDto, actorId: string) {
     const categoryId = await this.resolveProductCategoryId(dto);
+    this.ensureUnitConfiguration(dto.stockUnit, dto.writeOffUnit, dto.packageQuantity);
+    const barcode = await this.resolveBarcode(dto.barcode, dto.generateBarcode);
 
     const product = await this.prisma.product.create({
       data: {
@@ -121,14 +129,16 @@ export class StockService {
         title: dto.title.trim(),
         sku: clean(dto.sku),
         gtin: clean(dto.gtin),
-        barcode: clean(dto.barcode),
+        barcode,
         vatRate: dto.vatRate,
         retailPrice: dto.retailPrice ?? 0,
         stockUnit: clean(dto.stockUnit),
         writeOffUnit: clean(dto.writeOffUnit),
+        billingUnit: clean(dto.billingUnit) ?? clean(dto.writeOffUnit) ?? clean(dto.stockUnit),
         packageQuantity: dto.packageQuantity,
         minStock: dto.minStock,
         shelfLifeDays: dto.shelfLifeDays,
+        defaultExpiresAt: dto.defaultExpiresAt ? new Date(dto.defaultExpiresAt) : undefined,
         description: clean(dto.description),
       },
       include: productInclude,
@@ -173,8 +183,13 @@ export class StockService {
   }
 
   async updateProduct(productId: string, dto: UpdateProductDto, actorId: string) {
-    await this.ensureProductExists(productId);
+    const existing = await this.ensureProductExists(productId);
     const categoryId = await this.resolveProductCategoryId(dto);
+    const stockUnit = dto.stockUnit !== undefined ? clean(dto.stockUnit) : existing.stockUnit ?? undefined;
+    const writeOffUnit = dto.writeOffUnit !== undefined ? clean(dto.writeOffUnit) : existing.writeOffUnit ?? undefined;
+    const packageQuantity = dto.packageQuantity !== undefined ? dto.packageQuantity : decimalToOptionalNumber(existing.packageQuantity);
+    this.ensureUnitConfiguration(stockUnit, writeOffUnit, packageQuantity);
+    const barcode = await this.resolveBarcode(dto.barcode, dto.generateBarcode, existing.barcode ?? undefined, dto.barcode !== undefined);
 
     const product = await this.prisma.product.update({
       where: { id: productId },
@@ -183,14 +198,16 @@ export class StockService {
         ...(categoryId !== undefined ? { categoryId } : {}),
         ...(dto.sku !== undefined ? { sku: clean(dto.sku) } : {}),
         ...(dto.gtin !== undefined ? { gtin: clean(dto.gtin) } : {}),
-        ...(dto.barcode !== undefined ? { barcode: clean(dto.barcode) } : {}),
+        ...(dto.barcode !== undefined || dto.generateBarcode ? { barcode } : {}),
         ...(dto.vatRate !== undefined ? { vatRate: dto.vatRate } : {}),
         ...(dto.retailPrice !== undefined ? { retailPrice: dto.retailPrice } : {}),
         ...(dto.stockUnit !== undefined ? { stockUnit: clean(dto.stockUnit) } : {}),
         ...(dto.writeOffUnit !== undefined ? { writeOffUnit: clean(dto.writeOffUnit) } : {}),
+        ...(dto.billingUnit !== undefined ? { billingUnit: clean(dto.billingUnit) } : {}),
         ...(dto.packageQuantity !== undefined ? { packageQuantity: dto.packageQuantity } : {}),
         ...(dto.minStock !== undefined ? { minStock: dto.minStock } : {}),
         ...(dto.shelfLifeDays !== undefined ? { shelfLifeDays: dto.shelfLifeDays } : {}),
+        ...(dto.defaultExpiresAt !== undefined ? { defaultExpiresAt: dto.defaultExpiresAt ? new Date(dto.defaultExpiresAt) : null } : {}),
         ...(dto.description !== undefined ? { description: clean(dto.description) } : {}),
       },
       include: productInclude,
@@ -616,10 +633,54 @@ export class StockService {
   }
 
   private async ensureProductExists(productId: string) {
-    const product = await this.prisma.product.findUnique({ where: { id: productId }, select: { id: true } });
+    const product = await this.prisma.product.findUnique({
+      where: { id: productId },
+      select: { id: true, barcode: true, stockUnit: true, writeOffUnit: true, packageQuantity: true },
+    });
     if (!product) {
       throw new NotFoundException('Product not found');
     }
+
+    return product;
+  }
+
+  private ensureUnitConfiguration(stockUnit?: string, writeOffUnit?: string, packageQuantity?: number) {
+    if (unitsNeedConversion(stockUnit, writeOffUnit) && (!packageQuantity || packageQuantity <= 0)) {
+      throw new BadRequestException('Укажите, сколько единиц использования содержится в одной учётной единице');
+    }
+  }
+
+  private async resolveBarcode(barcode?: string, generateBarcode?: boolean, currentBarcode?: string, barcodeWasProvided = false) {
+    const explicit = clean(barcode);
+    if (explicit) {
+      if (!/^\d{4,32}$/.test(explicit)) {
+        throw new BadRequestException('Штрих-код должен содержать только цифры');
+      }
+
+      if (explicit !== currentBarcode) {
+        const duplicate = await this.prisma.product.findFirst({ where: { barcode: explicit }, select: { id: true } });
+        if (duplicate) {
+          throw new BadRequestException('Такой штрих-код уже назначен другому товару');
+        }
+      }
+
+      return explicit;
+    }
+
+    if (!generateBarcode) {
+      return barcodeWasProvided ? null : currentBarcode;
+    }
+
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const body = `20${String(randomInt(0, 10_000_000_000)).padStart(10, '0')}`;
+      const candidate = `${body}${ean13CheckDigit(body)}`;
+      const exists = await this.prisma.product.findFirst({ where: { barcode: candidate }, select: { id: true } });
+      if (!exists) {
+        return candidate;
+      }
+    }
+
+    throw new BadRequestException('Не удалось создать уникальный внутренний штрих-код. Повторите попытку.');
   }
 
   private async ensureServiceExists(serviceId: string) {
@@ -708,4 +769,13 @@ function decimal(value: number | string | Prisma.Decimal) {
 function clean(value: string | undefined) {
   const trimmed = value?.trim();
   return trimmed || undefined;
+}
+
+function decimalToOptionalNumber(value: Prisma.Decimal | null) {
+  return value === null ? undefined : value.toNumber();
+}
+
+function ean13CheckDigit(firstTwelveDigits: string) {
+  const sum = [...firstTwelveDigits].reduce((total, digit, index) => total + Number(digit) * (index % 2 === 0 ? 1 : 3), 0);
+  return (10 - (sum % 10)) % 10;
 }

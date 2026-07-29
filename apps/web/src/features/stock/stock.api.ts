@@ -40,12 +40,20 @@ export function createProduct(input: ProductMutationInput) {
   return apiRequest<Product>('/v1/stock/products', { method: 'POST', body: input });
 }
 
+export function updateProduct(productId: string, input: ProductMutationInput) {
+  return apiRequest<Product>(`/v1/stock/products/${productId}`, { method: 'PATCH', body: input });
+}
+
 export function listServices(query: StockListQuery) {
   return apiRequest<PaginatedResponse<ServiceItem>>(`/v1/stock/services${buildQuery(query)}`);
 }
 
 export function createService(input: ServiceMutationInput) {
   return apiRequest<ServiceItem>('/v1/stock/services', { method: 'POST', body: input });
+}
+
+export function updateService(serviceId: string, input: ServiceMutationInput) {
+  return apiRequest<ServiceItem>(`/v1/stock/services/${serviceId}`, { method: 'PATCH', body: input });
 }
 
 export function listStockBatches(query: StockListQuery) {

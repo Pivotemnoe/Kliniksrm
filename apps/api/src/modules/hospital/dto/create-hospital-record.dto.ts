@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import { IsDateString, IsIn, IsNumber, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
 
 export const hospitalRecordTypes = [
@@ -29,7 +30,8 @@ export class CreateHospitalRecordDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsNumber()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 1 })
   @Min(30)
   @Max(45)
   temperatureC?: number;

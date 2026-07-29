@@ -27,6 +27,9 @@ import { visitStatusColors, visitStatusLabels } from '../visits/types';
 import { getDashboardToday } from './dashboard.api';
 import { DashboardQueueItem, DashboardSummary } from './types';
 
+const hospitalStatusLabels = { ACTIVE: 'В стационаре', DISCHARGED: 'Выписан', CANCELLED: 'Отменён' } as const;
+const hospitalStatusColors = { ACTIVE: 'blue', DISCHARGED: 'green', CANCELLED: 'default' } as const;
+
 export function DashboardPage() {
   const navigate = useNavigate();
   const { data: auth } = useCurrentEmployee();
@@ -228,12 +231,12 @@ export function DashboardPage() {
             dataSource={todayVisits}
             locale={{ emptyText: 'Приёмов сегодня нет' }}
             renderItem={(item) => (
-              <List.Item onClick={() => navigate(`/visits/${item.id}`)}>
+              <List.Item onClick={() => navigate(`/hospital/${item.id}`)}>
                 <List.Item.Meta
                   title={`${item.animal?.nickname ?? 'Пациент'} · ${item.owner?.fullName ?? 'Владелец не указан'}`}
                   description={
                     <Space wrap size={6}>
-                      <Tag color={visitStatusColors[item.status]}>{visitStatusLabels[item.status]}</Tag>
+                      <Tag color="processing">В стационаре</Tag>
                       <span>{item.employee?.fullName ?? 'Сотрудник не назначен'}</span>
                       <span>{formatDateTime(item.completedAt ?? item.startedAt)}</span>
                     </Space>
@@ -256,12 +259,12 @@ export function DashboardPage() {
             dataSource={summary?.hospital.items ?? []}
             locale={{ emptyText: 'Пациентов в стационаре нет' }}
             renderItem={(item) => (
-              <List.Item onClick={() => navigate(`/visits/${item.id}`)}>
+              <List.Item onClick={() => navigate(`/hospital/${item.id}`)}>
                 <List.Item.Meta
                   title={`${item.animal?.nickname ?? 'Пациент'} · ${item.hospitalBox?.name ?? 'Бокс не указан'}`}
                   description={
                     <Space wrap size={6}>
-                      <Tag color={visitStatusColors[item.status]}>{visitStatusLabels[item.status]}</Tag>
+                      <Tag color={hospitalStatusColors[item.status]}>{hospitalStatusLabels[item.status]}</Tag>
                       <span>{item.owner?.fullName ?? 'Владелец не указан'}</span>
                     </Space>
                   }

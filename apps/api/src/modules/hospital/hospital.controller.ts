@@ -36,11 +36,11 @@ export class HospitalController {
     return this.hospitalService.admit(dto, actor.id);
   }
 
-  @Get(':visitId')
+  @Get(':stayId')
   @RequirePermissions('hospital.read')
   @ApiOkResponse({ description: 'Hospital stay card.' })
-  getHospitalStay(@Param('visitId') visitId: string) {
-    return this.hospitalService.getHospitalStay(visitId);
+  getHospitalStay(@Param('stayId') stayId: string) {
+    return this.hospitalService.getHospitalStay(stayId);
   }
 
   @Post(':visitId/admit')
@@ -54,35 +54,35 @@ export class HospitalController {
     return this.hospitalService.admitExisting(visitId, dto, actor.id);
   }
 
-  @Post(':visitId/records')
+  @Post(':stayId/records')
   @RequirePermissions('hospital.manage')
   @ApiCreatedResponse({ description: 'A timestamped hospital journal record.' })
   createRecord(
-    @Param('visitId') visitId: string,
+    @Param('stayId') stayId: string,
     @Body() dto: CreateHospitalRecordDto,
     @CurrentEmployee() actor: AuthEmployee,
   ) {
-    return this.hospitalService.createRecord(visitId, dto, actor.id);
+    return this.hospitalService.createRecord(stayId, dto, actor.id);
   }
 
-  @Patch(':visitId')
+  @Patch(':stayId')
   @RequirePermissions('hospital.manage')
   @ApiOkResponse({ description: 'Hospital stay updated.' })
-  updateStay(@Param('visitId') visitId: string, @Body() dto: UpdateHospitalStayDto, @CurrentEmployee() actor: AuthEmployee) {
-    return this.hospitalService.updateStay(visitId, dto, actor.id);
+  updateStay(@Param('stayId') stayId: string, @Body() dto: UpdateHospitalStayDto, @CurrentEmployee() actor: AuthEmployee) {
+    return this.hospitalService.updateStay(stayId, dto, actor.id);
   }
 
-  @Post(':visitId/discharge')
+  @Post(':stayId/discharge')
   @RequirePermissions('hospital.manage')
   @ApiOkResponse({ description: 'Patient discharged from hospital.' })
-  discharge(@Param('visitId') visitId: string, @CurrentEmployee() actor: AuthEmployee) {
-    return this.hospitalService.discharge(visitId, actor.id);
+  discharge(@Param('stayId') stayId: string, @CurrentEmployee() actor: AuthEmployee) {
+    return this.hospitalService.discharge(stayId, actor.id);
   }
 
-  @Post(':visitId/cancel')
+  @Post(':stayId/cancel')
   @RequirePermissions('hospital.manage')
   @ApiOkResponse({ description: 'Hospital stay cancelled.' })
-  cancel(@Param('visitId') visitId: string, @CurrentEmployee() actor: AuthEmployee) {
-    return this.hospitalService.cancel(visitId, actor.id);
+  cancel(@Param('stayId') stayId: string, @CurrentEmployee() actor: AuthEmployee) {
+    return this.hospitalService.cancel(stayId, actor.id);
   }
 }

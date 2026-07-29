@@ -1,10 +1,11 @@
-import { PlusOutlined, PrinterOutlined, ScanOutlined, SearchOutlined } from '@ant-design/icons';
+import { EditOutlined, PlusOutlined, PrinterOutlined, SearchOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Form, Input, InputNumber, Modal, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
+import { Alert, App, AutoComplete, Button, Checkbox, Form, Input, InputNumber, Modal, Radio, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
 import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
-import { useEffect, useMemo, useState } from 'react';
-import { Controller, useForm } from 'react-hook-form';
+import JsBarcode from 'jsbarcode';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Controller, useForm, useWatch } from 'react-hook-form';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
@@ -22,6 +23,8 @@ import {
   listServices,
   listStockBatches,
   listSupplyInvoices,
+  updateProduct,
+  updateService,
 } from './stock.api';
 import { Product, ServiceItem, StockBatch, StockResources, SupplyInvoice } from './types';
 
@@ -37,8 +40,10 @@ export function StockPage() {
   const [offset, setOffset] = useState(0);
   const [productOpen, setProductOpen] = useState(false);
   const [serviceOpen, setServiceOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [editingService, setEditingService] = useState<ServiceItem | null>(null);
+  const [printingProduct, setPrintingProduct] = useState<Product | null>(null);
   const [supplyOpen, setSupplyOpen] = useState(false);
-  const [scannerMode, setScannerMode] = useState(false);
   const resourcesQuery = useQuery({ queryKey: ['stock', 'resources'], queryFn: getStockResources });
 
   useEffect(() => {
@@ -87,19 +92,10 @@ export function StockPage() {
           }}
           tabBarExtraContent={
             <Space wrap>
-              <Button
-                type={scannerMode ? 'primary' : 'default'}
-                icon={<ScanOutlined />}
-                onClick={() => setScannerMode((value) => !value)}
-              >
-                Сканер
-              </Button>
               <Input.Search
-                key={scannerMode ? 'scanner' : 'search'}
                 allowClear
-                autoFocus={scannerMode}
                 enterButton={<SearchOutlined />}
-                placeholder={scannerMode ? 'Сканируйте штрих-код' : 'Название, SKU или штрих-код'}
+                placeholder="Название, SKU или номер штрих-кода"
                 className="search-input"
                 onSearch={handleSearch}
               />
@@ -109,12 +105,35 @@ export function StockPage() {
             {
               key: 'products',
               label: 'Товары',
-              children: <ProductsTable search={search} offset={offset} onTableChange={handleTableChange} />,
+              children: (
+                <ProductsTable
+                  search={search}
+                  offset={offset}
+                  canManage={canManage}
+                  onEdit={(product) => {
+                    setEditingProduct(product);
+                    setProductOpen(true);
+                  }}
+                  onPrint={setPrintingProduct}
+                  onTableChange={handleTableChange}
+                />
+              ),
             },
             {
               key: 'services',
               label: 'Услуги',
-              children: <ServicesTable search={search} offset={offset} onTableChange={handleTableChange} />,
+              children: (
+                <ServicesTable
+                  search={search}
+                  offset={offset}
+                  canManage={canManage}
+                  onEdit={(service) => {
+                    setEditingService(service);
+                    setServiceOpen(true);
+                  }}
+                  onTableChange={handleTableChange}
+                />
+              ),
             },
             {
               key: 'batches',
@@ -131,19 +150,28 @@ export function StockPage() {
       </div>
       <ProductModal
         open={productOpen}
+        product={editingProduct}
         resources={resourcesQuery.data}
-        onClose={() => setProductOpen(false)}
+        onClose={() => {
+          setProductOpen(false);
+          setEditingProduct(null);
+        }}
       />
       <ServiceModal
         open={serviceOpen}
+        service={editingService}
         resources={resourcesQuery.data}
-        onClose={() => setServiceOpen(false)}
+        onClose={() => {
+          setServiceOpen(false);
+          setEditingService(null);
+        }}
       />
       <SupplyInvoiceModal
         open={supplyOpen}
         resources={resourcesQuery.data}
         onClose={() => setSupplyOpen(false)}
       />
+      <PriceTagEditor product={printingProduct} organization={resourcesQuery.data?.organization ?? null} onClose={() => setPrintingProduct(null)} />
     </div>
   );
 }
@@ -174,10 +202,16 @@ function getStockTabFromPath(pathname: string) {
 function ProductsTable({
   search,
   offset,
+  canManage,
+  onEdit,
+  onPrint,
   onTableChange,
 }: {
   search: string;
   offset: number;
+  canManage: boolean;
+  onEdit: (product: Product) => void;
+  onPrint: (product: Product) => void;
   onTableChange: (pagination: TablePaginationConfig) => void;
 }) {
   const productsQuery = useQuery({
@@ -189,7 +223,12 @@ function ProductsTable({
       { title: 'Название', dataIndex: 'title', key: 'title' },
       { title: 'Категория', key: 'category', render: (_, record) => record.category?.title ?? '—' },
       { title: 'SKU', dataIndex: 'sku', key: 'sku', render: (value: string | null) => value || '—' },
-      { title: 'Цена', dataIndex: 'retailPrice', key: 'retailPrice', render: formatMoney },
+      {
+        title: 'Цена',
+        dataIndex: 'retailPrice',
+        key: 'retailPrice',
+        render: (value, record) => `${formatMoney(value)} / ${record.billingUnit || record.writeOffUnit || record.stockUnit || 'шт'}`,
+      },
       {
         title: 'Остаток',
         dataIndex: 'stockRest',
@@ -206,21 +245,40 @@ function ProductsTable({
         },
       },
       { title: 'Мин. остаток', dataIndex: 'minStock', key: 'minStock', render: (value, record) => (value === null || value === undefined ? '—' : `${value} ${record.stockUnit ?? ''}`) },
-      { title: 'GTIN', dataIndex: 'gtin', key: 'gtin', render: (value: string | null) => value || '—' },
+      {
+        title: 'Учёт и списание',
+        key: 'units',
+        render: (_, record) => {
+          const stockUnit = record.stockUnit || 'шт';
+          const writeOffUnit = record.writeOffUnit || stockUnit;
+          return stockUnit === writeOffUnit
+            ? `Склад и списание: ${stockUnit}`
+            : `Склад: ${stockUnit}; списание: 1 ${stockUnit} = ${record.packageQuantity || '?'} ${writeOffUnit}`;
+        },
+      },
+      { title: 'Годен до', dataIndex: 'defaultExpiresAt', key: 'defaultExpiresAt', render: formatDate },
       { title: 'Штрих-код', dataIndex: 'barcode', key: 'barcode', render: (value: string | null) => value || '—' },
       { title: 'НДС', dataIndex: 'vatRate', key: 'vatRate', render: (value) => (value === null || value === undefined ? 'Без НДС' : `${value}%`) },
       {
         title: '',
         key: 'actions',
-        width: 120,
+        width: 220,
+        fixed: 'right',
         render: (_, record) => (
-          <Button size="small" icon={<PrinterOutlined />} onClick={() => printProductPriceTag(record)}>
-            Ценник
-          </Button>
+          <Space size={6} wrap>
+            {canManage ? (
+              <Button size="small" icon={<EditOutlined />} onClick={() => onEdit(record)}>
+                Изменить
+              </Button>
+            ) : null}
+            <Button size="small" icon={<PrinterOutlined />} onClick={() => onPrint(record)}>
+              Ценник
+            </Button>
+          </Space>
         ),
       },
     ],
-    [],
+    [canManage, onEdit, onPrint],
   );
 
   return <StockTable query={productsQuery} columns={columns} offset={offset} onTableChange={onTableChange} />;
@@ -229,10 +287,14 @@ function ProductsTable({
 function ServicesTable({
   search,
   offset,
+  canManage,
+  onEdit,
   onTableChange,
 }: {
   search: string;
   offset: number;
+  canManage: boolean;
+  onEdit: (service: ServiceItem) => void;
   onTableChange: (pagination: TablePaginationConfig) => void;
 }) {
   const servicesQuery = useQuery({
@@ -246,8 +308,21 @@ function ServicesTable({
       { title: 'Цена', dataIndex: 'price', key: 'price', render: formatMoney },
       { title: 'Тип цены', dataIndex: 'priceType', key: 'priceType', render: (value: string) => (value === 'FLOATING' ? 'Плавающая' : 'Фиксированная') },
       { title: 'НДС', dataIndex: 'vatRate', key: 'vatRate', render: (value) => (value === null || value === undefined ? 'Без НДС' : `${value}%`) },
+      ...(canManage
+        ? [{
+            title: '',
+            key: 'actions',
+            width: 130,
+            fixed: 'right' as const,
+            render: (_: unknown, record: ServiceItem) => (
+              <Button size="small" icon={<EditOutlined />} onClick={() => onEdit(record)}>
+                Изменить
+              </Button>
+            ),
+          }]
+        : []),
     ],
-    [],
+    [canManage, onEdit],
   );
 
   return <StockTable query={servicesQuery} columns={columns} offset={offset} onTableChange={onTableChange} />;
@@ -339,6 +414,7 @@ function StockTable<T extends { id: string }>({
         columns={columns}
         dataSource={query.data?.items ?? []}
         loading={query.isLoading}
+        scroll={{ x: 'max-content' }}
         pagination={{ current: offset / pageSize + 1, pageSize, total: query.data?.total ?? 0, showSizeChanger: false }}
         onChange={onTableChange}
       />
@@ -346,38 +422,105 @@ function StockTable<T extends { id: string }>({
   );
 }
 
-const productSchema = z.object({
-  title: z.string().trim().min(2, 'Введите название'),
-  categoryTitle: z.string().trim().optional(),
-  sku: z.string().trim().optional(),
-  retailPrice: z.number().min(0).optional(),
-  stockUnit: z.string().trim().optional(),
-  writeOffUnit: z.string().trim().optional(),
-  gtin: z.string().trim().optional(),
-  barcode: z.string().trim().optional(),
-  vatRate: z.number().min(0).max(100).optional(),
-  packageQuantity: z.number().min(0).optional(),
-  minStock: z.number().min(0).optional(),
-  shelfLifeDays: z.number().min(0).optional(),
-  description: z.string().trim().optional(),
-});
+const productSchema = z
+  .object({
+    title: z.string().trim().min(2, 'Введите название'),
+    categoryTitle: z.string().trim().optional(),
+    sku: z.string().trim().optional(),
+    retailPrice: z.number().min(0).optional(),
+    stockUnit: z.string().trim().min(1, 'Выберите учётную единицу'),
+    writeOffUnit: z.string().trim().min(1, 'Выберите единицу использования'),
+    billingUnit: z.string().trim().min(1, 'Укажите, за что начисляется цена'),
+    gtin: z.string().trim().optional(),
+    barcode: z.string().trim().regex(/^\d{4,32}$/, 'Введите только цифры штрих-кода').or(z.literal('')).optional(),
+    generateBarcode: z.boolean().optional(),
+    vatRate: z.number().min(0).max(100).optional(),
+    packageQuantity: z.number().min(0).optional(),
+    minStock: z.number().min(0).optional(),
+    defaultExpiresAt: z.string().optional(),
+    description: z.string().trim().optional(),
+  })
+  .superRefine((value, context) => {
+    if (value.stockUnit !== value.writeOffUnit && (!value.packageQuantity || value.packageQuantity <= 0)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['packageQuantity'],
+        message: 'Укажите, сколько единиц использования содержится в одной учётной единице',
+      });
+    }
+  });
 
 type ProductFormValues = z.infer<typeof productSchema>;
 
-function ProductModal({ open, resources, onClose }: { open: boolean; resources?: StockResources; onClose: () => void }) {
+const unitOptions = ['шт', 'упак.', 'флакон', 'ампула', 'мл', 'л', 'г', 'кг', 'доза', 'таблетка', 'капсула', 'набор', 'рулон'].map((unit) => ({ value: unit, label: unit }));
+const billingUnitOptions = ['инъекция', 'процедура', 'доза', 'шт', 'мл', 'г', 'таблетка', 'капсула', 'упаковка', 'флакон'].map((unit) => ({ value: unit, label: unit }));
+const defaultProductCategories = ['Лекарственные препараты', 'Вакцины', 'Расходные материалы', 'Корма', 'Зоотовары', 'Диагностика', 'Гигиена и уход', 'Средства обработки', 'Прочее'];
+const defaultServiceCategories = ['Приём', 'Вакцинация', 'Процедуры и манипуляции', 'Хирургия', 'Диагностика', 'Лаборатория', 'Стационар', 'Визуальная диагностика', 'Груминг', 'Прочее'];
+
+function ProductModal({
+  open,
+  product,
+  resources,
+  onClose,
+}: {
+  open: boolean;
+  product: Product | null;
+  resources?: StockResources;
+  onClose: () => void;
+}) {
   const queryClient = useQueryClient();
   const { message } = App.useApp();
-  const { control, handleSubmit, reset } = useForm<ProductFormValues>({
+  const { control, handleSubmit, reset, setValue } = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
-    defaultValues: { title: '', categoryTitle: '', sku: '', retailPrice: 0, stockUnit: 'шт', writeOffUnit: 'шт' },
+    defaultValues: { title: '', categoryTitle: '', sku: '', retailPrice: 0, stockUnit: 'шт', writeOffUnit: 'шт', billingUnit: 'шт' },
   });
+  const stockUnit = useWatch({ control, name: 'stockUnit' });
+  const writeOffUnit = useWatch({ control, name: 'writeOffUnit' });
+  const billingUnit = useWatch({ control, name: 'billingUnit' });
+  const categoryOptions = useMemo(
+    () => buildCategoryOptions(defaultProductCategories, resources?.productCategories.map((category) => category.title) ?? []),
+    [resources?.productCategories],
+  );
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    reset({
+      title: product?.title ?? '',
+      categoryTitle: product?.category?.title ?? '',
+      sku: product?.sku ?? '',
+      retailPrice: Number(product?.retailPrice ?? 0),
+      stockUnit: product?.stockUnit ?? 'шт',
+      writeOffUnit: product?.writeOffUnit ?? product?.stockUnit ?? 'шт',
+      billingUnit: product?.billingUnit ?? product?.writeOffUnit ?? product?.stockUnit ?? 'шт',
+      gtin: product?.gtin ?? '',
+      barcode: product?.barcode ?? '',
+      generateBarcode: false,
+      vatRate: product?.vatRate === null || product?.vatRate === undefined ? undefined : Number(product.vatRate),
+      packageQuantity: product?.packageQuantity === null || product?.packageQuantity === undefined ? 1 : Number(product.packageQuantity),
+      minStock: product?.minStock === null || product?.minStock === undefined ? 0 : Number(product.minStock),
+      defaultExpiresAt: product?.defaultExpiresAt?.slice(0, 10) ?? '',
+      description: product?.description ?? '',
+    });
+  }, [open, product, reset]);
   const mutation = useMutation({
-    mutationFn: createProduct,
+    mutationFn: (values: ProductFormValues) =>
+      product
+        ? updateProduct(product.id, {
+            ...values,
+            defaultExpiresAt: values.defaultExpiresAt ? new Date(values.defaultExpiresAt).toISOString() : null,
+          })
+        : createProduct({
+            ...values,
+            defaultExpiresAt: values.defaultExpiresAt ? new Date(values.defaultExpiresAt).toISOString() : undefined,
+          }),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['stock'] }),
       ]);
-      message.success('Товар создан');
+      message.success(product ? 'Товар обновлён' : 'Товар создан');
       reset();
       onClose();
     },
@@ -385,38 +528,114 @@ function ProductModal({ open, resources, onClose }: { open: boolean; resources?:
   });
 
   return (
-    <Modal title="Добавление товара" open={open} onCancel={onClose} onOk={handleSubmit((values) => mutation.mutate(values))} confirmLoading={mutation.isPending} destroyOnHidden>
+    <Modal
+      title={product ? `Редактирование: ${product.title}` : 'Добавление товара'}
+      open={open}
+      onCancel={onClose}
+      onOk={handleSubmit((values) => mutation.mutate(values))}
+      okText={product ? 'Сохранить' : 'Добавить'}
+      confirmLoading={mutation.isPending}
+      destroyOnHidden
+      width={780}
+    >
       <Form layout="vertical">
         <FormText control={control} name="title" label="Название" autoFocus />
         <Controller
           control={control}
           name="categoryTitle"
           render={({ field }) => (
-            <Form.Item label="Категория">
-              <Select
-                showSearch
+            <Form.Item label="Категория" help="Выберите готовую категорию или введите новую — она сохранится автоматически.">
+              <AutoComplete
                 allowClear
                 value={field.value || undefined}
                 onChange={(value) => field.onChange(value)}
-                onSearch={(value) => field.onChange(value)}
-                options={resources?.productCategories.map((category) => ({ value: category.title, label: category.title })) ?? []}
-                placeholder="Выберите или введите категорию"
+                options={categoryOptions}
+                placeholder="Например, Лекарственные препараты"
+                filterOption={(input, option) => String(option?.value ?? '').toLowerCase().includes(input.toLowerCase())}
               />
             </Form.Item>
           )}
         />
         <div className="form-grid two-columns">
           <FormText control={control} name="sku" label="Артикул / SKU" />
-          <FormNumber control={control} name="retailPrice" label="Цена" />
-          <FormText control={control} name="gtin" label="GTIN" />
-          <FormText control={control} name="barcode" label="Штрих-код" />
+          <FormNumber control={control} name="retailPrice" label={`Цена за 1 ${billingUnit || 'единицу начисления'}`} />
+          <FormText control={control} name="barcode" label="Номер штрих-кода" help="Введите цифры, напечатанные под штрих-кодом на упаковке. Сканер не нужен: на ценнике будет создан настоящий штрих-код с этим номером." />
           <FormNumber control={control} name="vatRate" label="НДС, %" />
-          <FormNumber control={control} name="packageQuantity" label="Количество в упаковке" />
-          <FormNumber control={control} name="minStock" label="Минимальный остаток" />
-          <FormNumber control={control} name="shelfLifeDays" label="Срок хранения, дней" />
-          <FormText control={control} name="stockUnit" label="Единица на складе" />
-          <FormText control={control} name="writeOffUnit" label="Единица списания" />
+          <FormNumber control={control} name="minStock" label={`Минимальный остаток, ${stockUnit || 'ед.'}`} />
+          <FormText control={control} name="defaultExpiresAt" label="Годен до" type="date" help="Дата подставится в следующую приёмку; фактический срок хранится отдельно для каждой партии." />
+          <Controller
+            control={control}
+            name="stockUnit"
+            render={({ field, fieldState }) => (
+              <Form.Item label="Храним на складе в" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+                <Select
+                  {...field}
+                  options={unitOptions}
+                  onChange={(value) => {
+                    const previousStockUnit = stockUnit;
+                    field.onChange(value);
+                    if (!writeOffUnit || writeOffUnit === previousStockUnit) {
+                      setValue('writeOffUnit', value, { shouldValidate: true });
+                    }
+                    if (!billingUnit || billingUnit === previousStockUnit) {
+                      setValue('billingUnit', value, { shouldValidate: true });
+                    }
+                  }}
+                />
+              </Form.Item>
+            )}
+          />
+          <FormSelect control={control} name="writeOffUnit" label="Списываем при использовании в" options={unitOptions} />
+          <Controller
+            control={control}
+            name="billingUnit"
+            render={({ field, fieldState }) => (
+              <Form.Item label="Цена начисляется за" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message ?? 'Например: инъекция. Списать можно 0,5 мл, а начислить 1 инъекцию.'}>
+                <AutoComplete {...field} options={billingUnitOptions} placeholder="Например, инъекция" />
+              </Form.Item>
+            )}
+          />
         </div>
+        <Button
+          size="small"
+          onClick={() => {
+            setValue('stockUnit', 'мл', { shouldValidate: true });
+            setValue('writeOffUnit', 'мл', { shouldValidate: true });
+            setValue('billingUnit', 'инъекция', { shouldValidate: true });
+            setValue('packageQuantity', 1, { shouldValidate: true });
+          }}
+        >
+          Быстрая настройка: препарат в мл, цена за инъекцию
+        </Button>
+        {stockUnit !== writeOffUnit ? (
+          <Alert
+            type="info"
+            showIcon
+            message={`Списание будет пересчитано: 1 ${stockUnit || 'учётная единица'} = указанное ниже количество ${writeOffUnit || 'единиц использования'}.`}
+          />
+        ) : null}
+        {stockUnit !== writeOffUnit ? (
+          <FormNumber
+            control={control}
+            name="packageQuantity"
+            label={`Сколько ${writeOffUnit || 'единиц использования'} в 1 ${stockUnit || 'учётной единице'}`}
+            step={0.1}
+            help="Например: во флаконе 100 мл — укажите 100."
+          />
+        ) : (
+          <Alert type="success" showIcon message={`Склад и списание ведутся одинаково: в ${stockUnit || 'выбранных единицах'}.`} />
+        )}
+        <Controller
+          control={control}
+          name="generateBarcode"
+          render={({ field }) => (
+            <Form.Item>
+              <Checkbox checked={field.value} onChange={(event) => field.onChange(event.target.checked)}>
+                Номера на упаковке нет — создать внутренний штрих-код EAN-13
+              </Checkbox>
+            </Form.Item>
+          )}
+        />
         <FormText control={control} name="description" label="Дополнительная информация" textarea />
       </Form>
     </Modal>
@@ -434,18 +653,46 @@ const serviceSchema = z.object({
 
 type ServiceFormValues = z.infer<typeof serviceSchema>;
 
-function ServiceModal({ open, resources, onClose }: { open: boolean; resources?: StockResources; onClose: () => void }) {
+function ServiceModal({
+  open,
+  service,
+  resources,
+  onClose,
+}: {
+  open: boolean;
+  service: ServiceItem | null;
+  resources?: StockResources;
+  onClose: () => void;
+}) {
   const queryClient = useQueryClient();
   const { message } = App.useApp();
   const { control, handleSubmit, reset } = useForm<ServiceFormValues>({
     resolver: zodResolver(serviceSchema),
     defaultValues: { title: '', categoryTitle: '', price: 0, priceType: 'FIXED', description: '' },
   });
+  const categoryOptions = useMemo(
+    () => buildCategoryOptions(defaultServiceCategories, resources?.serviceCategories.map((category) => category.title) ?? []),
+    [resources?.serviceCategories],
+  );
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    reset({
+      title: service?.title ?? '',
+      categoryTitle: service?.category?.title ?? '',
+      price: Number(service?.price ?? 0),
+      priceType: service?.priceType ?? 'FIXED',
+      vatRate: service?.vatRate === null || service?.vatRate === undefined ? undefined : Number(service.vatRate),
+      description: service?.description ?? '',
+    });
+  }, [open, reset, service]);
   const mutation = useMutation({
-    mutationFn: createService,
+    mutationFn: (values: ServiceFormValues) => (service ? updateService(service.id, values) : createService(values)),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['stock'] });
-      message.success('Услуга создана');
+      message.success(service ? 'Услуга обновлена' : 'Услуга создана');
       reset();
       onClose();
     },
@@ -453,22 +700,29 @@ function ServiceModal({ open, resources, onClose }: { open: boolean; resources?:
   });
 
   return (
-    <Modal title="Добавить услугу" open={open} onCancel={onClose} onOk={handleSubmit((values) => mutation.mutate(values))} confirmLoading={mutation.isPending} destroyOnHidden>
+    <Modal
+      title={service ? `Редактирование: ${service.title}` : 'Добавить услугу'}
+      open={open}
+      onCancel={onClose}
+      onOk={handleSubmit((values) => mutation.mutate(values))}
+      okText={service ? 'Сохранить' : 'Добавить'}
+      confirmLoading={mutation.isPending}
+      destroyOnHidden
+    >
       <Form layout="vertical">
         <FormText control={control} name="title" label="Название" autoFocus />
         <Controller
           control={control}
           name="categoryTitle"
           render={({ field }) => (
-            <Form.Item label="Категория">
-              <Select
-                showSearch
+            <Form.Item label="Категория" help="Выберите готовую категорию или введите новую — она сохранится автоматически.">
+              <AutoComplete
                 allowClear
                 value={field.value || undefined}
                 onChange={(value) => field.onChange(value)}
-                onSearch={(value) => field.onChange(value)}
-                options={resources?.serviceCategories.map((category) => ({ value: category.title, label: category.title })) ?? []}
-                placeholder="Выберите или введите категорию"
+                options={categoryOptions}
+                placeholder="Например, Процедуры и манипуляции"
+                filterOption={(input, option) => String(option?.value ?? '').toLowerCase().includes(input.toLowerCase())}
               />
             </Form.Item>
           )}
@@ -524,7 +778,7 @@ function SupplyInvoiceModal({ open, resources, onClose }: { open: boolean; resou
     queryFn: () => listProducts({ limit: 100, offset: 0 }),
     enabled: open,
   });
-  const { control, handleSubmit, reset } = useForm<SupplyFormValues>({
+  const { control, handleSubmit, reset, setValue } = useForm<SupplyFormValues>({
     resolver: zodResolver(supplySchema),
     defaultValues: {
       supplierTitle: '',
@@ -614,6 +868,11 @@ function SupplyInvoiceModal({ open, resources, onClose }: { open: boolean; resou
                 {...field}
                 showSearch
                 loading={productsQuery.isLoading}
+                onChange={(value) => {
+                  field.onChange(value);
+                  const product = productsQuery.data?.items.find((item) => item.id === value);
+                  setValue('expiresAt', product?.defaultExpiresAt?.slice(0, 10) ?? '');
+                }}
                 options={productsQuery.data?.items.map((product) => ({ value: product.id, label: product.title })) ?? []}
                 placeholder="Выберите товар"
               />
@@ -642,6 +901,7 @@ function FormText({
   textarea,
   autoFocus,
   type,
+  help,
 }: {
   control: any;
   name: string;
@@ -649,13 +909,14 @@ function FormText({
   textarea?: boolean;
   autoFocus?: boolean;
   type?: string;
+  help?: string;
 }) {
   return (
     <Controller
       control={control}
       name={name}
       render={({ field, fieldState }) => (
-        <Form.Item label={label} validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+        <Form.Item label={label} validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message ?? help}>
           {textarea ? <Input.TextArea rows={3} {...field} /> : <Input {...field} type={type} autoFocus={autoFocus} />}
         </Form.Item>
       )}
@@ -663,14 +924,40 @@ function FormText({
   );
 }
 
-function FormNumber({ control, name, label, step = 0.01 }: { control: any; name: string; label: string; step?: number }) {
+function FormNumber({
+  control,
+  name,
+  label,
+  step = 0.01,
+  help,
+}: {
+  control: any;
+  name: string;
+  label: string;
+  step?: number;
+  help?: string;
+}) {
+  return (
+    <Controller
+      control={control}
+      name={name}
+      render={({ field, fieldState }) => (
+        <Form.Item label={label} validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message ?? help}>
+          <InputNumber className="full-width" min={0} step={step} value={field.value} onChange={(value) => field.onChange(value ?? 0)} />
+        </Form.Item>
+      )}
+    />
+  );
+}
+
+function FormSelect({ control, name, label, options }: { control: any; name: string; label: string; options: Array<{ value: string; label: string }> }) {
   return (
     <Controller
       control={control}
       name={name}
       render={({ field, fieldState }) => (
         <Form.Item label={label} validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
-          <InputNumber className="full-width" min={0} step={step} value={field.value} onChange={(value) => field.onChange(value ?? 0)} />
+          <Select {...field} showSearch options={options} />
         </Form.Item>
       )}
     />
@@ -692,21 +979,137 @@ function isLowStock(product: Product) {
   return Number(product.stockRest) <= Number(product.minStock);
 }
 
-function printProductPriceTag(product: Product) {
+type PriceTagSettings = {
+  paper: 'LABEL_58_40' | 'A4';
+  copies: number;
+  showClinic: boolean;
+  showLegalName: boolean;
+  showCategory: boolean;
+  showBarcode: boolean;
+  showVat: boolean;
+};
+
+type PriceTagOrganization = StockResources['organization'];
+
+function PriceTagEditor({ product, organization, onClose }: { product: Product | null; organization: PriceTagOrganization; onClose: () => void }) {
+  const [settings, setSettings] = useState<PriceTagSettings>({
+    paper: 'LABEL_58_40',
+    copies: 1,
+    showClinic: true,
+    showLegalName: true,
+    showCategory: true,
+    showBarcode: true,
+    showVat: true,
+  });
+
+  useEffect(() => {
+    if (product) {
+      setSettings({ paper: 'LABEL_58_40', copies: 1, showClinic: true, showLegalName: true, showCategory: true, showBarcode: true, showVat: true });
+    }
+  }, [product]);
+
+  if (!product) {
+    return null;
+  }
+
+  const barcode = product.barcode || product.gtin;
+
+  return (
+    <Modal
+      title="Редактор печати ценника"
+      open
+      onCancel={onClose}
+      width={820}
+      footer={[
+        <Button key="cancel" onClick={onClose}>Отмена</Button>,
+        <Button key="print" type="primary" icon={<PrinterOutlined />} onClick={() => printProductPriceTags(product, organization, settings)}>
+          Открыть печать
+        </Button>,
+      ]}
+    >
+      <Alert
+        type="info"
+        showIcon
+        message="Сначала проверьте макет ниже. Системное окно печати откроется только после нажатия «Открыть печать»."
+      />
+      <div className="form-grid two-columns" style={{ marginTop: 16 }}>
+        <Form.Item label="Бумага">
+          <Radio.Group
+            value={settings.paper}
+            onChange={(event) => setSettings((current) => ({ ...current, paper: event.target.value }))}
+            options={[
+              { value: 'LABEL_58_40', label: 'Этикетка 58 × 40 мм' },
+              { value: 'A4', label: 'Лист A4 (сетка)' },
+            ]}
+          />
+        </Form.Item>
+        <Form.Item label="Количество ценников">
+          <InputNumber
+            min={1}
+            max={60}
+            value={settings.copies}
+            onChange={(value) => setSettings((current) => ({ ...current, copies: value ?? 1 }))}
+          />
+        </Form.Item>
+      </div>
+      <Space wrap style={{ marginBottom: 16 }}>
+        <Checkbox checked={settings.showClinic} disabled={!organization?.displayName} onChange={(event) => setSettings((current) => ({ ...current, showClinic: event.target.checked }))}>
+          Название клиники
+        </Checkbox>
+        <Checkbox checked={settings.showLegalName} disabled={!organization?.legalName} onChange={(event) => setSettings((current) => ({ ...current, showLegalName: event.target.checked }))}>
+          Юридическое наименование
+        </Checkbox>
+        <Checkbox checked={settings.showCategory} onChange={(event) => setSettings((current) => ({ ...current, showCategory: event.target.checked }))}>
+          Категория
+        </Checkbox>
+        <Checkbox checked={settings.showBarcode} disabled={!barcode} onChange={(event) => setSettings((current) => ({ ...current, showBarcode: event.target.checked }))}>
+          Штрих-код
+        </Checkbox>
+        <Checkbox checked={settings.showVat} onChange={(event) => setSettings((current) => ({ ...current, showVat: event.target.checked }))}>
+          НДС
+        </Checkbox>
+      </Space>
+      <div style={{ background: '#eef2f7', padding: 24, display: 'flex', justifyContent: 'center' }}>
+        <div style={{ width: 260, minHeight: 180, background: '#fff', border: '1px solid #cbd5e1', padding: 14, display: 'grid', alignContent: 'start', gap: 5 }}>
+          {settings.showClinic && organization?.displayName ? <strong style={{ fontSize: 13 }}>{organization.displayName}</strong> : null}
+          {settings.showLegalName && organization?.legalName ? <small style={{ color: '#475569' }}>{organization.legalName}</small> : null}
+          <strong>{product.title}</strong>
+          <span style={{ fontSize: 26, fontWeight: 800 }}>{formatMoney(product.retailPrice)}</span>
+          {settings.showCategory && product.category?.title ? <Typography.Text type="secondary">{product.category.title}</Typography.Text> : null}
+          {settings.showVat ? <small>{product.vatRate !== null && product.vatRate !== undefined ? `НДС ${product.vatRate}%` : 'Без НДС'}</small> : null}
+          {settings.showBarcode && barcode ? <BarcodeGraphic value={barcode} /> : null}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function printProductPriceTags(product: Product, organization: PriceTagOrganization, settings: PriceTagSettings) {
   const printWindow = window.open('', '_blank', 'width=720,height=520');
 
   if (!printWindow) {
     return;
   }
 
-  const code = product.barcode || product.gtin || product.sku || product.id;
+  const barcode = product.barcode || product.gtin;
+  const barcodeSvg = settings.showBarcode && barcode ? renderBarcodeSvg(barcode) : '';
   const metaRows = [
     product.sku ? `Артикул: ${product.sku}` : null,
-    product.gtin ? `GTIN: ${product.gtin}` : null,
-    product.barcode ? `Штрих-код: ${product.barcode}` : null,
-    product.category?.title ? `Категория: ${product.category.title}` : null,
-    product.vatRate !== null && product.vatRate !== undefined ? `НДС: ${product.vatRate}%` : 'Без НДС',
+    settings.showCategory && product.category?.title ? `Категория: ${product.category.title}` : null,
+    settings.showVat ? (product.vatRate !== null && product.vatRate !== undefined ? `НДС: ${product.vatRate}%` : 'Без НДС') : null,
   ].filter(Boolean);
+  const label = `<div class="label">
+    ${settings.showClinic && organization?.displayName ? `<div class="clinic">${escapeHtml(organization.displayName)}</div>` : ''}
+    ${settings.showLegalName && organization?.legalName ? `<div class="legal">${escapeHtml(organization.legalName)}</div>` : ''}
+    <div class="title">${escapeHtml(product.title)}</div>
+    <div class="price">${escapeHtml(formatMoney(product.retailPrice))}</div>
+    <div class="meta">${metaRows.map((row) => `<div>${escapeHtml(String(row))}</div>`).join('')}</div>
+    ${barcodeSvg ? `<div class="barcode">${barcodeSvg}</div>` : ''}
+  </div>`;
+  const labels = Array.from({ length: settings.copies }, () => label).join('');
+  const pageCss = settings.paper === 'A4'
+    ? '@page { size: A4 portrait; margin: 12mm; } .sheet { display: grid; grid-template-columns: repeat(3, 58mm); gap: 5mm; align-content: start; } .label { break-inside: avoid; border: 1px dashed #9ca3af; }'
+    : '@page { size: 58mm 40mm; margin: 0; } .sheet { display: block; } .label { break-after: page; } .label:last-child { break-after: auto; }';
 
   printWindow.document.write(`<!doctype html>
 <html lang="ru">
@@ -714,26 +1117,83 @@ function printProductPriceTag(product: Product) {
   <meta charset="utf-8" />
   <title>Ценник ${escapeHtml(product.title)}</title>
   <style>
-    @page { size: 58mm 40mm; margin: 4mm; }
+    ${pageCss}
     body { margin: 0; color: #111827; font: 12px/1.35 Arial, sans-serif; }
-    .label { width: 50mm; min-height: 32mm; display: grid; gap: 2mm; align-content: start; }
-    .title { font-size: 13px; font-weight: 700; }
-    .price { font-size: 22px; font-weight: 800; }
-    .meta { color: #4b5563; font-size: 9px; }
-    .code { padding-top: 1mm; border-top: 1px solid #d1d5db; font-family: monospace; font-size: 10px; letter-spacing: 1px; }
+    .label { box-sizing: border-box; width: 58mm; height: 40mm; padding: 2.5mm 3mm; display: grid; gap: 0.7mm; align-content: start; overflow: hidden; }
+    .clinic { font-size: 9px; font-weight: 700; }
+    .legal { color: #4b5563; font-size: 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .title { font-size: 11px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .price { font-size: 18px; font-weight: 800; }
+    .meta { color: #4b5563; font-size: 7px; display: flex; gap: 2mm; }
+    .barcode { border-top: 1px solid #d1d5db; padding-top: 0.5mm; line-height: 0; }
+    .barcode svg { width: 100%; height: 11mm; }
   </style>
 </head>
 <body>
-  <div class="label">
-    <div class="title">${escapeHtml(product.title)}</div>
-    <div class="price">${escapeHtml(formatMoney(product.retailPrice))}</div>
-    <div class="meta">${metaRows.map((row) => `<div>${escapeHtml(String(row))}</div>`).join('')}</div>
-    <div class="code">${escapeHtml(code)}</div>
-  </div>
-  <script>window.print();</script>
+  <div class="sheet">${labels}</div>
+  <script>window.onload = () => window.print();</script>
 </body>
 </html>`);
   printWindow.document.close();
+}
+
+function BarcodeGraphic({ value }: { value: string }) {
+  const barcodeRef = useRef<SVGSVGElement | null>(null);
+
+  useEffect(() => {
+    if (!barcodeRef.current) {
+      return;
+    }
+
+    JsBarcode(barcodeRef.current, value, {
+      format: getBarcodeFormat(value),
+      width: 1.35,
+      height: 38,
+      margin: 0,
+      displayValue: true,
+      fontSize: 11,
+      background: '#ffffff',
+      lineColor: '#111827',
+    });
+  }, [value]);
+
+  return <svg ref={barcodeRef} role="img" aria-label={`Штрих-код ${value}`} style={{ width: '100%', height: 56 }} />;
+}
+
+function renderBarcodeSvg(value: string) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  JsBarcode(svg, value, {
+    format: getBarcodeFormat(value),
+    width: 1.25,
+    height: 34,
+    margin: 0,
+    displayValue: true,
+    fontSize: 10,
+    background: '#ffffff',
+    lineColor: '#111827',
+  });
+
+  return svg.outerHTML;
+}
+
+function getBarcodeFormat(value: string): 'EAN13' | 'CODE128' {
+  return isValidEan13(value) ? 'EAN13' : 'CODE128';
+}
+
+function isValidEan13(value: string) {
+  if (!/^\d{13}$/.test(value)) {
+    return false;
+  }
+
+  const body = value.slice(0, 12);
+  const sum = [...body].reduce((total, digit, index) => total + Number(digit) * (index % 2 === 0 ? 1 : 3), 0);
+  return (10 - (sum % 10)) % 10 === Number(value[12]);
+}
+
+function buildCategoryOptions(defaults: string[], saved: string[]) {
+  return [...new Set([...defaults, ...saved].map((value) => value.trim()).filter(Boolean))]
+    .sort((left, right) => left.localeCompare(right, 'ru'))
+    .map((value) => ({ value, label: value }));
 }
 
 function escapeHtml(value: string) {

@@ -50,11 +50,21 @@ export type Visit = Omit<VisitListItem, 'owner' | 'animal' | 'bill'> & {
   appointment: VisitAppointment | null;
   queueEntry: VisitQueueEntry | null;
   hospitalBox: VisitHospitalBox | null;
+  hospitalStay: VisitHospitalStay | null;
   exam: VisitExam | null;
   diagnoses: VisitDiagnosis[];
   recommendation: VisitRecommendation | null;
   laboratoryOrders: VisitLaboratoryOrder[];
   bill: VisitBill | null;
+};
+
+export type VisitHospitalStay = {
+  id: string;
+  status: 'ACTIVE' | 'DISCHARGED' | 'CANCELLED';
+  startedAt: string;
+  completedAt: string | null;
+  hospitalBoxId: string;
+  hospitalBox: VisitHospitalBox;
 };
 
 export type VisitAppointment = {
@@ -170,6 +180,7 @@ export type VisitBillItem = {
   serviceId: string | null;
   title: string;
   quantity: DecimalValue;
+  stockQuantity: DecimalValue | null;
   unitPrice: DecimalValue;
   discount: DecimalValue;
   totalAmount: DecimalValue;
@@ -183,6 +194,9 @@ export type VisitBillItem = {
     id: string;
     title: string;
     retailPrice: DecimalValue;
+    stockUnit: string | null;
+    writeOffUnit: string | null;
+    billingUnit: string | null;
   } | null;
   stockMovements?: Array<{
     id: string;
@@ -266,6 +280,7 @@ export type VisitServiceLineInput = {
   productId?: string;
   title?: string;
   quantity?: number;
+  stockQuantity?: number;
   unitPrice?: number;
   discount?: number;
 };

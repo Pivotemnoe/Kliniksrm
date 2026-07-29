@@ -25,6 +25,13 @@ export class AddVisitServiceDto {
   @Max(999999)
   quantity?: number;
 
+  @ApiPropertyOptional({ description: 'Quantity deducted from stock in the product write-off unit.' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0.001)
+  @Max(999999)
+  stockQuantity?: number;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()

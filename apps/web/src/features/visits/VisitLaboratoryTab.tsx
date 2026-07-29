@@ -175,6 +175,13 @@ function OrderDrawer({ open, visit, onClose }: { open: boolean; visit: Visit; on
     <Drawer title="Назначить анализы" open={open} onClose={onClose} width={620} destroyOnHidden>
       <Form layout="vertical" onFinish={form.handleSubmit((values) => mutation.mutate(values))}>
         {mutation.error ? <Alert type="error" showIcon message={getErrorMessage(mutation.error)} className="form-alert" /> : null}
+        <Alert
+          type="info"
+          showIcon
+          className="form-alert"
+          message="Профиль добавляет сразу всю карточку анализов"
+          description="Выберите готовый профиль для комплексного исследования. Отдельные анализы ниже можно добавить дополнительно."
+        />
         <Controller
           control={form.control}
           name="profileIds"
@@ -185,7 +192,11 @@ function OrderDrawer({ open, visit, onClose }: { open: boolean; visit: Visit; on
                 mode="multiple"
                 showSearch
                 optionFilterProp="label"
-                options={profilesQuery.data?.items.map((profile) => ({ value: profile.id, label: profile.code ? `${profile.title} · ${profile.code}` : profile.title })) ?? []}
+                placeholder="Например, Общий клинический профиль"
+                options={profilesQuery.data?.items.map((profile) => ({
+                  value: profile.id,
+                  label: `${profile.title}${profile.code ? ` · ${profile.code}` : ''} · ${profile.tests.length} анализов`,
+                })) ?? []}
               />
             </Form.Item>
           )}
@@ -200,6 +211,7 @@ function OrderDrawer({ open, visit, onClose }: { open: boolean; visit: Visit; on
                 mode="multiple"
                 showSearch
                 optionFilterProp="label"
+                placeholder="Дополнительные отдельные анализы"
                 options={testsQuery.data?.items.map((test) => ({ value: test.id, label: test.code ? `${test.title} · ${test.code}` : test.title })) ?? []}
               />
             </Form.Item>

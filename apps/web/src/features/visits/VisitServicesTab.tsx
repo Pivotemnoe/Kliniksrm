@@ -18,11 +18,16 @@ const serviceLineSchema = z.object({
   serviceId: z.string().optional(),
   title: z.string().trim().min(1, 'Введите услугу').max(500),
   quantity: requiredNumber(0.001, 999999),
+  stockQuantity: optionalNumber(0.001, 999999),
   unitPrice: requiredNumber(0, 999999999),
   discount: requiredNumber(0, 999999999),
 }).superRefine((value, context) => {
   if (value.lineType === 'PRODUCT' && !value.productId) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['productId'], message: 'Выберите товар' });
+  }
+
+  if (value.lineType === 'PRODUCT' && !value.stockQuantity) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['stockQuantity'], message: 'Укажите, сколько списать со склада' });
   }
 
   if (value.lineType === 'SERVICE' && !value.serviceId) {
@@ -64,15 +69,34 @@ export function VisitServicesTab({ visit, canManage, locked }: VisitServicesTabP
   });
   const columns = useMemo<ColumnsType<VisitBillItem>>(
     () => [
-      { title: 'Услуга', dataIndex: 'title', key: 'title' },
+      { title: 'Позиция', dataIndex: 'title', key: 'title' },
       {
         title: 'Тип',
         key: 'type',
         width: 120,
         render: (_, record) => record.productId ? <Tag color="green">Товар</Tag> : record.serviceId ? <Tag color="blue">Услуга</Tag> : <Tag>Ручная</Tag>,
       },
-      { title: 'Кол-во', dataIndex: 'quantity', key: 'quantity', render: (value) => Number(value).toLocaleString('ru-RU') },
-      { title: 'Цена', dataIndex: 'unitPrice', key: 'unitPrice', render: formatMoney },
+      {
+        title: 'Начислено / списано',
+        key: 'quantity',
+        render: (_, record) => {
+          const billedQuantity = Number(record.quantity).toLocaleString('ru-RU');
+          if (!record.productId) {
+            return billedQuantity;
+          }
+
+          const billingUnit = record.product?.billingUnit || record.product?.writeOffUnit || record.product?.stockUnit || 'ед.';
+          const writeOffUnit = record.product?.writeOffUnit || record.product?.stockUnit || 'ед.';
+          const stockQuantity = Number(record.stockQuantity ?? record.quantity).toLocaleString('ru-RU');
+          return (
+            <Space direction="vertical" size={0}>
+              <span>{billedQuantity} {billingUnit}</span>
+              <Typography.Text type="secondary">списано {stockQuantity} {writeOffUnit}</Typography.Text>
+            </Space>
+          );
+        },
+      },
+      { title: 'Цена за начисление', dataIndex: 'unitPrice', key: 'unitPrice', render: formatMoney },
       { title: 'Скидка', dataIndex: 'discount', key: 'discount', render: formatMoney },
       { title: 'Сумма', dataIndex: 'totalAmount', key: 'totalAmount', render: formatMoney },
       {
@@ -168,7 +192,9 @@ function ServiceLineDrawer({
   });
   const isEdit = Boolean(line);
   const lineType = useWatch({ control, name: 'lineType' });
+  const productId = useWatch({ control, name: 'productId' });
   const quantity = useWatch({ control, name: 'quantity' });
+  const stockQuantity = useWatch({ control, name: 'stockQuantity' });
   const unitPrice = useWatch({ control, name: 'unitPrice' });
   const discount = useWatch({ control, name: 'discount' });
   const calculatedTotal = Math.max(toMoneyNumber(quantity) * toMoneyNumber(unitPrice) - toMoneyNumber(discount), 0);
@@ -182,6 +208,8 @@ function ServiceLineDrawer({
     queryFn: () => listServices({ limit: 100, offset: 0 }),
     enabled: open && !isEdit,
   });
+  const selectedProduct = productsQuery.data?.items.find((product) => product.id === productId);
+  const activeProduct = selectedProduct ?? line?.product ?? null;
 
   function handleOpenChange(nextOpen: boolean) {
     if (nextOpen) {
@@ -195,6 +223,7 @@ function ServiceLineDrawer({
       ...(!line && values.lineType === 'SERVICE' ? { serviceId: values.serviceId } : {}),
       title: values.title,
       quantity: values.quantity,
+      ...(values.lineType === 'PRODUCT' && values.stockQuantity ? { stockQuantity: values.stockQuantity } : {}),
       unitPrice: values.unitPrice,
       discount: values.discount,
     });
@@ -249,7 +278,10 @@ function ServiceLineDrawer({
                   showSearch
                   disabled={isEdit}
                   loading={productsQuery.isLoading}
-                  options={productsQuery.data?.items.map((product) => ({ value: product.id, label: product.title })) ?? []}
+                  options={productsQuery.data?.items.map((product) => ({
+                    value: product.id,
+                    label: `${product.title} · ${product.writeOffUnit || product.stockUnit || 'шт'}`,
+                  })) ?? []}
                   placeholder="Выберите товар"
                   onChange={(value) => {
                     field.onChange(value);
@@ -261,7 +293,8 @@ function ServiceLineDrawer({
                         productId: product.id,
                         title: product.title,
                         unitPrice: String(product.retailPrice),
-                        quantity: quantity || '1',
+                        quantity: '1',
+                        stockQuantity: stockQuantity || '1',
                         discount: discount || '0',
                       });
                     }
@@ -304,30 +337,60 @@ function ServiceLineDrawer({
             )}
           />
         ) : null}
-        <Controller
-          control={control}
-          name="title"
-          render={({ field, fieldState }) => (
-            <Form.Item label="Услуга" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
-              <Input {...field} autoFocus />
-            </Form.Item>
-          )}
-        />
+        {lineType === 'MANUAL' ? (
+          <Controller
+            control={control}
+            name="title"
+            render={({ field, fieldState }) => (
+              <Form.Item label="Название позиции" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+                <Input {...field} autoFocus />
+              </Form.Item>
+            )}
+          />
+        ) : null}
+        {lineType === 'PRODUCT' && activeProduct ? (
+          <Alert
+            type="info"
+            showIcon
+            message={`Склад и оплата считаются отдельно: спишется ${stockQuantity || 0} ${activeProduct.writeOffUnit || activeProduct.stockUnit || 'ед.'}, клиенту начислится ${quantity || 0} ${activeProduct.billingUnit || activeProduct.writeOffUnit || activeProduct.stockUnit || 'ед.'}.`}
+          />
+        ) : null}
         <div className="form-grid two-columns">
+          {lineType === 'PRODUCT' ? (
+            <Controller
+              control={control}
+              name="stockQuantity"
+              render={({ field, fieldState }) => (
+                <Form.Item
+                  label={`Списать со склада, ${activeProduct?.writeOffUnit || activeProduct?.stockUnit || 'ед.'}`}
+                  validateStatus={fieldState.error ? 'error' : undefined}
+                  help={fieldState.error?.message ?? 'Фактически использованный объём: например, 0,5 мл.'}
+                >
+                  <Input inputMode="decimal" placeholder="Например, 0,5" {...field} />
+                </Form.Item>
+              )}
+            />
+          ) : null}
           <Controller
             control={control}
             name="quantity"
             render={({ field, fieldState }) => (
-              <Form.Item label="Количество" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+              <Form.Item
+                label={lineType === 'PRODUCT'
+                  ? `Начислить клиенту, ${activeProduct?.billingUnit || activeProduct?.writeOffUnit || activeProduct?.stockUnit || 'ед.'}`
+                  : 'Количество'}
+                validateStatus={fieldState.error ? 'error' : undefined}
+                help={fieldState.error?.message ?? (lineType === 'PRODUCT' ? 'Обычно 1 инъекция, даже если списано меньше 1 мл.' : undefined)}
+              >
                 <Input inputMode="decimal" placeholder="Например 0,1 или 0,01" {...field} />
               </Form.Item>
             )}
           />
           <Controller
-            control={control}
-            name="unitPrice"
-            render={({ field, fieldState }) => (
-              <Form.Item label="Цена" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+          control={control}
+          name="unitPrice"
+          render={({ field, fieldState }) => (
+              <Form.Item label={lineType === 'PRODUCT' ? `Цена за 1 ${activeProduct?.billingUnit || 'начисление'}` : 'Цена'} validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
                 <Input inputMode="decimal" {...field} />
               </Form.Item>
             )}
@@ -357,6 +420,7 @@ function getDefaultValues(line: VisitBillItem | null): ServiceLineFormInput {
     serviceId: line?.serviceId ?? undefined,
     title: line?.title ?? '',
     quantity: line ? String(line.quantity) : '1',
+    stockQuantity: line?.productId ? String(line.stockQuantity ?? line.quantity) : undefined,
     unitPrice: line ? String(line.unitPrice) : '0',
     discount: line ? String(line.discount) : '0',
   };
@@ -370,6 +434,25 @@ function requiredNumber(min: number, max: number) {
       const parsed = Number(value.replace(',', '.'));
 
       if (!value || !Number.isFinite(parsed) || parsed < min || parsed > max) {
+        context.addIssue({ code: z.ZodIssueCode.custom, message: `Введите число от ${min} до ${max}` });
+        return z.NEVER;
+      }
+
+      return parsed;
+    });
+}
+
+function optionalNumber(min: number, max: number) {
+  return z
+    .string()
+    .optional()
+    .transform((value, context) => {
+      if (!value?.trim()) {
+        return undefined;
+      }
+
+      const parsed = Number(value.replace(',', '.'));
+      if (!Number.isFinite(parsed) || parsed < min || parsed > max) {
         context.addIssue({ code: z.ZodIssueCode.custom, message: `Введите число от ${min} до ${max}` });
         return z.NEVER;
       }

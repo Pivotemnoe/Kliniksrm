@@ -4,6 +4,7 @@ import { parsePagination } from '../../common/pagination';
 import { AuditService } from '../audit/audit.service';
 import { FinanceService } from '../finance/finance.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { toStockQuantity } from '../stock/stock-units';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { CreateSaleDto, CreateSaleItemDto } from './dto/create-sale.dto';
 import { ListSalesQueryDto } from './dto/list-sales-query.dto';
@@ -224,6 +225,12 @@ export class SalesService {
       return;
     }
 
+    const product = await tx.product.findUniqueOrThrow({
+      where: { id: productId },
+      select: { stockUnit: true, writeOffUnit: true, packageQuantity: true },
+    });
+    const stockQuantity = toStockQuantity(product, line.quantity);
+
     const batches = await tx.stockBatch.findMany({
       where: {
         productId,
@@ -241,11 +248,11 @@ export class SalesService {
     const orderedBatches = batches.sort(compareStockBatches);
     const available = orderedBatches.reduce((sum, batch) => sum.plus(batch.rest), decimal(0));
 
-    if (available.lessThan(line.quantity)) {
+    if (available.lessThan(stockQuantity)) {
       throw new BadRequestException(`Недостаточно остатка товара "${line.title}"`);
     }
 
-    let remaining = line.quantity;
+    let remaining = stockQuantity;
 
     for (const batch of orderedBatches) {
       if (remaining.lessThanOrEqualTo(0)) {

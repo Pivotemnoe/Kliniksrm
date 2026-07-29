@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import {
   AppointmentStatus,
+  HospitalStayStatus,
   LaboratoryOrderStatus,
   OnlineRequestStatus,
   PaymentStatus,
@@ -113,14 +114,14 @@ export class DashboardService {
         take: 8,
         select: visitSelect,
       }),
-      this.prisma.visit.count({ where: { status: { in: [VisitStatus.DRAFT, VisitStatus.IN_PROGRESS] }, hospitalBoxId: { not: null }, ...employeeWhere } }),
-      this.prisma.visit.count({ where: { startedAt: { gte: start, lte: end }, hospitalBoxId: { not: null }, ...employeeWhere } }),
-      this.prisma.visit.count({ where: { status: VisitStatus.COMPLETED, completedAt: { gte: start, lte: end }, hospitalBoxId: { not: null }, ...employeeWhere } }),
-      this.prisma.visit.findMany({
-        where: { status: { in: [VisitStatus.DRAFT, VisitStatus.IN_PROGRESS] }, hospitalBoxId: { not: null }, ...employeeWhere },
-        orderBy: { startedAt: 'asc' },
+      this.prisma.hospitalStay.count({ where: { status: HospitalStayStatus.ACTIVE, ...employeeWhere } }),
+      this.prisma.hospitalStay.count({ where: { startedAt: { gte: start, lte: end }, ...employeeWhere } }),
+      this.prisma.hospitalStay.count({ where: { status: HospitalStayStatus.DISCHARGED, completedAt: { gte: start, lte: end }, ...employeeWhere } }),
+      this.prisma.hospitalStay.findMany({
+        where: { status: HospitalStayStatus.ACTIVE, ...employeeWhere },
+        orderBy: { startedAt: 'desc' },
         take: 6,
-        select: hospitalVisitSelect,
+        select: hospitalStaySelect,
       }),
       this.prisma.bill.count({ where: { createdAt: { gte: start, lte: end } } }),
       this.prisma.bill.count({ where: { status: { in: [PaymentStatus.UNPAID, PaymentStatus.PARTIAL] } } }),
@@ -270,7 +271,7 @@ export class DashboardService {
         activePatients: activeHospital,
         admittedToday: admittedHospitalToday,
         dischargedToday: dischargedHospitalToday,
-        items: hospitalItems,
+        items: hospitalItems.map(({ sourceVisit, ...stay }) => ({ ...stay, totalAmount: sourceVisit.totalAmount, bill: sourceVisit.bill })),
       } : { activePatients: 0, admittedToday: 0, dischargedToday: 0, items: [] },
       stock: canRead('stock.read') ? {
         lowStockProducts: lowStockProducts.length,
@@ -375,10 +376,22 @@ const visitSelect = {
   bill: { select: { id: true, status: true, totalAmount: true, paidAmount: true } },
 } satisfies Prisma.VisitSelect;
 
-const hospitalVisitSelect = {
-  ...visitSelect,
+const hospitalStaySelect = {
+  id: true,
+  status: true,
+  startedAt: true,
+  completedAt: true,
+  owner: { select: { id: true, fullName: true, phone: true } },
+  animal: { select: { id: true, nickname: true, species: true, breed: true, sex: true } },
+  employee: { select: { id: true, fullName: true, position: true } },
   hospitalBox: { select: { id: true, name: true } },
-} satisfies Prisma.VisitSelect;
+  sourceVisit: {
+    select: {
+      totalAmount: true,
+      bill: { select: { id: true, status: true, totalAmount: true, paidAmount: true } },
+    },
+  },
+} satisfies Prisma.HospitalStaySelect;
 
 const onlineRequestSelect = {
   id: true,

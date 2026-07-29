@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { VisitStatus } from '@prisma/client';
+import { HospitalStayStatus } from '@prisma/client';
 import { IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 export class ListHospitalQueryDto {
@@ -14,10 +14,10 @@ export class ListHospitalQueryDto {
   @IsUUID()
   hospitalBoxId?: string;
 
-  @ApiPropertyOptional({ enum: VisitStatus })
+  @ApiPropertyOptional({ enum: HospitalStayStatus })
   @IsOptional()
-  @IsEnum(VisitStatus)
-  status?: VisitStatus;
+  @IsEnum(HospitalStayStatus)
+  status?: HospitalStayStatus;
 
   @ApiPropertyOptional()
   @IsOptional()

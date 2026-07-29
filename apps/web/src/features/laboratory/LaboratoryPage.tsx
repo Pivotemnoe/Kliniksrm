@@ -57,7 +57,7 @@ const profileSchema = z.object({
   species: z.array(z.string()).optional(),
   serviceId: nullableText,
   isActive: z.boolean().default(true),
-  testIds: z.array(z.string()).optional(),
+  testIds: z.array(z.string()).min(1, 'Выберите хотя бы один анализ').max(20, 'В одном профиле может быть не больше 20 анализов').default([]),
 });
 const resultSchema = z.object({
   status: z.enum(['ORDERED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']),
@@ -114,10 +114,10 @@ export function LaboratoryPage() {
           canManage ? (
             <Space wrap>
               <Button icon={<PlusOutlined />} onClick={() => openTest(null)}>
-                Добавить анализ
+                Новый отдельный анализ
               </Button>
               <Button type="primary" icon={<PlusOutlined />} onClick={() => openProfile(null)}>
-                Добавить профиль
+                Новый профиль из нескольких анализов
               </Button>
             </Space>
           ) : null
@@ -270,6 +270,10 @@ export function LaboratoryPage() {
         test={editingTest}
         resources={resourcesQuery.data}
         onClose={() => setTestOpen(false)}
+        onCreateProfile={() => {
+          setTestOpen(false);
+          openProfile(null);
+        }}
       />
       <ProfileDrawer
         open={profileOpen}
@@ -738,7 +742,16 @@ function ProfilesTable({
     () => [
       { title: 'Профиль', dataIndex: 'title', key: 'title', render: (value, item) => <TitleCell title={value} code={item.code} /> },
       { title: 'Виды', dataIndex: 'species', key: 'species', width: 180, render: renderSpecies },
-      { title: 'Анализы', key: 'tests', render: (_, item) => item.tests.map((link) => link.test.title).join(', ') || '—' },
+      {
+        title: 'Состав профиля',
+        key: 'tests',
+        render: (_, item) => (
+          <Space direction="vertical" size={2}>
+            <Tag color="blue">{item.tests.length} {pluralizeAnalysis(item.tests.length)}</Tag>
+            <Typography.Text>{item.tests.map((link) => link.test.title).join(', ') || 'Анализы не выбраны'}</Typography.Text>
+          </Space>
+        ),
+      },
       { title: 'Услуга', key: 'service', render: (_, item) => item.service ? `${item.service.title} · ${formatMoney(item.service.price)}` : '—' },
       { title: 'Статус', dataIndex: 'isActive', key: 'isActive', width: 110, render: activeTag },
       {
@@ -773,7 +786,19 @@ function ProfilesTable({
   );
 }
 
-function TestDrawer({ open, test, resources, onClose }: { open: boolean; test: LaboratoryTest | null; resources?: LaboratoryResources; onClose: () => void }) {
+function TestDrawer({
+  open,
+  test,
+  resources,
+  onClose,
+  onCreateProfile,
+}: {
+  open: boolean;
+  test: LaboratoryTest | null;
+  resources?: LaboratoryResources;
+  onClose: () => void;
+  onCreateProfile: () => void;
+}) {
   const queryClient = useQueryClient();
   const { message } = App.useApp();
   const form = useForm<TestFormInput, unknown, TestFormValues>({ resolver: zodResolver(testSchema), defaultValues: getTestDefaults(test) });
@@ -795,6 +820,16 @@ function TestDrawer({ open, test, resources, onClose }: { open: boolean; test: L
   return (
     <Drawer title={test ? 'Анализ' : 'Новый анализ'} open={open} onClose={onClose} width={620} destroyOnHidden>
       <Form layout="vertical" onFinish={form.handleSubmit((values) => mutation.mutate(values))}>
+        {!test ? (
+          <Alert
+            type="info"
+            showIcon
+            className="form-alert"
+            message="Здесь создаётся один отдельный анализ"
+            description="Чтобы собрать готовую карточку из нескольких исследований и затем назначать её одной кнопкой, создайте профиль анализов."
+            action={<Button onClick={onCreateProfile}>Создать профиль</Button>}
+          />
+        ) : null}
         <FormInput control={form.control} name="title" label="Название" />
         <Space className="form-grid-two" align="start">
           <FormInput control={form.control} name="code" label="Код" />
@@ -840,9 +875,16 @@ function ProfileDrawer({ open, profile, resources, onClose }: { open: boolean; p
   }, [form, profile, open]);
 
   return (
-    <Drawer title={profile ? 'Профиль анализов' : 'Новый профиль анализов'} open={open} onClose={onClose} width={620} destroyOnHidden>
+    <Drawer title={profile ? 'Профиль анализов' : 'Новый профиль анализов'} open={open} onClose={onClose} width={680} destroyOnHidden>
       <Form layout="vertical" onFinish={form.handleSubmit((values) => mutation.mutate(values))}>
-        <FormInput control={form.control} name="title" label="Название" />
+        <Alert
+          type="info"
+          showIcon
+          className="form-alert"
+          message="Профиль — готовая карточка из нескольких анализов"
+          description="Выберите до 20 исследований. Во время приёма достаточно назначить профиль — все входящие анализы добавятся автоматически."
+        />
+        <FormInput control={form.control} name="title" label="Название профиля" />
         <FormInput control={form.control} name="code" label="Код" />
         <SpeciesSelect control={form.control} resources={resources} />
         <ServiceSelect control={form.control} resources={resources} />
@@ -850,12 +892,19 @@ function ProfileDrawer({ open, profile, resources, onClose }: { open: boolean; p
           control={form.control}
           name="testIds"
           render={({ field, fieldState }) => (
-            <Form.Item label="Анализы в профиле" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+            <Form.Item
+              label="Состав профиля"
+              validateStatus={fieldState.error ? 'error' : undefined}
+              help={fieldState.error?.message ?? `Выбрано ${(field.value ?? []).length} из 20 анализов`}
+            >
               <Select
                 {...field}
                 mode="multiple"
                 showSearch
+                maxCount={20}
+                maxTagCount="responsive"
                 optionFilterProp="label"
+                placeholder="Выберите анализы"
                 options={testsQuery.data?.items.map((item) => ({ value: item.id, label: item.code ? `${item.title} · ${item.code}` : item.title })) ?? []}
               />
             </Form.Item>
@@ -864,7 +913,7 @@ function ProfileDrawer({ open, profile, resources, onClose }: { open: boolean; p
         <FormInput control={form.control} name="description" label="Описание" textarea />
         <ActiveSwitch control={form.control} />
         <Button type="primary" htmlType="submit" loading={mutation.isPending}>
-          Сохранить
+          Сохранить профиль
         </Button>
       </Form>
     </Drawer>
@@ -985,6 +1034,15 @@ function getResultDefaults(item: LaboratoryOrderItem | null): ResultFormInput {
     referenceRange: item?.referenceRange ?? '',
     comment: item?.comment ?? '',
   };
+}
+
+function pluralizeAnalysis(count: number) {
+  const lastTwo = count % 100;
+  const last = count % 10;
+  if (lastTwo >= 11 && lastTwo <= 14) return 'анализов';
+  if (last === 1) return 'анализ';
+  if (last >= 2 && last <= 4) return 'анализа';
+  return 'анализов';
 }
 
 function formatOrderItems(items: LaboratoryOrderItem[]) {

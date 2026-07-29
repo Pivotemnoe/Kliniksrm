@@ -7,7 +7,7 @@ import {
   SwapOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Descriptions, Form, Input, InputNumber, Modal, Select, Space, Table, Tag, Typography } from 'antd';
+import { Alert, App, Button, Descriptions, Form, Input, Modal, Select, Space, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -18,7 +18,6 @@ import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDateTime } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
-import { visitStatusColors, visitStatusLabels } from '../visits/types';
 import {
   cancelHospitalStay,
   createHospitalRecord,
@@ -40,7 +39,7 @@ const recordTypeOptions: Array<{ value: HospitalRecordType; label: string; defau
 ];
 
 export function HospitalCardPage() {
-  const { visitId = '' } = useParams();
+  const { stayId = '' } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { message, modal } = App.useApp();
@@ -49,13 +48,13 @@ export function HospitalCardPage() {
   const [recordOpen, setRecordOpen] = useState(false);
   const [boxId, setBoxId] = useState<string>();
   const stayQuery = useQuery({
-    queryKey: ['hospital', visitId],
-    queryFn: () => getHospitalStay(visitId),
-    enabled: Boolean(visitId),
+    queryKey: ['hospital', stayId],
+    queryFn: () => getHospitalStay(stayId),
+    enabled: Boolean(stayId),
   });
   const resourcesQuery = useQuery({ queryKey: ['hospital', 'resources'], queryFn: getHospitalResources });
   const stay = stayQuery.data;
-  const active = stay ? ['DRAFT', 'IN_PROGRESS'].includes(stay.status) : false;
+  const active = stay?.status === 'ACTIVE';
 
   useEffect(() => {
     setBoxId(stay?.hospitalBoxId ?? undefined);
@@ -63,21 +62,21 @@ export function HospitalCardPage() {
 
   async function refresh() {
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['hospital', visitId] }),
+      queryClient.invalidateQueries({ queryKey: ['hospital', stayId] }),
       queryClient.invalidateQueries({ queryKey: ['hospital'] }),
-      queryClient.invalidateQueries({ queryKey: ['visits', visitId] }),
+      queryClient.invalidateQueries({ queryKey: ['visits', stay?.sourceVisitId] }),
       queryClient.invalidateQueries({ queryKey: ['visits'] }),
     ]);
   }
 
   const transferMutation = useMutation({
-    mutationFn: (nextBoxId: string) => updateHospitalStay(visitId, { hospitalBoxId: nextBoxId }),
+    mutationFn: (nextBoxId: string) => updateHospitalStay(stayId, { hospitalBoxId: nextBoxId }),
     onSuccess: async () => { await refresh(); message.success('Пациент переведён в другой бокс'); },
     onError: (error) => message.error(getErrorMessage(error)),
   });
   const actionMutation = useMutation({
     mutationFn: (action: 'discharge' | 'cancel') =>
-      action === 'discharge' ? dischargeHospitalStay(visitId) : cancelHospitalStay(visitId),
+      action === 'discharge' ? dischargeHospitalStay(stayId) : cancelHospitalStay(stayId),
     onSuccess: async (_, action) => {
       await refresh();
       message.success(action === 'discharge' ? 'Пациент выписан из стационара' : 'Госпитализация отменена');
@@ -85,7 +84,7 @@ export function HospitalCardPage() {
     onError: (error) => message.error(getErrorMessage(error)),
   });
   const recordMutation = useMutation({
-    mutationFn: (input: CreateHospitalRecordInput) => createHospitalRecord(visitId, input),
+    mutationFn: (input: CreateHospitalRecordInput) => createHospitalRecord(stayId, input),
     onSuccess: async () => {
       await refresh();
       setRecordOpen(false);
@@ -105,7 +104,7 @@ export function HospitalCardPage() {
             <Tag color={recordTypeColor[record.recordType]}>{recordTypeLabel[record.recordType]}</Tag>
             <Typography.Text strong>{record.title}</Typography.Text>
           </Space>
-          {record.temperatureC ? <Typography.Text>{record.temperatureC} °C</Typography.Text> : null}
+          {record.temperatureC !== null ? <Typography.Text>{record.temperatureC} °C</Typography.Text> : null}
           {record.value ? <Typography.Text>{record.value}</Typography.Text> : null}
           {record.notes ? <Typography.Text type="secondary">{record.notes}</Typography.Text> : null}
         </Space>
@@ -126,7 +125,7 @@ export function HospitalCardPage() {
         extra={
           <Space wrap>
             <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/hospital')}>К стационару</Button>
-            {stay ? <Button icon={<FileTextOutlined />} onClick={() => navigate(`/visits/${stay.id}`)}>Осмотр при поступлении</Button> : null}
+            {stay ? <Button icon={<FileTextOutlined />} onClick={() => navigate(`/visits/${stay.sourceVisitId}`)}>Осмотр при поступлении</Button> : null}
             {canManage && active ? <Button type="primary" icon={<PlusOutlined />} onClick={() => setRecordOpen(true)}>Добавить запись</Button> : null}
           </Space>
         }
@@ -140,7 +139,7 @@ export function HospitalCardPage() {
                 <Descriptions.Item label="Вид"><AnimalSpeciesLabel species={stay.animal?.species} /></Descriptions.Item>
                 <Descriptions.Item label="Владелец"><Typography.Link onClick={() => navigate(`/owners/${stay.ownerId}`)}>{stay.owner?.fullName ?? '—'}</Typography.Link></Descriptions.Item>
                 <Descriptions.Item label="Ответственный">{stay.employee?.fullName ?? 'Не назначен'}</Descriptions.Item>
-                <Descriptions.Item label="Статус"><Tag color={visitStatusColors[stay.status]}>{visitStatusLabels[stay.status]}</Tag></Descriptions.Item>
+                <Descriptions.Item label="Статус"><Tag color={hospitalStatusColors[stay.status]}>{hospitalStatusLabels[stay.status]}</Tag></Descriptions.Item>
                 <Descriptions.Item label="Счёт">{stay.bill ? `${formatMoney(stay.bill.totalAmount)} · оплачено ${formatMoney(stay.bill.paidAmount)}` : '—'}</Descriptions.Item>
                 <Descriptions.Item label="Причина помещения" span={3}>{stay.exam?.purpose || 'Не указана'}</Descriptions.Item>
               </Descriptions>
@@ -201,7 +200,7 @@ function HospitalRecordModal({ open, loading, onClose, onSubmit }: { open: boole
 
   return (
     <Modal title="Новая запись стационара" open={open} onCancel={onClose} onOk={() => form.submit()} okText="Добавить" cancelText="Отмена" confirmLoading={loading} destroyOnHidden afterOpenChange={(nextOpen) => nextOpen && form.setFieldsValue({ recordType: 'OBSERVATION', title: 'Состояние пациента', recordedAt: toDatetimeInput(new Date()), value: '', notes: '', temperatureC: undefined })}>
-      <Form form={form} layout="vertical" onFinish={onSubmit}>
+      <Form form={form} layout="vertical" onFinish={(values) => onSubmit(normalizeHospitalRecord(values))}>
         <Form.Item name="recordType" label="Тип записи" rules={[{ required: true, message: 'Выберите тип записи' }]}>
           <Select
             options={recordTypeOptions.map(({ value, label }) => ({ value, label }))}
@@ -218,8 +217,22 @@ function HospitalRecordModal({ open, loading, onClose, onSubmit }: { open: boole
           <Input placeholder={recordType === 'MEDICATION' ? 'Например: Цефтриаксон' : 'Краткое название записи'} />
         </Form.Item>
         {recordType === 'TEMPERATURE' ? (
-          <Form.Item name="temperatureC" label="Температура, °C" rules={[{ required: true, message: 'Введите температуру' }]}>
-            <InputNumber min={30} max={45} step={0.1} precision={1} className="full-width" />
+          <Form.Item
+            name="temperatureC"
+            label="Температура, °C"
+            rules={[
+              { required: true, message: 'Введите температуру' },
+              {
+                validator: (_, value) => {
+                  const temperature = Number(String(value ?? '').replace(',', '.'));
+                  return Number.isFinite(temperature) && temperature >= 30 && temperature <= 45
+                    ? Promise.resolve()
+                    : Promise.reject(new Error('Введите температуру от 30,0 до 45,0 °C'));
+                },
+              },
+            ]}
+          >
+            <Input inputMode="decimal" placeholder="Например: 38,5" />
           </Form.Item>
         ) : (
           <Form.Item name="value" label={recordType === 'MEDICATION' ? 'Доза и способ введения' : 'Результат / объём'}>
@@ -248,4 +261,27 @@ const recordTypeColor: Record<HospitalRecordType, string> = {
 function toDatetimeInput(value: Date) {
   const offsetDate = new Date(value.getTime() - value.getTimezoneOffset() * 60_000);
   return offsetDate.toISOString().slice(0, 16);
+}
+
+const hospitalStatusLabels = {
+  ACTIVE: 'В стационаре',
+  DISCHARGED: 'Выписан',
+  CANCELLED: 'Отменён',
+} as const;
+
+const hospitalStatusColors = {
+  ACTIVE: 'processing',
+  DISCHARGED: 'success',
+  CANCELLED: 'default',
+} as const;
+
+function normalizeHospitalRecord(values: CreateHospitalRecordInput): CreateHospitalRecordInput {
+  if (values.temperatureC === undefined || values.temperatureC === null) {
+    return values;
+  }
+
+  return {
+    ...values,
+    temperatureC: Math.round(Number(String(values.temperatureC).replace(',', '.')) * 10) / 10,
+  };
 }

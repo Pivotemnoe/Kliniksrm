@@ -382,7 +382,10 @@ function SaleCreateModal({ open, onClose }: { open: boolean; onClose: () => void
                   loading={productsQuery.isLoading}
                   value={line.productId}
                   placeholder="Товар"
-                  options={productsQuery.data?.items.map((product) => ({ value: product.id, label: product.title })) ?? []}
+                  options={productsQuery.data?.items.map((product) => ({
+                    value: product.id,
+                    label: `${product.title} · ${product.writeOffUnit || product.stockUnit || 'шт'}`,
+                  })) ?? []}
                   onChange={(value) => {
                     const product = productsQuery.data?.items.find((item) => item.id === value);
                     updateLine(line.id, { productId: value, title: product?.title ?? '', unitPrice: toMoneyNumber(product?.retailPrice) });
@@ -405,7 +408,17 @@ function SaleCreateModal({ open, onClose }: { open: boolean; onClose: () => void
               {line.lineType === 'MANUAL' ? (
                 <Input value={line.title} placeholder="Название" onChange={(event) => updateLine(line.id, { title: event.target.value })} />
               ) : null}
-              <InputNumber min={0.001} step={0.01} value={line.quantity} onChange={(value) => updateLine(line.id, { quantity: value ?? 1 })} />
+              <InputNumber
+                min={0.001}
+                step={0.01}
+                value={line.quantity}
+                addonAfter={line.lineType === 'PRODUCT'
+                  ? productsQuery.data?.items.find((product) => product.id === line.productId)?.writeOffUnit
+                    || productsQuery.data?.items.find((product) => product.id === line.productId)?.stockUnit
+                    || 'ед.'
+                  : undefined}
+                onChange={(value) => updateLine(line.id, { quantity: value ?? 1 })}
+              />
               <InputNumber min={0} value={line.unitPrice} onChange={(value) => updateLine(line.id, { unitPrice: value ?? 0 })} />
               <InputNumber min={0} value={line.discount} onChange={(value) => updateLine(line.id, { discount: value ?? 0 })} />
               <Typography.Text strong>{formatMoney(Math.max(line.quantity * line.unitPrice - line.discount, 0))}</Typography.Text>

@@ -16,7 +16,6 @@ import { formatDateTime } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
 import { listAnimals } from '../animals/animals.api';
 import { getSchedulingResources } from '../scheduling/scheduling.api';
-import { VisitStatus, visitStatusColors, visitStatusLabels } from '../visits/types';
 import {
   admitHospitalPatient,
   cancelHospitalStay,
@@ -24,7 +23,7 @@ import {
   getHospitalResources,
   listHospital,
 } from './hospital.api';
-import { HospitalStay } from './types';
+import { HospitalStay, HospitalStayStatus } from './types';
 
 const pageSize = 10;
 
@@ -36,7 +35,7 @@ export function HospitalPage() {
   const canManage = hasPermission(auth?.employee, 'hospital.manage');
   const [search, setSearch] = useState('');
   const [boxId, setBoxId] = useState<string | undefined>();
-  const [status, setStatus] = useState<VisitStatus | undefined>();
+  const [status, setStatus] = useState<HospitalStayStatus | undefined>();
   const [offset, setOffset] = useState(0);
   const [admitOpen, setAdmitOpen] = useState(false);
   const hospitalQuery = useQuery({
@@ -81,7 +80,7 @@ export function HospitalPage() {
         title: 'Статус',
         dataIndex: 'status',
         key: 'status',
-        render: (value: HospitalStay['status']) => <Tag color={visitStatusColors[value]}>{visitStatusLabels[value]}</Tag>,
+        render: (value: HospitalStay['status']) => <Tag color={hospitalStatusColors[value]}>{hospitalStatusLabels[value]}</Tag>,
       },
       {
         title: 'Действия',
@@ -91,7 +90,7 @@ export function HospitalPage() {
             <Button size="small" type="primary" onClick={() => navigate(`/hospital/${record.id}`)}>
               Карта стационара
             </Button>
-            {canManage && ['DRAFT', 'IN_PROGRESS'].includes(record.status) ? (
+            {canManage && record.status === 'ACTIVE' ? (
               <>
               <Button size="small" icon={<CheckOutlined />} onClick={() => actionMutation.mutate({ id: record.id, action: 'discharge' })}>
                 Выписать
@@ -152,7 +151,7 @@ export function HospitalPage() {
           />
           <Select
             allowClear
-            placeholder="Активные статусы"
+            placeholder="Все статусы"
             className="status-filter"
             value={status}
             onChange={(value) => {
@@ -216,7 +215,6 @@ function AdmitModal({ open, onClose }: { open: boolean; onClose: () => void }) {
       admitHospitalPatient({
         ...values,
         admittedAt: values.admittedAt ? new Date(values.admittedAt).toISOString() : undefined,
-        status: 'IN_PROGRESS',
       }),
     onSuccess: async () => {
       await Promise.all([
@@ -327,11 +325,22 @@ function toDatetimeInput(value: Date) {
   return offsetDate.toISOString().slice(0, 16);
 }
 
-const hospitalStatusOptions: Array<{ value: VisitStatus; label: string }> = [
-  { value: 'DRAFT', label: visitStatusLabels.DRAFT },
-  { value: 'IN_PROGRESS', label: visitStatusLabels.IN_PROGRESS },
-  { value: 'COMPLETED', label: visitStatusLabels.COMPLETED },
-  { value: 'CANCELLED', label: visitStatusLabels.CANCELLED },
+const hospitalStatusLabels: Record<HospitalStayStatus, string> = {
+  ACTIVE: 'В стационаре',
+  DISCHARGED: 'Выписан',
+  CANCELLED: 'Отменён',
+};
+
+const hospitalStatusColors: Record<HospitalStayStatus, string> = {
+  ACTIVE: 'processing',
+  DISCHARGED: 'success',
+  CANCELLED: 'default',
+};
+
+const hospitalStatusOptions: Array<{ value: HospitalStayStatus; label: string }> = [
+  { value: 'ACTIVE', label: hospitalStatusLabels.ACTIVE },
+  { value: 'DISCHARGED', label: hospitalStatusLabels.DISCHARGED },
+  { value: 'CANCELLED', label: hospitalStatusLabels.CANCELLED },
 ];
 
 function getStayDuration(startedAt: string, completedAt?: string | null) {

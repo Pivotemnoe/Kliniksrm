@@ -108,7 +108,6 @@ export function FinanceSettingsPage() {
     () => [
       { title: 'Название', dataIndex: 'title', key: 'title', render: (value: string) => <Typography.Text strong>{value}</Typography.Text> },
       { title: 'Тип', dataIndex: 'type', key: 'type', width: 180, render: (value: PaymentMethod['type']) => paymentTypeLabels[value] },
-      { title: 'Порядок', dataIndex: 'sortOrder', key: 'sortOrder', width: 110 },
       { title: 'Статус', dataIndex: 'isActive', key: 'isActive', width: 120, render: (value: boolean) => (value ? <Tag color="green">Активен</Tag> : <Tag>Выключен</Tag>) },
       {
         title: '',
@@ -147,7 +146,7 @@ export function FinanceSettingsPage() {
 
   function openMethod(method: PaymentMethod | null) {
     setEditingMethod(method);
-    methodForm.reset(getMethodDefaults(method));
+    methodForm.reset(getMethodDefaults(method, getNextPaymentMethodSortOrder(settingsQuery.data?.paymentMethods ?? [])));
     setMethodModalOpen(true);
   }
 
@@ -303,26 +302,15 @@ export function FinanceSettingsPage() {
               </Form.Item>
             )}
           />
-          <div className="form-grid two-columns">
-            <Controller
-              control={methodForm.control}
-              name="type"
-              render={({ field }) => (
-                <Form.Item label="Тип">
-                  <Select {...field} options={Object.entries(paymentTypeLabels).map(([value, label]) => ({ value, label }))} />
-                </Form.Item>
-              )}
-            />
-            <Controller
-              control={methodForm.control}
-              name="sortOrder"
-              render={({ field }) => (
-                <Form.Item label="Порядок">
-                  <InputNumber {...field} min={0} style={{ width: '100%' }} />
-                </Form.Item>
-              )}
-            />
-          </div>
+          <Controller
+            control={methodForm.control}
+            name="type"
+            render={({ field }) => (
+              <Form.Item label="Тип">
+                <Select {...field} options={Object.entries(paymentTypeLabels).map(([value, label]) => ({ value, label }))} />
+              </Form.Item>
+            )}
+          />
           <Controller
             control={methodForm.control}
             name="isActive"
@@ -397,13 +385,17 @@ export function FinanceSettingsPage() {
   );
 }
 
-function getMethodDefaults(method: PaymentMethod | null): PaymentMethodFormValues {
+function getMethodDefaults(method: PaymentMethod | null, nextSortOrder = 0): PaymentMethodFormValues {
   return {
     title: method?.title ?? '',
     type: method?.type ?? 'CARD',
     isActive: method?.isActive ?? true,
-    sortOrder: method?.sortOrder ?? 0,
+    sortOrder: method?.sortOrder ?? nextSortOrder,
   };
+}
+
+function getNextPaymentMethodSortOrder(methods: PaymentMethod[]) {
+  return methods.reduce((highest, method) => Math.max(highest, method.sortOrder), 0) + 10;
 }
 
 function getCashboxDefaults(cashbox: Cashbox | null): CashboxFormValues {

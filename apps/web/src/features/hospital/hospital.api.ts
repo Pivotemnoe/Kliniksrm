@@ -1,12 +1,12 @@
 import { apiRequest } from '../../api/client';
 import { PaginatedResponse } from '../../shared/types/api';
 import { buildQuery } from '../../shared/utils/query';
-import { AdmitHospitalInput, CreateHospitalRecordInput, HospitalRecord, HospitalResources, HospitalStay } from './types';
+import { AdmitHospitalInput, CreateHospitalRecordInput, HospitalRecord, HospitalResources, HospitalStay, HospitalStayStatus } from './types';
 
 type HospitalListQuery = {
   search?: string;
   hospitalBoxId?: string;
-  status?: string;
+  status?: HospitalStayStatus;
   limit?: number;
   offset?: number;
 };
@@ -19,12 +19,12 @@ export function getHospitalResources() {
   return apiRequest<HospitalResources>('/v1/hospital/resources');
 }
 
-export function getHospitalStay(visitId: string) {
-  return apiRequest<HospitalStay>(`/v1/hospital/${visitId}`);
+export function getHospitalStay(stayId: string) {
+  return apiRequest<HospitalStay>(`/v1/hospital/${stayId}`);
 }
 
-export function createHospitalRecord(visitId: string, input: CreateHospitalRecordInput) {
-  return apiRequest<HospitalRecord>(`/v1/hospital/${visitId}/records`, { method: 'POST', body: input });
+export function createHospitalRecord(stayId: string, input: CreateHospitalRecordInput) {
+  return apiRequest<HospitalRecord>(`/v1/hospital/${stayId}/records`, { method: 'POST', body: input });
 }
 
 export function admitExistingHospitalStay(visitId: string, input: Pick<AdmitHospitalInput, 'hospitalBoxId' | 'employeeId'>) {
@@ -35,14 +35,14 @@ export function admitHospitalPatient(input: AdmitHospitalInput) {
   return apiRequest<HospitalStay>('/v1/hospital', { method: 'POST', body: input });
 }
 
-export function updateHospitalStay(visitId: string, input: Partial<Pick<AdmitHospitalInput, 'employeeId' | 'hospitalBoxId'>>) {
-  return apiRequest<HospitalStay>(`/v1/hospital/${visitId}`, { method: 'PATCH', body: input });
+export function updateHospitalStay(stayId: string, input: Partial<Pick<AdmitHospitalInput, 'employeeId' | 'hospitalBoxId'>>) {
+  return apiRequest<HospitalStay>(`/v1/hospital/${stayId}`, { method: 'PATCH', body: input });
 }
 
-export function dischargeHospitalStay(visitId: string) {
-  return apiRequest<HospitalStay>(`/v1/hospital/${visitId}/discharge`, { method: 'POST' });
+export function dischargeHospitalStay(stayId: string) {
+  return apiRequest<HospitalStay>(`/v1/hospital/${stayId}/discharge`, { method: 'POST' });
 }
 
-export function cancelHospitalStay(visitId: string) {
-  return apiRequest<HospitalStay>(`/v1/hospital/${visitId}/cancel`, { method: 'POST' });
+export function cancelHospitalStay(stayId: string) {
+  return apiRequest<HospitalStay>(`/v1/hospital/${stayId}/cancel`, { method: 'POST' });
 }

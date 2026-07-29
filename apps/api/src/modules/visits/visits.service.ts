@@ -29,6 +29,7 @@ import { UpdateVisitServiceDto } from './dto/update-visit-service.dto';
 import { UpdateVisitDto } from './dto/update-visit.dto';
 import { UpsertVisitExamDto } from './dto/upsert-visit-exam.dto';
 import { UpsertVisitRecommendationDto } from './dto/upsert-visit-recommendation.dto';
+import { toStockQuantity } from '../stock/stock-units';
 
 type WarehouseScope = string[] | null;
 const COMPLETED_VISIT_EDIT_GRACE_MS = 30 * 60 * 1000;
@@ -397,6 +398,7 @@ export class VisitsService {
           productId: serviceLine.productId,
           title: serviceLine.title,
           quantity: serviceLine.quantity,
+          stockQuantity: serviceLine.stockQuantity,
           unitPrice: serviceLine.unitPrice,
           discount: serviceLine.discount,
           totalAmount: serviceLine.totalAmount,
@@ -434,6 +436,9 @@ export class VisitsService {
         productId: existingBillItem.productId ?? undefined,
         title: dto.title ?? existingBillItem.title,
         quantity: dto.quantity ?? decimalToNumber(existingBillItem.quantity),
+        stockQuantity:
+          dto.stockQuantity ??
+          (existingBillItem.stockQuantity === null ? decimalToNumber(existingBillItem.quantity) : decimalToNumber(existingBillItem.stockQuantity)),
         unitPrice: dto.unitPrice ?? decimalToNumber(existingBillItem.unitPrice),
         discount: dto.discount ?? decimalToNumber(existingBillItem.discount),
       });
@@ -443,6 +448,7 @@ export class VisitsService {
         data: {
           title: line.title,
           quantity: line.quantity,
+          stockQuantity: line.stockQuantity,
           unitPrice: line.unitPrice,
           discount: line.discount,
           totalAmount: line.totalAmount,
@@ -450,9 +456,10 @@ export class VisitsService {
       });
 
       if (existingBillItem.productId) {
-        const delta = line.quantity.minus(existingBillItem.quantity);
+        const previousStockQuantity = existingBillItem.stockQuantity ?? existingBillItem.quantity;
+        const delta = (line.stockQuantity ?? line.quantity).minus(previousStockQuantity);
         if (delta.greaterThan(0)) {
-          await this.writeOffVisitProduct(tx, visitId, billItemId, { ...line, quantity: delta }, warehouseScope);
+          await this.writeOffVisitProduct(tx, visitId, billItemId, { ...line, stockQuantity: delta }, warehouseScope);
         } else if (delta.lessThan(0)) {
           await this.restoreVisitProduct(tx, visitId, billItemId, existingBillItem.productId, existingBillItem.title, delta.abs());
         }
@@ -480,7 +487,14 @@ export class VisitsService {
       ensureVisitEditable(visit, actor);
       const billItem = await this.getVisitBillItem(tx, visitId, billItemId);
       if (billItem.productId) {
-        await this.restoreVisitProduct(tx, visitId, billItemId, billItem.productId, billItem.title, billItem.quantity);
+        await this.restoreVisitProduct(
+          tx,
+          visitId,
+          billItemId,
+          billItem.productId,
+          billItem.title,
+          billItem.stockQuantity ?? billItem.quantity,
+        );
       }
       await tx.billItem.delete({ where: { id: billItemId } });
       await this.recalculateVisitTotals(tx, visitId);
@@ -961,6 +975,7 @@ export class VisitsService {
       productId: product?.id,
       title: dto.title ?? service?.title ?? product?.title,
       quantity: dto.quantity ?? 1,
+      stockQuantity: product ? dto.stockQuantity ?? dto.quantity ?? 1 : undefined,
       unitPrice:
         dto.unitPrice ??
         (service ? decimalToNumber(service.price) : undefined) ??
@@ -981,6 +996,12 @@ export class VisitsService {
       return;
     }
 
+    const product = await tx.product.findUniqueOrThrow({
+      where: { id: productId },
+      select: { stockUnit: true, writeOffUnit: true, packageQuantity: true },
+    });
+    const stockQuantity = toStockQuantity(product, line.stockQuantity ?? line.quantity);
+
     const batches = await tx.stockBatch.findMany({
       where: {
         productId,
@@ -992,11 +1013,11 @@ export class VisitsService {
     const orderedBatches = batches.sort(compareStockBatches);
     const available = orderedBatches.reduce((sum, batch) => sum.plus(batch.rest), decimal(0));
 
-    if (available.lessThan(line.quantity)) {
+    if (available.lessThan(stockQuantity)) {
       throw new BadRequestException(`Недостаточно остатка товара "${line.title}"`);
     }
 
-    let remaining = line.quantity;
+    let remaining = stockQuantity;
 
     for (const batch of orderedBatches) {
       if (remaining.lessThanOrEqualTo(0)) {
@@ -1036,7 +1057,11 @@ export class VisitsService {
     title: string,
     quantityToRestore: Prisma.Decimal.Value,
   ) {
-    let remaining = decimal(quantityToRestore);
+    const product = await tx.product.findUniqueOrThrow({
+      where: { id: productId },
+      select: { stockUnit: true, writeOffUnit: true, packageQuantity: true },
+    });
+    let remaining = toStockQuantity(product, quantityToRestore);
     const movements = await tx.stockMovement.findMany({
       where: {
         billItemId,
@@ -1222,6 +1247,9 @@ const visitInclude = {
   appointment: true,
   queueEntry: true,
   hospitalBox: true,
+  hospitalStay: {
+    include: { hospitalBox: true },
+  },
   exam: true,
   diagnoses: {
     orderBy: { createdAt: 'asc' },
@@ -1240,7 +1268,7 @@ const visitInclude = {
             select: { id: true, title: true, price: true },
           },
           product: {
-            select: { id: true, title: true, retailPrice: true },
+            select: { id: true, title: true, retailPrice: true, stockUnit: true, writeOffUnit: true, billingUnit: true },
           },
           stockMovements: {
             orderBy: { createdAt: 'asc' },
@@ -1363,6 +1391,7 @@ function resolveBillItemLine(input: {
   productId?: string;
   title?: string;
   quantity?: number;
+  stockQuantity?: number;
   unitPrice?: number;
   discount?: number;
 }) {
@@ -1373,6 +1402,7 @@ function resolveBillItemLine(input: {
   }
 
   const quantity = decimal(input.quantity ?? 1);
+  const stockQuantity = input.productId ? decimal(input.stockQuantity ?? input.quantity ?? 1) : null;
   const unitPrice = decimal(input.unitPrice ?? 0);
   const discount = decimal(input.discount ?? 0);
   const totalAmount = maxDecimal(quantity.mul(unitPrice).minus(discount), decimal(0));
@@ -1382,6 +1412,7 @@ function resolveBillItemLine(input: {
     productId: input.productId,
     title,
     quantity,
+    stockQuantity,
     unitPrice,
     discount,
     totalAmount,

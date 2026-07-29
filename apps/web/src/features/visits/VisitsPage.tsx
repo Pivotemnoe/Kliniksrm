@@ -1,4 +1,4 @@
-import { OrderedListOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
+import { FolderOpenOutlined, OrderedListOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Button, Input, Select, Space, Table, Tag, Typography } from 'antd';
 import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
@@ -44,7 +44,7 @@ export function VisitsPage() {
 
   const visitsQuery = useQuery({
     queryKey: ['visits', { search, status, employeeId, limit: pageSize, offset }],
-    queryFn: () => listVisits({ search, status, employeeId, excludeHospital: true, limit: pageSize, offset }),
+    queryFn: () => listVisits({ search, status, employeeId, limit: pageSize, offset }),
   });
   const appointmentQuery = useQuery({
     queryKey: ['appointments', appointmentId],
@@ -126,6 +126,16 @@ export function VisitsPage() {
         render: (value: VisitStatus) => <Tag color={visitStatusColors[value]}>{visitStatusLabels[value]}</Tag>,
       },
       { title: 'Сумма', dataIndex: 'totalAmount', key: 'totalAmount', render: formatMoney },
+      {
+        title: 'Действия',
+        key: 'actions',
+        width: 130,
+        render: (_, record) => (
+          <Button size="small" icon={<FolderOpenOutlined />} onClick={() => navigate(`/visits/${record.id}`)}>
+            Открыть
+          </Button>
+        ),
+      },
     ],
     [navigate],
   );

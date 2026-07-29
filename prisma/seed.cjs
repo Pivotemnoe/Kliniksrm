@@ -112,6 +112,7 @@ const roles = [
       'tasks.read',
       'tasks.manage',
       'owners.read',
+      'owners.manage',
       'animals.read',
       'animals.manage',
       'visits.read',

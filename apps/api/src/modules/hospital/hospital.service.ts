@@ -1,5 +1,13 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { BillSource, PaymentStatus, Prisma, VisitStatus } from '@prisma/client';
+import {
+  AppointmentStatus,
+  BillSource,
+  HospitalStayStatus,
+  PaymentStatus,
+  Prisma,
+  QueueStatus,
+  VisitStatus,
+} from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
 import { AuditService } from '../audit/audit.service';
 import { FinanceService } from '../finance/finance.service';
@@ -23,9 +31,9 @@ export class HospitalService {
   async listHospital(query: ListHospitalQueryDto) {
     const { limit, offset } = parsePagination(query);
     const search = query.search?.trim();
-    const where: Prisma.VisitWhereInput = {
-      hospitalBoxId: query.hospitalBoxId ? query.hospitalBoxId : { not: null },
-      status: query.status ?? { in: [VisitStatus.DRAFT, VisitStatus.IN_PROGRESS] },
+    const where: Prisma.HospitalStayWhereInput = {
+      ...(query.hospitalBoxId ? { hospitalBoxId: query.hospitalBoxId } : {}),
+      ...(query.status ? { status: query.status } : {}),
       ...(search
         ? {
             OR: [
@@ -34,24 +42,24 @@ export class HospitalService {
               { animal: { nickname: { contains: search, mode: 'insensitive' } } },
               { animal: { species: { contains: search, mode: 'insensitive' } } },
               { hospitalBox: { name: { contains: search, mode: 'insensitive' } } },
-              { exam: { purpose: { contains: search, mode: 'insensitive' } } },
+              { purpose: { contains: search, mode: 'insensitive' } },
             ],
           }
         : {}),
     };
 
     const [items, total] = await this.prisma.$transaction([
-      this.prisma.visit.findMany({
+      this.prisma.hospitalStay.findMany({
         where,
-        orderBy: { startedAt: 'asc' },
-        include: hospitalVisitInclude,
+        orderBy: [{ status: 'asc' }, { startedAt: 'desc' }],
+        include: hospitalStayInclude,
         skip: offset,
         take: limit,
       }),
-      this.prisma.visit.count({ where }),
+      this.prisma.hospitalStay.count({ where }),
     ]);
 
-    return { items, total, limit, offset };
+    return { items: items.map(serializeHospitalStay), total, limit, offset };
   }
 
   async getResources() {
@@ -63,29 +71,29 @@ export class HospitalService {
     return { boxes };
   }
 
-  async getHospitalStay(visitId: string) {
-    const visit = await this.prisma.visit.findFirst({
-      where: { id: visitId, hospitalBoxId: { not: null } },
-      include: hospitalStayCardInclude,
+  async getHospitalStay(stayId: string) {
+    const stay = await this.prisma.hospitalStay.findFirst({
+      where: { OR: [{ id: stayId }, { sourceVisitId: stayId }] },
+      include: hospitalStayInclude,
     });
 
-    if (!visit) {
-      throw new NotFoundException('Hospital stay not found');
+    if (!stay) {
+      throw new NotFoundException('Госпитализация не найдена');
     }
 
-    return visit;
+    return serializeHospitalStay(stay);
   }
 
-  async createRecord(visitId: string, dto: CreateHospitalRecordDto, actorId: string) {
-    const stay = await this.getExistingHospitalStay(visitId);
+  async createRecord(stayId: string, dto: CreateHospitalRecordDto, actorId: string) {
+    const stay = await this.getExistingHospitalStay(stayId);
 
-    if (stay.status !== VisitStatus.DRAFT && stay.status !== VisitStatus.IN_PROGRESS) {
-      throw new BadRequestException('Hospital journal is closed after discharge or cancellation');
+    if (stay.status !== HospitalStayStatus.ACTIVE) {
+      throw new BadRequestException('Журнал закрыт после выписки или отмены госпитализации');
     }
 
     const record = await this.prisma.hospitalRecord.create({
       data: {
-        visitId,
+        visitId: stay.sourceVisitId,
         recordedById: actorId,
         recordType: dto.recordType,
         title: dto.title.trim(),
@@ -102,7 +110,7 @@ export class HospitalService {
       action: 'hospital.record.create',
       entityType: 'HospitalRecord',
       entityId: record.id,
-      metadata: { visitId, recordType: dto.recordType },
+      metadata: { stayId: stay.id, sourceVisitId: stay.sourceVisitId, recordType: dto.recordType },
     });
 
     return record;
@@ -111,67 +119,106 @@ export class HospitalService {
   async admitExisting(visitId: string, dto: AdmitExistingHospitalStayDto, actorId: string) {
     const visit = await this.prisma.visit.findUnique({
       where: { id: visitId },
-      select: { id: true, status: true },
+      select: {
+        id: true,
+        ownerId: true,
+        animalId: true,
+        employeeId: true,
+        appointmentId: true,
+        queueEntryId: true,
+        status: true,
+        startedAt: true,
+        exam: { select: { purpose: true } },
+        hospitalStay: { select: { id: true } },
+      },
     });
 
     if (!visit) {
-      throw new NotFoundException('Visit not found');
+      throw new NotFoundException('Приём не найден');
+    }
+
+    if (visit.hospitalStay) {
+      return this.getHospitalStay(visit.hospitalStay.id);
     }
 
     if (visit.status !== VisitStatus.DRAFT && visit.status !== VisitStatus.IN_PROGRESS) {
-      throw new BadRequestException('Only an active visit can be admitted to hospital');
+      throw new BadRequestException('В стационар можно перевести только пациента из активного приёма');
     }
 
     const box = await this.schedulingService.ensureHospitalBoxExists(dto.hospitalBoxId);
+    const responsibleEmployeeId = dto.employeeId ?? visit.employeeId;
 
-    if (dto.employeeId) {
-      await this.schedulingService.ensureEmployeeActive(dto.employeeId);
+    if (responsibleEmployeeId) {
+      await this.schedulingService.ensureEmployeeActive(responsibleEmployeeId);
     }
 
-    await this.prisma.visit.update({
-      where: { id: visitId },
-      data: {
-        hospitalBoxId: box.id,
-        ...(dto.employeeId !== undefined ? { employeeId: dto.employeeId } : {}),
-      },
+    const completedAt = new Date();
+    const stay = await this.prisma.$transaction(async (tx) => {
+      await tx.visit.update({
+        where: { id: visit.id },
+        data: { status: VisitStatus.COMPLETED, completedAt },
+      });
+
+      if (visit.appointmentId) {
+        await tx.appointment.update({
+          where: { id: visit.appointmentId },
+          data: { status: AppointmentStatus.COMPLETED },
+        });
+      }
+
+      if (visit.queueEntryId) {
+        await tx.queueEntry.update({
+          where: { id: visit.queueEntryId },
+          data: { status: QueueStatus.COMPLETED },
+        });
+      }
+
+      return tx.hospitalStay.create({
+        data: {
+          sourceVisitId: visit.id,
+          ownerId: visit.ownerId,
+          animalId: visit.animalId,
+          employeeId: responsibleEmployeeId,
+          hospitalBoxId: box.id,
+          purpose: visit.exam?.purpose,
+          startedAt: completedAt,
+          status: HospitalStayStatus.ACTIVE,
+        },
+        select: { id: true },
+      });
     });
 
     await this.auditService.log({
       actorId,
       action: 'hospital.admit.existing',
-      entityType: 'Visit',
-      entityId: visitId,
-      metadata: { hospitalBoxId: box.id },
+      entityType: 'HospitalStay',
+      entityId: stay.id,
+      metadata: { sourceVisitId: visit.id, hospitalBoxId: box.id },
     });
 
-    return this.getHospitalStay(visitId);
+    return this.getHospitalStay(stay.id);
   }
 
   async admit(dto: AdmitHospitalPatientDto, actorId: string) {
     const ownerId = await this.schedulingService.resolveAnimalOwner(dto.animalId, dto.ownerId);
     const box = await this.schedulingService.ensureHospitalBoxExists(dto.hospitalBoxId);
     const dueAt = await this.financeService.getDefaultBillDueAt();
+    const admittedAt = dto.admittedAt ? new Date(dto.admittedAt) : new Date();
 
     if (dto.employeeId) {
       await this.schedulingService.ensureEmployeeActive(dto.employeeId);
     }
 
-    const visit = await this.prisma.$transaction(async (tx) => {
-      const createdVisit = await tx.visit.create({
+    const created = await this.prisma.$transaction(async (tx) => {
+      const sourceVisit = await tx.visit.create({
         data: {
           ownerId,
           animalId: dto.animalId,
           employeeId: dto.employeeId,
-          hospitalBoxId: box.id,
-          startedAt: dto.admittedAt ? new Date(dto.admittedAt) : undefined,
-          status: dto.status ?? VisitStatus.IN_PROGRESS,
-          exam: dto.purpose
-            ? {
-                create: {
-                  purpose: dto.purpose,
-                },
-              }
-            : undefined,
+          startedAt: admittedAt,
+          completedAt: admittedAt,
+          status: VisitStatus.COMPLETED,
+          exam: dto.purpose ? { create: { purpose: dto.purpose } } : undefined,
         },
       });
 
@@ -179,29 +226,47 @@ export class HospitalService {
         data: {
           ownerId,
           animalId: dto.animalId,
-          visitId: createdVisit.id,
+          visitId: sourceVisit.id,
           source: BillSource.VISIT,
           status: PaymentStatus.UNPAID,
           dueAt,
         },
       });
 
-      return createdVisit;
+      const stay = await tx.hospitalStay.create({
+        data: {
+          sourceVisitId: sourceVisit.id,
+          ownerId,
+          animalId: dto.animalId,
+          employeeId: dto.employeeId,
+          hospitalBoxId: box.id,
+          purpose: dto.purpose?.trim() || null,
+          startedAt: admittedAt,
+          status: HospitalStayStatus.ACTIVE,
+        },
+        select: { id: true },
+      });
+
+      return { sourceVisitId: sourceVisit.id, stayId: stay.id };
     });
 
     await this.auditService.log({
       actorId,
       action: 'hospital.admit',
-      entityType: 'Visit',
-      entityId: visit.id,
-      metadata: { ownerId, animalId: dto.animalId, hospitalBoxId: box.id },
+      entityType: 'HospitalStay',
+      entityId: created.stayId,
+      metadata: { ownerId, animalId: dto.animalId, hospitalBoxId: box.id, sourceVisitId: created.sourceVisitId },
     });
 
-    return this.getHospitalStay(visit.id);
+    return this.getHospitalStay(created.stayId);
   }
 
-  async updateStay(visitId: string, dto: UpdateHospitalStayDto, actorId: string) {
-    const existing = await this.getExistingHospitalStay(visitId);
+  async updateStay(stayId: string, dto: UpdateHospitalStayDto, actorId: string) {
+    const existing = await this.getExistingHospitalStay(stayId);
+
+    if (existing.status !== HospitalStayStatus.ACTIVE) {
+      throw new BadRequestException('Закрытую госпитализацию нельзя переводить или переназначать');
+    }
 
     if (dto.hospitalBoxId) {
       await this.schedulingService.ensureHospitalBoxExists(dto.hospitalBoxId);
@@ -211,109 +276,127 @@ export class HospitalService {
       await this.schedulingService.ensureEmployeeActive(dto.employeeId);
     }
 
-    const updatedVisit = await this.prisma.visit.update({
+    await this.prisma.hospitalStay.update({
       where: { id: existing.id },
       data: {
         ...(dto.hospitalBoxId !== undefined ? { hospitalBoxId: dto.hospitalBoxId } : {}),
         ...(dto.employeeId !== undefined ? { employeeId: dto.employeeId } : {}),
       },
-      include: hospitalVisitInclude,
     });
 
     await this.auditService.log({
       actorId,
       action: 'hospital.update',
-      entityType: 'Visit',
-      entityId: visitId,
+      entityType: 'HospitalStay',
+      entityId: existing.id,
       metadata: { changedFields: Object.keys(dto) },
     });
 
-    return updatedVisit;
+    return this.getHospitalStay(existing.id);
   }
 
-  async discharge(visitId: string, actorId: string) {
-    const existing = await this.getExistingHospitalStay(visitId);
+  async discharge(stayId: string, actorId: string) {
+    const existing = await this.getExistingHospitalStay(stayId);
 
-    if (existing.status === VisitStatus.CANCELLED) {
-      throw new BadRequestException('Cancelled hospital stay cannot be discharged');
+    if (existing.status === HospitalStayStatus.CANCELLED) {
+      throw new BadRequestException('Отменённую госпитализацию нельзя завершить выпиской');
     }
 
-    const visit = await this.prisma.visit.update({
+    await this.prisma.hospitalStay.update({
       where: { id: existing.id },
-      data: {
-        status: VisitStatus.COMPLETED,
-        completedAt: new Date(),
-      },
-      include: hospitalVisitInclude,
+      data: { status: HospitalStayStatus.DISCHARGED, completedAt: new Date() },
     });
 
     await this.auditService.log({
       actorId,
       action: 'hospital.discharge',
-      entityType: 'Visit',
-      entityId: visitId,
+      entityType: 'HospitalStay',
+      entityId: existing.id,
+      metadata: { sourceVisitId: existing.sourceVisitId },
     });
 
-    return visit;
+    return this.getHospitalStay(existing.id);
   }
 
-  async cancel(visitId: string, actorId: string) {
-    const existing = await this.getExistingHospitalStay(visitId);
+  async cancel(stayId: string, actorId: string) {
+    const existing = await this.getExistingHospitalStay(stayId);
 
-    const visit = await this.prisma.visit.update({
+    await this.prisma.hospitalStay.update({
       where: { id: existing.id },
-      data: {
-        status: VisitStatus.CANCELLED,
-        completedAt: new Date(),
-      },
-      include: hospitalVisitInclude,
+      data: { status: HospitalStayStatus.CANCELLED, completedAt: new Date() },
     });
 
     await this.auditService.log({
       actorId,
       action: 'hospital.cancel',
-      entityType: 'Visit',
-      entityId: visitId,
+      entityType: 'HospitalStay',
+      entityId: existing.id,
+      metadata: { sourceVisitId: existing.sourceVisitId },
     });
 
-    return visit;
+    return this.getHospitalStay(existing.id);
   }
 
-  private async getExistingHospitalStay(visitId: string) {
-    const visit = await this.prisma.visit.findFirst({
-      where: { id: visitId, hospitalBoxId: { not: null } },
-      select: {
-        id: true,
-        status: true,
-      },
+  private async getExistingHospitalStay(stayId: string) {
+    const stay = await this.prisma.hospitalStay.findFirst({
+      where: { OR: [{ id: stayId }, { sourceVisitId: stayId }] },
+      select: { id: true, sourceVisitId: true, status: true },
     });
 
-    if (!visit) {
-      throw new NotFoundException('Hospital stay not found');
+    if (!stay) {
+      throw new NotFoundException('Госпитализация не найдена');
     }
 
-    return visit;
+    return stay;
   }
 }
-
-const hospitalVisitInclude = {
-  owner: { select: { id: true, fullName: true, phone: true, extraPhone: true } },
-  animal: { select: { id: true, nickname: true, species: true, breed: true, sex: true, status: true } },
-  employee: { select: { id: true, fullName: true, position: true } },
-  hospitalBox: { select: { id: true, name: true, officeId: true } },
-  exam: true,
-  recommendation: true,
-  bill: { select: { id: true, status: true, totalAmount: true, paidAmount: true } },
-} satisfies Prisma.VisitInclude;
 
 const hospitalRecordAuthorInclude = {
   recordedBy: { select: { id: true, fullName: true, position: true } },
 } satisfies Prisma.HospitalRecordInclude;
 
-const hospitalStayCardInclude = {
-  ...hospitalVisitInclude,
-  hospitalRecords: {
-    orderBy: { recordedAt: 'desc' as const },
-    include: hospitalRecordAuthorInclude,
+const hospitalStayInclude = {
+  owner: { select: { id: true, fullName: true, phone: true, extraPhone: true } },
+  animal: { select: { id: true, nickname: true, species: true, breed: true, sex: true, status: true } },
+  employee: { select: { id: true, fullName: true, position: true } },
+  hospitalBox: { select: { id: true, name: true, officeId: true } },
+  sourceVisit: {
+    include: {
+      exam: true,
+      recommendation: true,
+      bill: { select: { id: true, status: true, totalAmount: true, paidAmount: true } },
+      hospitalRecords: {
+        orderBy: { recordedAt: 'desc' as const },
+        include: hospitalRecordAuthorInclude,
+      },
+    },
   },
-} satisfies Prisma.VisitInclude;
+} satisfies Prisma.HospitalStayInclude;
+
+type HospitalStayWithRelations = Prisma.HospitalStayGetPayload<{ include: typeof hospitalStayInclude }>;
+
+function serializeHospitalStay(stay: HospitalStayWithRelations) {
+  return {
+    id: stay.id,
+    sourceVisitId: stay.sourceVisitId,
+    ownerId: stay.ownerId,
+    animalId: stay.animalId,
+    employeeId: stay.employeeId,
+    hospitalBoxId: stay.hospitalBoxId,
+    status: stay.status,
+    purpose: stay.purpose,
+    startedAt: stay.startedAt,
+    completedAt: stay.completedAt,
+    createdAt: stay.createdAt,
+    updatedAt: stay.updatedAt,
+    totalAmount: stay.sourceVisit.totalAmount,
+    owner: stay.owner,
+    animal: stay.animal,
+    employee: stay.employee,
+    hospitalBox: stay.hospitalBox,
+    exam: stay.sourceVisit.exam,
+    recommendation: stay.sourceVisit.recommendation,
+    bill: stay.sourceVisit.bill,
+    hospitalRecords: stay.sourceVisit.hospitalRecords,
+  };
+}

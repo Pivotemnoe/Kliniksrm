@@ -1,4 +1,4 @@
-import { FileAddOutlined, SearchOutlined } from '@ant-design/icons';
+import { CheckCircleOutlined, FileAddOutlined, SearchOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Button, Form, Input, Modal, Select, Space, Table, Tag, Typography } from 'antd';
@@ -32,6 +32,7 @@ export function BillsPage() {
   const [searchParams] = useSearchParams();
   const { data: auth } = useCurrentEmployee();
   const canManage = hasPermission(auth?.employee, 'billing.manage');
+  const canManagePayments = hasPermission(auth?.employee, 'payments.manage');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<BillStatusFilter | undefined>(() => getInitialStatusFilter(searchParams));
   const [source, setSource] = useState<BillSource | undefined>();
@@ -52,13 +53,22 @@ export function BillsPage() {
   const columns = useMemo<ColumnsType<BillListItem>>(
     () => [
       {
-        title: 'Счёт',
+        title: 'Действия',
         key: 'bill',
-        render: (_, record) => (
-          <Button type="link" className="table-link" onClick={() => navigate(`/bills/${record.id}`)}>
-            {record.id.slice(0, 8)}
-          </Button>
-        ),
+        width: 210,
+        render: (_, record) => {
+          const debt = toMoneyNumber(record.totalAmount) - toMoneyNumber(record.paidAmount);
+          return (
+            <Space>
+              <Button size="small" onClick={() => navigate(`/bills/${record.id}`)}>Открыть</Button>
+              {canManagePayments && debt > 0 && record.status !== 'CANCELLED' ? (
+                <Button size="small" type="primary" icon={<CheckCircleOutlined />} onClick={() => navigate(`/bills/${record.id}?pay=1`)}>
+                  Оплатить
+                </Button>
+              ) : null}
+            </Space>
+          );
+        },
       },
       {
         title: 'Статус',
@@ -124,7 +134,7 @@ export function BillsPage() {
         },
       },
     ],
-    [navigate],
+    [canManagePayments, navigate],
   );
 
   function handleTableChange(pagination: TablePaginationConfig) {

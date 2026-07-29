@@ -48,7 +48,7 @@ export function VisitCardPage() {
   });
   const hospitalAdmissionMutation = useMutation({
     mutationFn: (boxId: string) => admitExistingHospitalStay(visitId!, { hospitalBoxId: boxId }),
-    onSuccess: async () => {
+    onSuccess: async (stay) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['visits', visitId] }),
         queryClient.invalidateQueries({ queryKey: ['visits'] }),
@@ -57,7 +57,7 @@ export function VisitCardPage() {
       setHospitalModalOpen(false);
       setHospitalBoxId(undefined);
       message.success('Пациент помещён в стационар');
-      navigate(`/hospital/${visitId}`);
+      navigate(`/hospital/${stay.id}`);
     },
     onError: (error) => message.error(getErrorMessage(error)),
   });
@@ -108,8 +108,8 @@ export function VisitCardPage() {
       <aside className="context-panel">
         <div className="context-section">
           <div className="context-section-header">
-            <button className="table-link" type="button" onClick={() => navigate(visit?.hospitalBoxId ? '/hospital' : '/visits')}>
-              <LeftOutlined /> {visit?.hospitalBoxId ? 'К стационару' : 'К приёмам'}
+            <button className="table-link" type="button" onClick={() => navigate('/visits')}>
+              <LeftOutlined /> К приёмам
             </button>
           </div>
           <div className="context-section-body context-grid">
@@ -168,7 +168,7 @@ export function VisitCardPage() {
               }
             />
             <ContextRow label="Температура" value={visit?.exam?.temperatureC ? `${visit.exam.temperatureC} °C` : '—'} />
-            <ContextRow label="Тип обращения" value={visit?.hospitalBoxId ? 'Стационар' : visit?.visitType ? visitTypeLabels[visit.visitType] : '—'} />
+            <ContextRow label="Тип обращения" value={visit?.hospitalStay ? 'Поступление в стационар' : visit?.visitType ? visitTypeLabels[visit.visitType] : '—'} />
             <ContextRow
               label="Диагнозы"
               value={
@@ -228,8 +228,8 @@ export function VisitCardPage() {
               <strong>Стационар</strong>
             </div>
             <div className="context-section-body">
-              {visit.hospitalBoxId ? (
-                <Button type="primary" icon={<HomeOutlined />} onClick={() => navigate(`/hospital/${visit.id}`)}>
+              {visit.hospitalStay ? (
+                <Button type="primary" icon={<HomeOutlined />} onClick={() => navigate(`/hospital/${visit.hospitalStay?.id}`)}>
                   Открыть карту стационара
                 </Button>
               ) : canManageHospital && (visit.status === 'DRAFT' || visit.status === 'IN_PROGRESS') ? (
@@ -322,8 +322,8 @@ export function VisitCardPage() {
                           'Прямой приём'
                         )}
                       </Descriptions.Item>
-                      <Descriptions.Item label="Бокс стационара">{visit.hospitalBox?.name ?? visit.hospitalBox?.title ?? '—'}</Descriptions.Item>
-                      <Descriptions.Item label="Тип обращения">{visit.hospitalBoxId ? 'Стационар' : visit.visitType ? visitTypeLabels[visit.visitType] : '—'}</Descriptions.Item>
+                      <Descriptions.Item label="Бокс стационара">{visit.hospitalStay?.hospitalBox?.name ?? visit.hospitalBox?.name ?? visit.hospitalBox?.title ?? '—'}</Descriptions.Item>
+                      <Descriptions.Item label="Тип обращения">{visit.hospitalStay ? 'Поступление в стационар' : visit.visitType ? visitTypeLabels[visit.visitType] : '—'}</Descriptions.Item>
                       <Descriptions.Item label="Начат">{formatDateTime(visit.startedAt)}</Descriptions.Item>
                       <Descriptions.Item label="Завершён">{formatDateTime(visit.completedAt)}</Descriptions.Item>
                       <Descriptions.Item label="Счёт">
@@ -352,7 +352,7 @@ export function VisitCardPage() {
         onOk={() => hospitalBoxId && hospitalAdmissionMutation.mutate(hospitalBoxId)}
       >
         <Typography.Paragraph type="secondary">
-          После размещения наблюдения, температура, препараты и процедуры будут в отдельной карте стационара.
+          Приём будет завершён, а наблюдения, температура, препараты и процедуры продолжатся независимо в отдельной карте стационара.
         </Typography.Paragraph>
         <Select
           value={hospitalBoxId}

@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsDateString, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
 
 export class UpsertProductDto {
   @ApiProperty()
@@ -61,6 +61,12 @@ export class UpsertProductDto {
   @MaxLength(40)
   writeOffUnit?: string;
 
+  @ApiPropertyOptional({ description: 'Unit charged to the client, for example injection or ml.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  billingUnit?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()
@@ -78,6 +84,16 @@ export class UpsertProductDto {
   @IsNumber()
   @Min(0)
   shelfLifeDays?: number;
+
+  @ApiPropertyOptional({ description: 'Suggested exact expiry date for the next received batch.' })
+  @IsOptional()
+  @IsDateString()
+  defaultExpiresAt?: string | null;
+
+  @ApiPropertyOptional({ description: 'Generate an internal EAN-13 barcode when barcode is empty.' })
+  @IsOptional()
+  @IsBoolean()
+  generateBarcode?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()

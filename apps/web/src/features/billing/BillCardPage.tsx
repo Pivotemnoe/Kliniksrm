@@ -11,11 +11,11 @@ import {
 } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Card, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
+import { Alert, App, Button, Card, Checkbox, Form, Input, InputNumber, Modal, Popconfirm, Radio, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
 import { ColumnsType } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
@@ -51,12 +51,16 @@ import {
 export function BillCardPage() {
   const { billId } = useParams<{ billId: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const { message } = App.useApp();
   const { data: auth } = useCurrentEmployee();
   const canManageBills = hasPermission(auth?.employee, 'billing.manage');
   const canManagePayments = hasPermission(auth?.employee, 'payments.manage');
   const [dueAtOpen, setDueAtOpen] = useState(false);
+  const [printOpen, setPrintOpen] = useState(false);
+  const [paymentRequestKey, setPaymentRequestKey] = useState(() => (searchParams.get('pay') === '1' ? 1 : 0));
+  const [activeTab, setActiveTab] = useState(() => (searchParams.get('pay') === '1' ? 'payments' : 'items'));
   const billQuery = useQuery({
     queryKey: ['bills', billId],
     queryFn: () => getBill(billId!),
@@ -117,7 +121,6 @@ export function BillCardPage() {
             </button>
           </div>
           <div className="context-section-body context-grid">
-            <ContextRow label="№ счёта" value={bill?.id.slice(0, 8)} />
             <ContextRow label="Создан" value={formatDateTime(bill?.createdAt)} />
             <ContextRow label="Срок оплаты" value={formatDate(bill?.dueAt)} />
             <ContextRow label="Источник" value={bill ? billSourceLabels[bill.source] : undefined} />
@@ -135,6 +138,18 @@ export function BillCardPage() {
               {debt > 0 ? `, долг ${formatMoney(debt)}` : ''}
             </Typography.Text>
             {isOverdue ? <Tag color="red">Просрочен</Tag> : null}
+            {canPay ? (
+              <Button
+                type="primary"
+                icon={<CheckCircleOutlined />}
+                onClick={() => {
+                  setActiveTab('payments');
+                  setPaymentRequestKey((value) => value + 1);
+                }}
+              >
+                Оплатить {formatMoney(debt)}
+              </Button>
+            ) : null}
           </div>
         </div>
         <div className="context-section">
@@ -165,7 +180,7 @@ export function BillCardPage() {
           <div className="context-section">
             <div className="context-section-body">
               <Space wrap>
-                <Button icon={<PrinterOutlined />} onClick={() => printBillDocument(bill)}>
+                <Button icon={<PrinterOutlined />} onClick={() => setPrintOpen(true)}>
                   Печать
                 </Button>
                 <Button icon={<EditOutlined />} onClick={() => setDueAtOpen(true)}>
@@ -197,6 +212,8 @@ export function BillCardPage() {
         <div className="work-surface">
           {bill ? (
             <Tabs
+              activeKey={activeTab}
+              onChange={setActiveTab}
               items={[
                 {
                   key: 'items',
@@ -206,7 +223,7 @@ export function BillCardPage() {
                 {
                   key: 'payments',
                   label: 'Оплаты',
-                  children: <BillPaymentsTab bill={bill} canPay={canPay} canRefund={canManagePayments && bill.status !== 'CANCELLED'} />,
+                  children: <BillPaymentsTab bill={bill} canPay={canPay} canRefund={canManagePayments && bill.status !== 'CANCELLED'} paymentRequestKey={paymentRequestKey} />,
                 },
                 {
                   key: 'profile',
@@ -219,13 +236,16 @@ export function BillCardPage() {
         </div>
       </main>
       {bill ? (
-        <BillDueAtModal
-          open={dueAtOpen}
-          bill={bill}
-          loading={updateBillMutation.isPending}
-          onClose={() => setDueAtOpen(false)}
-          onSubmit={(values) => updateBillMutation.mutate(values)}
-        />
+        <>
+          <BillDueAtModal
+            open={dueAtOpen}
+            bill={bill}
+            loading={updateBillMutation.isPending}
+            onClose={() => setDueAtOpen(false)}
+            onSubmit={(values) => updateBillMutation.mutate(values)}
+          />
+          <BillPrintEditor open={printOpen} bill={bill} onClose={() => setPrintOpen(false)} />
+        </>
       ) : null}
     </div>
   );
@@ -323,8 +343,25 @@ function BillItemsTab({ bill, canEdit }: { bill: Bill; canEdit: boolean }) {
   const columns = useMemo<ColumnsType<BillItem>>(
     () => [
       { title: 'Позиция', dataIndex: 'title', key: 'title' },
-      { title: 'Кол-во', dataIndex: 'quantity', key: 'quantity' },
-      { title: 'Цена', dataIndex: 'unitPrice', key: 'unitPrice', render: formatMoney },
+      {
+        title: 'Начислено / списано',
+        key: 'quantity',
+        render: (_, record) => {
+          if (!record.productId) {
+            return String(record.quantity);
+          }
+
+          const billingUnit = record.product?.billingUnit || record.product?.writeOffUnit || record.product?.stockUnit || 'ед.';
+          const writeOffUnit = record.product?.writeOffUnit || record.product?.stockUnit || 'ед.';
+          return (
+            <Space direction="vertical" size={0}>
+              <span>{String(record.quantity)} {billingUnit}</span>
+              <Typography.Text type="secondary">списано {String(record.stockQuantity ?? record.quantity)} {writeOffUnit}</Typography.Text>
+            </Space>
+          );
+        },
+      },
+      { title: 'Цена за начисление', dataIndex: 'unitPrice', key: 'unitPrice', render: formatMoney },
       { title: 'Скидка', dataIndex: 'discount', key: 'discount', render: formatMoney },
       { title: 'Итого', dataIndex: 'totalAmount', key: 'totalAmount', render: formatMoney },
       {
@@ -424,12 +461,18 @@ function BillItemsTab({ bill, canEdit }: { bill: Bill; canEdit: boolean }) {
   );
 }
 
-function BillPaymentsTab({ bill, canPay, canRefund }: { bill: Bill; canPay: boolean; canRefund: boolean }) {
+function BillPaymentsTab({ bill, canPay, canRefund, paymentRequestKey }: { bill: Bill; canPay: boolean; canRefund: boolean; paymentRequestKey: number }) {
   const queryClient = useQueryClient();
   const { message } = App.useApp();
   const [payOpen, setPayOpen] = useState(false);
   const [refundPaymentRecord, setRefundPaymentRecord] = useState<Payment | null>(null);
   const debt = Math.max(toMoneyNumber(bill.totalAmount) - toMoneyNumber(bill.paidAmount), 0);
+
+  useEffect(() => {
+    if (paymentRequestKey > 0 && canPay) {
+      setPayOpen(true);
+    }
+  }, [canPay, paymentRequestKey]);
   const payMutation = useMutation({
     mutationFn: (values: PaymentFormValues) =>
       createPayment(bill.id, {
@@ -576,6 +619,7 @@ const itemFormSchema = z
     productId: z.string().optional(),
     title: z.string().trim().optional(),
     quantity: z.number().min(0.001, 'Введите количество'),
+    stockQuantity: z.number().min(0.001, 'Укажите, сколько списать со склада').optional(),
     unitPrice: z.number().min(0, 'Введите цену'),
     discount: z.number().min(0, 'Введите скидку'),
   })
@@ -586,6 +630,10 @@ const itemFormSchema = z
 
     if (value.lineType === 'PRODUCT' && !value.productId) {
       ctx.addIssue({ code: 'custom', path: ['productId'], message: 'Выберите товар' });
+    }
+
+    if (value.lineType === 'PRODUCT' && !value.stockQuantity) {
+      ctx.addIssue({ code: 'custom', path: ['stockQuantity'], message: 'Укажите, сколько списать со склада' });
     }
 
     if (value.lineType === 'MANUAL' && !value.title?.trim()) {
@@ -613,6 +661,7 @@ function BillItemModal({
     defaultValues: getItemDefaults(item),
   });
   const lineType = useWatch({ control, name: 'lineType' });
+  const productId = useWatch({ control, name: 'productId' });
   const productsQuery = useQuery({
     queryKey: ['stock', 'products', 'bill-select'],
     queryFn: () => listProducts({ limit: 100, offset: 0 }),
@@ -623,6 +672,7 @@ function BillItemModal({
     queryFn: () => listServices({ limit: 100, offset: 0 }),
     enabled: open,
   });
+  const selectedProduct = productsQuery.data?.items.find((product) => product.id === productId);
 
   useEffect(() => {
     if (open) {
@@ -635,6 +685,7 @@ function BillItemModal({
       onSubmit({
         title: values.title,
         quantity: values.quantity,
+        ...(values.lineType === 'PRODUCT' && values.stockQuantity ? { stockQuantity: values.stockQuantity } : {}),
         unitPrice: values.unitPrice,
         discount: values.discount,
       });
@@ -646,6 +697,7 @@ function BillItemModal({
       productId: values.lineType === 'PRODUCT' ? values.productId : undefined,
       title: values.title,
       quantity: values.quantity,
+      ...(values.lineType === 'PRODUCT' && values.stockQuantity ? { stockQuantity: values.stockQuantity } : {}),
       unitPrice: values.unitPrice,
       discount: values.discount,
     });
@@ -717,30 +769,61 @@ function BillItemModal({
                   loading={productsQuery.isLoading}
                   disabled={Boolean(item)}
                   placeholder="Выберите товар"
-                  options={productsQuery.data?.items.map((product) => ({ value: product.id, label: product.title })) ?? []}
+                  options={productsQuery.data?.items.map((product) => ({
+                    value: product.id,
+                    label: `${product.title} · ${product.writeOffUnit || product.stockUnit || 'шт'}`,
+                  })) ?? []}
                   onChange={(value) => {
                     field.onChange(value);
                     const product = productsQuery.data?.items.find((item) => item.id === value);
                     setValue('title', product?.title ?? '');
                     setValue('unitPrice', toMoneyNumber(product?.retailPrice));
+                    setValue('quantity', 1);
+                    setValue('stockQuantity', 1);
                   }}
                 />
               </Form.Item>
             )}
           />
         ) : null}
-        <Controller
-          control={control}
-          name="title"
-          render={({ field, fieldState }) => (
-            <Form.Item label="Название" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
-              <Input {...field} disabled={!item && lineType !== 'MANUAL'} />
-            </Form.Item>
-          )}
-        />
+        {lineType === 'MANUAL' ? (
+          <Controller
+            control={control}
+            name="title"
+            render={({ field, fieldState }) => (
+              <Form.Item label="Название позиции" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+                <Input {...field} />
+              </Form.Item>
+            )}
+          />
+        ) : null}
+        {lineType === 'PRODUCT' && selectedProduct ? (
+          <Alert
+            type="info"
+            showIcon
+            message={`Склад и оплата считаются отдельно: фактический расход — в ${selectedProduct.writeOffUnit || selectedProduct.stockUnit || 'ед.'}, начисление — в ${selectedProduct.billingUnit || selectedProduct.writeOffUnit || selectedProduct.stockUnit || 'ед.'}.`}
+          />
+        ) : null}
         <div className="form-grid two-columns">
-          <MoneyNumber control={control} name="quantity" label="Количество" min={0.001} step={0.01} />
-          <MoneyNumber control={control} name="unitPrice" label="Цена" />
+          {lineType === 'PRODUCT' ? (
+            <MoneyNumber
+              control={control}
+              name="stockQuantity"
+              label={`Списать со склада, ${selectedProduct?.writeOffUnit || selectedProduct?.stockUnit || item?.product?.writeOffUnit || item?.product?.stockUnit || 'ед.'}`}
+              min={0.001}
+              step={0.01}
+            />
+          ) : null}
+          <MoneyNumber
+            control={control}
+            name="quantity"
+            label={lineType === 'PRODUCT'
+              ? `Начислить клиенту, ${selectedProduct?.billingUnit || selectedProduct?.writeOffUnit || selectedProduct?.stockUnit || item?.product?.billingUnit || item?.product?.writeOffUnit || item?.product?.stockUnit || 'ед.'}`
+              : 'Количество'}
+            min={0.001}
+            step={0.01}
+          />
+          <MoneyNumber control={control} name="unitPrice" label={lineType === 'PRODUCT' ? 'Цена за 1 начисление' : 'Цена'} />
           <MoneyNumber control={control} name="discount" label="Скидка" />
         </div>
       </Form>
@@ -993,6 +1076,7 @@ function getItemDefaults(item: BillItem | null): ItemFormValues {
     productId: item?.productId ?? undefined,
     title: item?.title ?? '',
     quantity: toMoneyNumber(item?.quantity) || 1,
+    stockQuantity: item?.productId ? (toMoneyNumber(item.stockQuantity ?? item.quantity) || 1) : undefined,
     unitPrice: toMoneyNumber(item?.unitPrice),
     discount: toMoneyNumber(item?.discount),
   };
@@ -1021,7 +1105,75 @@ function toDueAtIso(value: string | undefined) {
   return value ? new Date(`${value}T23:59:59`).toISOString() : null;
 }
 
-function printBillDocument(bill: Bill) {
+type BillPrintSettings = {
+  paper: 'A4' | 'RECEIPT_80' | 'RECEIPT_58';
+  showCustomer: boolean;
+  showPayments: boolean;
+};
+
+function BillPrintEditor({ open, bill, onClose }: { open: boolean; bill: Bill; onClose: () => void }) {
+  const [settings, setSettings] = useState<BillPrintSettings>({ paper: 'A4', showCustomer: true, showPayments: true });
+
+  useEffect(() => {
+    if (open) {
+      setSettings({ paper: 'A4', showCustomer: true, showPayments: true });
+    }
+  }, [open]);
+
+  const debt = Math.max(toMoneyNumber(bill.totalAmount) - toMoneyNumber(bill.paidAmount), 0);
+
+  return (
+    <Modal
+      title="Редактор печати счёта / чека"
+      open={open}
+      onCancel={onClose}
+      width={820}
+      footer={[
+        <Button key="cancel" onClick={onClose}>Отмена</Button>,
+        <Button key="print" type="primary" icon={<PrinterOutlined />} onClick={() => printBillDocument(bill, settings)}>
+          Открыть печать
+        </Button>,
+      ]}
+    >
+      <Alert type="info" showIcon message="Выберите бумагу и состав документа. Печать не начнётся, пока вы не подтвердите её в системном окне." />
+      <Form layout="vertical" style={{ marginTop: 16 }}>
+        <Form.Item label="Формат бумаги">
+          <Radio.Group
+            value={settings.paper}
+            onChange={(event) => setSettings((current) => ({ ...current, paper: event.target.value }))}
+            options={[
+              { value: 'A4', label: 'A4 — счёт' },
+              { value: 'RECEIPT_80', label: 'Лента 80 мм' },
+              { value: 'RECEIPT_58', label: 'Лента 58 мм' },
+            ]}
+          />
+        </Form.Item>
+        <Space wrap>
+          <Checkbox checked={settings.showCustomer} onChange={(event) => setSettings((current) => ({ ...current, showCustomer: event.target.checked }))}>
+            Владелец и пациент
+          </Checkbox>
+          <Checkbox checked={settings.showPayments} onChange={(event) => setSettings((current) => ({ ...current, showPayments: event.target.checked }))}>
+            История оплат
+          </Checkbox>
+        </Space>
+      </Form>
+      <div style={{ marginTop: 18, background: '#eef2f7', padding: 20, display: 'flex', justifyContent: 'center' }}>
+        <div style={{ width: settings.paper === 'A4' ? 560 : settings.paper === 'RECEIPT_80' ? 300 : 220, background: '#fff', padding: 18, border: '1px solid #cbd5e1' }}>
+          <strong>Счёт от {formatDate(bill.createdAt)}</strong>
+          <div style={{ color: '#64748b', marginBottom: 12 }}>{formatDateTime(bill.createdAt)}</div>
+          {settings.showCustomer ? <div>{bill.owner?.fullName ?? 'Розничный покупатель'} · {bill.animal?.nickname ?? 'без пациента'}</div> : null}
+          <div style={{ borderTop: '1px solid #cbd5e1', marginTop: 12, paddingTop: 8 }}>
+            {bill.items.slice(0, 4).map((item) => <div key={item.id}>{item.title} × {String(item.quantity)}</div>)}
+            {bill.items.length > 4 ? <div>…ещё {bill.items.length - 4}</div> : null}
+          </div>
+          <div style={{ fontSize: 20, fontWeight: 800, marginTop: 12 }}>К оплате {formatMoney(debt)}</div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function printBillDocument(bill: Bill, settings: BillPrintSettings) {
   const printWindow = window.open('', '_blank', 'width=980,height=760');
 
   if (!printWindow) {
@@ -1058,14 +1210,23 @@ function printBillDocument(bill: Bill) {
         )
         .join('')
     : '<tr><td colspan="4">Оплат пока нет</td></tr>';
+  const receiptItems = bill.items
+    .map((item) => `<div class="receipt-item"><span>${escapeHtml(item.title)} × ${escapeHtml(String(item.quantity))}</span><strong>${escapeHtml(formatMoney(item.totalAmount))}</strong></div>`)
+    .join('');
+  const isReceipt = settings.paper !== 'A4';
+  const pageWidth = settings.paper === 'RECEIPT_58' ? '58mm' : '80mm';
+  const pageCss = isReceipt
+    ? `@page { size: ${pageWidth} auto; margin: 4mm; } body { width: calc(${pageWidth} - 8mm); margin: 0; font-size: 11px; }`
+    : '@page { size: A4 portrait; margin: 14mm; } body { margin: 0; font-size: 14px; }';
 
   printWindow.document.write(`<!doctype html>
 <html lang="ru">
 <head>
   <meta charset="utf-8" />
-  <title>Счёт ${escapeHtml(bill.id.slice(0, 8))}</title>
+  <title>Счёт от ${escapeHtml(formatDate(bill.createdAt))}</title>
   <style>
-    body { margin: 32px; color: #111827; font: 14px/1.45 Arial, sans-serif; }
+    ${pageCss}
+    body { color: #111827; font-family: Arial, sans-serif; line-height: 1.4; }
     h1 { margin: 0 0 4px; font-size: 24px; }
     h2 { margin: 24px 0 10px; font-size: 16px; }
     .meta { margin-bottom: 18px; color: #6b7280; }
@@ -1078,13 +1239,16 @@ function printBillDocument(bill: Bill) {
     .totals { margin-top: 18px; margin-left: auto; width: 320px; }
     .totals div { display: flex; justify-content: space-between; padding: 4px 0; }
     .total { font-size: 18px; font-weight: 700; }
+    .receipt-items { display: grid; gap: 6px; margin-top: 10px; }
+    .receipt-item { display: flex; gap: 8px; justify-content: space-between; border-bottom: 1px dotted #9ca3af; padding-bottom: 4px; }
+    ${isReceipt ? 'h1 { font-size: 17px; } h2 { font-size: 13px; margin-top: 14px; } .grid { grid-template-columns: 1fr; } .totals { width: 100%; }' : ''}
   </style>
 </head>
 <body>
-  <h1>Счёт / накладная № ${escapeHtml(bill.id.slice(0, 8))}</h1>
+  <h1>Счёт / накладная</h1>
   <div class="meta">${escapeHtml(formatDateTime(bill.createdAt))} · ${escapeHtml(billSourceLabels[bill.source])} · ${escapeHtml(paymentStatusLabels[bill.status])}</div>
 
-  <div class="grid">
+  ${settings.showCustomer ? `<div class="grid">
     <div>
       <div class="label">Владелец</div>
       <div>${escapeHtml(bill.owner?.fullName ?? 'Розничный покупатель')}</div>
@@ -1105,10 +1269,10 @@ function printBillDocument(bill: Bill) {
       <div class="label">Срок оплаты</div>
       <div>${escapeHtml(formatDate(bill.dueAt))}${overdue ? ' · Просрочен' : ''}</div>
     </div>
-  </div>
+  </div>` : ''}
 
   <h2>Позиции</h2>
-  <table>
+  ${isReceipt ? `<div class="receipt-items">${receiptItems || 'Позиции не добавлены'}</div>` : `<table>
     <thead>
       <tr>
         <th>№</th>
@@ -1120,7 +1284,7 @@ function printBillDocument(bill: Bill) {
       </tr>
     </thead>
     <tbody>${itemRows || '<tr><td colspan="6">Позиции не добавлены</td></tr>'}</tbody>
-  </table>
+  </table>`}
 
   <div class="totals">
     <div><span>Сумма</span><strong>${escapeHtml(formatMoney(bill.totalAmount))}</strong></div>
@@ -1129,7 +1293,7 @@ function printBillDocument(bill: Bill) {
     <div class="total"><span>К оплате</span><span>${escapeHtml(formatMoney(debt))}</span></div>
   </div>
 
-  <h2>Оплаты</h2>
+  ${settings.showPayments ? `<h2>Оплаты</h2>
   <table>
     <thead>
       <tr>
@@ -1140,8 +1304,8 @@ function printBillDocument(bill: Bill) {
       </tr>
     </thead>
     <tbody>${paymentRows}</tbody>
-  </table>
-  <script>window.print();</script>
+  </table>` : ''}
+  <script>window.onload = () => window.print();</script>
 </body>
 </html>`);
   printWindow.document.close();

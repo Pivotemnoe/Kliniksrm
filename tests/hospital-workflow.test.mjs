@@ -22,7 +22,7 @@ test('стационар имеет отдельную карту и време�
   const card = await read('apps/web/src/features/hospital/HospitalCardPage.tsx');
   const hospitalList = await read('apps/web/src/features/hospital/HospitalPage.tsx');
 
-  assert.match(routes, /path: '\/hospital\/:visitId'/);
+  assert.match(routes, /path: '\/hospital\/:stayId'/);
   assert.match(card, /Журнал стационара/);
   assert.match(card, /Температура, препараты, процедуры, наблюдения, кормление и уход/);
   assert.match(hospitalList, /label: animal\.nickname/);
@@ -34,8 +34,42 @@ test('обычные приёмы и стационар разделены в п
   const visitCard = await read('apps/web/src/features/visits/VisitCardPage.tsx');
   const exam = await read('apps/web/src/features/visits/VisitExamTab.tsx');
 
-  assert.match(visitsPage, /excludeHospital: true/);
+  assert.doesNotMatch(visitsPage, /excludeHospital: true/);
   assert.match(visitCard, /Открыть карту стационара/);
+  assert.match(visitCard, /hospitalStay/);
   assert.doesNotMatch(visitCard, /<VisitHospitalTab/);
   assert.match(exam, /value="Стационар"/);
+});
+
+test('пребывание в стационаре имеет независимый от приёма жизненный цикл', async () => {
+  const migration = await read('prisma/migrations/20260728000100_hospital_stay_lifecycle/migration.sql');
+  const service = await read('apps/api/src/modules/hospital/hospital.service.ts');
+
+  assert.match(migration, /CREATE TABLE "HospitalStay"/);
+  assert.match(migration, /"sourceVisitId" TEXT NOT NULL/);
+  assert.doesNotMatch(migration, /\b(?:DROP|DELETE\s+FROM|TRUNCATE)\b/i);
+  assert.match(service, /data: \{ status: VisitStatus\.COMPLETED, completedAt \}/);
+  assert.match(service, /tx\.hospitalStay\.create/);
+  assert.match(service, /status: HospitalStayStatus\.ACTIVE/);
+  assert.match(service, /data: \{ status: HospitalStayStatus\.DISCHARGED, completedAt: new Date\(\) \}/);
+  assert.doesNotMatch(service, /data: \{ status: VisitStatus\.COMPLETED, completedAt: new Date\(\) \}/);
+});
+
+test('поиск стационара работает без обязательного фильтра статуса', async () => {
+  const service = await read('apps/api/src/modules/hospital/hospital.service.ts');
+  const page = await read('apps/web/src/features/hospital/HospitalPage.tsx');
+
+  assert.match(service, /\.\.\.\(query\.status \? \{ status: query\.status \} : \{\}\)/);
+  assert.doesNotMatch(service, /query\.status \? \[query\.status\]/);
+  assert.match(page, /value=\{status\}/);
+  assert.match(page, /placeholder="Все статусы"/);
+});
+
+test('температура стационара передаётся числом с точностью до десятых', async () => {
+  const dto = await read('apps/api/src/modules/hospital/dto/create-hospital-record.dto.ts');
+  const card = await read('apps/web/src/features/hospital/HospitalCardPage.tsx');
+
+  assert.match(dto, /@Type\(\(\) => Number\)/);
+  assert.match(dto, /maxDecimalPlaces: 1/);
+  assert.match(card, /Math\.round\(Number\(String\(values\.temperatureC\)\.replace\(',', '\.'\)\) \* 10\) \/ 10/);
 });

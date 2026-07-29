@@ -41,9 +41,11 @@ export type Product = {
   retailPrice: DecimalValue;
   stockUnit: string | null;
   writeOffUnit: string | null;
+  billingUnit: string | null;
   packageQuantity: DecimalValue | null;
   minStock: DecimalValue | null;
   shelfLifeDays: number | null;
+  defaultExpiresAt: string | null;
   description: string | null;
   stockRest?: DecimalValue;
   batches?: StockBatch[];
@@ -110,6 +112,12 @@ export type StockResources = {
   suppliers: Supplier[];
   cashboxes: Array<{ id: string; officeId: string | null; title: string }>;
   paymentMethods: Array<{ id: string; title: string; type: string }>;
+  organization: {
+    displayName: string;
+    legalName: string | null;
+    orgType: string | null;
+    inn: string | null;
+  } | null;
 };
 
 export type ProductMutationInput = {
@@ -123,9 +131,12 @@ export type ProductMutationInput = {
   retailPrice?: number;
   stockUnit?: string;
   writeOffUnit?: string;
+  billingUnit?: string;
   packageQuantity?: number;
   minStock?: number;
   shelfLifeDays?: number;
+  defaultExpiresAt?: string | null;
+  generateBarcode?: boolean;
   description?: string;
 };
 
