@@ -291,6 +291,64 @@ export class EmployeesService {
     }
   }
 
+  async archiveEmployee(employeeId: string, actorId: string) {
+    if (employeeId === actorId) {
+      throw new BadRequestException('Нельзя удалить собственную активную учётную запись');
+    }
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      include: { user: true, roles: { include: { role: true } } },
+    });
+    if (!employee) throw new NotFoundException('Сотрудник не найден');
+    if (employee.status === EmployeeStatus.BLOCKED) return this.getEmployee(employeeId);
+
+    if (employee.roles.some(({ role }) => role.code === 'director')) {
+      const activeDirectors = await this.prisma.employee.count({
+        where: { status: EmployeeStatus.ACTIVE, roles: { some: { role: { code: 'director' } } } },
+      });
+      if (activeDirectors <= 1) {
+        throw new BadRequestException('Нельзя удалить последнего активного директора');
+      }
+    }
+
+    const now = new Date();
+    const archived = await this.prisma.$transaction(async (tx) => {
+      await tx.employee.update({ where: { id: employeeId }, data: { status: EmployeeStatus.BLOCKED } });
+      if (employee.userId) await tx.session.deleteMany({ where: { userId: employee.userId } });
+      await tx.employeeShift.updateMany({
+        where: { employeeId, isActive: true, endsAt: { gt: now } },
+        data: { isActive: false },
+      });
+      return tx.employee.findUniqueOrThrow({ where: { id: employeeId }, include: employeeInclude });
+    });
+    await this.auditService.log({
+      actorId,
+      action: 'employee.archive',
+      entityType: 'Employee',
+      entityId: employeeId,
+      metadata: { sessionsRevoked: Boolean(employee.userId), futureShiftsDisabled: true },
+    });
+    return serializeEmployee(archived);
+  }
+
+  async restoreEmployee(employeeId: string, actorId: string) {
+    const result = await this.prisma.employee.updateMany({
+      where: { id: employeeId, status: EmployeeStatus.BLOCKED },
+      data: { status: EmployeeStatus.ACTIVE },
+    });
+    if (!result.count) {
+      const existing = await this.prisma.employee.findUnique({ where: { id: employeeId }, select: { id: true } });
+      if (!existing) throw new NotFoundException('Сотрудник не найден');
+    }
+    await this.auditService.log({
+      actorId,
+      action: 'employee.restore',
+      entityType: 'Employee',
+      entityId: employeeId,
+    });
+    return this.getEmployee(employeeId);
+  }
+
   private async findRolesOrThrow(roleCodes: string[]) {
     const uniqueCodes = [...new Set(roleCodes)];
     const roles = await this.prisma.role.findMany({

@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomInt } from 'node:crypto';
 import { Prisma, ProductBarcodeType, StockMovementType } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
@@ -8,8 +8,10 @@ import { CreateSupplyInvoiceDto } from './dto/create-supply-invoice.dto';
 import { ListStockQueryDto } from './dto/list-stock-query.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
+import { UpdateSupplyInvoiceDto, UpdateSupplyInvoiceItemDto } from './dto/update-supply-invoice.dto';
 import { UpsertProductDto } from './dto/upsert-product.dto';
 import { UpsertServiceDto } from './dto/upsert-service.dto';
+import { UpsertSupplierDto } from './dto/upsert-supplier.dto';
 import { unitsNeedConversion } from './stock-units';
 
 type WarehouseScope = string[] | null;
@@ -48,6 +50,51 @@ export class StockService {
     ]);
 
     return { warehouses, productCategories, serviceCategories, suppliers, cashboxes, paymentMethods, organization };
+  }
+
+  async createSupplier(dto: UpsertSupplierDto, actorId: string) {
+    await this.ensureSupplierTitleAvailable(dto.title);
+    const supplier = await this.prisma.supplier.create({
+      data: {
+        title: dto.title.trim(),
+        phone: clean(dto.phone),
+        email: clean(dto.email)?.toLowerCase(),
+        inn: clean(dto.inn),
+        comment: clean(dto.comment),
+      },
+    });
+    await this.auditService.log({
+      actorId,
+      action: 'stock.supplier.create',
+      entityType: 'Supplier',
+      entityId: supplier.id,
+      metadata: { title: supplier.title },
+    });
+    return supplier;
+  }
+
+  async updateSupplier(supplierId: string, dto: UpsertSupplierDto, actorId: string) {
+    const existing = await this.prisma.supplier.findUnique({ where: { id: supplierId }, select: { id: true } });
+    if (!existing) throw new NotFoundException('Поставщик не найден');
+    await this.ensureSupplierTitleAvailable(dto.title, supplierId);
+    const supplier = await this.prisma.supplier.update({
+      where: { id: supplierId },
+      data: {
+        title: dto.title.trim(),
+        phone: clean(dto.phone) ?? null,
+        email: clean(dto.email)?.toLowerCase() ?? null,
+        inn: clean(dto.inn) ?? null,
+        comment: clean(dto.comment) ?? null,
+      },
+    });
+    await this.auditService.log({
+      actorId,
+      action: 'stock.supplier.update',
+      entityType: 'Supplier',
+      entityId: supplier.id,
+      metadata: { title: supplier.title },
+    });
+    return supplier;
   }
 
   async listProducts(query: ListStockQueryDto, actorId: string) {
@@ -118,6 +165,59 @@ export class StockService {
       .filter((product) => product.minStock !== null && decimal(product.stockRest).lessThanOrEqualTo(product.minStock));
 
     return { items: alerts.slice(offset, offset + limit), total: alerts.length, limit, offset };
+  }
+
+  async getCatalogQuality() {
+    const products = await this.prisma.product.findMany({
+      orderBy: { title: 'asc' },
+      select: {
+        id: true,
+        title: true,
+        categoryId: true,
+        retailPrice: true,
+        stockUnit: true,
+        writeOffUnit: true,
+        billingUnit: true,
+        barcode: true,
+        barcodes: { select: { value: true } },
+      },
+    });
+
+    const barcodeOwners = new Map<string, Set<string>>();
+    for (const product of products) {
+      for (const value of readNumericBarcodes(product)) {
+        const owners = barcodeOwners.get(value) ?? new Set<string>();
+        owners.add(product.id);
+        barcodeOwners.set(value, owners);
+      }
+    }
+    const duplicateBarcodeValues = [...barcodeOwners.entries()].filter(([, owners]) => owners.size > 1).map(([value]) => value);
+    const duplicateSet = new Set(duplicateBarcodeValues);
+    const issues = products.map((product) => {
+      const productIssues = [
+        !product.categoryId ? 'Нет категории' : null,
+        product.retailPrice.lessThanOrEqualTo(0) ? 'Цена равна нулю' : null,
+        !product.stockUnit || !product.writeOffUnit || !product.billingUnit ? 'Не заполнены единицы учёта' : null,
+        product.barcode && /[;,\r\n]/.test(product.barcode) ? 'Старый составной штрих-код' : null,
+        [...readNumericBarcodes(product)].some((value) => duplicateSet.has(value)) ? 'Штрих-код повторяется у разных товаров' : null,
+      ].filter((value): value is string => Boolean(value));
+      return { id: product.id, title: product.title, issues: productIssues };
+    }).filter((product) => product.issues.length);
+
+    const cleanProducts = products.length - issues.length;
+    return {
+      total: products.length,
+      cleanProducts,
+      qualityPercent: products.length ? Math.round(cleanProducts / products.length * 100) : 100,
+      counts: {
+        withoutCategory: products.filter((product) => !product.categoryId).length,
+        zeroPrice: products.filter((product) => product.retailPrice.lessThanOrEqualTo(0)).length,
+        missingUnits: products.filter((product) => !product.stockUnit || !product.writeOffUnit || !product.billingUnit).length,
+        legacyCompositeBarcode: products.filter((product) => Boolean(product.barcode && /[;,\r\n]/.test(product.barcode))).length,
+        duplicateBarcodeValues: duplicateBarcodeValues.length,
+      },
+      sample: issues.slice(0, 20),
+    };
   }
 
   async createProduct(dto: UpsertProductDto, actorId: string) {
@@ -459,7 +559,7 @@ export class StockService {
         const discountAmount = decimal(item.discountAmount ?? 0);
         totalAmount = totalAmount.plus(quantity.mul(purchasePrice).minus(discountAmount));
 
-        await tx.supplyInvoiceItem.create({
+        const invoiceItem = await tx.supplyInvoiceItem.create({
           data: {
             supplyInvoiceId: createdInvoice.id,
             productId: item.productId,
@@ -486,6 +586,11 @@ export class StockService {
             rackNumber: clean(item.rackNumber),
             shelfNumber: clean(item.shelfNumber),
           },
+        });
+
+        await tx.supplyInvoiceItem.update({
+          where: { id: invoiceItem.id },
+          data: { stockBatchId: batch.id },
         });
 
         await tx.stockMovement.create({
@@ -521,6 +626,246 @@ export class StockService {
     });
 
     return invoice;
+  }
+
+  async updateSupplyInvoice(supplyInvoiceId: string, dto: UpdateSupplyInvoiceDto, actorId: string) {
+    const warehouseScope = await this.getWarehouseScope(actorId);
+    const invoice = await this.prisma.supplyInvoice.findUnique({
+      where: { id: supplyInvoiceId },
+      include: supplyInvoiceInclude,
+    });
+    if (!invoice) throw new NotFoundException('Накладная не найдена');
+
+    const existingIds = invoice.items.map((item) => item.id);
+    const suppliedIds = dto.items.map((item) => item.id).filter((id): id is string => Boolean(id));
+    if (new Set(suppliedIds).size !== suppliedIds.length) {
+      throw new BadRequestException('Одна позиция накладной указана несколько раз');
+    }
+    const missingIds = existingIds.filter((id) => !suppliedIds.includes(id));
+    const unknownIds = suppliedIds.filter((id) => !existingIds.includes(id));
+    if (missingIds.length || unknownIds.length) {
+      throw new BadRequestException('Проведённые позиции нельзя удалять. Исправьте их количество или создайте возврат поставщику');
+    }
+
+    const productIds = [...new Set(dto.items.map((item) => item.productId))];
+    const productsCount = await this.prisma.product.count({ where: { id: { in: productIds } } });
+    if (productsCount !== productIds.length) throw new BadRequestException('В накладной указан неизвестный товар');
+    for (const item of dto.items) {
+      await this.ensureWarehouseExists(item.warehouseId);
+      this.ensureWarehouseAllowed(item.warehouseId, warehouseScope);
+    }
+    if (dto.supplierId) {
+      await this.resolveSupplierId({ supplierId: dto.supplierId });
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const existingById = new Map(invoice.items.map((item) => [item.id, item]));
+
+      for (const nextItem of dto.items) {
+        if (!nextItem.id) {
+          await this.createSupplyInvoiceLine(tx, invoice.id, dto.supplierId ?? invoice.supplierId, invoice.number, nextItem);
+          continue;
+        }
+
+        const currentItem = existingById.get(nextItem.id)!;
+        const stockChanged = supplyLineChanged(currentItem, nextItem);
+        const supplierChanged = dto.supplierId !== undefined && dto.supplierId !== invoice.supplierId;
+        let batch = currentItem.stockBatch;
+
+        if ((stockChanged || supplierChanged) && !batch) {
+          batch = await this.findLegacySupplyBatch(tx, invoice, currentItem);
+          if (!batch) {
+            throw new BadRequestException(
+              `Позиция «${currentItem.product.title}» создана старой версией и не может быть исправлена автоматически. Создайте складской документ «Корректировка»`,
+            );
+          }
+        }
+
+        if (batch && (stockChanged || supplierChanged)) {
+          const oldQuantity = decimal(batch.quantity);
+          const currentRest = decimal(batch.rest);
+          const consumed = oldQuantity.minus(currentRest).greaterThan(0) ? oldQuantity.minus(currentRest) : decimal(0);
+          const nextQuantity = decimal(nextItem.quantity);
+          if (nextQuantity.lessThan(consumed)) {
+            throw new BadRequestException(
+              `Количество «${currentItem.product.title}» нельзя уменьшить ниже уже использованного: ${consumed.toString()}`,
+            );
+          }
+          const identityChanged = nextItem.productId !== batch.productId || nextItem.warehouseId !== batch.warehouseId;
+          if (identityChanged && consumed.greaterThan(0)) {
+            throw new BadRequestException(
+              `Товар или склад позиции «${currentItem.product.title}» нельзя менять после списания. Добавьте новую позицию и оформите корректировку`,
+            );
+          }
+
+          const difference = nextQuantity.minus(oldQuantity);
+          const nextRest = currentRest.plus(difference);
+          await tx.stockBatch.update({
+            where: { id: batch.id },
+            data: {
+              productId: nextItem.productId,
+              warehouseId: nextItem.warehouseId,
+              supplierId: dto.supplierId !== undefined ? dto.supplierId : invoice.supplierId,
+              quantity: nextQuantity,
+              rest: nextRest,
+              purchasePrice: nextItem.purchasePrice,
+              expiresAt: nextItem.expiresAt ? new Date(nextItem.expiresAt) : null,
+              series: clean(nextItem.series) ?? null,
+              rack: clean(nextItem.rack) ?? null,
+              rackNumber: clean(nextItem.rackNumber) ?? null,
+              shelfNumber: clean(nextItem.shelfNumber) ?? null,
+            },
+          });
+          await tx.supplyInvoiceItem.update({
+            where: { id: currentItem.id },
+            data: {
+              stockBatchId: batch.id,
+              productId: nextItem.productId,
+              warehouseId: nextItem.warehouseId,
+              quantity: nextQuantity,
+              purchasePrice: nextItem.purchasePrice,
+              discountAmount: nextItem.discountAmount ?? 0,
+              expiresAt: nextItem.expiresAt ? new Date(nextItem.expiresAt) : null,
+              series: clean(nextItem.series) ?? null,
+            },
+          });
+          await tx.stockMovement.updateMany({
+            where: { stockBatchId: batch.id, type: StockMovementType.SUPPLY },
+            data: {
+              productId: nextItem.productId,
+              warehouseId: nextItem.warehouseId,
+              unitCost: nextItem.purchasePrice,
+            },
+          });
+          if (!difference.equals(0)) {
+            await tx.stockMovement.create({
+              data: {
+                productId: nextItem.productId,
+                stockBatchId: batch.id,
+                warehouseId: nextItem.warehouseId,
+                type: StockMovementType.CORRECTION,
+                quantity: difference,
+                unitCost: nextItem.purchasePrice,
+                comment: invoice.number
+                  ? `Исправление накладной ${invoice.number}`
+                  : `Исправление накладной ${invoice.id.slice(0, 8)}`,
+              },
+            });
+          }
+        } else {
+          await tx.supplyInvoiceItem.update({
+            where: { id: currentItem.id },
+            data: {
+              discountAmount: nextItem.discountAmount ?? 0,
+              expiresAt: nextItem.expiresAt ? new Date(nextItem.expiresAt) : null,
+              series: clean(nextItem.series) ?? null,
+            },
+          });
+        }
+      }
+
+      const totalAmount = dto.items.reduce(
+        (total, item) => total.plus(decimal(item.quantity).times(item.purchasePrice).minus(item.discountAmount ?? 0)),
+        decimal(0),
+      );
+      return tx.supplyInvoice.update({
+        where: { id: invoice.id },
+        data: {
+          ...(dto.supplierId !== undefined ? { supplierId: dto.supplierId } : {}),
+          ...(dto.number !== undefined ? { number: clean(dto.number) ?? null } : {}),
+          ...(dto.suppliedAt !== undefined ? { suppliedAt: new Date(dto.suppliedAt) } : {}),
+          totalAmount,
+        },
+        include: supplyInvoiceInclude,
+      });
+    });
+
+    await this.auditService.log({
+      actorId,
+      action: 'stock.supply_invoice.update',
+      entityType: 'SupplyInvoice',
+      entityId: invoice.id,
+      metadata: {
+        previousTotalAmount: invoice.totalAmount,
+        totalAmount: updated.totalAmount,
+        previousItems: invoice.items.length,
+        items: updated.items.length,
+      },
+    });
+    return updated;
+  }
+
+  private async createSupplyInvoiceLine(
+    tx: Prisma.TransactionClient,
+    supplyInvoiceId: string,
+    supplierId: string | null | undefined,
+    invoiceNumber: string | null,
+    item: UpdateSupplyInvoiceItemDto,
+  ) {
+    const invoiceItem = await tx.supplyInvoiceItem.create({
+      data: {
+        supplyInvoiceId,
+        productId: item.productId,
+        warehouseId: item.warehouseId,
+        quantity: item.quantity,
+        purchasePrice: item.purchasePrice,
+        discountAmount: item.discountAmount ?? 0,
+        expiresAt: item.expiresAt ? new Date(item.expiresAt) : undefined,
+        series: clean(item.series),
+      },
+    });
+    const batch = await tx.stockBatch.create({
+      data: {
+        productId: item.productId,
+        warehouseId: item.warehouseId,
+        supplierId,
+        quantity: item.quantity,
+        rest: item.quantity,
+        purchasePrice: item.purchasePrice,
+        expiresAt: item.expiresAt ? new Date(item.expiresAt) : undefined,
+        series: clean(item.series),
+        rack: clean(item.rack),
+        rackNumber: clean(item.rackNumber),
+        shelfNumber: clean(item.shelfNumber),
+      },
+    });
+    await tx.supplyInvoiceItem.update({ where: { id: invoiceItem.id }, data: { stockBatchId: batch.id } });
+    await tx.stockMovement.create({
+      data: {
+        productId: item.productId,
+        stockBatchId: batch.id,
+        warehouseId: item.warehouseId,
+        type: StockMovementType.SUPPLY,
+        quantity: item.quantity,
+        unitCost: item.purchasePrice,
+        comment: invoiceNumber ? `Дополнение накладной ${invoiceNumber}` : 'Дополнение накладной',
+      },
+    });
+  }
+
+  private async findLegacySupplyBatch(
+    tx: Prisma.TransactionClient,
+    invoice: { supplierId: string | null; createdAt: Date },
+    item: { productId: string; warehouseId: string; quantity: Prisma.Decimal; purchasePrice: Prisma.Decimal; expiresAt: Date | null; series: string | null },
+  ) {
+    const createdFrom = new Date(invoice.createdAt.getTime() - 2 * 60 * 1000);
+    const createdTo = new Date(invoice.createdAt.getTime() + 10 * 60 * 1000);
+    const candidates = await tx.stockBatch.findMany({
+      where: {
+        productId: item.productId,
+        warehouseId: item.warehouseId,
+        supplierId: invoice.supplierId,
+        quantity: item.quantity,
+        purchasePrice: item.purchasePrice,
+        expiresAt: item.expiresAt,
+        series: item.series,
+        createdAt: { gte: createdFrom, lte: createdTo },
+        supplyInvoiceItem: null,
+        movements: { some: { type: StockMovementType.SUPPLY } },
+      },
+      take: 2,
+    });
+    return candidates.length === 1 ? candidates[0] : null;
   }
 
   private async resolveProductCategoryId(dto: { categoryId?: string; categoryTitle?: string }) {
@@ -590,6 +935,17 @@ export class StockService {
 
     const existingSupplier = await this.prisma.supplier.findFirst({ where: { title }, select: { id: true } });
     return existingSupplier?.id ?? (await this.prisma.supplier.create({ data: { title }, select: { id: true } })).id;
+  }
+
+  private async ensureSupplierTitleAvailable(title: string, currentSupplierId?: string) {
+    const existing = await this.prisma.supplier.findFirst({
+      where: {
+        title: { equals: title.trim(), mode: 'insensitive' },
+        ...(currentSupplierId ? { id: { not: currentSupplierId } } : {}),
+      },
+      select: { id: true },
+    });
+    if (existing) throw new ConflictException('Поставщик с таким названием уже существует');
   }
 
   private async getDefaultWarehouseId(warehouseScope: WarehouseScope) {
@@ -792,6 +1148,7 @@ const supplyInvoiceInclude = {
     include: {
       product: { include: { category: true } },
       warehouse: { select: { id: true, name: true } },
+      stockBatch: true,
     },
     orderBy: { createdAt: 'asc' },
   },
@@ -805,6 +1162,7 @@ function getSupplyInvoiceInclude(itemWhere?: Prisma.SupplyInvoiceItemWhereInput 
       include: {
         product: { include: { category: true } },
         warehouse: { select: { id: true, name: true } },
+        stockBatch: true,
       },
       orderBy: { createdAt: 'asc' },
     },
@@ -816,12 +1174,58 @@ function serializeProduct(product: Prisma.ProductGetPayload<{ include: typeof pr
 
   return {
     ...product,
+    barcode: selectPrimaryNumericBarcode(product),
     stockRest,
   };
 }
 
+function selectPrimaryNumericBarcode(product: { barcode: string | null; barcodes: Array<{ value: string; isPrimary?: boolean }> }) {
+  const candidates = [
+    ...product.barcodes.filter((item) => item.isPrimary).map((item) => item.value),
+    ...(product.barcode?.split(/[;,\r\n]+/) ?? []),
+    ...product.barcodes.map((item) => item.value),
+  ].map((value) => value.trim());
+  return candidates.find((value) => /^\d{4,32}$/.test(value)) ?? null;
+}
+
+function readNumericBarcodes(product: { barcode: string | null; barcodes: Array<{ value: string }> }) {
+  return new Set([
+    ...(product.barcode?.split(/[;,\r\n]+/) ?? []),
+    ...product.barcodes.map((item) => item.value),
+  ].map((value) => value.trim()).filter((value) => /^\d{4,32}$/.test(value)));
+}
+
 function decimal(value: number | string | Prisma.Decimal) {
   return new Prisma.Decimal(value);
+}
+
+function supplyLineChanged(
+  current: {
+    productId: string;
+    warehouseId: string;
+    quantity: Prisma.Decimal;
+    purchasePrice: Prisma.Decimal;
+    discountAmount: Prisma.Decimal;
+    expiresAt: Date | null;
+    series: string | null;
+    stockBatch: { rack: string | null; rackNumber: string | null; shelfNumber: string | null } | null;
+  },
+  next: UpdateSupplyInvoiceItemDto,
+) {
+  return current.productId !== next.productId
+    || current.warehouseId !== next.warehouseId
+    || !current.quantity.equals(next.quantity)
+    || !current.purchasePrice.equals(next.purchasePrice)
+    || !current.discountAmount.equals(next.discountAmount ?? 0)
+    || dateKey(current.expiresAt) !== dateKey(next.expiresAt ? new Date(next.expiresAt) : null)
+    || (current.series ?? '') !== (clean(next.series) ?? '')
+    || (current.stockBatch?.rack ?? '') !== (clean(next.rack) ?? '')
+    || (current.stockBatch?.rackNumber ?? '') !== (clean(next.rackNumber) ?? '')
+    || (current.stockBatch?.shelfNumber ?? '') !== (clean(next.shelfNumber) ?? '');
+}
+
+function dateKey(value: Date | null) {
+  return value ? value.toISOString().slice(0, 10) : '';
 }
 
 function clean(value: string | undefined) {

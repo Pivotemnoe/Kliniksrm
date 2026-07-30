@@ -682,16 +682,32 @@ export class DataTransferService {
         .map((row) => clean(row.normalizedData.title))
         .filter(isPresent));
       const productConditions: Prisma.ProductWhereInput[] = [];
-      if (barcodes.length) productConditions.push({ barcode: { in: barcodes } });
+      if (barcodes.length) productConditions.push({
+        OR: [
+          { barcode: { in: barcodes } },
+          { barcodes: { some: { value: { in: barcodes } } } },
+        ],
+      });
       if (skus.length) productConditions.push({ sku: { in: skus } });
       if (productTitles.length) productConditions.push({ title: { in: productTitles, mode: Prisma.QueryMode.insensitive } });
       const products = productConditions.length
         ? await this.prisma.product.findMany({
             where: { OR: productConditions },
-            select: { id: true, title: true, sku: true, barcode: true },
+            select: { id: true, title: true, sku: true, barcode: true, barcodes: { select: { value: true } } },
           })
         : [];
-      const productsByBarcode = groupBy(products.filter((product) => product.barcode), (product) => product.barcode!);
+      const productsByBarcode = new Map<string, typeof products>();
+      for (const product of products) {
+        const values = unique([
+          ...(product.barcode?.split(/[;,\r\n]+/) ?? []),
+          ...product.barcodes.map((item) => item.value),
+        ].map((value) => value.trim()).filter(Boolean));
+        for (const value of values) {
+          const matches = productsByBarcode.get(value) ?? [];
+          if (!matches.some((item) => item.id === product.id)) matches.push(product);
+          productsByBarcode.set(value, matches);
+        }
+      }
       const productsBySku = groupBy(products.filter((product) => product.sku), (product) => product.sku!);
       const productsByTitle = groupBy(products, (product) => normalize(product.title));
       const productIdByRow = new Map<number, string>();
@@ -1071,7 +1087,7 @@ export class DataTransferService {
     // Prefer stable identifiers. A title match is used only when the source
     // has neither barcode nor article, avoiding accidental stock merging.
     const productCandidates = barcode
-      ? await tx.product.findMany({ where: { barcode }, take: 2 })
+      ? await tx.product.findMany({ where: { OR: [{ barcode }, { barcodes: { some: { value: barcode } } }] }, take: 2 })
       : sku
         ? await tx.product.findMany({ where: { sku }, take: 2 })
         : await tx.product.findMany({ where: { title: { equals: clean(row.title)!, mode: Prisma.QueryMode.insensitive } }, take: 2 });
@@ -1093,6 +1109,9 @@ export class DataTransferService {
         writeOffUnit: clean(row.unit) || 'шт',
         minStock: parseOptionalDecimal(row.min_stock),
         description: catalogDescription(row),
+        ...(barcode && /^\d{4,32}$/.test(barcode)
+          ? { barcodes: { create: { value: barcode, isPrimary: true, type: /^\d{13}$/.test(barcode) ? 'EAN13' : 'OTHER' } } }
+          : {}),
       },
     });
     await this.link(tx, batchId, rowId, 'Product', product.id, DataTransferAction.CREATED, row.source_id, true);

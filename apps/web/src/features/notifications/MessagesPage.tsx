@@ -14,10 +14,12 @@ import { fromDatetimeLocal, formatDateTime } from '../../shared/utils/date';
 import { getOwner, listOwnerAnimals, listOwners } from '../owners/owners.api';
 import {
   cancelNotification,
+  createTelegramBroadcast,
   createNotification,
   listNotificationOutbox,
   listNotificationTemplates,
   retryNotification,
+  previewTelegramBroadcast,
   upsertNotificationTemplate,
 } from './notifications.api';
 import {
@@ -30,6 +32,8 @@ import {
   NotificationStatus,
   NotificationTemplate,
   UpsertNotificationTemplateInput,
+  TelegramBroadcastDraft,
+  TelegramBroadcastPreview,
 } from './types';
 
 const pageSize = 10;
@@ -44,6 +48,7 @@ export function MessagesPage() {
   const [channel, setChannel] = useState<NotificationChannel | undefined>();
   const [offset, setOffset] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
+  const [broadcastOpen, setBroadcastOpen] = useState(false);
   const [templateOpen, setTemplateOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<NotificationTemplate | null>(null);
   const [selectedOutbox, setSelectedOutbox] = useState<NotificationOutboxItem | null>(null);
@@ -235,6 +240,9 @@ export function MessagesPage() {
               <Button icon={<PlusOutlined />} onClick={() => setTemplateOpen(true)}>
                 Новый шаблон
               </Button>
+              <Button onClick={() => setBroadcastOpen(true)}>
+                Рассылка Telegram
+              </Button>
               <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
                 Написать владельцу
               </Button>
@@ -329,6 +337,14 @@ export function MessagesPage() {
         onClose={() => setCreateOpen(false)}
         onSubmit={(values) => createMutation.mutate(values)}
       />
+      <TelegramBroadcastDrawer
+        open={broadcastOpen}
+        onClose={() => setBroadcastOpen(false)}
+        onQueued={async () => {
+          await invalidateNotifications(queryClient);
+          setBroadcastOpen(false);
+        }}
+      />
       <TemplateFormDrawer
         open={templateOpen}
         template={editingTemplate}
@@ -356,6 +372,114 @@ export function MessagesPage() {
     setTemplateOpen(false);
     setEditingTemplate(null);
   }
+}
+
+function TelegramBroadcastDrawer({ open, onClose, onQueued }: { open: boolean; onClose: () => void; onQueued: () => Promise<void> }) {
+  const { message } = App.useApp();
+  const [subject, setSubject] = useState('');
+  const [body, setBody] = useState('');
+  const [scheduledAt, setScheduledAt] = useState('');
+  const [confirmation, setConfirmation] = useState('');
+  const [preview, setPreview] = useState<TelegramBroadcastPreview | null>(null);
+  const draft: TelegramBroadcastDraft = {
+    subject: subject.trim() || null,
+    body: body.trim(),
+    scheduledAt: scheduledAt ? fromDatetimeLocal(scheduledAt) : null,
+  };
+  const previewMutation = useMutation({
+    mutationFn: () => previewTelegramBroadcast(draft),
+    onSuccess: (result) => {
+      setPreview(result);
+      setConfirmation('');
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
+  const createMutation = useMutation({
+    mutationFn: () => createTelegramBroadcast({ ...draft, confirmation: 'ОТПРАВИТЬ' }),
+    onSuccess: async (result) => {
+      message.success(`В очередь добавлено сообщений: ${result.queued}`);
+      await onQueued();
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
+
+  function resetDrawer(nextOpen: boolean) {
+    if (!nextOpen) return;
+    setSubject('');
+    setBody('');
+    setScheduledAt('');
+    setConfirmation('');
+    setPreview(null);
+  }
+
+  function invalidatePreview() {
+    setPreview(null);
+    setConfirmation('');
+  }
+
+  return (
+    <Drawer
+      title="Рассылка через Telegram"
+      width={700}
+      open={open}
+      onClose={onClose}
+      afterOpenChange={resetDrawer}
+      destroyOnHidden
+    >
+      <Space direction="vertical" size={16} className="full-width">
+        <Alert
+          type="warning"
+          showIcon
+          message="Сначала обязателен предпросмотр аудитории"
+          description="В рассылке нельзя передавать диагнозы, анализы и другие медицинские сведения. Каждое сообщение также появится в защищённом личном кабинете."
+        />
+        <Form layout="vertical">
+          <Form.Item label="Тема">
+            <Input value={subject} maxLength={300} onChange={(event) => { setSubject(event.target.value); invalidatePreview(); }} />
+          </Form.Item>
+          <Form.Item label="Текст" required>
+            <Input.TextArea value={body} rows={7} maxLength={4000} onChange={(event) => { setBody(event.target.value); invalidatePreview(); }} />
+          </Form.Item>
+          <Form.Item label="Отправить после">
+            <Input type="datetime-local" value={scheduledAt} onChange={(event) => { setScheduledAt(event.target.value); invalidatePreview(); }} />
+          </Form.Item>
+        </Form>
+        <Button
+          onClick={() => previewMutation.mutate()}
+          loading={previewMutation.isPending}
+          disabled={!body.trim()}
+        >
+          Проверить аудиторию
+        </Button>
+        {preview ? (
+          <Space direction="vertical" size={12} className="full-width">
+            <Descriptions bordered size="small" column={1}>
+              <Descriptions.Item label="Получат в Telegram">{preview.eligible}</Descriptions.Item>
+              <Descriptions.Item label="Без разрешённого Telegram">{preview.skippedWithoutTelegramConsent}</Descriptions.Item>
+              <Descriptions.Item label="Всего с кабинетом">{preview.portalOwners}</Descriptions.Item>
+            </Descriptions>
+            {preview.overLimit ? <Alert type="error" showIcon message="Больше 500 получателей — разделите рассылку" /> : null}
+            {!preview.gatewayAvailable ? <Alert type="error" showIcon message={preview.warning} /> : null}
+            <Typography.Text type="secondary">
+              Первые получатели: {preview.recipients.map((owner) => owner.fullName).join(', ') || 'нет'}
+            </Typography.Text>
+            <Form.Item label="Для подтверждения введите ОТПРАВИТЬ">
+              <Input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} />
+            </Form.Item>
+            <Button
+              type="primary"
+              danger
+              loading={createMutation.isPending}
+              disabled={confirmation !== 'ОТПРАВИТЬ' || preview.overLimit || !preview.eligible || !preview.gatewayAvailable}
+              onClick={() => createMutation.mutate()}
+            >
+              Поставить рассылку в очередь
+            </Button>
+          </Space>
+        ) : null}
+      </Space>
+    </Drawer>
+  );
 }
 
 function NotificationDetailDrawer({

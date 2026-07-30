@@ -27,6 +27,18 @@ export type OwnerGatewayMessageResult = {
   channel: OwnerMessengerChannel | null;
 };
 
+export type OwnerGatewayBookingRequest = {
+  id: string;
+  ownerId: string;
+  animalId: string | null;
+  animalNickname: string;
+  animalSpecies: string | null;
+  preferredAt: string | null;
+  comment: string | null;
+  source: string;
+  createdAt: string;
+};
+
 const DEFAULT_GATEWAY_REQUEST_TIMEOUT_MS = 30_000;
 const GATEWAY_RETRY_DELAY_MS = 400;
 
@@ -206,6 +218,64 @@ export class OwnerGatewayClient {
         syncSecret,
         { method: 'GET' },
       );
+    } catch {
+      return null;
+    }
+  }
+
+  async pullPendingBookingRequests(): Promise<OwnerGatewayBookingRequest[] | null> {
+    const baseUrl = normalizeBaseUrl(process.env.OWNER_GATEWAY_URL);
+    const syncSecret = process.env.OWNER_GATEWAY_SYNC_SECRET?.trim();
+    if (!baseUrl || !syncSecret) {
+      return null;
+    }
+
+    try {
+      return await requestGatewayWithRetry<OwnerGatewayBookingRequest[]>(
+        `${baseUrl}/internal/v1/owners/booking-requests/pending`,
+        syncSecret,
+        { method: 'GET' },
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  async acknowledgeBookingRequest(requestId: string, crmRequestId: string): Promise<boolean> {
+    const baseUrl = normalizeBaseUrl(process.env.OWNER_GATEWAY_URL);
+    const syncSecret = process.env.OWNER_GATEWAY_SYNC_SECRET?.trim();
+    if (!baseUrl || !syncSecret) {
+      return false;
+    }
+
+    try {
+      await requestGateway(
+        `${baseUrl}/internal/v1/owners/booking-requests/${encodeURIComponent(requestId)}/imported`,
+        syncSecret,
+        { method: 'POST', body: { crmRequestId } },
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async getLinkedOwnerIds(channel: OwnerMessengerChannel): Promise<string[] | null> {
+    const baseUrl = normalizeBaseUrl(process.env.OWNER_GATEWAY_URL);
+    const syncSecret = process.env.OWNER_GATEWAY_SYNC_SECRET?.trim();
+    if (!baseUrl || !syncSecret) {
+      return null;
+    }
+
+    try {
+      const result = await requestGatewayWithRetry<{ ownerIds?: unknown }>(
+        `${baseUrl}/internal/v1/owners/connections/${encodeURIComponent(channel)}`,
+        syncSecret,
+        { method: 'GET' },
+      );
+      return Array.isArray(result.ownerIds)
+        ? result.ownerIds.filter((value): value is string => typeof value === 'string')
+        : [];
     } catch {
       return null;
     }

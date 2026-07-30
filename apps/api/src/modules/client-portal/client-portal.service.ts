@@ -11,7 +11,7 @@ import { shouldExposePortalDebugCode } from '../../config/runtime-config';
 const PORTAL_CODE_TTL_MINUTES = Number(process.env.CLIENT_PORTAL_CODE_TTL_MINUTES ?? 10);
 const PORTAL_CODE_MAX_ATTEMPTS = Number(process.env.CLIENT_PORTAL_CODE_MAX_ATTEMPTS ?? 5);
 const PORTAL_PHONE_TOKEN_DAYS = Number(process.env.CLIENT_PORTAL_PHONE_TOKEN_DAYS ?? 30);
-const PORTAL_ONLINE_REQUESTS_ENABLED = process.env.CLIENT_PORTAL_ONLINE_REQUESTS_ENABLED === 'true';
+const PORTAL_ONLINE_REQUESTS_ENABLED = process.env.CLIENT_PORTAL_ONLINE_REQUESTS_ENABLED !== 'false';
 
 @Injectable()
 export class ClientPortalService {
@@ -112,6 +112,21 @@ export class ClientPortalService {
     const ownerId = access.ownerId;
     const snapshot = await this.buildOwnerGatewaySnapshot(ownerId);
 
+    const onlineRequests = await this.prisma.onlineAppointmentRequest.findMany({
+      where: { ownerId },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      select: {
+        id: true,
+        status: true,
+        preferredAt: true,
+        comment: true,
+        createdAt: true,
+        animal: { select: { id: true, nickname: true, species: true } },
+        appointment: { select: { id: true, startsAt: true, status: true } },
+      },
+    });
+
     return {
       access: {
         status: access.status,
@@ -124,7 +139,7 @@ export class ClientPortalService {
       visits: snapshot.visits,
       bills: snapshot.bills,
       notifications: snapshot.notifications,
-      onlineRequests: [],
+      onlineRequests,
     };
   }
 

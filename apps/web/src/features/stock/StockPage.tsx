@@ -1,11 +1,11 @@
-import { EditOutlined, PaperClipOutlined, PlusOutlined, PrinterOutlined, SearchOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined, PaperClipOutlined, PlusOutlined, PrinterOutlined, SearchOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, App, AutoComplete, Button, Checkbox, Drawer, Form, Input, InputNumber, Modal, Radio, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
 import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import JsBarcode from 'jsbarcode';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Controller, useForm, useWatch } from 'react-hook-form';
+import { Controller, useFieldArray, useForm, useWatch } from 'react-hook-form';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
@@ -21,15 +21,18 @@ import {
   createService,
   createSupplyInvoice,
   getStockResources,
+  getCatalogQuality,
   listProducts,
   listServices,
   listStockBatches,
   listSupplyInvoices,
+  updateSupplyInvoice,
   updateProduct,
   updateService,
 } from './stock.api';
 import { Product, ServiceItem, StockBatch, StockResources, SupplyInvoice } from './types';
 import { SupplyInvoiceImporter } from './SupplyInvoiceImporter';
+import { SupplierModal } from './SupplierModal';
 
 const pageSize = 10;
 
@@ -47,8 +50,10 @@ export function StockPage() {
   const [editingService, setEditingService] = useState<ServiceItem | null>(null);
   const [printingProduct, setPrintingProduct] = useState<Product | null>(null);
   const [supplyOpen, setSupplyOpen] = useState(false);
+  const [editingInvoice, setEditingInvoice] = useState<SupplyInvoice | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<SupplyInvoice | null>(null);
   const resourcesQuery = useQuery({ queryKey: ['stock', 'resources'], queryFn: getStockResources });
+  const catalogQualityQuery = useQuery({ queryKey: ['stock', 'catalog-quality'], queryFn: getCatalogQuality });
 
   useEffect(() => {
     setActiveTab(getStockTabFromPath(location.pathname));
@@ -87,6 +92,15 @@ export function StockPage() {
           ) : null
         }
       />
+      {catalogQualityQuery.data && catalogQualityQuery.data.qualityPercent < 100 ? (
+        <Alert
+          type={catalogQualityQuery.data.qualityPercent >= 80 ? 'warning' : 'error'}
+          showIcon
+          className="form-alert"
+          message={`Качество каталога: ${catalogQualityQuery.data.qualityPercent}%`}
+          description={`Требуют проверки: без категории — ${catalogQualityQuery.data.counts.withoutCategory}, с нулевой ценой — ${catalogQualityQuery.data.counts.zeroPrice}, без единиц учёта — ${catalogQualityQuery.data.counts.missingUnits}, старых составных штрих-кодов — ${catalogQualityQuery.data.counts.legacyCompositeBarcode}, повторяющихся кодов — ${catalogQualityQuery.data.counts.duplicateBarcodeValues}.`}
+        />
+      ) : null}
       <div className="list-panel">
         <Tabs
           activeKey={activeTab}
@@ -148,7 +162,10 @@ export function StockPage() {
             {
               key: 'invoices',
               label: 'Накладные',
-              children: <InvoicesTable search={search} offset={offset} onOpen={setSelectedInvoice} onTableChange={handleTableChange} />,
+              children: <InvoicesTable search={search} offset={offset} canManage={canManage} onOpen={setSelectedInvoice} onEdit={(invoice) => {
+                setEditingInvoice(invoice);
+                setSupplyOpen(true);
+              }} onTableChange={handleTableChange} />,
             },
           ]}
         />
@@ -173,8 +190,12 @@ export function StockPage() {
       />
       <SupplyInvoiceModal
         open={supplyOpen}
+        invoice={editingInvoice}
         resources={resourcesQuery.data}
-        onClose={() => setSupplyOpen(false)}
+        onClose={() => {
+          setSupplyOpen(false);
+          setEditingInvoice(null);
+        }}
       />
       <Drawer
         title={selectedInvoice ? `Накладная ${selectedInvoice.number || 'без номера'}` : 'Накладная'}
@@ -185,6 +206,15 @@ export function StockPage() {
       >
         {selectedInvoice ? (
           <Space direction="vertical" size={16} className="full-width">
+            {canManage ? (
+              <Button icon={<EditOutlined />} onClick={() => {
+                setEditingInvoice(selectedInvoice);
+                setSelectedInvoice(null);
+                setSupplyOpen(true);
+              }}>
+                Исправить накладную
+              </Button>
+            ) : null}
             <Typography.Text>
               {formatDate(selectedInvoice.suppliedAt)} · {selectedInvoice.supplier?.title ?? 'Поставщик не указан'} · {formatMoney(selectedInvoice.totalAmount)}
             </Typography.Text>
@@ -405,12 +435,16 @@ function BatchesTable({
 function InvoicesTable({
   search,
   offset,
+  canManage,
   onOpen,
+  onEdit,
   onTableChange,
 }: {
   search: string;
   offset: number;
+  canManage: boolean;
   onOpen: (invoice: SupplyInvoice) => void;
+  onEdit: (invoice: SupplyInvoice) => void;
   onTableChange: (pagination: TablePaginationConfig) => void;
 }) {
   const invoicesQuery = useQuery({
@@ -427,14 +461,13 @@ function InvoicesTable({
       {
         title: '',
         key: 'actions',
-        render: (_, record) => (
-          <Button size="small" icon={<PaperClipOutlined />} onClick={() => onOpen(record)}>
-            Открыть
-          </Button>
-        ),
+        render: (_, record) => <Space size={6}>
+          <Button size="small" icon={<PaperClipOutlined />} onClick={() => onOpen(record)}>Открыть</Button>
+          {canManage ? <Button size="small" icon={<EditOutlined />} onClick={() => onEdit(record)}>Исправить</Button> : null}
+        </Space>,
       },
     ],
-    [onOpen],
+    [canManage, onEdit, onOpen],
   );
 
   return <StockTable query={invoicesQuery} columns={columns} offset={offset} onTableChange={onTableChange} />;
@@ -814,12 +847,10 @@ function ServiceModal({
   );
 }
 
-const supplySchema = z.object({
-  supplierTitle: z.string().trim().optional(),
-  number: z.string().trim().optional(),
-  suppliedAt: z.string().optional(),
+const supplyLineSchema = z.object({
+  id: z.string().optional(),
   productId: z.string().min(1, 'Выберите товар'),
-  warehouseId: z.string().optional(),
+  warehouseId: z.string().min(1, 'Выберите склад'),
   quantity: z.number().min(0.001, 'Введите количество'),
   purchasePrice: z.number().min(0, 'Введите закупочную цену'),
   discountAmount: z.number().min(0).optional(),
@@ -830,58 +861,52 @@ const supplySchema = z.object({
   shelfNumber: z.string().trim().optional(),
 });
 
+const supplySchema = z.object({
+  supplierId: z.string().min(1, 'Выберите поставщика'),
+  number: z.string().trim().optional(),
+  suppliedAt: z.string().min(1, 'Укажите дату поставки'),
+  items: z.array(supplyLineSchema).min(1, 'Добавьте хотя бы одну позицию'),
+});
+
 type SupplyFormValues = z.infer<typeof supplySchema>;
 
-function SupplyInvoiceModal({ open, resources, onClose }: { open: boolean; resources?: StockResources; onClose: () => void }) {
+function SupplyInvoiceModal({ open, invoice, resources, onClose }: { open: boolean; invoice?: SupplyInvoice | null; resources?: StockResources; onClose: () => void }) {
   const queryClient = useQueryClient();
   const { message } = App.useApp();
+  const [supplierOpen, setSupplierOpen] = useState(false);
   const productsQuery = useQuery({
     queryKey: ['stock', 'products', 'supply-select'],
     queryFn: () => listProducts({ limit: 100, offset: 0 }),
     enabled: open,
   });
+  const defaultWarehouseId = resources?.warehouses[0]?.id ?? '';
   const { control, handleSubmit, reset, setValue } = useForm<SupplyFormValues>({
     resolver: zodResolver(supplySchema),
-    defaultValues: {
-      supplierTitle: '',
-      number: '',
-      suppliedAt: toDateInput(new Date()),
-      productId: '',
-      warehouseId: resources?.warehouses[0]?.id,
-      quantity: 1,
-      purchasePrice: 0,
-      discountAmount: 0,
-      expiresAt: '',
-      series: '',
-      rack: '',
-      rackNumber: '',
-      shelfNumber: '',
-    },
+    defaultValues: getSupplyFormValues(invoice, defaultWarehouseId),
   });
+  const { fields, append, remove } = useFieldArray({ control, name: 'items' });
+  const watchedItems = useWatch({ control, name: 'items' }) ?? [];
+
+  useEffect(() => {
+    if (open) reset(getSupplyFormValues(invoice, defaultWarehouseId));
+  }, [defaultWarehouseId, invoice, open, reset]);
+
   const mutation = useMutation({
-    mutationFn: (values: SupplyFormValues) =>
-      createSupplyInvoice({
-        supplierTitle: values.supplierTitle,
+    mutationFn: (values: SupplyFormValues) => {
+      const input = {
+        supplierId: values.supplierId,
         number: values.number,
-        suppliedAt: values.suppliedAt ? new Date(values.suppliedAt).toISOString() : undefined,
-        items: [
-          {
-            productId: values.productId,
-            warehouseId: values.warehouseId,
-            quantity: values.quantity,
-            purchasePrice: values.purchasePrice,
-            discountAmount: values.discountAmount,
-            expiresAt: values.expiresAt ? new Date(values.expiresAt).toISOString() : undefined,
-            series: values.series,
-            rack: values.rack,
-            rackNumber: values.rackNumber,
-            shelfNumber: values.shelfNumber,
-          },
-        ],
-      }),
+        suppliedAt: new Date(values.suppliedAt).toISOString(),
+        items: values.items.map((item) => ({
+          ...item,
+          expiresAt: item.expiresAt ? new Date(item.expiresAt).toISOString() : undefined,
+        })),
+      };
+      return invoice ? updateSupplyInvoice(invoice.id, input) : createSupplyInvoice(input);
+    },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['stock'] });
-      message.success('Приёмка проведена');
+      message.success(invoice ? 'Накладная исправлена, изменения остатка записаны в историю' : 'Приёмка проведена');
       reset();
       onClose();
     },
@@ -889,71 +914,99 @@ function SupplyInvoiceModal({ open, resources, onClose }: { open: boolean; resou
   });
 
   return (
-    <Modal title="Новая поставка товара" open={open} onCancel={onClose} onOk={handleSubmit((values) => mutation.mutate(values))} confirmLoading={mutation.isPending} destroyOnHidden width={720}>
+    <>
+    <Modal title={invoice ? `Исправление накладной ${invoice.number || 'без номера'}` : 'Новая поставка товара'} open={open} onCancel={onClose} onOk={handleSubmit((values) => mutation.mutate(values))} okText={invoice ? 'Сохранить исправления' : 'Провести приёмку'} confirmLoading={mutation.isPending} destroyOnHidden width={980}>
       <Form layout="vertical">
+        {invoice ? <Alert type="info" showIcon message="Исправление сохраняет историю движений" description="Уже использованное количество не уменьшается. Проведённые строки не удаляются: для возврата используйте складской документ «Возврат поставщику»." className="form-alert" /> : null}
         <div className="form-grid two-columns">
           <Controller
             control={control}
-            name="supplierTitle"
-            render={({ field }) => (
-              <Form.Item label="Поставщик">
-                <Select
-                  showSearch
-                  allowClear
-                  value={field.value || undefined}
-                  onChange={(value) => field.onChange(value)}
-                  onSearch={(value) => field.onChange(value)}
-                  options={resources?.suppliers.map((supplier) => ({ value: supplier.title, label: supplier.title })) ?? []}
-                  placeholder="Введите поставщика"
-                />
+            name="supplierId"
+            render={({ field, fieldState }) => (
+              <Form.Item label="Поставщик" required validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message ?? 'Поставщик выбирается из справочника.'}>
+                <Space.Compact className="full-width">
+                  <Select {...field} showSearch optionFilterProp="label" options={resources?.suppliers.map((supplier) => ({ value: supplier.id, label: supplier.title })) ?? []} placeholder="Выберите поставщика" />
+                  <Button icon={<PlusOutlined />} onClick={() => setSupplierOpen(true)}>Новый</Button>
+                </Space.Compact>
               </Form.Item>
             )}
           />
           <FormText control={control} name="number" label="№ накладной" />
           <FormText control={control} name="suppliedAt" label="Дата поставки" type="date" />
-          <Controller
-            control={control}
-            name="warehouseId"
-            render={({ field }) => (
-              <Form.Item label="Склад">
-                <Select {...field} options={resources?.warehouses.map((warehouse) => ({ value: warehouse.id, label: warehouse.name })) ?? []} />
-              </Form.Item>
-            )}
-          />
         </div>
-        <Controller
-          control={control}
-          name="productId"
-          render={({ field, fieldState }) => (
-            <Form.Item label="Товар" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
-              <Select
-                {...field}
-                showSearch
-                loading={productsQuery.isLoading}
-                onChange={(value) => {
-                  field.onChange(value);
-                  const product = productsQuery.data?.items.find((item) => item.id === value);
-                  setValue('expiresAt', product?.defaultExpiresAt?.slice(0, 10) ?? '');
-                }}
-                options={productsQuery.data?.items.map((product) => ({ value: product.id, label: product.title })) ?? []}
-                placeholder="Выберите товар"
-              />
-            </Form.Item>
-          )}
-        />
-        <div className="form-grid two-columns">
-          <FormNumber control={control} name="quantity" label="Количество" step={0.01} />
-          <FormNumber control={control} name="purchasePrice" label="Закупочная цена" />
-          <FormNumber control={control} name="discountAmount" label="Скидка" />
-          <FormText control={control} name="expiresAt" label="Срок годности" type="date" />
-          <FormText control={control} name="series" label="Серия" />
-          <FormText control={control} name="rack" label="Стеллаж" />
-          <FormText control={control} name="rackNumber" label="Номер стеллажа" />
-          <FormText control={control} name="shelfNumber" label="Полка" />
-        </div>
+        <Typography.Title level={5}>Позиции накладной</Typography.Title>
+        <Space direction="vertical" size={12} className="full-width">
+          {fields.map((field, index) => {
+            const existingLine = Boolean(watchedItems[index]?.id);
+            return <div key={field.id} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 14 }}>
+              <Space align="start" className="full-width" style={{ justifyContent: 'space-between' }}>
+                <Typography.Text strong>Позиция {index + 1}</Typography.Text>
+                <Button danger type="text" icon={<DeleteOutlined />} disabled={fields.length === 1 || existingLine} onClick={() => remove(index)}>
+                  {existingLine ? 'Проведена' : 'Убрать'}
+                </Button>
+              </Space>
+              <div className="form-grid two-columns">
+                <Controller control={control} name={`items.${index}.productId`} render={({ field: productField, fieldState }) => (
+                  <Form.Item label="Товар" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+                    <Select {...productField} showSearch optionFilterProp="label" loading={productsQuery.isLoading} onChange={(value) => {
+                      productField.onChange(value);
+                      const product = productsQuery.data?.items.find((item) => item.id === value);
+                      setValue(`items.${index}.expiresAt`, product?.defaultExpiresAt?.slice(0, 10) ?? '');
+                    }} options={productsQuery.data?.items.map((product) => ({ value: product.id, label: product.title })) ?? []} placeholder="Выберите товар" />
+                  </Form.Item>
+                )} />
+                <Controller control={control} name={`items.${index}.warehouseId`} render={({ field: warehouseField, fieldState }) => (
+                  <Form.Item label="Склад" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+                    <Select {...warehouseField} options={resources?.warehouses.map((warehouse) => ({ value: warehouse.id, label: warehouse.name })) ?? []} />
+                  </Form.Item>
+                )} />
+                <FormNumber control={control} name={`items.${index}.quantity`} label="Количество" step={0.001} />
+                <FormNumber control={control} name={`items.${index}.purchasePrice`} label="Закупочная цена" />
+                <FormNumber control={control} name={`items.${index}.discountAmount`} label="Скидка по позиции" />
+                <FormText control={control} name={`items.${index}.expiresAt`} label="Годен до" type="date" />
+                <FormText control={control} name={`items.${index}.series`} label="Серия" />
+                <FormText control={control} name={`items.${index}.rack`} label="Стеллаж" />
+                <FormText control={control} name={`items.${index}.rackNumber`} label="Номер стеллажа" />
+                <FormText control={control} name={`items.${index}.shelfNumber`} label="Полка" />
+              </div>
+            </div>;
+          })}
+          <Button icon={<PlusOutlined />} onClick={() => append(emptySupplyLine(defaultWarehouseId))}>Добавить позицию</Button>
+          <Typography.Text strong>Итого: {formatMoney(watchedItems.reduce((total, item) => total + Number(item?.quantity ?? 0) * Number(item?.purchasePrice ?? 0) - Number(item?.discountAmount ?? 0), 0))}</Typography.Text>
+        </Space>
       </Form>
     </Modal>
+    <SupplierModal open={supplierOpen} onClose={() => setSupplierOpen(false)} onSaved={(supplier) => setValue('supplierId', supplier.id, { shouldValidate: true })} />
+    </>
   );
+}
+
+function emptySupplyLine(warehouseId: string): SupplyFormValues['items'][number] {
+  return { productId: '', warehouseId, quantity: 1, purchasePrice: 0, discountAmount: 0, expiresAt: '', series: '', rack: '', rackNumber: '', shelfNumber: '' };
+}
+
+function getSupplyFormValues(invoice: SupplyInvoice | null | undefined, warehouseId: string): SupplyFormValues {
+  if (!invoice) {
+    return { supplierId: '', number: '', suppliedAt: toDateInput(new Date()), items: [emptySupplyLine(warehouseId)] };
+  }
+  return {
+    supplierId: invoice.supplierId ?? '',
+    number: invoice.number ?? '',
+    suppliedAt: invoice.suppliedAt.slice(0, 10),
+    items: invoice.items.map((item) => ({
+      id: item.id,
+      productId: item.productId,
+      warehouseId: item.warehouseId,
+      quantity: Number(item.quantity),
+      purchasePrice: Number(item.purchasePrice),
+      discountAmount: Number(item.discountAmount),
+      expiresAt: item.expiresAt?.slice(0, 10) ?? '',
+      series: item.series ?? '',
+      rack: item.stockBatch?.rack ?? '',
+      rackNumber: item.stockBatch?.rackNumber ?? '',
+      shelfNumber: item.stockBatch?.shelfNumber ?? '',
+    })),
+  };
 }
 
 function FormText({

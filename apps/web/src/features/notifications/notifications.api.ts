@@ -12,6 +12,8 @@ import {
   NotificationTemplate,
   UpdatePortalAccessInput,
   UpsertNotificationTemplateInput,
+  TelegramBroadcastDraft,
+  TelegramBroadcastPreview,
 } from './types';
 
 export type ListNotificationsQuery = {
@@ -34,6 +36,20 @@ export function listNotificationOutbox(query: ListNotificationsQuery = {}) {
 
 export function createNotification(input: CreateNotificationInput) {
   return apiRequest<NotificationOutboxItem>('/v1/notifications/outbox', {
+    method: 'POST',
+    body: input,
+  });
+}
+
+export function previewTelegramBroadcast(input: TelegramBroadcastDraft) {
+  return apiRequest<TelegramBroadcastPreview>('/v1/notifications/broadcasts/telegram/preview', {
+    method: 'POST',
+    body: input,
+  });
+}
+
+export function createTelegramBroadcast(input: TelegramBroadcastDraft & { confirmation: 'ОТПРАВИТЬ' }) {
+  return apiRequest<{ broadcastId: string; queued: number; scheduledAt: string }>('/v1/notifications/broadcasts/telegram', {
     method: 'POST',
     body: input,
   });

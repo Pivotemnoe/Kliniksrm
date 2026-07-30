@@ -7,7 +7,7 @@ import {
 } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { App, Alert, Button, Empty, Form, Input, Space, Statistic, Table, Tabs, Tag, Typography } from 'antd';
+import { App, Alert, Button, Empty, Form, Input, Select, Space, Statistic, Table, Tabs, Tag, Typography } from 'antd';
 import { ColumnsType } from 'antd/es/table';
 import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
@@ -18,7 +18,7 @@ import { getErrorMessage } from '../../api/errors';
 import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
 import { RussianPhoneInput } from '../../shared/ui/RussianPhoneInput';
 import { formatDate, formatDateTime } from '../../shared/utils/date';
-import { getClientPortalSummary, requestClientPortalCode, verifyClientPortalCode } from './clientPortal.api';
+import { createPortalOnlineRequest, getClientPortalSummary, requestClientPortalCode, verifyClientPortalCode } from './clientPortal.api';
 import {
   ClientPortalDeliveryChannel,
   PortalAnimal,
@@ -204,6 +204,18 @@ export function ClientPortalPage() {
               children: <PortalTable columns={appointmentColumns} data={data.appointments} icon={<CalendarOutlined />} emptyText="Записей пока нет" />,
             },
             {
+              key: 'booking',
+              label: 'Записаться',
+              children: (
+                <PortalBookingPanel
+                  token={token}
+                  animals={data.owner.animals}
+                  requests={data.onlineRequests}
+                  onCreated={() => portalQuery.refetch()}
+                />
+              ),
+            },
+            {
               key: 'visits',
               label: 'История приёмов',
               children: <PortalTable columns={visitColumns} data={data.visits} icon={<HistoryOutlined />} emptyText="Приёмов пока нет" />,
@@ -228,6 +240,114 @@ export function ClientPortalPage() {
       </main>
     </div>
   );
+}
+
+const portalBookingSchema = z.object({
+  animalId: z.string().trim().min(1, 'Выберите пациента'),
+  preferredAt: z.string().optional(),
+  comment: z.string().trim().max(1000, 'До 1000 символов').optional(),
+});
+
+type PortalBookingValues = z.infer<typeof portalBookingSchema>;
+
+function PortalBookingPanel({
+  token,
+  animals,
+  requests,
+  onCreated,
+}: {
+  token: string;
+  animals: PortalAnimal[];
+  requests: import('./types').PortalOnlineRequest[];
+  onCreated: () => void;
+}) {
+  const { message } = App.useApp();
+  const form = useForm<PortalBookingValues>({
+    resolver: zodResolver(portalBookingSchema),
+    defaultValues: { animalId: animals[0]?.id ?? '', preferredAt: '', comment: '' },
+  });
+  const mutation = useMutation({
+    mutationFn: (values: PortalBookingValues) => createPortalOnlineRequest(token, {
+      animalId: values.animalId,
+      preferredAt: values.preferredAt ? new Date(values.preferredAt).toISOString() : undefined,
+      comment: values.comment || undefined,
+    }),
+    onSuccess: () => {
+      form.reset({ animalId: animals[0]?.id ?? '', preferredAt: '', comment: '' });
+      message.success('Заявка отправлена администратору');
+      onCreated();
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
+
+  return (
+    <div className="portal-grid">
+      <div className="list-panel">
+        <div className="list-panel-header">
+          <Typography.Title level={4} className="compact-title">Новая заявка на приём</Typography.Title>
+        </div>
+        <div className="list-panel-body">
+          <Alert
+            type="info"
+            showIcon
+            className="form-alert"
+            message="Администратор подтвердит точное время"
+            description="Вы отправляете заявку, а не создаёте запись в расписании автоматически."
+          />
+          <Form layout="vertical" onFinish={form.handleSubmit((values) => mutation.mutate(values))}>
+            <Controller
+              control={form.control}
+              name="animalId"
+              render={({ field, fieldState }) => (
+                <Form.Item label="Пациент" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+                  <Select {...field} options={animals.map((animal) => ({ value: animal.id, label: animal.nickname }))} />
+                </Form.Item>
+              )}
+            />
+            <Controller
+              control={form.control}
+              name="preferredAt"
+              render={({ field }) => <Form.Item label="Желаемая дата и время"><Input {...field} type="datetime-local" /></Form.Item>}
+            />
+            <Controller
+              control={form.control}
+              name="comment"
+              render={({ field, fieldState }) => (
+                <Form.Item label="Причина обращения" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+                  <Input.TextArea {...field} rows={4} placeholder="Кратко опишите причину и удобное время для звонка" />
+                </Form.Item>
+              )}
+            />
+            <Button type="primary" htmlType="submit" loading={mutation.isPending} disabled={!animals.length}>
+              Отправить заявку
+            </Button>
+          </Form>
+        </div>
+      </div>
+      <div className="list-panel">
+        <div className="list-panel-header"><Typography.Title level={4} className="compact-title">Мои заявки</Typography.Title></div>
+        <div className="list-panel-body">
+          {requests.length ? requests.map((request) => (
+            <div className="portal-info-row" key={request.id}>
+              <span>{formatDateTime(request.createdAt)} · {request.animal?.nickname ?? 'Пациент'}</span>
+              <strong>{formatPortalRequestStatus(request.status)}</strong>
+            </div>
+          )) : <Empty description="Заявок пока нет" />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function formatPortalRequestStatus(status: string) {
+  const labels: Record<string, string> = {
+    NEW: 'Ожидает ответа',
+    CONTACTED: 'Клиника связалась',
+    ACCEPTED: 'Запись подтверждена',
+    CANCELLED: 'Отменена',
+    ARCHIVED: 'Завершена',
+  };
+  return labels[status] ?? status;
 }
 
 function PortalHeader({ ownerName }: { ownerName?: string }) {

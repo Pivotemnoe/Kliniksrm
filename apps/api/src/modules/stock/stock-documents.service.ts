@@ -12,6 +12,7 @@ import { CreateStockDocumentDto } from './dto/create-stock-document.dto';
 import { CreateSupplierPaymentDto } from './dto/create-supplier-payment.dto';
 import { ListStockDocumentsQueryDto } from './dto/list-stock-documents-query.dto';
 import { ListStockQueryDto } from './dto/list-stock-query.dto';
+import { UpdateStockDocumentDto } from './dto/update-stock-document.dto';
 
 type WarehouseScope = string[] | null;
 
@@ -74,6 +75,72 @@ export class StockDocumentsService {
   }
 
   async createDocument(dto: CreateStockDocumentDto, actorId: string) {
+    const prepared = await this.prepareDocument(dto, actorId);
+
+    const document = await this.prisma.stockDocument.create({
+      data: {
+        type: dto.type,
+        number: clean(dto.number),
+        warehouseId: prepared.warehouseId,
+        toWarehouseId: dto.toWarehouseId,
+        supplierId: dto.supplierId,
+        occurredAt: dto.occurredAt ? new Date(dto.occurredAt) : undefined,
+        comment: clean(dto.comment),
+        createdById: actorId,
+        items: { create: prepared.items },
+      },
+      include: documentInclude,
+    });
+    await this.auditService.log({
+      actorId,
+      action: 'stock.document.create',
+      entityType: 'StockDocument',
+      entityId: document.id,
+      metadata: { type: document.type, items: document.items.length },
+    });
+    return document;
+  }
+
+  async updateDocument(documentId: string, dto: UpdateStockDocumentDto, actorId: string) {
+    const existing = await this.prisma.stockDocument.findUnique({
+      where: { id: documentId },
+      select: { id: true, status: true, warehouseId: true, toWarehouseId: true },
+    });
+    if (!existing) throw new NotFoundException('Складской документ не найден');
+    await this.ensureDocumentAllowed(existing, actorId);
+    if (existing.status !== StockDocumentStatus.DRAFT) {
+      throw new BadRequestException('Изменять можно только черновик. Для проведённого документа создайте корректировку');
+    }
+
+    const prepared = await this.prepareDocument(dto, actorId);
+    const document = await this.prisma.$transaction(async (tx) => {
+      await tx.stockDocumentItem.deleteMany({ where: { documentId } });
+      return tx.stockDocument.update({
+        where: { id: documentId },
+        data: {
+          type: dto.type,
+          number: clean(dto.number) ?? null,
+          warehouseId: prepared.warehouseId,
+          toWarehouseId: dto.type === StockDocumentType.TRANSFER ? dto.toWarehouseId : null,
+          supplierId: dto.type === StockDocumentType.SUPPLIER_RETURN ? dto.supplierId : null,
+          occurredAt: dto.occurredAt ? new Date(dto.occurredAt) : undefined,
+          comment: clean(dto.comment) ?? null,
+          items: { create: prepared.items },
+        },
+        include: documentInclude,
+      });
+    });
+    await this.auditService.log({
+      actorId,
+      action: 'stock.document.update',
+      entityType: 'StockDocument',
+      entityId: document.id,
+      metadata: { type: document.type, items: document.items.length },
+    });
+    return document;
+  }
+
+  private async prepareDocument(dto: CreateStockDocumentDto, actorId: string) {
     if (!dto.items.length) throw new BadRequestException('Добавьте хотя бы одну позицию');
     const scope = await this.getWarehouseScope(actorId);
     const sourceBatchIds = dto.items.map((item) => item.sourceBatchId).filter((id): id is string => Boolean(id));
@@ -81,7 +148,6 @@ export class StockDocumentsService {
       throw new BadRequestException('Для каждой позиции нужно выбрать исходную партию');
     }
     ensureUnique(sourceBatchIds, 'Одна партия не может повторяться в документе');
-
     const batches = await this.prisma.stockBatch.findMany({ where: { id: { in: sourceBatchIds } } });
     if (batches.length !== sourceBatchIds.length) throw new BadRequestException('Одна из выбранных партий не найдена');
     const batchById = new Map(batches.map((batch) => [batch.id, batch]));
@@ -103,9 +169,7 @@ export class StockDocumentsService {
     }
     if (dto.type === StockDocumentType.SUPPLIER_RETURN) {
       const mismatchedBatch = batches.find((batch) => batch.supplierId && batch.supplierId !== dto.supplierId);
-      if (mismatchedBatch) {
-        throw new BadRequestException('Выбранная партия поступила от другого поставщика');
-      }
+      if (mismatchedBatch) throw new BadRequestException('Выбранная партия поступила от другого поставщика');
     }
 
     const targetProductIds = dto.items.map((item) => item.targetProductId).filter((id): id is string => Boolean(id));
@@ -113,8 +177,9 @@ export class StockDocumentsService {
       throw new BadRequestException('Для пересортицы укажите товар, в который переносится остаток');
     }
     if (targetProductIds.length) {
-      const count = await this.prisma.product.count({ where: { id: { in: [...new Set(targetProductIds)] } } });
-      if (count !== new Set(targetProductIds).size) throw new BadRequestException('Целевой товар не найден');
+      const uniqueTargetIds = [...new Set(targetProductIds)];
+      const count = await this.prisma.product.count({ where: { id: { in: uniqueTargetIds } } });
+      if (count !== uniqueTargetIds.length) throw new BadRequestException('Целевой товар не найден');
     }
 
     const items = dto.items.map((item) => {
@@ -136,29 +201,7 @@ export class StockDocumentsService {
         comment: clean(item.comment),
       };
     });
-
-    const document = await this.prisma.stockDocument.create({
-      data: {
-        type: dto.type,
-        number: clean(dto.number),
-        warehouseId,
-        toWarehouseId: dto.toWarehouseId,
-        supplierId: dto.supplierId,
-        occurredAt: dto.occurredAt ? new Date(dto.occurredAt) : undefined,
-        comment: clean(dto.comment),
-        createdById: actorId,
-        items: { create: items },
-      },
-      include: documentInclude,
-    });
-    await this.auditService.log({
-      actorId,
-      action: 'stock.document.create',
-      entityType: 'StockDocument',
-      entityId: document.id,
-      metadata: { type: document.type, items: document.items.length },
-    });
-    return document;
+    return { warehouseId, items };
   }
 
   async postDocument(documentId: string, actorId: string) {
@@ -273,6 +316,10 @@ export class StockDocumentsService {
       return {
         id: supplier.id,
         title: supplier.title,
+        phone: supplier.phone,
+        email: supplier.email,
+        inn: supplier.inn,
+        comment: supplier.comment,
         suppliedAmount,
         returnedAmount,
         paidAmount,

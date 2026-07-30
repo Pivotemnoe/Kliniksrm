@@ -4,6 +4,8 @@ import { AuthEmployee } from '../auth/auth.types';
 import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { CreateSupplyInvoiceDto } from './dto/create-supply-invoice.dto';
+import { UpdateSupplyInvoiceDto } from './dto/update-supply-invoice.dto';
+import { UpsertSupplierDto } from './dto/upsert-supplier.dto';
 import { ListStockQueryDto } from './dto/list-stock-query.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
@@ -35,6 +37,13 @@ export class StockController {
   @ApiOkResponse({ description: 'Products with low stock rest.' })
   listStockAlerts(@Query() query: ListStockQueryDto, @CurrentEmployee() actor: AuthEmployee) {
     return this.stockService.listStockAlerts(query, actor.id);
+  }
+
+  @Get('catalog-quality')
+  @RequirePermissions('stock.read')
+  @ApiOkResponse({ description: 'Read-only product catalog quality report.' })
+  getCatalogQuality() {
+    return this.stockService.getCatalogQuality();
   }
 
   @Post('products')
@@ -107,10 +116,39 @@ export class StockController {
     return this.stockService.createSupplyInvoice(dto, actor.id);
   }
 
+  @Patch('supply-invoices/:supplyInvoiceId')
+  @RequirePermissions('stock.manage')
+  @ApiOkResponse({ description: 'Supply invoice corrected with stock audit trail.' })
+  updateSupplyInvoice(
+    @Param('supplyInvoiceId') supplyInvoiceId: string,
+    @Body() dto: UpdateSupplyInvoiceDto,
+    @CurrentEmployee() actor: AuthEmployee,
+  ) {
+    return this.stockService.updateSupplyInvoice(supplyInvoiceId, dto, actor.id);
+  }
+
   @Get('supply-invoices/:supplyInvoiceId')
   @RequirePermissions('stock.read')
   @ApiOkResponse({ description: 'Supply invoice card.' })
   getSupplyInvoice(@Param('supplyInvoiceId') supplyInvoiceId: string, @CurrentEmployee() actor: AuthEmployee) {
     return this.stockService.getSupplyInvoice(supplyInvoiceId, actor.id);
+  }
+
+  @Post('suppliers')
+  @RequirePermissions('stock.manage')
+  @ApiCreatedResponse({ description: 'Supplier created.' })
+  createSupplier(@Body() dto: UpsertSupplierDto, @CurrentEmployee() actor: AuthEmployee) {
+    return this.stockService.createSupplier(dto, actor.id);
+  }
+
+  @Patch('suppliers/:supplierId')
+  @RequirePermissions('stock.manage')
+  @ApiOkResponse({ description: 'Supplier updated.' })
+  updateSupplier(
+    @Param('supplierId') supplierId: string,
+    @Body() dto: UpsertSupplierDto,
+    @CurrentEmployee() actor: AuthEmployee,
+  ) {
+    return this.stockService.updateSupplier(supplierId, dto, actor.id);
   }
 }

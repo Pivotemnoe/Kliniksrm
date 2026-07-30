@@ -19,6 +19,14 @@ export function updateEmployee(employeeId: string, input: UpdateEmployeeInput) {
   });
 }
 
+export function archiveEmployee(employeeId: string) {
+  return apiRequest<Employee>(`/v1/employees/${employeeId}`, { method: 'DELETE' });
+}
+
+export function restoreEmployee(employeeId: string) {
+  return apiRequest<Employee>(`/v1/employees/${employeeId}/restore`, { method: 'POST' });
+}
+
 export function listRoles() {
   return apiRequest<RoleTemplate[]>('/v1/roles');
 }

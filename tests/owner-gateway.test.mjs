@@ -5,7 +5,7 @@ import test from 'node:test';
 const require = createRequire(import.meta.url);
 const { assertGatewaySecurityConfiguration } = require('../apps/owner-gateway/dist/runtime-config.js');
 const { parseMaxBotStarted } = require('../apps/owner-gateway/dist/max-webhook.service.js');
-const { parseTelegramBotStarted } = require('../apps/owner-gateway/dist/telegram-webhook.service.js');
+const { parseTelegramBotStarted, parseTelegramStart } = require('../apps/owner-gateway/dist/telegram-webhook.service.js');
 
 const inviteToken = 'A'.repeat(48);
 
@@ -77,4 +77,15 @@ test('Telegram принимает /start и токен приглашения и
     { payload: inviteToken, userId: '12345', chatId: '12345' },
   );
   assert.equal(parseTelegramBotStarted({ message: { text: '/start bad', from: { id: 1 }, chat: { id: 1 } } }), null);
+});
+
+test('привязанный Telegram может запросить новый вход обычной командой start только в личном чате', () => {
+  assert.deepEqual(
+    parseTelegramStart({ message: { text: '/start', from: { id: 12345 }, chat: { id: 12345 } } }),
+    { payload: null, userId: '12345', chatId: '12345' },
+  );
+  assert.equal(
+    parseTelegramStart({ message: { text: '/start', from: { id: 12345 }, chat: { id: -777 } } }),
+    null,
+  );
 });

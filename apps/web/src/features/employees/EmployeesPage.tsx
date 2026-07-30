@@ -1,6 +1,6 @@
-import { EditOutlined, PlusOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined, PlusOutlined, UndoOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Space, Table, Tag, Tabs, Typography } from 'antd';
+import { Alert, App, Button, Checkbox, Space, Table, Tag, Tabs, Typography } from 'antd';
 import { ColumnsType } from 'antd/es/table';
 import { useMemo, useState } from 'react';
 import { getErrorMessage } from '../../api/errors';
@@ -10,7 +10,7 @@ import { EmployeeShiftsPanel } from '../appointments/EmployeeShiftsPanel';
 import { getSchedulingSettings } from '../scheduling/scheduling.api';
 import { getDefaultRouteLabel } from '../../shared/routes/defaultRoutes';
 import { PageHeader } from '../../shared/ui/PageHeader';
-import { createEmployee, listEmployees, listRoles, updateEmployee } from './employees.api';
+import { archiveEmployee, createEmployee, listEmployees, listRoles, restoreEmployee, updateEmployee } from './employees.api';
 import { EmployeeFormDrawer, EmployeeFormValues, toUpdateEmployeeInput } from './EmployeeFormDrawer';
 import { CreateEmployeeInput, Employee, RoleTemplate, UpdateEmployeeInput } from './types';
 
@@ -22,6 +22,7 @@ export function EmployeesPage() {
   const rolesQuery = useQuery({ queryKey: ['roles'], queryFn: listRoles });
   const [createOpen, setCreateOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
   const currentEmployee = currentEmployeeQuery.data?.employee;
   const canManage =
     hasPermission(currentEmployee, 'employees.manage') && hasPermission(currentEmployee, 'roles.manage');
@@ -82,6 +83,26 @@ export function EmployeesPage() {
     },
     onError: (mutationError) => message.error(getErrorMessage(mutationError)),
   });
+  const archiveMutation = useMutation({
+    mutationFn: archiveEmployee,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['employees'] });
+      message.success('Сотрудник удалён из активных. История приёмов и документов сохранена');
+    },
+    onError: (mutationError) => message.error(getErrorMessage(mutationError)),
+  });
+  const restoreMutation = useMutation({
+    mutationFn: restoreEmployee,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['employees'] });
+      message.success('Сотрудник восстановлен');
+    },
+    onError: (mutationError) => message.error(getErrorMessage(mutationError)),
+  });
+  const visibleEmployees = useMemo(
+    () => (employeesQuery.data ?? []).filter((employee) => showArchived || employee.status === 'ACTIVE'),
+    [employeesQuery.data, showArchived],
+  );
 
   const employeeColumns = useMemo<ColumnsType<Employee>>(() => {
     const columns: ColumnsType<Employee> = [
@@ -158,16 +179,26 @@ export function EmployeesPage() {
         title: 'Действия',
         key: 'actions',
         width: 160,
-        render: (_, record) => (
-          <Button size="small" icon={<EditOutlined />} onClick={() => setEditingEmployee(record)}>
-            Редактировать
-          </Button>
-        ),
+        render: (_, record) => <Space wrap>
+          <Button size="small" icon={<EditOutlined />} onClick={() => setEditingEmployee(record)}>Редактировать</Button>
+          {record.status === 'ACTIVE' ? (
+            <Button size="small" danger icon={<DeleteOutlined />} disabled={record.id === currentEmployee?.id} onClick={() => modal.confirm({
+              title: `Удалить сотрудника «${record.fullName}» из активных?`,
+              content: 'Вход будет немедленно закрыт, будущие смены отключены. Старые приёмы, оплаты, назначения и документы останутся в истории.',
+              okText: 'Удалить из активных',
+              okButtonProps: { danger: true },
+              cancelText: 'Отмена',
+              onOk: () => archiveMutation.mutateAsync(record.id),
+            })}>Удалить</Button>
+          ) : (
+            <Button size="small" icon={<UndoOutlined />} onClick={() => restoreMutation.mutate(record.id)}>Восстановить</Button>
+          )}
+        </Space>,
       });
     }
 
     return columns;
-  }, [canManage]);
+  }, [archiveMutation, canManage, currentEmployee?.id, modal, restoreMutation]);
 
   function closeEmployeeForm() {
     setCreateOpen(false);
@@ -229,14 +260,17 @@ export function EmployeesPage() {
               key: 'employees',
               label: 'Сотрудники',
               children: (
+                <Space direction="vertical" className="full-width">
+                <Checkbox checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)}>Показывать удалённых и заблокированных</Checkbox>
                 <Table<Employee>
                   rowKey="id"
                   className="dense-table"
-                  dataSource={employeesQuery.data ?? []}
+                  dataSource={visibleEmployees}
                   loading={employeesQuery.isLoading}
                   pagination={false}
                   columns={employeeColumns}
                 />
+                </Space>
               ),
             },
             {

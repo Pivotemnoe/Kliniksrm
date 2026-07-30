@@ -206,6 +206,54 @@ export class InternalSyncService {
     };
   }
 
+  listPendingBookingRequests() {
+    return this.prisma.portalBookingRequest.findMany({
+      where: { status: 'NEW' },
+      orderBy: { createdAt: 'asc' },
+      take: 100,
+      select: {
+        id: true,
+        ownerId: true,
+        animalId: true,
+        animalNickname: true,
+        animalSpecies: true,
+        preferredAt: true,
+        comment: true,
+        source: true,
+        createdAt: true,
+      },
+    });
+  }
+
+  async markBookingRequestImported(requestId: string, crmRequestId: string) {
+    const request = await this.prisma.portalBookingRequest.findUnique({
+      where: { id: requestId },
+      select: { id: true, status: true, crmRequestId: true },
+    });
+    if (!request) {
+      throw new NotFoundException('Заявка личного кабинета не найдена');
+    }
+    if (request.status === 'IMPORTED') {
+      return request;
+    }
+
+    return this.prisma.portalBookingRequest.update({
+      where: { id: requestId },
+      data: { status: 'IMPORTED', crmRequestId: crmRequestId.trim(), importedAt: new Date() },
+      select: { id: true, status: true, crmRequestId: true, importedAt: true },
+    });
+  }
+
+  async listConnections(channelValue: string) {
+    const channel = normalizeMessengerChannel(channelValue);
+    const bindings = await this.prisma.messengerBinding.findMany({
+      where: { channel },
+      orderBy: { createdAt: 'asc' },
+      select: { ownerId: true },
+    });
+    return { channel, ownerIds: bindings.map((binding) => binding.ownerId) };
+  }
+
   private async deliverToLinkedMessenger(ownerId: string, channel: PortalInviteChannel, token: string) {
     if (channel === PortalInviteChannel.WEB) {
       return 'manual_required' as const;

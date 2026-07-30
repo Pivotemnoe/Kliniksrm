@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Headers, HttpCode, Post, Res, Unauthoriz
 import type { Response } from 'express';
 import { ExchangeInvitationDto } from './dto/exchange-invitation.dto';
 import { PortalPushSubscriptionDto, RemovePortalPushSubscriptionDto } from './dto/portal-push-subscription.dto';
+import { CreatePortalBookingRequestDto } from './dto/create-portal-booking-request.dto';
 import { PortalService } from './portal.service';
 
 @Controller('v1/portal')
@@ -56,6 +57,19 @@ export class PortalController {
     @Body() dto: RemovePortalPushSubscriptionDto,
   ) {
     return this.portalService.removePushSubscription(requireSessionToken(cookieHeader), dto.endpoint);
+  }
+
+  @Get('booking-requests')
+  listBookingRequests(@Headers('cookie') cookieHeader: string | undefined) {
+    return this.portalService.listBookingRequests(requireSessionToken(cookieHeader));
+  }
+
+  @Post('booking-requests')
+  createBookingRequest(
+    @Headers('cookie') cookieHeader: string | undefined,
+    @Body() dto: CreatePortalBookingRequestDto,
+  ) {
+    return this.portalService.createBookingRequest(requireSessionToken(cookieHeader), dto);
   }
 
   @Post('logout')

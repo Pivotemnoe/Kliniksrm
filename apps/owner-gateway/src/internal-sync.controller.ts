@@ -4,6 +4,7 @@ import { UpsertOwnerSnapshotDto } from './dto/upsert-owner-snapshot.dto';
 import { SendOwnerMessageDto } from './dto/send-owner-message.dto';
 import { InternalSyncService } from './internal-sync.service';
 import { assertSecret } from './security';
+import { MarkBookingRequestImportedDto } from './dto/mark-booking-request-imported.dto';
 
 @Controller('internal/v1/owners')
 export class InternalSyncController {
@@ -74,6 +75,33 @@ export class InternalSyncController {
   ) {
     this.assertSyncSecret(secret);
     return this.internalSyncService.resetConnection(ownerId, channel);
+  }
+
+  @Get('booking-requests/pending')
+  listPendingBookingRequests(
+    @Headers('x-owner-gateway-secret') secret: string | undefined,
+  ) {
+    this.assertSyncSecret(secret);
+    return this.internalSyncService.listPendingBookingRequests();
+  }
+
+  @Post('booking-requests/:requestId/imported')
+  markBookingRequestImported(
+    @Param('requestId') requestId: string,
+    @Headers('x-owner-gateway-secret') secret: string | undefined,
+    @Body() dto: MarkBookingRequestImportedDto,
+  ) {
+    this.assertSyncSecret(secret);
+    return this.internalSyncService.markBookingRequestImported(requestId, dto.crmRequestId);
+  }
+
+  @Get('connections/:channel')
+  listConnections(
+    @Param('channel') channel: string,
+    @Headers('x-owner-gateway-secret') secret: string | undefined,
+  ) {
+    this.assertSyncSecret(secret);
+    return this.internalSyncService.listConnections(channel);
   }
 
   private assertSyncSecret(secret: string | undefined) {

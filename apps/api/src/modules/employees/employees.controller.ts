@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { AuthEmployee } from '../auth/auth.types';
 import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
@@ -42,5 +42,19 @@ export class EmployeesController {
     @CurrentEmployee() actor: AuthEmployee,
   ) {
     return this.employeesService.updateEmployee(employeeId, dto, actor.id);
+  }
+
+  @Delete(':employeeId')
+  @RequirePermissions('employees.manage', 'roles.manage')
+  @ApiOkResponse({ description: 'Employee archived safely; historical relations are preserved.' })
+  archiveEmployee(@Param('employeeId') employeeId: string, @CurrentEmployee() actor: AuthEmployee) {
+    return this.employeesService.archiveEmployee(employeeId, actor.id);
+  }
+
+  @Post(':employeeId/restore')
+  @RequirePermissions('employees.manage', 'roles.manage')
+  @ApiOkResponse({ description: 'Archived employee restored.' })
+  restoreEmployee(@Param('employeeId') employeeId: string, @CurrentEmployee() actor: AuthEmployee) {
+    return this.employeesService.restoreEmployee(employeeId, actor.id);
   }
 }

@@ -121,6 +121,27 @@ export type CreatePortalInviteInput = {
   channel: PortalInviteChannel;
 };
 
+export type TelegramBroadcastDraft = {
+  subject?: string | null;
+  body: string;
+  scheduledAt?: string | null;
+};
+
+export type TelegramBroadcastPreview = {
+  channel: 'TELEGRAM';
+  scheduledAt: string;
+  portalOwners: number;
+  eligible: number;
+  overLimit: boolean;
+  gatewayAvailable: boolean;
+  skippedWithoutTelegramConsent: number;
+  recipients: Array<{ id: string; fullName: string; phone: string | null }>;
+  subject: string | null;
+  body: string;
+  confirmationRequired: 'ОТПРАВИТЬ';
+  warning: string;
+};
+
 export const notificationChannelLabels: Record<NotificationChannel, string> = {
   INTERNAL: 'Внутреннее',
   MESSENGER: 'Личный кабинет + мессенджер',

@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { ClientPortalStatus, NotificationChannel, NotificationStatus, Prisma } from '@prisma/client';
-import { randomBytes, createHash } from 'node:crypto';
+import { randomBytes, createHash, randomUUID } from 'node:crypto';
 import { parsePagination } from '../../common/pagination';
 import { AuditService } from '../audit/audit.service';
 import { MaxBotClient, MaxPortalInviteDelivery } from './providers/max-bot.client';
@@ -12,6 +12,8 @@ import { ListNotificationsQueryDto } from './dto/list-notifications-query.dto';
 import { ListTemplatesQueryDto } from './dto/list-templates-query.dto';
 import { UpdatePortalAccessDto } from './dto/update-portal-access.dto';
 import { UpsertTemplateDto } from './dto/upsert-template.dto';
+import { PreviewTelegramBroadcastDto } from './dto/preview-telegram-broadcast.dto';
+import { CreateTelegramBroadcastDto } from './dto/create-telegram-broadcast.dto';
 
 @Injectable()
 export class NotificationsService {
@@ -127,6 +129,115 @@ export class NotificationsService {
     });
 
     return message;
+  }
+
+  async previewTelegramBroadcast(dto: PreviewTelegramBroadcastDto) {
+    const scheduledAt = dto.scheduledAt ? new Date(dto.scheduledAt) : new Date();
+    if (Number.isNaN(scheduledAt.getTime())) {
+      throw new BadRequestException('Укажите корректную дату отправки');
+    }
+
+    const audience = await this.resolveTelegramBroadcastAudience();
+    const recipients = audience.recipients;
+
+    return {
+      channel: 'TELEGRAM' as const,
+      scheduledAt,
+      portalOwners: audience.portalOwners,
+      eligible: Math.min(recipients.length, 500),
+      overLimit: recipients.length > 500,
+      gatewayAvailable: audience.gatewayAvailable,
+      skippedWithoutTelegramConsent: Math.max(audience.portalOwners - recipients.length, 0),
+      recipients: recipients.slice(0, 20),
+      subject: emptyToNull(dto.subject),
+      body: dto.body.trim(),
+      confirmationRequired: 'ОТПРАВИТЬ' as const,
+      warning: audience.gatewayAvailable
+        ? 'Сообщение не должно содержать диагнозы, результаты анализов и другие медицинские сведения для экрана блокировки.'
+        : 'Публичный шлюз недоступен или не настроен. Рассылка заблокирована.',
+    };
+  }
+
+  async createTelegramBroadcast(dto: CreateTelegramBroadcastDto, actorId: string) {
+    const preview = await this.previewTelegramBroadcast(dto);
+    if (preview.overLimit) {
+      throw new BadRequestException('В одной рассылке допускается не более 500 получателей');
+    }
+    if (!preview.gatewayAvailable) {
+      throw new ServiceUnavailableException('Публичный шлюз Telegram недоступен или не настроен');
+    }
+    if (!preview.eligible) {
+      throw new BadRequestException('Нет владельцев с включённым личным кабинетом и разрешённым Telegram');
+    }
+
+    const confirmedAudience = await this.resolveTelegramBroadcastAudience();
+    if (!confirmedAudience.gatewayAvailable) {
+      throw new ServiceUnavailableException('Публичный шлюз Telegram стал недоступен. Рассылка не создана');
+    }
+    const recipients = confirmedAudience.recipients.slice(0, 500);
+    if (!recipients.length) {
+      throw new BadRequestException('После повторной проверки не осталось подключённых получателей');
+    }
+    const broadcastId = randomUUID();
+
+    await this.prisma.$transaction(
+      recipients.map((owner) => this.prisma.notificationOutbox.create({
+        data: {
+          ownerId: owner.id,
+          createdById: actorId,
+          channel: NotificationChannel.MESSENGER,
+          recipient: `owner:${owner.id}`,
+          subject: emptyToNull(dto.subject),
+          body: dto.body.trim(),
+          scheduledAt: preview.scheduledAt,
+          dedupeKey: `telegram-broadcast:${broadcastId}:${owner.id}`,
+          metadata: {
+            broadcastId,
+            delivery: {
+              mode: 'EXPLICIT',
+              messengerChannels: ['TELEGRAM'],
+              deliveredMessengerChannels: [],
+            },
+          },
+        },
+      })),
+    );
+
+    await this.auditService.log({
+      actorId,
+      action: 'notification.telegram_broadcast_queue',
+      entityType: 'NotificationBroadcast',
+      entityId: broadcastId,
+      metadata: { recipients: recipients.length, scheduledAt: preview.scheduledAt },
+    });
+
+    return { broadcastId, queued: recipients.length, scheduledAt: preview.scheduledAt };
+  }
+
+  private async resolveTelegramBroadcastAudience() {
+    const [portalOwners, linkedOwnerIds] = await Promise.all([
+      this.prisma.owner.count({
+        where: { portalAccess: { status: { in: [ClientPortalStatus.INVITED, ClientPortalStatus.ENABLED] } } },
+      }),
+      this.ownerGatewayClient.getLinkedOwnerIds('TELEGRAM'),
+    ]);
+    if (linkedOwnerIds === null) {
+      return { portalOwners, gatewayAvailable: false, recipients: [] as Array<{ id: string; fullName: string; phone: string | null }> };
+    }
+
+    const recipients = linkedOwnerIds.length
+      ? await this.prisma.owner.findMany({
+          where: {
+            id: { in: linkedOwnerIds },
+            allowTelegram: true,
+            portalAccess: { status: { in: [ClientPortalStatus.INVITED, ClientPortalStatus.ENABLED] } },
+          },
+          orderBy: { fullName: 'asc' },
+          take: 501,
+          select: { id: true, fullName: true, phone: true },
+        })
+      : [];
+    return { portalOwners, gatewayAvailable: true, recipients };
   }
 
   async retryOutbox(notificationId: string, actorId: string) {

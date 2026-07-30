@@ -1,10 +1,11 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { PortalInviteChannel, PortalInviteStatus } from './generated/client';
 import { randomBytes } from 'node:crypto';
 import { PrismaService } from './prisma.service';
 import { hashToken } from './security';
 import { PortalPushSubscriptionDto } from './dto/portal-push-subscription.dto';
 import { WebPushService } from './web-push.service';
+import { CreatePortalBookingRequestDto } from './dto/create-portal-booking-request.dto';
 
 @Injectable()
 export class PortalService {
@@ -153,6 +154,78 @@ export class PortalService {
     return { ok: true, removed: result.count };
   }
 
+  async listBookingRequests(sessionToken: string) {
+    const session = await this.resolveSession(sessionToken);
+    return this.prisma.portalBookingRequest.findMany({
+      where: { ownerId: session.ownerId },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      select: {
+        id: true,
+        animalId: true,
+        animalNickname: true,
+        preferredAt: true,
+        comment: true,
+        status: true,
+        createdAt: true,
+      },
+    });
+  }
+
+  async createBookingRequest(sessionToken: string, dto: CreatePortalBookingRequestDto) {
+    const session = await this.resolveSession(sessionToken);
+    if (!dto.contactConsent) {
+      throw new BadRequestException('Подтвердите согласие на связь по заявке');
+    }
+
+    const animals = readSnapshotAnimals(session.owner.payload);
+    const selectedAnimal = dto.animalId
+      ? animals.find((animal) => animal.id === dto.animalId)
+      : null;
+    if (dto.animalId && !selectedAnimal) {
+      throw new BadRequestException('Выбранный пациент не найден в личном кабинете');
+    }
+
+    const animalNickname = clean(selectedAnimal?.nickname ?? dto.animalNickname);
+    if (!animalNickname) {
+      throw new BadRequestException('Укажите пациента');
+    }
+
+    const preferredAt = dto.preferredAt ? new Date(dto.preferredAt) : null;
+    if (preferredAt && (Number.isNaN(preferredAt.getTime()) || preferredAt <= new Date())) {
+      throw new BadRequestException('Выберите будущую дату и время');
+    }
+
+    return this.prisma.portalBookingRequest.upsert({
+      where: {
+        ownerId_clientRequestId: {
+          ownerId: session.ownerId,
+          clientRequestId: dto.clientRequestId.trim(),
+        },
+      },
+      create: {
+        ownerId: session.ownerId,
+        clientRequestId: dto.clientRequestId.trim(),
+        animalId: selectedAnimal?.id ?? null,
+        animalNickname,
+        animalSpecies: clean(selectedAnimal?.species ?? dto.animalSpecies),
+        preferredAt,
+        comment: clean(dto.comment),
+        contactConsent: true,
+      },
+      update: {},
+      select: {
+        id: true,
+        animalId: true,
+        animalNickname: true,
+        preferredAt: true,
+        comment: true,
+        status: true,
+        createdAt: true,
+      },
+    });
+  }
+
   private async resolveSession(sessionToken: string) {
     const session = await this.prisma.portalSession.findUnique({
       where: { tokenHash: hashToken(sessionToken) },
@@ -165,6 +238,37 @@ export class PortalService {
 
     return session;
   }
+}
+
+function readSnapshotAnimals(payload: unknown) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return [];
+  }
+
+  const animals = (payload as { animals?: unknown }).animals;
+  if (!Array.isArray(animals)) {
+    return [];
+  }
+
+  return animals.flatMap((animal) => {
+    if (!animal || typeof animal !== 'object' || Array.isArray(animal)) {
+      return [];
+    }
+    const value = animal as { id?: unknown; nickname?: unknown; species?: unknown };
+    if (typeof value.id !== 'string' || typeof value.nickname !== 'string') {
+      return [];
+    }
+    return [{
+      id: value.id,
+      nickname: value.nickname,
+      species: typeof value.species === 'string' ? value.species : null,
+    }];
+  });
+}
+
+function clean(value: string | null | undefined) {
+  const normalized = value?.trim();
+  return normalized || null;
 }
 
 function addDays(date: Date, days: number) {

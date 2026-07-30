@@ -9,6 +9,8 @@ import { ListNotificationsQueryDto } from './dto/list-notifications-query.dto';
 import { ListTemplatesQueryDto } from './dto/list-templates-query.dto';
 import { UpdatePortalAccessDto } from './dto/update-portal-access.dto';
 import { UpsertTemplateDto } from './dto/upsert-template.dto';
+import { PreviewTelegramBroadcastDto } from './dto/preview-telegram-broadcast.dto';
+import { CreateTelegramBroadcastDto } from './dto/create-telegram-broadcast.dto';
 import { NotificationsService } from './notifications.service';
 
 @ApiTags('notifications')
@@ -28,6 +30,20 @@ export class NotificationsController {
   @ApiCreatedResponse({ description: 'Notification queued locally.' })
   createOutbox(@Body() dto: CreateNotificationDto, @CurrentEmployee() actor: AuthEmployee) {
     return this.notificationsService.createOutbox(dto, actor.id);
+  }
+
+  @Post('broadcasts/telegram/preview')
+  @RequirePermissions('notifications.manage')
+  @ApiOkResponse({ description: 'Read-only Telegram broadcast audience preview.' })
+  previewTelegramBroadcast(@Body() dto: PreviewTelegramBroadcastDto) {
+    return this.notificationsService.previewTelegramBroadcast(dto);
+  }
+
+  @Post('broadcasts/telegram')
+  @RequirePermissions('notifications.manage')
+  @ApiCreatedResponse({ description: 'Telegram broadcast queued after explicit confirmation.' })
+  createTelegramBroadcast(@Body() dto: CreateTelegramBroadcastDto, @CurrentEmployee() actor: AuthEmployee) {
+    return this.notificationsService.createTelegramBroadcast(dto, actor.id);
   }
 
   @Post('outbox/:notificationId/retry')

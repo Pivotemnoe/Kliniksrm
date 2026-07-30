@@ -9,11 +9,22 @@ import { CreateOnlineRequestDto } from './dto/create-online-request.dto';
 import { ListOnlineRequestsQueryDto } from './dto/list-online-requests-query.dto';
 import { UpdateOnlineRequestDto } from './dto/update-online-request.dto';
 import { OnlineRequestsService } from './online-requests.service';
+import { OwnerGatewayBookingSyncService } from './owner-gateway-booking-sync.service';
 
 @ApiTags('online-requests')
 @Controller('v1/online-requests')
 export class OnlineRequestsController {
-  constructor(private readonly onlineRequestsService: OnlineRequestsService) {}
+  constructor(
+    private readonly onlineRequestsService: OnlineRequestsService,
+    private readonly ownerGatewayBookingSyncService: OwnerGatewayBookingSyncService,
+  ) {}
+
+  @Post('sync-owner-cabinet')
+  @RequirePermissions('appointments.manage')
+  @ApiOkResponse({ description: 'Pending owner-cabinet booking requests imported idempotently.' })
+  syncOwnerCabinetRequests() {
+    return this.ownerGatewayBookingSyncService.syncNow();
+  }
 
   @Get()
   @RequirePermissions('appointments.read')

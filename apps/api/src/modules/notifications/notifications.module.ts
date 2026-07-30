@@ -11,5 +11,6 @@ import { NotificationDispatcherService } from './notification-dispatcher.service
   imports: [AuditModule, ClientPortalModule],
   controllers: [NotificationsController],
   providers: [NotificationsService, NotificationDispatcherService, MaxBotClient, OwnerGatewayClient],
+  exports: [OwnerGatewayClient],
 })
 export class NotificationsModule {}

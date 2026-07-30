@@ -1,9 +1,9 @@
-import { CheckOutlined, CloseOutlined, PlusOutlined } from '@ant-design/icons';
+import { CheckOutlined, CloseOutlined, EditOutlined, EyeOutlined, PlusOutlined, RetweetOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, DatePicker, Form, Input, InputNumber, Modal, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
+import { App, Button, DatePicker, Drawer, Form, Input, InputNumber, Modal, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { Dayjs } from 'dayjs';
-import { useDeferredValue, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
@@ -21,8 +21,10 @@ import {
   listProducts,
   listSupplierBalances,
   postStockDocument,
+  updateStockDocument,
 } from './stock.api';
-import { StockDocument, StockDocumentMutationInput, StockDocumentType, StockMovement, StockResources, SupplierBalance } from './types';
+import { StockDocument, StockDocumentMutationInput, StockDocumentType, StockMovement, StockResources, Supplier, SupplierBalance } from './types';
+import { SupplierModal } from './SupplierModal';
 
 const historyPageSize = 20;
 
@@ -47,7 +49,12 @@ export function StockOperationsPage() {
   const { data: auth } = useCurrentEmployee();
   const canManage = hasPermission(auth?.employee, 'stock.manage');
   const [documentOpen, setDocumentOpen] = useState(false);
+  const [editingDocument, setEditingDocument] = useState<StockDocument | null>(null);
+  const [correctionSource, setCorrectionSource] = useState<StockDocument | null>(null);
+  const [selectedDocument, setSelectedDocument] = useState<StockDocument | null>(null);
   const [paymentSupplier, setPaymentSupplier] = useState<SupplierBalance | null>(null);
+  const [supplierOpen, setSupplierOpen] = useState(false);
+  const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [documentPage, setDocumentPage] = useState(1);
   const [movementPage, setMovementPage] = useState(1);
   const resourcesQuery = useQuery({ queryKey: ['stock', 'resources'], queryFn: getStockResources });
@@ -78,7 +85,8 @@ export function StockOperationsPage() {
     { title: 'Поставщик', key: 'supplier', render: (_, row) => row.supplier?.title ?? '—' },
     { title: 'Позиций', key: 'items', render: (_, row) => row.items.length },
     { title: 'Статус', dataIndex: 'status', key: 'status', render: (value) => value === 'POSTED' ? <Tag color="green">Проведён</Tag> : value === 'CANCELLED' ? <Tag>Отменён</Tag> : <Tag color="blue">Черновик</Tag> },
-    ...(canManage ? [{ title: '', key: 'actions', width: 240, render: (_: unknown, row: StockDocument) => row.status === 'DRAFT' ? <Space><Button type="primary" icon={<CheckOutlined />} loading={postMutation.isPending} onClick={() => modal.confirm({ title: 'Провести документ?', content: 'После проведения документ станет неизменяемым и обновит остатки.', okText: 'Провести', cancelText: 'Отмена', onOk: () => postMutation.mutateAsync(row.id) })}>Провести</Button><Button danger icon={<CloseOutlined />} loading={cancelMutation.isPending} onClick={() => cancelMutation.mutate(row.id)}>Отменить</Button></Space> : null }] : []),
+    { title: '', key: 'open', width: 110, render: (_: unknown, row: StockDocument) => <Button size="small" icon={<EyeOutlined />} onClick={() => setSelectedDocument(row)}>Открыть</Button> },
+    ...(canManage ? [{ title: 'Действия', key: 'actions', width: 360, render: (_: unknown, row: StockDocument) => row.status === 'DRAFT' ? <Space wrap><Button icon={<EditOutlined />} onClick={() => { setEditingDocument(row); setDocumentOpen(true); }}>Изменить</Button><Button type="primary" icon={<CheckOutlined />} loading={postMutation.isPending} onClick={() => modal.confirm({ title: 'Провести документ?', content: 'После проведения прямое редактирование будет закрыто. Дальнейшие изменения оформляются отдельной корректировкой.', okText: 'Провести', cancelText: 'Отмена', onOk: () => postMutation.mutateAsync(row.id) })}>Провести</Button><Button danger icon={<CloseOutlined />} loading={cancelMutation.isPending} onClick={() => cancelMutation.mutate(row.id)}>Отменить</Button></Space> : row.status === 'POSTED' ? <Button icon={<RetweetOutlined />} onClick={() => { setCorrectionSource(row); setDocumentOpen(true); }}>Создать корректировку</Button> : null }] : []),
   ], [canManage, cancelMutation, modal, postMutation]);
 
   const movementColumns: ColumnsType<StockMovement> = [
@@ -93,22 +101,26 @@ export function StockOperationsPage() {
 
   const supplierColumns: ColumnsType<SupplierBalance> = [
     { title: 'Поставщик', dataIndex: 'title', key: 'title' },
+    { title: 'Телефон', dataIndex: 'phone', key: 'phone', render: (value) => value || '—' },
+    { title: 'ИНН', dataIndex: 'inn', key: 'inn', render: (value) => value || '—' },
     { title: 'Поставлено', dataIndex: 'suppliedAmount', key: 'suppliedAmount', render: formatMoney },
     { title: 'Возвращено', dataIndex: 'returnedAmount', key: 'returnedAmount', render: formatMoney },
     { title: 'Оплачено', dataIndex: 'paidAmount', key: 'paidAmount', render: formatMoney },
     { title: 'К оплате', dataIndex: 'balance', key: 'balance', render: (value) => <strong>{formatMoney(value)}</strong> },
-    ...(canManage ? [{ title: '', key: 'action', width: 150, render: (_: unknown, row: SupplierBalance) => <Button onClick={() => setPaymentSupplier(row)}>Внести оплату</Button> }] : []),
+    ...(canManage ? [{ title: '', key: 'action', width: 270, render: (_: unknown, row: SupplierBalance) => <Space><Button icon={<EditOutlined />} onClick={() => { setEditingSupplier(row); setSupplierOpen(true); }}>Изменить</Button><Button onClick={() => setPaymentSupplier(row)}>Внести оплату</Button></Space> }] : []),
   ];
 
   return <div className="page">
-    <PageHeader title="Складские операции" description="Инвентаризации, перемещения, возвраты, списания, пересортица и взаиморасчёты с поставщиками." extra={canManage ? <Button type="primary" icon={<PlusOutlined />} onClick={() => setDocumentOpen(true)}>Новый документ</Button> : null} />
+    <PageHeader title="Складские операции" description="Инвентаризации, перемещения, возвраты, списания, пересортица и взаиморасчёты с поставщиками." extra={canManage ? <Space wrap><Button icon={<PlusOutlined />} onClick={() => { setEditingSupplier(null); setSupplierOpen(true); }}>Новый поставщик</Button><Button type="primary" icon={<PlusOutlined />} onClick={() => { setEditingDocument(null); setCorrectionSource(null); setDocumentOpen(true); }}>Новый документ</Button></Space> : null} />
     <div className="list-panel"><Tabs items={[
       { key: 'documents', label: 'Документы', children: <Table rowKey="id" columns={documentColumns} dataSource={documentsQuery.data?.items ?? []} loading={documentsQuery.isLoading} pagination={{ current: documentPage, pageSize: historyPageSize, total: documentsQuery.data?.total ?? 0, showSizeChanger: false, onChange: setDocumentPage }} scroll={{ x: 1050 }} /> },
       { key: 'movements', label: 'История движения', children: <Table rowKey="id" columns={movementColumns} dataSource={movementsQuery.data?.items ?? []} loading={movementsQuery.isLoading} pagination={{ current: movementPage, pageSize: historyPageSize, total: movementsQuery.data?.total ?? 0, showSizeChanger: false, onChange: setMovementPage }} scroll={{ x: 1100 }} /> },
       ...(canManage ? [{ key: 'suppliers', label: 'Поставщики и расчёты', children: <Table rowKey="id" columns={supplierColumns} dataSource={suppliersQuery.data ?? []} loading={suppliersQuery.isLoading} pagination={false} scroll={{ x: 850 }} /> }] : []),
     ]} /></div>
-    <StockDocumentModal open={documentOpen} resources={resourcesQuery.data} onClose={() => setDocumentOpen(false)} onSaved={refresh} />
+    <StockDocumentModal open={documentOpen} document={editingDocument} correctionSource={correctionSource} resources={resourcesQuery.data} onClose={() => { setDocumentOpen(false); setEditingDocument(null); setCorrectionSource(null); }} onSaved={refresh} />
     <SupplierPaymentModal supplier={paymentSupplier} resources={resourcesQuery.data} onClose={() => setPaymentSupplier(null)} onSaved={refresh} />
+    <SupplierModal open={supplierOpen} supplier={editingSupplier} onClose={() => { setSupplierOpen(false); setEditingSupplier(null); }} />
+    <StockDocumentDrawer document={selectedDocument} onClose={() => setSelectedDocument(null)} />
   </div>;
 }
 
@@ -123,7 +135,7 @@ type DocumentFormValues = {
   items: Array<{ sourceBatchId: string; productId?: string; quantity?: number; actualQuantity?: number; targetProductId?: string; comment?: string }>;
 };
 
-function StockDocumentModal({ open, resources, onClose, onSaved }: { open: boolean; resources?: Awaited<ReturnType<typeof getStockResources>>; onClose: () => void; onSaved: () => Promise<void> }) {
+function StockDocumentModal({ open, document, correctionSource, resources, onClose, onSaved }: { open: boolean; document?: StockDocument | null; correctionSource?: StockDocument | null; resources?: Awaited<ReturnType<typeof getStockResources>>; onClose: () => void; onSaved: () => Promise<void> }) {
   const { message } = App.useApp();
   const [form] = Form.useForm<DocumentFormValues>();
   const [batchSearch, setBatchSearch] = useState('');
@@ -148,11 +160,22 @@ function StockDocumentModal({ open, resources, onClose, onSaved }: { open: boole
     (needsActual || Number(batch.rest) > 0)
     && (type !== 'SUPPLIER_RETURN' || !supplierId || !batch.supplierId || batch.supplierId === supplierId),
   );
+  const knownItems = document?.items ?? correctionSource?.items ?? [];
+  const rawBatchOptions = [
+    ...visibleBatches.map((batch) => ({ value: batch.id, productId: batch.productId, label: `${batch.product?.title ?? batch.productId} · остаток ${batch.rest}${batch.series ? ` · серия ${batch.series}` : ''}` })),
+    ...knownItems.filter((item) => item.sourceBatchId && !visibleBatches.some((batch) => batch.id === item.sourceBatchId)).map((item) => ({ value: item.sourceBatchId!, productId: item.productId, label: `${item.product?.title ?? item.productId} · остаток ${item.sourceBatch?.rest ?? '—'}${item.sourceBatch?.series ? ` · серия ${item.sourceBatch.series}` : ''}` })),
+  ];
+  const batchOptions = Array.from(new Map(rawBatchOptions.map((option) => [option.value, option])).values());
   const mutation = useMutation({
-    mutationFn: createStockDocument,
-    onSuccess: async () => { await onSaved(); message.success('Черновик создан. Проверьте его и нажмите «Провести»'); form.resetFields(); onClose(); },
+    mutationFn: (input: StockDocumentMutationInput) => document ? updateStockDocument(document.id, input) : createStockDocument(input),
+    onSuccess: async () => { await onSaved(); message.success(document ? 'Черновик документа сохранён' : 'Черновик создан. Проверьте его и нажмите «Провести»'); form.resetFields(); onClose(); },
     onError: (error) => message.error(getErrorMessage(error)),
   });
+
+  useEffect(() => {
+    if (!open) return;
+    form.setFieldsValue(getDocumentFormValues(document, correctionSource, resources?.warehouses[0]?.id));
+  }, [correctionSource, document, form, open, resources?.warehouses]);
   function submit(values: DocumentFormValues) {
     const input: StockDocumentMutationInput = {
       type: values.type,
@@ -169,8 +192,8 @@ function StockDocumentModal({ open, resources, onClose, onSaved }: { open: boole
     };
     mutation.mutate(input);
   }
-  return <Modal open={open} title="Новый складской документ" onCancel={onClose} okText="Создать черновик" cancelText="Отмена" confirmLoading={mutation.isPending} onOk={() => form.submit()} destroyOnHidden width={920}>
-    <Form form={form} layout="vertical" initialValues={{ type: 'INVENTORY', occurredAt: dayjs(), items: [{}] }} onFinish={submit}>
+  return <Modal open={open} title={document ? 'Редактирование складского документа' : correctionSource ? `Корректировка документа ${correctionSource.number || correctionSource.id.slice(0, 8)}` : 'Новый складской документ'} onCancel={onClose} okText={document ? 'Сохранить черновик' : 'Создать черновик'} cancelText="Отмена" confirmLoading={mutation.isPending} onOk={() => form.submit()} destroyOnHidden width={920}>
+    <Form form={form} layout="vertical" onFinish={submit}>
       <Space wrap align="start">
         <Form.Item name="type" label="Операция" rules={[{ required: true }]}><Select style={{ width: 220 }} options={Object.entries(documentTitles).map(([value, label]) => ({ value, label }))} /></Form.Item>
         <Form.Item name="warehouseId" label="Склад" rules={[{ required: true }]}><Select style={{ width: 220 }} options={resources?.warehouses.map((item) => ({ value: item.id, label: item.name }))} /></Form.Item>
@@ -179,11 +202,100 @@ function StockDocumentModal({ open, resources, onClose, onSaved }: { open: boole
         <Form.Item name="number" label="Номер"><Input style={{ width: 180 }} /></Form.Item>
         <Form.Item name="occurredAt" label="Дата" rules={[{ required: true }]}><DatePicker format="DD.MM.YYYY" /></Form.Item>
       </Space>
-      <Form.List name="items">{(fields, { add, remove }) => <Space direction="vertical" style={{ width: '100%' }}>{fields.map((field, index) => <Space key={field.key} wrap align="start"><Form.Item {...field} name={[field.name, 'sourceBatchId']} label={index === 0 ? 'Партия' : undefined} rules={[{ required: true }]}><Select showSearch filterOption={false} onSearch={setBatchSearch} onChange={(value) => { const batch = visibleBatches.find((candidate) => candidate.id === value); form.setFieldValue(['items', field.name, 'productId'], batch?.productId); }} loading={batchesQuery.isFetching} placeholder="Введите товар, код или штрих-код" style={{ width: 390 }} options={visibleBatches.map((batch) => ({ value: batch.id, label: `${batch.product?.title ?? batch.productId} · остаток ${batch.rest}${batch.series ? ` · серия ${batch.series}` : ''}` }))} /></Form.Item>{needsActual ? <Form.Item {...field} name={[field.name, 'actualQuantity']} label={index === 0 ? 'Фактически' : undefined} rules={[{ required: true }]}><InputNumber min={0} precision={3} /></Form.Item> : <Form.Item {...field} name={[field.name, 'quantity']} label={index === 0 ? 'Количество' : undefined} rules={[{ required: true }]}><InputNumber min={0.001} precision={3} /></Form.Item>}{type === 'RESORTING' ? <Form.Item {...field} name={[field.name, 'targetProductId']} label={index === 0 ? 'Целевой товар' : undefined} rules={[{ required: true }]}><Select showSearch filterOption={false} onSearch={setProductSearch} loading={productsQuery.isFetching} placeholder="Введите название или код" style={{ width: 300 }} options={(productsQuery.data?.items ?? []).map((item) => ({ value: item.id, label: item.title }))} /></Form.Item> : null}<Button danger disabled={fields.length === 1} onClick={() => remove(field.name)}>Убрать</Button></Space>)}<Button onClick={() => add({})}>Добавить позицию</Button></Space>}</Form.List>
+      <Form.List name="items">{(fields, { add, remove }) => (
+        <Space direction="vertical" style={{ width: '100%' }}>
+          {fields.map((field, index) => (
+            <Space key={field.key} wrap align="start">
+              <Form.Item name={[field.name, 'sourceBatchId']} label={index === 0 ? 'Партия' : undefined} rules={[{ required: true }]}>
+                <Select
+                  showSearch
+                  filterOption={false}
+                  onSearch={setBatchSearch}
+                  onChange={(value) => {
+                    const batch = batchOptions.find((candidate) => candidate.value === value);
+                    form.setFieldValue(['items', field.name, 'productId'], batch?.productId);
+                  }}
+                  loading={batchesQuery.isFetching}
+                  placeholder="Введите товар, код или штрих-код"
+                  style={{ width: 390 }}
+                  options={batchOptions.map(({ value, label }) => ({ value, label }))}
+                />
+              </Form.Item>
+              {needsActual ? (
+                <Form.Item name={[field.name, 'actualQuantity']} label={index === 0 ? 'Фактически' : undefined} rules={[{ required: true }]}>
+                  <InputNumber min={0} precision={3} />
+                </Form.Item>
+              ) : (
+                <Form.Item name={[field.name, 'quantity']} label={index === 0 ? 'Количество' : undefined} rules={[{ required: true }]}>
+                  <InputNumber min={0.001} precision={3} />
+                </Form.Item>
+              )}
+              {type === 'RESORTING' ? (
+                <Form.Item name={[field.name, 'targetProductId']} label={index === 0 ? 'Целевой товар' : undefined} rules={[{ required: true }]}>
+                  <Select showSearch filterOption={false} onSearch={setProductSearch} loading={productsQuery.isFetching} placeholder="Введите название или код" style={{ width: 300 }} options={(productsQuery.data?.items ?? []).map((item) => ({ value: item.id, label: item.title }))} />
+                </Form.Item>
+              ) : null}
+              <Button danger disabled={fields.length === 1} onClick={() => remove(field.name)}>Убрать</Button>
+            </Space>
+          ))}
+          <Button onClick={() => add({})}>Добавить позицию</Button>
+        </Space>
+      )}</Form.List>
         <Form.Item name="comment" label="Комментарий" style={{ marginTop: 16 }}><Input.TextArea rows={2} /></Form.Item>
       <Typography.Text type="secondary">Черновик не меняет остатки. Изменение произойдёт только после отдельного подтверждения «Провести».</Typography.Text>
     </Form>
   </Modal>;
+}
+
+function getDocumentFormValues(document?: StockDocument | null, correctionSource?: StockDocument | null, defaultWarehouseId?: string): DocumentFormValues {
+  if (document) {
+    return {
+      type: document.type,
+      number: document.number ?? undefined,
+      warehouseId: document.warehouseId ?? defaultWarehouseId ?? '',
+      toWarehouseId: document.toWarehouseId ?? undefined,
+      supplierId: document.supplierId ?? undefined,
+      occurredAt: dayjs(document.occurredAt),
+      comment: document.comment ?? undefined,
+      items: document.items.map((item) => ({
+        sourceBatchId: item.sourceBatchId ?? '',
+        productId: item.productId,
+        quantity: item.quantity === null ? undefined : Number(item.quantity),
+        actualQuantity: item.actualQuantity === null ? undefined : Number(item.actualQuantity),
+        targetProductId: item.targetProductId ?? undefined,
+        comment: item.comment ?? undefined,
+      })),
+    };
+  }
+  if (correctionSource) {
+    return {
+      type: 'CORRECTION',
+      number: `Испр. ${correctionSource.number || correctionSource.id.slice(0, 8)}`,
+      warehouseId: correctionSource.warehouseId ?? defaultWarehouseId ?? '',
+      occurredAt: dayjs(),
+      comment: `Корректировка складского документа ${correctionSource.number || correctionSource.id}`,
+      items: correctionSource.items.filter((item) => item.sourceBatchId).map((item) => ({
+        sourceBatchId: item.sourceBatchId!,
+        productId: item.productId,
+        actualQuantity: Number(item.sourceBatch?.rest ?? 0),
+      })),
+    };
+  }
+  return { type: 'INVENTORY', warehouseId: defaultWarehouseId ?? '', occurredAt: dayjs(), items: [{ sourceBatchId: '' }] };
+}
+
+function StockDocumentDrawer({ document, onClose }: { document: StockDocument | null; onClose: () => void }) {
+  return <Drawer title={document ? `${documentTitles[document.type]} ${document.number || ''}`.trim() : 'Складской документ'} open={Boolean(document)} onClose={onClose} width={760} destroyOnHidden>
+    {document ? <Space direction="vertical" size={16} className="full-width">
+      <Typography.Text>{formatDate(document.occurredAt)} · {document.warehouse?.name ?? 'Склад не указан'} · {document.supplier?.title ?? 'Без поставщика'}</Typography.Text>
+      <Table rowKey="id" size="small" pagination={false} dataSource={document.items} columns={[
+        { title: 'Товар', key: 'product', render: (_, item) => item.product?.title ?? '—' },
+        { title: 'Партия', key: 'batch', render: (_, item) => item.sourceBatch?.series || item.sourceBatchId?.slice(0, 8) || '—' },
+        { title: document.type === 'INVENTORY' || document.type === 'CORRECTION' ? 'Фактически' : 'Количество', key: 'quantity', render: (_, item) => item.actualQuantity ?? item.quantity ?? '—' },
+      ]} />
+      {document.comment ? <Typography.Paragraph>{document.comment}</Typography.Paragraph> : null}
+    </Space> : null}
+  </Drawer>;
 }
 
 function SupplierPaymentModal({ supplier, resources, onClose, onSaved }: { supplier: SupplierBalance | null; resources?: StockResources; onClose: () => void; onSaved: () => Promise<void> }) {

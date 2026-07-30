@@ -107,6 +107,7 @@ function renderPortal(response) {
     <nav class="tabs" aria-label="Разделы личного кабинета">
       ${tabButton('animals', `Пациенты · ${animals.length}`, true)}
       ${tabButton('appointments', `Записи · ${appointments.length}`)}
+      ${tabButton('booking', 'Записаться')}
       ${tabButton('visits', `Приёмы · ${visits.length}`)}
       ${tabButton('documents', `Документы · ${documents.length}`)}
       ${tabButton('bills', `Счета · ${bills.length}`)}
@@ -114,6 +115,7 @@ function renderPortal(response) {
     </nav>
     ${section('animals', 'Мои животные', renderAnimals(animals), false)}
     ${section('appointments', 'Записи в клинику', renderAppointments(appointments), true)}
+    ${section('booking', 'Запись на приём', renderBookingForm(animals), true)}
     ${section('visits', 'Завершённые приёмы', renderVisits(visits), true)}
     ${section('documents', 'Подписанные документы', renderDocuments(documents), true)}
     ${section('bills', 'Счета', renderBills(bills), true)}
@@ -129,6 +131,8 @@ function renderPortal(response) {
   document.querySelector('#prepare-browser')?.addEventListener('click', prepareBrowserTransfer);
   document.querySelector('#copy-browser-link')?.addEventListener('click', copyBrowserTransferLink);
   document.querySelector('#enable-push')?.addEventListener('click', enablePushNotifications);
+  document.querySelector('#booking-form')?.addEventListener('submit', submitBookingRequest);
+  void loadBookingRequests();
   void updateAppBadge(unreadNotifications);
   void updatePushButton();
 
@@ -136,6 +140,74 @@ function renderPortal(response) {
     selectTab('notifications');
     markNotificationsRead(response.ownerId, notifications);
   }
+}
+
+function renderBookingForm(animals) {
+  const animalOptions = animals.map((animal) => `<option value="${escapeHtml(animal.id)}">${escapeHtml(animal.nickname || 'Пациент')}</option>`).join('');
+  return `
+    <div class="booking-layout">
+      <form id="booking-form" class="booking-form">
+        <p class="booking-note"><strong>Это заявка.</strong> Администратор свяжется с вами и подтвердит точное время приёма.</p>
+        <label>Пациент<select name="animalId" required>${animalOptions}</select></label>
+        <label>Желаемая дата и время<input name="preferredAt" type="datetime-local"></label>
+        <label>Причина обращения<textarea name="comment" maxlength="1000" rows="4" placeholder="Кратко опишите причину и удобное время для звонка"></textarea></label>
+        <label class="booking-consent"><input name="contactConsent" type="checkbox" required> Разрешаю клинике связаться со мной по этой заявке</label>
+        <button class="button" type="submit"${animals.length ? '' : ' disabled'}>Отправить заявку</button>
+        <span id="booking-status" class="booking-status" role="status" aria-live="polite"></span>
+      </form>
+      <div><h3>Мои заявки</h3><div id="booking-requests" class="booking-requests"><span class="muted">Загружаем…</span></div></div>
+    </div>`;
+}
+
+async function submitBookingRequest(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = form.querySelector('button[type="submit"]');
+  const status = document.querySelector('#booking-status');
+  const values = new FormData(form);
+  button.disabled = true;
+  if (status) status.textContent = 'Отправляем…';
+  try {
+    await request('/v1/portal/booking-requests', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        clientRequestId: createClientRequestId(),
+        animalId: String(values.get('animalId') || ''),
+        preferredAt: values.get('preferredAt') ? new Date(String(values.get('preferredAt'))).toISOString() : undefined,
+        comment: String(values.get('comment') || ''),
+        contactConsent: values.get('contactConsent') === 'on',
+      }),
+    });
+    form.reset();
+    if (status) status.textContent = 'Заявка отправлена. Клиника подтвердит время.';
+    await loadBookingRequests();
+  } catch (error) {
+    if (status) status.textContent = error instanceof Error ? error.message : 'Не удалось отправить заявку';
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function loadBookingRequests() {
+  const container = document.querySelector('#booking-requests');
+  if (!container) return;
+  try {
+    const items = await request('/v1/portal/booking-requests');
+    container.innerHTML = array(items).length
+      ? array(items).map((item) => `<article class="booking-request"><strong>${escapeHtml(item.animalNickname || 'Пациент')}</strong><span>${formatDateTime(item.createdAt)}</span><span>${escapeHtml(bookingStatusLabel(item.status))}</span></article>`).join('')
+      : '<span class="muted">Заявок пока нет.</span>';
+  } catch {
+    container.innerHTML = '<span class="muted">Не удалось загрузить заявки.</span>';
+  }
+}
+
+function createClientRequestId() {
+  return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+}
+
+function bookingStatusLabel(status) {
+  return status === 'IMPORTED' ? 'Передана в клинику' : status === 'CANCELLED' ? 'Отменена' : 'Ожидает обработки';
 }
 
 async function prepareBrowserTransfer() {

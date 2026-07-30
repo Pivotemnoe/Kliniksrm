@@ -29,6 +29,14 @@ export type Supplier = {
   comment: string | null;
 };
 
+export type SupplierMutationInput = {
+  title: string;
+  phone?: string;
+  email?: string;
+  inn?: string;
+  comment?: string;
+};
+
 export type Product = {
   id: string;
   categoryId: string | null;
@@ -102,6 +110,8 @@ export type SupplyInvoiceItem = {
   discountAmount: DecimalValue;
   expiresAt: string | null;
   series: string | null;
+  stockBatchId?: string | null;
+  stockBatch?: Pick<StockBatch, 'id' | 'rack' | 'rackNumber' | 'shelfNumber' | 'quantity' | 'rest'> | null;
   product?: Product;
   warehouse?: Pick<Warehouse, 'id' | 'name'>;
 };
@@ -119,6 +129,20 @@ export type StockResources = {
     orgType: string | null;
     inn: string | null;
   } | null;
+};
+
+export type CatalogQualityReport = {
+  total: number;
+  cleanProducts: number;
+  qualityPercent: number;
+  counts: {
+    withoutCategory: number;
+    zeroPrice: number;
+    missingUnits: number;
+    legacyCompositeBarcode: number;
+    duplicateBarcodeValues: number;
+  };
+  sample: Array<{ id: string; title: string; issues: string[] }>;
 };
 
 export type ProductMutationInput = {
@@ -169,6 +193,13 @@ export type SupplyInvoiceMutationInput = {
     rackNumber?: string;
     shelfNumber?: string;
   }>;
+};
+
+export type SupplyInvoiceUpdateInput = {
+  supplierId?: string;
+  number?: string;
+  suppliedAt?: string;
+  items: Array<SupplyInvoiceMutationInput['items'][number] & { id?: string; warehouseId: string }>;
 };
 
 export type StockDocumentType = 'INVENTORY' | 'TRANSFER' | 'SUPPLIER_RETURN' | 'WRITE_OFF' | 'RESORTING' | 'CORRECTION';
@@ -246,6 +277,10 @@ export type StockMovement = {
 export type SupplierBalance = {
   id: string;
   title: string;
+  phone: string | null;
+  email: string | null;
+  inn: string | null;
+  comment: string | null;
   suppliedAmount: DecimalValue;
   returnedAmount: DecimalValue;
   paidAmount: DecimalValue;

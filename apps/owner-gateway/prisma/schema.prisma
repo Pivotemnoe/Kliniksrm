@@ -25,6 +25,12 @@ enum MessengerChannel {
   TELEGRAM
 }
 
+enum PortalBookingRequestStatus {
+  NEW
+  IMPORTED
+  CANCELLED
+}
+
 model OwnerSnapshot {
   ownerId         String             @id
   displayName     String
@@ -36,8 +42,33 @@ model OwnerSnapshot {
   bindings        MessengerBinding[]
   sessions        PortalSession[]
   pushSubscriptions PortalPushSubscription[]
+  bookingRequests   PortalBookingRequest[]
 
   @@index([syncedAt])
+}
+
+model PortalBookingRequest {
+  id                String                     @id @default(uuid())
+  ownerId           String
+  owner             OwnerSnapshot              @relation(fields: [ownerId], references: [ownerId], onDelete: Cascade)
+  clientRequestId   String
+  animalId          String?
+  animalNickname    String
+  animalSpecies     String?
+  preferredAt       DateTime?
+  comment           String?
+  contactConsent    Boolean
+  source            String                     @default("OWNER_PORTAL")
+  status            PortalBookingRequestStatus @default(NEW)
+  crmRequestId      String?
+  importedAt        DateTime?
+  cancelledAt       DateTime?
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+
+  @@unique([ownerId, clientRequestId])
+  @@index([status, createdAt])
+  @@index([ownerId, createdAt])
 }
 
 model PortalInvitation {
