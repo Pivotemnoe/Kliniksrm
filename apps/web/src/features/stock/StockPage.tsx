@@ -134,6 +134,7 @@ export function StockPage() {
                     setProductOpen(true);
                   }}
                   onPrint={setPrintingProduct}
+                  onAdjustStock={(product) => navigate(`/stock/operations?inventoryProductId=${encodeURIComponent(product.id)}`)}
                   onTableChange={handleTableChange}
                 />
               ),
@@ -174,6 +175,11 @@ export function StockPage() {
         open={productOpen}
         product={editingProduct}
         resources={resourcesQuery.data}
+        onAdjustStock={(product) => {
+          setProductOpen(false);
+          setEditingProduct(null);
+          navigate(`/stock/operations?inventoryProductId=${encodeURIComponent(product.id)}`);
+        }}
         onClose={() => {
           setProductOpen(false);
           setEditingProduct(null);
@@ -275,6 +281,7 @@ function ProductsTable({
   canManage,
   onEdit,
   onPrint,
+  onAdjustStock,
   onTableChange,
 }: {
   search: string;
@@ -282,6 +289,7 @@ function ProductsTable({
   canManage: boolean;
   onEdit: (product: Product) => void;
   onPrint: (product: Product) => void;
+  onAdjustStock: (product: Product) => void;
   onTableChange: (pagination: TablePaginationConfig) => void;
 }) {
   const productsQuery = useQuery({
@@ -337,9 +345,14 @@ function ProductsTable({
         render: (_, record) => (
           <Space size={6} wrap>
             {canManage ? (
-              <Button size="small" icon={<EditOutlined />} onClick={() => onEdit(record)}>
-                Изменить
-              </Button>
+              <>
+                <Button size="small" icon={<EditOutlined />} onClick={() => onEdit(record)}>
+                  Изменить
+                </Button>
+                <Button size="small" icon={<PlusOutlined />} onClick={() => onAdjustStock(record)}>
+                  Остаток
+                </Button>
+              </>
             ) : null}
             <Button size="small" icon={<PrinterOutlined />} onClick={() => onPrint(record)}>
               Ценник
@@ -348,7 +361,7 @@ function ProductsTable({
         ),
       },
     ],
-    [canManage, onEdit, onPrint],
+    [canManage, onAdjustStock, onEdit, onPrint],
   );
 
   return <StockTable query={productsQuery} columns={columns} offset={offset} onTableChange={onTableChange} />;
@@ -549,11 +562,13 @@ function ProductModal({
   open,
   product,
   resources,
+  onAdjustStock,
   onClose,
 }: {
   open: boolean;
   product: Product | null;
   resources?: StockResources;
+  onAdjustStock: (product: Product) => void;
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -633,6 +648,22 @@ function ProductModal({
       width={780}
     >
       <Form layout="vertical">
+        {product ? (
+          <Alert
+            type="info"
+            showIcon
+            className="form-alert"
+            message={`Текущий остаток: ${product.stockRest ?? 0} ${product.stockUnit ?? ''}`}
+            description={(
+              <Space direction="vertical" size={8}>
+                <span>Остаток меняется отдельным документом, чтобы сохранялись история, сотрудник и дата корректировки.</span>
+                <Button size="small" icon={<PlusOutlined />} onClick={() => onAdjustStock(product)}>
+                  Провести инвентаризацию этого товара
+                </Button>
+              </Space>
+            )}
+          />
+        ) : null}
         <FormText control={control} name="title" label="Название" autoFocus />
         <Controller
           control={control}

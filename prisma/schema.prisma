@@ -1008,6 +1008,8 @@ model HospitalRecord {
   id           String    @id @default(uuid())
   visitId      String
   visit        Visit     @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  billItemId   String?   @unique
+  billItem     BillItem? @relation(fields: [billItemId], references: [id], onDelete: SetNull)
   recordedById String?
   recordedBy   Employee? @relation("HospitalRecordAuthor", fields: [recordedById], references: [id], onDelete: SetNull)
   recordType   String
@@ -1555,6 +1557,7 @@ model BillItem {
   discount             Decimal               @default(0) @db.Decimal(12, 2)
   totalAmount          Decimal               @default(0) @db.Decimal(12, 2)
   laboratoryOrderItems LaboratoryOrderItem[]
+  hospitalRecord       HospitalRecord?
   stockMovements       StockMovement[]
   createdAt            DateTime              @default(now())
 

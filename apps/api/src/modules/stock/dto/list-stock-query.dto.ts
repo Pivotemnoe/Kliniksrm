@@ -20,6 +20,11 @@ export class ListStockQueryDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsUUID()
+  productId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
   limit?: string;
 

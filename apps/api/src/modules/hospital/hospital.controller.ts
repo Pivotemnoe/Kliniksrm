@@ -8,6 +8,7 @@ import { AdmitExistingHospitalStayDto } from './dto/admit-existing-hospital-stay
 import { CreateHospitalRecordDto } from './dto/create-hospital-record.dto';
 import { ListHospitalQueryDto } from './dto/list-hospital-query.dto';
 import { UpdateHospitalStayDto } from './dto/update-hospital-stay.dto';
+import { UpdateHospitalRecordDto } from './dto/update-hospital-record.dto';
 import { HospitalService } from './hospital.service';
 
 @ApiTags('hospital')
@@ -27,6 +28,13 @@ export class HospitalController {
   @ApiOkResponse({ description: 'Hospital boxes.' })
   getResources() {
     return this.hospitalService.getResources();
+  }
+
+  @Get('catalog')
+  @RequirePermissions('hospital.read')
+  @ApiOkResponse({ description: 'Products and services available for hospital records.' })
+  getCatalog(@Query('search') search: string | undefined, @CurrentEmployee() actor: AuthEmployee) {
+    return this.hospitalService.getCatalog(search, actor.id);
   }
 
   @Post()
@@ -63,6 +71,18 @@ export class HospitalController {
     @CurrentEmployee() actor: AuthEmployee,
   ) {
     return this.hospitalService.createRecord(stayId, dto, actor.id);
+  }
+
+  @Patch(':stayId/records/:recordId')
+  @RequirePermissions('hospital.manage')
+  @ApiOkResponse({ description: 'Hospital journal record updated with an audit trail.' })
+  updateRecord(
+    @Param('stayId') stayId: string,
+    @Param('recordId') recordId: string,
+    @Body() dto: UpdateHospitalRecordDto,
+    @CurrentEmployee() actor: AuthEmployee,
+  ) {
+    return this.hospitalService.updateRecord(stayId, recordId, dto, actor.id);
   }
 
   @Patch(':stayId')

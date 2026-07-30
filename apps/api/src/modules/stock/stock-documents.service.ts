@@ -144,17 +144,27 @@ export class StockDocumentsService {
     if (!dto.items.length) throw new BadRequestException('Добавьте хотя бы одну позицию');
     const scope = await this.getWarehouseScope(actorId);
     const sourceBatchIds = dto.items.map((item) => item.sourceBatchId).filter((id): id is string => Boolean(id));
-    if (sourceBatchIds.length !== dto.items.length) {
+    const allowsNewBatch = dto.type === StockDocumentType.INVENTORY || dto.type === StockDocumentType.CORRECTION;
+    if (!allowsNewBatch && sourceBatchIds.length !== dto.items.length) {
       throw new BadRequestException('Для каждой позиции нужно выбрать исходную партию');
     }
     ensureUnique(sourceBatchIds, 'Одна партия не может повторяться в документе');
+    const newBatchProductIds = dto.items
+      .filter((item) => !item.sourceBatchId)
+      .map((item) => item.productId);
+    ensureUnique(newBatchProductIds, 'Новая учётная партия одного товара не может повторяться в документе');
+    const productIds = [...new Set(dto.items.map((item) => item.productId))];
+    const productCount = await this.prisma.product.count({ where: { id: { in: productIds } } });
+    if (productCount !== productIds.length) throw new BadRequestException('Один из выбранных товаров не найден');
     const batches = await this.prisma.stockBatch.findMany({ where: { id: { in: sourceBatchIds } } });
     if (batches.length !== sourceBatchIds.length) throw new BadRequestException('Одна из выбранных партий не найдена');
     const batchById = new Map(batches.map((batch) => [batch.id, batch]));
     const warehouseIds = [...new Set(batches.map((batch) => batch.warehouseId))];
-    if (warehouseIds.length !== 1) throw new BadRequestException('Один документ должен относиться к одному складу');
+    if (warehouseIds.length > 1) throw new BadRequestException('Один документ должен относиться к одному складу');
     const warehouseId = dto.warehouseId ?? warehouseIds[0];
-    if (warehouseId !== warehouseIds[0]) throw new BadRequestException('Партии не относятся к выбранному складу');
+    if (!warehouseId) throw new BadRequestException('Выберите склад');
+    await this.ensureWarehouseExists(warehouseId);
+    if (warehouseIds[0] && warehouseId !== warehouseIds[0]) throw new BadRequestException('Партии не относятся к выбранному складу');
     this.ensureWarehouseAllowed(warehouseId, scope);
 
     if (dto.type === StockDocumentType.TRANSFER) {
@@ -183,21 +193,26 @@ export class StockDocumentsService {
     }
 
     const items = dto.items.map((item) => {
-      const batch = batchById.get(item.sourceBatchId!);
-      if (!batch || batch.productId !== item.productId) throw new BadRequestException('Товар не соответствует выбранной партии');
+      const batch = item.sourceBatchId ? batchById.get(item.sourceBatchId) : null;
+      if (item.sourceBatchId && (!batch || batch.productId !== item.productId)) {
+        throw new BadRequestException('Товар не соответствует выбранной партии');
+      }
       if (dto.type === StockDocumentType.INVENTORY || dto.type === StockDocumentType.CORRECTION) {
         if (item.actualQuantity === undefined) throw new BadRequestException('Укажите фактический остаток');
+        if (!batch && item.actualQuantity <= 0) {
+          throw new BadRequestException('Для новой учётной партии укажите остаток больше нуля');
+        }
       } else if (!item.quantity || item.quantity <= 0) {
         throw new BadRequestException('Количество должно быть больше нуля');
       }
       return {
         productId: item.productId,
         targetProductId: item.targetProductId,
-        sourceBatchId: batch.id,
-        expectedQuantity: batch.rest,
+        sourceBatchId: batch?.id,
+        expectedQuantity: batch?.rest ?? 0,
         actualQuantity: item.actualQuantity,
         quantity: item.quantity,
-        unitCost: batch.purchasePrice,
+        unitCost: batch?.purchasePrice ?? item.unitCost ?? 0,
         comment: clean(item.comment),
       };
     });
@@ -381,7 +396,33 @@ export class StockDocumentsService {
       unitCost: Prisma.Decimal | null;
     },
   ) {
-    if (!item.sourceBatchId) throw new BadRequestException('В позиции не указана партия');
+    if (!item.sourceBatchId) {
+      if (document.type !== StockDocumentType.INVENTORY && document.type !== StockDocumentType.CORRECTION) {
+        throw new BadRequestException('В позиции не указана партия');
+      }
+      if (!document.warehouseId) throw new BadRequestException('В документе не указан склад');
+      const actual = decimal(item.actualQuantity ?? 0);
+      if (actual.lessThanOrEqualTo(0)) throw new BadRequestException('Остаток новой учётной партии должен быть больше нуля');
+      const batch = await tx.stockBatch.create({
+        data: {
+          productId: item.productId,
+          warehouseId: document.warehouseId,
+          quantity: actual,
+          rest: actual,
+          purchasePrice: item.unitCost ?? 0,
+        },
+      });
+      await tx.stockDocumentItem.update({ where: { id: item.id }, data: { sourceBatchId: batch.id } });
+      await this.createMovement(
+        tx,
+        document,
+        item,
+        batch,
+        actual,
+        document.type === StockDocumentType.INVENTORY ? StockMovementType.INVENTORY : StockMovementType.CORRECTION,
+      );
+      return;
+    }
     const batch = await tx.stockBatch.findUnique({ where: { id: item.sourceBatchId } });
     if (!batch) throw new BadRequestException('Исходная партия не найдена');
     const currentRest = decimal(batch.rest);

@@ -73,3 +73,26 @@ test('температура стационара передаётся числ�
   assert.match(dto, /maxDecimalPlaces: 1/);
   assert.match(card, /Math\.round\(Number\(String\(values\.temperatureC\)\.replace\(',', '\.'\)\) \* 10\) \/ 10/);
 });
+
+test('запись стационара редактируется и может быть связана со счётом и складом', async () => {
+  const [schema, migration, controller, service, card, api] = await Promise.all([
+    read('prisma/schema.prisma'),
+    read('prisma/migrations/20260730000300_hospital_record_billing/migration.sql'),
+    read('apps/api/src/modules/hospital/hospital.controller.ts'),
+    read('apps/api/src/modules/hospital/hospital.service.ts'),
+    read('apps/web/src/features/hospital/HospitalCardPage.tsx'),
+    read('apps/web/src/features/hospital/hospital.api.ts'),
+  ]);
+
+  assert.match(schema, /billItemId\s+String\?\s+@unique/);
+  assert.match(migration, /REFERENCES "BillItem"\("id"\) ON DELETE SET NULL/);
+  assert.doesNotMatch(migration, /\b(?:DROP|DELETE\s+FROM|TRUNCATE)\b/i);
+  assert.match(controller, /@Patch\(':stayId\/records\/:recordId'\)/);
+  assert.match(service, /hospital\.record\.update/);
+  assert.match(service, /StockMovementType\.VISIT_USAGE/);
+  assert.match(service, /recalculateHospitalBill/);
+  assert.match(card, /Изменить/);
+  assert.match(card, /Товар — начислить и списать со склада/);
+  assert.match(card, /Услуга — начислить по прайсу/);
+  assert.match(api, /updateHospitalRecord/);
+});

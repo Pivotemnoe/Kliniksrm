@@ -91,3 +91,19 @@ test('интерфейс показывает зарплату, складски
   assert.match(menu, /Зарплата/);
   assert.match(menu, /Операции/);
 });
+
+test('товар без накладной ставится на остаток только проводимой инвентаризацией', async () => {
+  const [service, operations, stockPage] = await Promise.all([
+    read('apps/api/src/modules/stock/stock-documents.service.ts'),
+    read('apps/web/src/features/stock/StockOperationsPage.tsx'),
+    read('apps/web/src/features/stock/StockPage.tsx'),
+  ]);
+
+  assert.match(stockPage, /Провести инвентаризацию этого товара/);
+  assert.match(operations, /новая учётная партия без накладной/);
+  assert.match(operations, /inventoryProductId/);
+  assert.match(service, /stockBatch\.create/);
+  assert.match(service, /actual\.lessThanOrEqualTo\(0\)/);
+  assert.match(service, /StockMovementType\.INVENTORY/);
+  assert.match(service, /stockDocumentItem\.update/);
+});
