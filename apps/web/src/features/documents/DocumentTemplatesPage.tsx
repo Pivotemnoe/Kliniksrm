@@ -12,7 +12,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Alert, Button, Card, Checkbox, Form, Input, Modal, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography } from 'antd';
 import { ColumnsType } from 'antd/es/table';
-import { useMemo, useState } from 'react';
+import type { TextAreaRef } from 'antd/es/input/TextArea';
+import { useMemo, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
@@ -31,6 +32,7 @@ import { listNotificationTemplates, upsertNotificationTemplate } from '../notifi
 import { notificationChannelLabels, NotificationTemplate, UpsertNotificationTemplateInput } from '../notifications/types';
 import { createDocumentTemplate, listDocumentTemplates, updateDocumentTemplate } from './documents.api';
 import { DocumentVariablePalette } from './DocumentVariablePalette';
+import { insertDocumentTemplateContent } from './documentTemplateEditor';
 import { DocumentTemplate } from './types';
 
 const textTemplatePageSize = 20;
@@ -515,6 +517,8 @@ function DocumentTemplatesPanel({ canManage }: { canManage: boolean }) {
   const templatesQuery = useQuery({ queryKey: ['document-templates'], queryFn: listDocumentTemplates });
   const [modalOpen, setModalOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<DocumentTemplate | null>(null);
+  const bodyEditorRef = useRef<TextAreaRef | null>(null);
+  const bodySelectionRef = useRef({ start: 0, end: 0 });
   const { control, getValues, handleSubmit, reset, setValue, watch } = useForm<DocumentTemplateFormValues>({
     resolver: zodResolver(documentTemplateSchema),
     defaultValues: { title: '', categoryTitle: '', body: '' },
@@ -581,12 +585,15 @@ function DocumentTemplatesPanel({ canManage }: { canManage: boolean }) {
   function openCreate() {
     setEditingTemplate(null);
     reset({ title: '', categoryTitle: '', body: '' });
+    bodySelectionRef.current = { start: 0, end: 0 };
     setModalOpen(true);
   }
 
   function openEdit(template: DocumentTemplate) {
     setEditingTemplate(template);
     reset({ title: template.title, categoryTitle: template.category?.title ?? '', body: template.body ?? '' });
+    const bodyLength = template.body?.length ?? 0;
+    bodySelectionRef.current = { start: bodyLength, end: bodyLength };
     setModalOpen(true);
   }
 
@@ -594,12 +601,28 @@ function DocumentTemplatesPanel({ canManage }: { canManage: boolean }) {
     setModalOpen(false);
     setEditingTemplate(null);
     reset({ title: '', categoryTitle: '', body: '' });
+    bodySelectionRef.current = { start: 0, end: 0 };
   }
 
   function insertVariable(variable: string) {
-    const body = getValues('body') ?? '';
-    const separator = body && !body.endsWith(' ') && !body.endsWith('\n') ? ' ' : '';
-    setValue('body', `${body}${separator}{${variable}}`, { shouldDirty: true });
+    insertBodyContent(`{${variable}}`, 'inline');
+  }
+
+  function insertBlock(block: string) {
+    insertBodyContent(block, 'block');
+  }
+
+  function insertBodyContent(content: string, kind: 'inline' | 'block') {
+    const result = insertDocumentTemplateContent(getValues('body') ?? '', content, bodySelectionRef.current, kind);
+    setValue('body', result.value, { shouldDirty: true, shouldValidate: true });
+    bodySelectionRef.current = { start: result.cursor, end: result.cursor };
+
+    window.requestAnimationFrame(() => {
+      const textarea = bodyEditorRef.current?.resizableTextArea?.textArea;
+      if (!textarea) return;
+      textarea.focus();
+      textarea.setSelectionRange(result.cursor, result.cursor);
+    });
   }
 
   return (
@@ -634,7 +657,7 @@ function DocumentTemplatesPanel({ canManage }: { canManage: boolean }) {
         title={editingTemplate ? 'Редактирование документа' : 'Новый документ'}
         open={modalOpen}
         onCancel={closeModal}
-        width={760}
+        width={1040}
         destroyOnHidden
         footer={
           <Space>
@@ -673,14 +696,61 @@ function DocumentTemplatesPanel({ canManage }: { canManage: boolean }) {
             control={control}
             name="body"
             render={({ field, fieldState }) => (
-              <Form.Item label="Текст" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
-                <Input.TextArea {...field} rows={16} />
+              <Form.Item
+                label="Текст документа"
+                validateStatus={fieldState.error ? 'error' : undefined}
+                help={fieldState.error?.message}
+                extra="Поставьте курсор в нужное место, затем выберите отдельное поле или готовый блок. Выделенный текст будет заменён."
+              >
+                <Input.TextArea
+                  {...field}
+                  ref={(instance) => {
+                    bodyEditorRef.current = instance;
+                    field.ref(instance?.resizableTextArea?.textArea ?? null);
+                  }}
+                  rows={16}
+                  showCount
+                  maxLength={20000}
+                  placeholder="Напишите основной текст документа и вставьте нужные данные в выбранные места"
+                  onChange={(event) => {
+                    field.onChange(event);
+                    bodySelectionRef.current = {
+                      start: event.currentTarget.selectionStart,
+                      end: event.currentTarget.selectionEnd,
+                    };
+                  }}
+                  onSelect={(event) => {
+                    bodySelectionRef.current = {
+                      start: event.currentTarget.selectionStart,
+                      end: event.currentTarget.selectionEnd,
+                    };
+                  }}
+                  onClick={(event) => {
+                    bodySelectionRef.current = {
+                      start: event.currentTarget.selectionStart,
+                      end: event.currentTarget.selectionEnd,
+                    };
+                  }}
+                  onKeyUp={(event) => {
+                    bodySelectionRef.current = {
+                      start: event.currentTarget.selectionStart,
+                      end: event.currentTarget.selectionEnd,
+                    };
+                  }}
+                  onBlur={(event) => {
+                    field.onBlur();
+                    bodySelectionRef.current = {
+                      start: event.currentTarget.selectionStart,
+                      end: event.currentTarget.selectionEnd,
+                    };
+                  }}
+                />
               </Form.Item>
             )}
           />
           <div className="document-editor-grid">
             <Card size="small" title="Переменные">
-              <DocumentVariablePalette onInsert={insertVariable} />
+              <DocumentVariablePalette onInsert={insertVariable} onInsertBlock={insertBlock} />
             </Card>
             <Card size="small" title="Предпросмотр на примере">
               <div className="document-preview">

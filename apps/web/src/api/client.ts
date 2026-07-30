@@ -31,8 +31,52 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
   return payload as T;
 }
 
+export async function apiUpload<T>(path: string, file: File, fields: Record<string, string> = {}): Promise<T> {
+  const form = new FormData();
+  form.append('file', file, file.name);
+  Object.entries(fields).forEach(([key, value]) => form.append(key, value));
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    method: 'POST',
+    credentials: 'include',
+    body: form,
+  });
+  const payload = await parseResponse(response);
+  assertResponseOk(response, payload);
+  return payload as T;
+}
+
+export async function apiDownload(path: string) {
+  const response = await fetch(`${apiBaseUrl}${path}`, { credentials: 'include' });
+  if (!response.ok) {
+    const payload = await parseResponse(response);
+    assertResponseOk(response, payload);
+  }
+  return {
+    blob: await response.blob(),
+    fileName: readDownloadFileName(response.headers.get('content-disposition')),
+  };
+}
+
 function normalizeErrorPayload(payload: unknown) {
   return payload && typeof payload === 'object' ? (payload as ApiErrorPayload) : null;
+}
+
+function assertResponseOk(response: Response, payload: unknown): asserts response is Response {
+  if (response.ok) return;
+  if (response.status === 401) window.dispatchEvent(new Event('crm:unauthorized'));
+  throw new ApiError(response.status, extractMessage(payload, response.status), normalizeErrorPayload(payload));
+}
+
+function readDownloadFileName(header: string | null) {
+  const encoded = header?.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded);
+    } catch {
+      // Use the conservative fallback below.
+    }
+  }
+  return header?.match(/filename="([^"]+)"/i)?.[1] ?? 'файл';
 }
 
 async function parseResponse(response: Response): Promise<ApiErrorPayload | unknown> {

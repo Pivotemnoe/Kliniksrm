@@ -202,6 +202,20 @@ enum FileVisibility {
   PUBLIC_LINK
 }
 
+enum FilePurpose {
+  MEDICAL_DOCUMENT
+  LABORATORY_RESULT
+  SUPPLY_DOCUMENT
+}
+
+enum ProductBarcodeType {
+  EAN13
+  GTIN
+  INTERNAL
+  SUPPLIER
+  OTHER
+}
+
 enum JobStatus {
   PENDING
   RUNNING
@@ -345,6 +359,7 @@ model Employee {
   handledSupportRequests    SupportRequest[]             @relation("SupportRequestHandler")
   preparedAcceptances       ServerAcceptance[]           @relation("ServerAcceptancePreparer")
   acceptedAcceptances       ServerAcceptance[]           @relation("ServerAcceptanceAcceptor")
+  uploadedFiles             FileObject[]                 @relation("FileUploader")
   createdAt                 DateTime                     @default(now())
   updatedAt                 DateTime                     @updatedAt
 
@@ -1084,6 +1099,7 @@ model VisitDocument {
   body              String?
   status            DocumentStatus     @default(DRAFT)
   generatedDocument GeneratedDocument?
+  files             FileObject[]
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
@@ -1213,12 +1229,28 @@ model Product {
   payrollRules             PayrollProductRule[]
   stockDocumentItems       StockDocumentItem[]  @relation("StockDocumentProduct")
   targetStockDocumentItems StockDocumentItem[]  @relation("StockDocumentTargetProduct")
+  barcodes                 ProductBarcode[]
   createdAt                DateTime             @default(now())
   updatedAt                DateTime             @updatedAt
 
   @@index([title])
   @@index([barcode])
   @@index([defaultExpiresAt])
+}
+
+model ProductBarcode {
+  id        String             @id @default(uuid())
+  productId String
+  product   Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  value     String
+  type      ProductBarcodeType @default(OTHER)
+  isPrimary Boolean            @default(false)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  @@unique([productId, value])
+  @@index([value])
+  @@index([productId, isPrimary])
 }
 
 model ServiceCategory {
@@ -1317,6 +1349,7 @@ model LaboratoryOrder {
   createdById String?
   completedAt DateTime?
   items       LaboratoryOrderItem[]
+  files       FileObject[]
   createdAt   DateTime              @default(now())
   updatedAt   DateTime              @updatedAt
 
@@ -1347,6 +1380,7 @@ model LaboratoryOrderItem {
   resultText     String?
   comment        String?
   completedAt    DateTime?
+  files          FileObject[]
   createdAt      DateTime                  @default(now())
   updatedAt      DateTime                  @updatedAt
 
@@ -1448,6 +1482,7 @@ model SupplyInvoice {
   totalAmount Decimal             @default(0) @db.Decimal(12, 2)
   items       SupplyInvoiceItem[]
   payments    SupplierPayment[]
+  files       FileObject[]
   createdAt   DateTime            @default(now())
   updatedAt   DateTime            @updatedAt
 
@@ -1964,19 +1999,39 @@ model TemplateVariable {
 }
 
 model FileObject {
-  id                 String              @id @default(uuid())
-  visitId            String?
-  visit              Visit?              @relation(fields: [visitId], references: [id], onDelete: SetNull)
-  storageKey         String              @unique
-  originalName       String
-  mimeType           String?
-  sizeBytes          Int?
-  visibility         FileVisibility      @default(PRIVATE)
-  generatedDocuments GeneratedDocument[]
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
+  id                    String               @id @default(uuid())
+  visitId               String?
+  visit                 Visit?               @relation(fields: [visitId], references: [id], onDelete: SetNull)
+  visitDocumentId       String?
+  visitDocument         VisitDocument?       @relation(fields: [visitDocumentId], references: [id], onDelete: SetNull)
+  laboratoryOrderId     String?
+  laboratoryOrder       LaboratoryOrder?     @relation(fields: [laboratoryOrderId], references: [id], onDelete: SetNull)
+  laboratoryOrderItemId String?
+  laboratoryOrderItem   LaboratoryOrderItem? @relation(fields: [laboratoryOrderItemId], references: [id], onDelete: SetNull)
+  supplyInvoiceId       String?
+  supplyInvoice         SupplyInvoice?       @relation(fields: [supplyInvoiceId], references: [id], onDelete: SetNull)
+  uploadedById          String?
+  uploadedBy            Employee?            @relation("FileUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+  purpose               FilePurpose          @default(MEDICAL_DOCUMENT)
+  storageKey            String               @unique
+  originalName          String
+  mimeType              String?
+  sizeBytes             Int?
+  checksumSha256        String?
+  visibility            FileVisibility       @default(PRIVATE)
+  deletedAt             DateTime?
+  generatedDocuments    GeneratedDocument[]
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
 
   @@index([visitId])
+  @@index([visitDocumentId])
+  @@index([laboratoryOrderId])
+  @@index([laboratoryOrderItemId])
+  @@index([supplyInvoiceId])
+  @@index([uploadedById])
+  @@index([purpose, createdAt])
+  @@index([deletedAt])
 }
 
 model BackupJob {

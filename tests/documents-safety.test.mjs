@@ -40,6 +40,27 @@ test('предпросмотр документов подставляет да�
   assert.match(visitDocuments, /Предпросмотр с данными приёма/);
 });
 
+test('редактор шаблона вставляет поля в позицию курсора и предлагает готовые разделы', async () => {
+  const [templates, palette, editor] = await Promise.all([
+    read('apps/web/src/features/documents/DocumentTemplatesPage.tsx'),
+    read('apps/web/src/features/documents/DocumentVariablePalette.tsx'),
+    read('apps/web/src/features/documents/documentTemplateEditor.ts'),
+  ]);
+
+  assert.match(templates, /bodySelectionRef/);
+  assert.match(templates, /setSelectionRange\(result\.cursor, result\.cursor\)/);
+  assert.match(templates, /onBlur=\{\(event\) => \{/);
+  assert.match(templates, /onKeyUp=\{\(event\) => \{/);
+  assert.match(templates, /onInsertBlock=\{insertBlock\}/);
+  assert.match(templates, /Поставьте курсор в нужное место/);
+  assert.match(palette, /Вставить блок/);
+  assert.match(palette, /КЛИНИКА[\s\S]*Адрес: \{clinic\.address\}/);
+  assert.match(palette, /ВЛАДЕЛЕЦ[\s\S]*ФИО: \{owner\.fullName\}/);
+  assert.match(palette, /ПАЦИЕНТ[\s\S]*Кличка: \{animal\.nickname\}/);
+  assert.match(editor, /body\.slice\(0, start\)/);
+  assert.match(editor, /body\.slice\(end\)/);
+});
+
 test('переносной комплект добавляет данные только отдельным ручным импортом', async () => {
   const portable = await read('scripts/create-portable-flash.sh');
 

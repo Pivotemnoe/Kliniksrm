@@ -10,6 +10,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { DocumentsModule } from './modules/documents/documents.module';
 import { EmployeesModule } from './modules/employees/employees.module';
 import { FinanceModule } from './modules/finance/finance.module';
+import { FilesModule } from './modules/files/files.module';
 import { HealthModule } from './modules/health/health.module';
 import { HospitalModule } from './modules/hospital/hospital.module';
 import { ImportsModule } from './modules/imports/imports.module';
@@ -45,6 +46,7 @@ import { PrismaModule } from './prisma/prisma.module';
     DocumentsModule,
     EmployeesModule,
     FinanceModule,
+    FilesModule,
     OnlineRequestsModule,
     OwnersModule,
     AnimalsModule,

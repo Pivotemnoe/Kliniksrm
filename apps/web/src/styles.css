@@ -1742,7 +1742,7 @@ body {
 
 .document-editor-grid {
   display: grid;
-  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
   gap: 14px;
   align-items: start;
 }
@@ -1750,6 +1750,20 @@ body {
 .document-variable-group {
   display: grid;
   gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid #edf0f3;
+}
+
+.document-variable-group:first-of-type {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.document-variable-group-header {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .document-variable-list {

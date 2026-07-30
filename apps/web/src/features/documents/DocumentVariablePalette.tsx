@@ -3,6 +3,11 @@ import { Button, Space, Typography } from 'antd';
 export const documentVariableGroups = [
   {
     title: 'Клиника',
+    block: `КЛИНИКА
+{clinic.name}
+Адрес: {clinic.address}
+Телефон: {office.phone}
+Реквизиты: {organization.requisites}`,
     variables: [
       ['clinic.name', 'Название клиники'],
       ['clinic.address', 'Адрес клиники'],
@@ -12,6 +17,11 @@ export const documentVariableGroups = [
   },
   {
     title: 'Владелец',
+    block: `ВЛАДЕЛЕЦ
+ФИО: {owner.fullName}
+Телефон: {owner.phone}
+Email: {owner.email}
+Адрес: {owner.address}`,
     variables: [
       ['owner.fullName', 'ФИО владельца'],
       ['owner.phone', 'Телефон'],
@@ -21,6 +31,12 @@ export const documentVariableGroups = [
   },
   {
     title: 'Пациент',
+    block: `ПАЦИЕНТ
+Кличка: {animal.nickname}
+Вид: {animal.species}
+Порода: {animal.breed}
+Дата рождения: {animal.birthDate}
+Микрочип: {animal.microchip}`,
     variables: [
       ['animal.nickname', 'Кличка'],
       ['animal.species', 'Вид'],
@@ -31,6 +47,10 @@ export const documentVariableGroups = [
   },
   {
     title: 'Приём',
+    block: `ПРИЁМ
+Дата: {visit.startedAt}
+Врач: {employee.fullName}
+Сумма: {visit.totalAmount}`,
     variables: [
       ['visit.startedAt', 'Дата приёма'],
       ['visit.totalAmount', 'Сумма'],
@@ -42,18 +62,31 @@ export const documentVariableGroups = [
 
 type DocumentVariablePaletteProps = {
   onInsert?: (variable: string) => void;
+  onInsertBlock?: (block: string) => void;
 };
 
-export function DocumentVariablePalette({ onInsert }: DocumentVariablePaletteProps) {
+export function DocumentVariablePalette({ onInsert, onInsertBlock }: DocumentVariablePaletteProps) {
   return (
     <Space direction="vertical" size={10} className="full-width">
+      {onInsert ? (
+        <Typography.Text type="secondary">
+          Поле вставится туда, где стоит курсор. «Вставить блок» добавит готовый раздел с подписями и переносами строк.
+        </Typography.Text>
+      ) : null}
       {documentVariableGroups.map((group) => (
         <div className="document-variable-group" key={group.title}>
-          <Typography.Text strong>{group.title}</Typography.Text>
+          <div className="document-variable-group-header">
+            <Typography.Text strong>{group.title}</Typography.Text>
+            {onInsertBlock ? (
+              <Button size="small" type="dashed" onClick={() => onInsertBlock(group.block)}>
+                Вставить блок
+              </Button>
+            ) : null}
+          </div>
           <div className="document-variable-list">
             {group.variables.map(([variable, label]) =>
               onInsert ? (
-                <Button key={variable} size="small" onClick={() => onInsert(variable)}>
+                <Button key={variable} size="small" title={`Вставить {${variable}} в позицию курсора`} onClick={() => onInsert(variable)}>
                   {label}
                 </Button>
               ) : (

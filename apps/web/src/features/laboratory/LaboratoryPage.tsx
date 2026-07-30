@@ -11,6 +11,8 @@ import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { PageHeader } from '../../shared/ui/PageHeader';
+import { AttachmentsPanel } from '../files/AttachmentsPanel';
+import { listLaboratoryFiles, listLaboratoryOrderFiles, uploadLaboratoryFile, uploadLaboratoryOrderFile } from '../files/files.api';
 import { formatDateTime } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
 import {
@@ -33,6 +35,7 @@ import {
   updateLaboratoryTest,
 } from './laboratory.api';
 import { LaboratoryOrder, LaboratoryOrderInput, LaboratoryOrderItem, LaboratoryOrderItemInput, LaboratoryProfile, LaboratoryResources, LaboratoryTest } from './types';
+import { LaboratoryResultsImporter } from './LaboratoryResultsImporter';
 
 const pageSize = 10;
 type OrderStatusFilter = VisitLaboratoryOrderStatus | 'ACTIVE';
@@ -287,7 +290,7 @@ export function LaboratoryPage() {
         onClose={() => setSelectedOrder(null)}
         onEditItem={(order, item) => setEditingItem({ order, item })}
       />
-      <ResultDrawer target={editingItem} onClose={() => setEditingItem(null)} />
+      <ResultDrawer target={editingItem} canManage={canManage} onClose={() => setEditingItem(null)} />
     </div>
   );
 
@@ -591,6 +594,7 @@ function OrderDrawer({
               <Button size="small" onClick={() => navigate(`/visits/${order.visit.id}`)}>
                 Открыть приём
               </Button>
+              {canManage && order.status !== 'CANCELLED' ? <LaboratoryResultsImporter order={order} /> : null}
             </Space>
           </Card>
           <Table<LaboratoryOrderItem>
@@ -601,13 +605,30 @@ function OrderDrawer({
             className="dense-table"
             scroll={{ x: 980 }}
           />
+          <Card size="small" title="Файлы всего лабораторного заказа">
+            <AttachmentsPanel
+              queryKey={['laboratory', 'order-files', order.id]}
+              listFiles={() => listLaboratoryOrderFiles(order.id)}
+              uploadFile={(file) => uploadLaboratoryOrderFile(order.id, file)}
+              canManage={canManage && order.status !== 'CANCELLED'}
+              description="Исходные таблицы, общий лабораторный бланк и сопроводительные материалы по этому заказу."
+            />
+          </Card>
         </Space>
       ) : null}
     </Drawer>
   );
 }
 
-function ResultDrawer({ target, onClose }: { target: { order: LaboratoryOrder; item: LaboratoryOrderItem } | null; onClose: () => void }) {
+function ResultDrawer({
+  target,
+  canManage,
+  onClose,
+}: {
+  target: { order: LaboratoryOrder; item: LaboratoryOrderItem } | null;
+  canManage: boolean;
+  onClose: () => void;
+}) {
   const queryClient = useQueryClient();
   const { message } = App.useApp();
   const form = useForm<ResultFormInput, unknown, ResultFormValues>({
@@ -653,6 +674,17 @@ function ResultDrawer({ target, onClose }: { target: { order: LaboratoryOrder; i
           Сохранить результат
         </Button>
       </Form>
+      {target ? (
+        <Card size="small" title="Бланк и материалы результата" style={{ marginTop: 20 }}>
+          <AttachmentsPanel
+            queryKey={['laboratory', 'files', target.order.id, target.item.id]}
+            listFiles={() => listLaboratoryFiles(target.order.id, target.item.id)}
+            uploadFile={(file) => uploadLaboratoryFile(target.order.id, target.item.id, file)}
+            canManage={canManage}
+            description="Приложите бланк лаборатории, снимок анализатора или таблицу результата. PDF, изображения, DOCX, XLSX/XLS/CSV — до 15 МБ."
+          />
+        </Card>
+      ) : null}
     </Drawer>
   );
 }

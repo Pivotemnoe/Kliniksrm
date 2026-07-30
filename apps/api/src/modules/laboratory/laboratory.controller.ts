@@ -3,6 +3,7 @@ import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { AuthEmployee } from '../auth/auth.types';
 import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { ImportLaboratoryResultsDto } from './dto/import-laboratory-results.dto';
 import { ListLaboratoryOrdersQueryDto } from './dto/list-laboratory-orders-query.dto';
 import { ListLaboratoryQueryDto } from './dto/list-laboratory-query.dto';
 import { UpdateLaboratoryOrderDto } from './dto/update-laboratory-order.dto';
@@ -47,6 +48,17 @@ export class LaboratoryController {
     @CurrentEmployee() actor: AuthEmployee,
   ) {
     return this.laboratoryService.updateOrderItem(orderId, itemId, dto, actor.id);
+  }
+
+  @Post('orders/:orderId/results/import')
+  @RequirePermissions('laboratory.manage')
+  @ApiOkResponse({ description: 'Preview or apply automatically matched laboratory results.' })
+  importResults(
+    @Param('orderId') orderId: string,
+    @Body() dto: ImportLaboratoryResultsDto,
+    @CurrentEmployee() actor: AuthEmployee,
+  ) {
+    return this.laboratoryService.importResults(orderId, dto, actor.id);
   }
 
   @Get('tests')

@@ -150,3 +150,31 @@ export type LaboratoryOrderInput = {
   status?: VisitLaboratoryOrderStatus;
   comment?: string | null;
 };
+
+export type LaboratoryResultImportRow = {
+  rowNumber: number;
+  code?: string;
+  title?: string;
+  resultValue?: string;
+  resultText?: string;
+  unit?: string;
+  referenceRange?: string;
+  comment?: string;
+};
+
+export type LaboratoryResultsImportPreview = {
+  mode: 'PREVIEW' | 'APPLY';
+  canApply: boolean;
+  summary: { total: number; matched: number; issues: number };
+  rows: Array<{
+    rowNumber: number;
+    code: string | null;
+    title: string | null;
+    resultValue: string | null;
+    matchStatus: 'MATCHED' | 'NOT_FOUND' | 'AMBIGUOUS' | 'DUPLICATE' | 'BLOCKED';
+    itemId: string | null;
+    itemTitle: string | null;
+    message: string;
+  }>;
+  applied?: number;
+};

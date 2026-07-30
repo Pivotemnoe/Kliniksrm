@@ -37,6 +37,7 @@ export type Product = {
   sku: string | null;
   gtin: string | null;
   barcode: string | null;
+  barcodes?: Array<{ id: string; value: string; type: 'EAN13' | 'GTIN' | 'INTERNAL' | 'SUPPLIER' | 'OTHER'; isPrimary: boolean }>;
   vatRate: DecimalValue | null;
   retailPrice: DecimalValue;
   stockUnit: string | null;
@@ -127,6 +128,7 @@ export type ProductMutationInput = {
   sku?: string;
   gtin?: string;
   barcode?: string;
+  barcodes?: string[];
   vatRate?: number;
   retailPrice?: number;
   stockUnit?: string;

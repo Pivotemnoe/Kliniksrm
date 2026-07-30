@@ -3,6 +3,7 @@ import { LaboratoryOrderItemStatus, LaboratoryOrderStatus, Prisma } from '@prism
 import { parsePagination } from '../../common/pagination';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { ImportLaboratoryResultsDto, LaboratoryResultImportRowDto, LaboratoryResultsImportMode } from './dto/import-laboratory-results.dto';
 import { ListLaboratoryOrdersQueryDto } from './dto/list-laboratory-orders-query.dto';
 import { ListLaboratoryQueryDto } from './dto/list-laboratory-query.dto';
 import { UpdateLaboratoryOrderDto } from './dto/update-laboratory-order.dto';
@@ -144,6 +145,66 @@ export class LaboratoryService {
     });
 
     return updatedItem;
+  }
+
+  async importResults(orderId: string, dto: ImportLaboratoryResultsDto, actorId: string) {
+    const order = await this.prisma.laboratoryOrder.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        status: true,
+        items: { select: { id: true, title: true, code: true, status: true } },
+      },
+    });
+    if (!order) throw new NotFoundException('Лабораторный заказ не найден');
+    if (order.status === LaboratoryOrderStatus.CANCELLED) {
+      throw new BadRequestException('В отменённый лабораторный заказ нельзя загружать результаты');
+    }
+
+    const matchedIds = new Set<string>();
+    const rows = dto.rows.map((row) => matchImportRow(row, order.items, matchedIds));
+    const matched = rows.filter((row) => row.matchStatus === 'MATCHED');
+    const issues = rows.filter((row) => row.matchStatus !== 'MATCHED');
+    const preview = {
+      mode: dto.mode,
+      canApply: matched.length > 0 && issues.length === 0,
+      summary: { total: rows.length, matched: matched.length, issues: issues.length },
+      rows,
+    };
+
+    if (dto.mode === LaboratoryResultsImportMode.PREVIEW) return preview;
+    if (!preview.canApply) {
+      throw new BadRequestException(`Импорт не выполнен: исправьте ${issues.length} строк с ошибками и снова запустите безопасную проверку`);
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const match of matched) {
+        const source = dto.rows.find((row) => row.rowNumber === match.rowNumber)!;
+        await tx.laboratoryOrderItem.update({
+          where: { id: match.itemId! },
+          data: {
+            status: LaboratoryOrderItemStatus.COMPLETED,
+            resultValue: clean(source.resultValue),
+            resultText: clean(source.resultText),
+            ...(source.unit !== undefined ? { unit: clean(source.unit) } : {}),
+            ...(source.referenceRange !== undefined ? { referenceRange: clean(source.referenceRange) } : {}),
+            ...(source.comment !== undefined ? { comment: clean(source.comment) } : {}),
+            completedAt: new Date(),
+          },
+        });
+      }
+      await syncLaboratoryOrderStatus(tx, orderId);
+    });
+
+    await this.auditService.log({
+      actorId,
+      action: 'laboratory.results.import',
+      entityType: 'LaboratoryOrder',
+      entityId: orderId,
+      metadata: { rows: matched.length, sourceRowNumbers: matched.map((row) => row.rowNumber) },
+    });
+
+    return { ...preview, applied: matched.length };
   }
 
   async listTests(query: ListLaboratoryQueryDto) {
@@ -494,6 +555,62 @@ const laboratoryOrderInclude = {
 function clean(value?: string | null) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
+}
+
+type LaboratoryImportItem = {
+  id: string;
+  title: string;
+  code: string | null;
+  status: LaboratoryOrderItemStatus;
+};
+
+function matchImportRow(row: LaboratoryResultImportRowDto, items: LaboratoryImportItem[], matchedIds: Set<string>) {
+  const normalizedCode = normalizeMatchText(row.code);
+  const normalizedTitle = normalizeMatchText(row.title);
+  let candidates = normalizedCode ? items.filter((item) => normalizeMatchText(item.code) === normalizedCode) : [];
+  if (!candidates.length && normalizedTitle) {
+    candidates = items.filter((item) => normalizeMatchText(item.title) === normalizedTitle);
+  }
+  if (!normalizedCode && !normalizedTitle) {
+    return importMatch(row, 'NOT_FOUND', null, 'Нет кода или названия анализа');
+  }
+  if (!candidates.length) {
+    return importMatch(row, 'NOT_FOUND', null, 'Анализ не найден в этом заказе');
+  }
+  if (candidates.length > 1) {
+    return importMatch(row, 'AMBIGUOUS', null, 'Найдено несколько анализов; добавьте точный код');
+  }
+  const item = candidates[0];
+  if (item.status === LaboratoryOrderItemStatus.CANCELLED) {
+    return importMatch(row, 'BLOCKED', item, 'Строка заказа отменена');
+  }
+  if (matchedIds.has(item.id)) {
+    return importMatch(row, 'DUPLICATE', item, 'Один анализ указан в файле несколько раз');
+  }
+  matchedIds.add(item.id);
+  return importMatch(row, 'MATCHED', item, 'Распознано автоматически');
+}
+
+function importMatch(
+  row: LaboratoryResultImportRowDto,
+  matchStatus: 'MATCHED' | 'NOT_FOUND' | 'AMBIGUOUS' | 'DUPLICATE' | 'BLOCKED',
+  item: LaboratoryImportItem | null,
+  message: string,
+) {
+  return {
+    rowNumber: row.rowNumber,
+    code: clean(row.code),
+    title: clean(row.title),
+    resultValue: clean(row.resultValue) ?? clean(row.resultText),
+    matchStatus,
+    itemId: item?.id ?? null,
+    itemTitle: item?.title ?? null,
+    message,
+  };
+}
+
+function normalizeMatchText(value?: string | null) {
+  return value?.normalize('NFKC').trim().toLocaleLowerCase('ru-RU').replace(/[\s._\-/\\]+/g, '') ?? '';
 }
 
 function required(value: string | null | undefined, message: string) {

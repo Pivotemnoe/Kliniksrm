@@ -1,7 +1,7 @@
-import { EditOutlined, PlusOutlined, PrinterOutlined, SearchOutlined } from '@ant-design/icons';
+import { EditOutlined, PaperClipOutlined, PlusOutlined, PrinterOutlined, SearchOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, AutoComplete, Button, Checkbox, Form, Input, InputNumber, Modal, Radio, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
+import { Alert, App, AutoComplete, Button, Checkbox, Drawer, Form, Input, InputNumber, Modal, Radio, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
 import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import JsBarcode from 'jsbarcode';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -14,6 +14,8 @@ import { useCurrentEmployee } from '../../auth/useAuth';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDate } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
+import { AttachmentsPanel } from '../files/AttachmentsPanel';
+import { listSupplyFiles, uploadSupplyFile } from '../files/files.api';
 import {
   createProduct,
   createService,
@@ -27,6 +29,7 @@ import {
   updateService,
 } from './stock.api';
 import { Product, ServiceItem, StockBatch, StockResources, SupplyInvoice } from './types';
+import { SupplyInvoiceImporter } from './SupplyInvoiceImporter';
 
 const pageSize = 10;
 
@@ -44,6 +47,7 @@ export function StockPage() {
   const [editingService, setEditingService] = useState<ServiceItem | null>(null);
   const [printingProduct, setPrintingProduct] = useState<Product | null>(null);
   const [supplyOpen, setSupplyOpen] = useState(false);
+  const [selectedInvoice, setSelectedInvoice] = useState<SupplyInvoice | null>(null);
   const resourcesQuery = useQuery({ queryKey: ['stock', 'resources'], queryFn: getStockResources });
 
   useEffect(() => {
@@ -78,6 +82,7 @@ export function StockPage() {
               <Button type="primary" icon={<PlusOutlined />} onClick={() => setSupplyOpen(true)}>
                 Новая приёмка
               </Button>
+              <SupplyInvoiceImporter resources={resourcesQuery.data} />
             </Space>
           ) : null
         }
@@ -143,7 +148,7 @@ export function StockPage() {
             {
               key: 'invoices',
               label: 'Накладные',
-              children: <InvoicesTable search={search} offset={offset} onTableChange={handleTableChange} />,
+              children: <InvoicesTable search={search} offset={offset} onOpen={setSelectedInvoice} onTableChange={handleTableChange} />,
             },
           ]}
         />
@@ -171,6 +176,41 @@ export function StockPage() {
         resources={resourcesQuery.data}
         onClose={() => setSupplyOpen(false)}
       />
+      <Drawer
+        title={selectedInvoice ? `Накладная ${selectedInvoice.number || 'без номера'}` : 'Накладная'}
+        open={Boolean(selectedInvoice)}
+        onClose={() => setSelectedInvoice(null)}
+        width={760}
+        destroyOnHidden
+      >
+        {selectedInvoice ? (
+          <Space direction="vertical" size={16} className="full-width">
+            <Typography.Text>
+              {formatDate(selectedInvoice.suppliedAt)} · {selectedInvoice.supplier?.title ?? 'Поставщик не указан'} · {formatMoney(selectedInvoice.totalAmount)}
+            </Typography.Text>
+            <Table
+              rowKey="id"
+              size="small"
+              pagination={false}
+              dataSource={selectedInvoice.items}
+              columns={[
+                { title: 'Товар', key: 'product', render: (_, item) => item.product?.title ?? '—' },
+                { title: 'Количество', dataIndex: 'quantity', key: 'quantity' },
+                { title: 'Цена закупки', dataIndex: 'purchasePrice', key: 'purchasePrice', render: formatMoney },
+                { title: 'Серия', dataIndex: 'series', key: 'series', render: (value) => value || '—' },
+              ]}
+            />
+            <AttachmentsPanel
+              queryKey={['stock', 'supply-files', selectedInvoice.id]}
+              listFiles={() => listSupplyFiles(selectedInvoice.id)}
+              uploadFile={(file) => uploadSupplyFile(selectedInvoice.id, file)}
+              canManage={canManage}
+              title="Оригинал накладной и сопроводительные документы"
+              description="Прикрепите PDF, фото или исходную таблицу поставщика. Файл хранится вместе с накладной и доступен по кнопке «Открыть»."
+            />
+          </Space>
+        ) : null}
+      </Drawer>
       <PriceTagEditor product={printingProduct} organization={resourcesQuery.data?.organization ?? null} onClose={() => setPrintingProduct(null)} />
     </div>
   );
@@ -365,10 +405,12 @@ function BatchesTable({
 function InvoicesTable({
   search,
   offset,
+  onOpen,
   onTableChange,
 }: {
   search: string;
   offset: number;
+  onOpen: (invoice: SupplyInvoice) => void;
   onTableChange: (pagination: TablePaginationConfig) => void;
 }) {
   const invoicesQuery = useQuery({
@@ -382,8 +424,17 @@ function InvoicesTable({
       { title: 'Поставщик', key: 'supplier', render: (_, record) => record.supplier?.title ?? '—' },
       { title: 'Позиций', key: 'items', render: (_, record) => record.items.length },
       { title: 'Сумма', dataIndex: 'totalAmount', key: 'totalAmount', render: formatMoney },
+      {
+        title: '',
+        key: 'actions',
+        render: (_, record) => (
+          <Button size="small" icon={<PaperClipOutlined />} onClick={() => onOpen(record)}>
+            Открыть
+          </Button>
+        ),
+      },
     ],
-    [],
+    [onOpen],
   );
 
   return <StockTable query={invoicesQuery} columns={columns} offset={offset} onTableChange={onTableChange} />;
@@ -433,6 +484,10 @@ const productSchema = z
     billingUnit: z.string().trim().min(1, 'Укажите, за что начисляется цена'),
     gtin: z.string().trim().optional(),
     barcode: z.string().trim().regex(/^\d{4,32}$/, 'Введите только цифры штрих-кода').or(z.literal('')).optional(),
+    barcodesText: z.string().trim().refine(
+      (value) => !value || value.split(/[;,\n]+/).map((item) => item.trim()).filter(Boolean).every((item) => /^\d{4,32}$/.test(item)),
+      'Каждый дополнительный штрих-код должен содержать только цифры',
+    ).optional(),
     generateBarcode: z.boolean().optional(),
     vatRate: z.number().min(0).max(100).optional(),
     packageQuantity: z.number().min(0).optional(),
@@ -497,6 +552,7 @@ function ProductModal({
       billingUnit: product?.billingUnit ?? product?.writeOffUnit ?? product?.stockUnit ?? 'шт',
       gtin: product?.gtin ?? '',
       barcode: product?.barcode ?? '',
+      barcodesText: product?.barcodes?.filter((item) => !item.isPrimary).map((item) => item.value).join('\n') ?? '',
       generateBarcode: false,
       vatRate: product?.vatRate === null || product?.vatRate === undefined ? undefined : Number(product.vatRate),
       packageQuantity: product?.packageQuantity === null || product?.packageQuantity === undefined ? 1 : Number(product.packageQuantity),
@@ -506,16 +562,21 @@ function ProductModal({
     });
   }, [open, product, reset]);
   const mutation = useMutation({
-    mutationFn: (values: ProductFormValues) =>
-      product
+    mutationFn: (values: ProductFormValues) => {
+      const { barcodesText, ...productValues } = values;
+      const barcodes = barcodesText?.split(/[;,\n]+/).map((item) => item.trim()).filter(Boolean) ?? [];
+      return product
         ? updateProduct(product.id, {
-            ...values,
+            ...productValues,
+            barcodes,
             defaultExpiresAt: values.defaultExpiresAt ? new Date(values.defaultExpiresAt).toISOString() : null,
           })
         : createProduct({
-            ...values,
+            ...productValues,
+            barcodes,
             defaultExpiresAt: values.defaultExpiresAt ? new Date(values.defaultExpiresAt).toISOString() : undefined,
-          }),
+          });
+    },
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['stock'] }),
@@ -560,6 +621,7 @@ function ProductModal({
           <FormText control={control} name="sku" label="Артикул / SKU" />
           <FormNumber control={control} name="retailPrice" label={`Цена за 1 ${billingUnit || 'единицу начисления'}`} />
           <FormText control={control} name="barcode" label="Номер штрих-кода" help="Введите цифры, напечатанные под штрих-кодом на упаковке. Сканер не нужен: на ценнике будет создан настоящий штрих-код с этим номером." />
+          <FormText control={control} name="barcodesText" label="Дополнительные штрих-коды" textarea help="Если у товара несколько упаковок или кодов поставщика, вводите по одному номеру в строке. Все они будут находить один товар." />
           <FormNumber control={control} name="vatRate" label="НДС, %" />
           <FormNumber control={control} name="minStock" label={`Минимальный остаток, ${stockUnit || 'ед.'}`} />
           <FormText control={control} name="defaultExpiresAt" label="Годен до" type="date" help="Дата подставится в следующую приёмку; фактический срок хранится отдельно для каждой партии." />

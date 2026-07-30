@@ -9,6 +9,8 @@ import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
+import { AttachmentsPanel } from '../files/AttachmentsPanel';
+import { listVisitFiles, uploadVisitFile } from '../files/files.api';
 import {
   createVisitDocument,
   deleteVisitDocument,
@@ -47,7 +49,8 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
   const queryClient = useQueryClient();
   const { message, modal } = App.useApp();
   const { data: auth } = useCurrentEmployee();
-  const canManage = hasPermission(auth?.employee, 'documents.manage') && !locked;
+  const canAttach = hasPermission(auth?.employee, 'documents.manage');
+  const canManage = canAttach && !locked;
   const canPrint = hasPermission(auth?.employee, 'documents.print');
   const canSend = hasPermission(auth?.employee, 'notifications.manage');
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -252,6 +255,15 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
         locale={{ emptyText: 'Документы приёма пока не созданы' }}
         onRow={(record) => ({ onDoubleClick: () => openEdit(record) })}
       />
+      <Card size="small" title="Загруженные документы и снимки" style={{ marginTop: 16 }}>
+        <AttachmentsPanel
+          queryKey={['visits', visit.id, 'files']}
+          listFiles={() => listVisitFiles(visit.id)}
+          uploadFile={(file) => uploadVisitFile(visit.id, file)}
+          canManage={canAttach}
+          description="Заключения, согласия, выписки, результаты сторонней лаборатории и снимки. Файл сохраняется в истории приёма; завершение приёма не удаляет его."
+        />
+      </Card>
       <Drawer
         title={editingDocument ? 'Документ приёма' : 'Новый документ приёма'}
         width={760}

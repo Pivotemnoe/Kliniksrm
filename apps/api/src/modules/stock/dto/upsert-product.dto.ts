@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsDateString, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
+import { ArrayMaxSize, ArrayUnique, IsArray, IsBoolean, IsDateString, IsNumber, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min } from 'class-validator';
 
 export class UpsertProductDto {
   @ApiProperty()
@@ -35,6 +35,15 @@ export class UpsertProductDto {
   @IsString()
   @MaxLength(80)
   barcode?: string;
+
+  @ApiPropertyOptional({ type: [String], description: 'All package, supplier and internal barcodes for this product.' })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ArrayUnique()
+  @IsString({ each: true })
+  @Matches(/^\d{4,32}$/, { each: true, message: 'Каждый штрих-код должен содержать только цифры' })
+  barcodes?: string[];
 
   @ApiPropertyOptional()
   @IsOptional()

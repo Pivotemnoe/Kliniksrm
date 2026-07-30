@@ -11,6 +11,8 @@ import {
   LaboratoryProfile,
   LaboratoryProfileInput,
   LaboratoryResources,
+  LaboratoryResultImportRow,
+  LaboratoryResultsImportPreview,
   LaboratoryTest,
   LaboratoryTestInput,
 } from './types';
@@ -29,6 +31,13 @@ export function updateLaboratoryOrder(orderId: string, input: LaboratoryOrderInp
 
 export function updateLaboratoryOrderItem(orderId: string, itemId: string, input: LaboratoryOrderItemInput) {
   return apiRequest<LaboratoryOrderItem>(`/v1/laboratory/orders/${orderId}/items/${itemId}`, { method: 'PATCH', body: input });
+}
+
+export function importLaboratoryResults(orderId: string, mode: 'PREVIEW' | 'APPLY', rows: LaboratoryResultImportRow[]) {
+  return apiRequest<LaboratoryResultsImportPreview>(`/v1/laboratory/orders/${orderId}/results/import`, {
+    method: 'POST',
+    body: { mode, rows },
+  });
 }
 
 export function listLaboratoryTests(query: LaboratoryListQuery) {

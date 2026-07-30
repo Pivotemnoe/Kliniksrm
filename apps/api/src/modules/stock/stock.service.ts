@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomInt } from 'node:crypto';
-import { Prisma, StockMovementType } from '@prisma/client';
+import { Prisma, ProductBarcodeType, StockMovementType } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -65,6 +65,7 @@ export class StockService {
               { sku: { contains: search, mode: 'insensitive' } },
               { gtin: { contains: search, mode: 'insensitive' } },
               { barcode: { contains: search, mode: 'insensitive' } },
+              { barcodes: { some: { value: { contains: search, mode: 'insensitive' } } } },
               { category: { title: { contains: search, mode: 'insensitive' } } },
             ],
           }
@@ -100,6 +101,7 @@ export class StockService {
               { sku: { contains: search, mode: 'insensitive' } },
               { gtin: { contains: search, mode: 'insensitive' } },
               { barcode: { contains: search, mode: 'insensitive' } },
+              { barcodes: { some: { value: { contains: search, mode: 'insensitive' } } } },
               { category: { title: { contains: search, mode: 'insensitive' } } },
             ],
           }
@@ -121,7 +123,10 @@ export class StockService {
   async createProduct(dto: UpsertProductDto, actorId: string) {
     const categoryId = await this.resolveProductCategoryId(dto);
     this.ensureUnitConfiguration(dto.stockUnit, dto.writeOffUnit, dto.packageQuantity);
-    const barcode = await this.resolveBarcode(dto.barcode, dto.generateBarcode);
+    let barcode = await this.resolveBarcode(dto.barcode, dto.generateBarcode);
+    const barcodes = normalizeBarcodes([...(barcode ? [barcode] : []), ...(dto.barcodes ?? [])]);
+    if (!barcode && barcodes.length) barcode = barcodes[0];
+    await this.ensureBarcodesAvailable(barcodes);
 
     const product = await this.prisma.product.create({
       data: {
@@ -140,6 +145,9 @@ export class StockService {
         shelfLifeDays: dto.shelfLifeDays,
         defaultExpiresAt: dto.defaultExpiresAt ? new Date(dto.defaultExpiresAt) : undefined,
         description: clean(dto.description),
+        barcodes: barcodes.length
+          ? { create: barcodes.map((value) => barcodeCreate(value, value === barcode, dto.gtin)) }
+          : undefined,
       },
       include: productInclude,
     });
@@ -189,7 +197,16 @@ export class StockService {
     const writeOffUnit = dto.writeOffUnit !== undefined ? clean(dto.writeOffUnit) : existing.writeOffUnit ?? undefined;
     const packageQuantity = dto.packageQuantity !== undefined ? dto.packageQuantity : decimalToOptionalNumber(existing.packageQuantity);
     this.ensureUnitConfiguration(stockUnit, writeOffUnit, packageQuantity);
-    const barcode = await this.resolveBarcode(dto.barcode, dto.generateBarcode, existing.barcode ?? undefined, dto.barcode !== undefined);
+    let barcode = await this.resolveBarcode(dto.barcode, dto.generateBarcode, existing.barcode ?? undefined, dto.barcode !== undefined, productId);
+    const shouldSyncBarcodes = dto.barcodes !== undefined || dto.barcode !== undefined || Boolean(dto.generateBarcode);
+    const barcodes = shouldSyncBarcodes
+      ? normalizeBarcodes([
+          ...(barcode ? [barcode] : []),
+          ...(dto.barcodes ?? existing.barcodes.map((item) => item.value).filter((value) => value !== existing.barcode)),
+        ])
+      : undefined;
+    if (!barcode && barcodes?.length) barcode = barcodes[0];
+    if (barcodes) await this.ensureBarcodesAvailable(barcodes, productId);
 
     const product = await this.prisma.product.update({
       where: { id: productId },
@@ -209,6 +226,14 @@ export class StockService {
         ...(dto.shelfLifeDays !== undefined ? { shelfLifeDays: dto.shelfLifeDays } : {}),
         ...(dto.defaultExpiresAt !== undefined ? { defaultExpiresAt: dto.defaultExpiresAt ? new Date(dto.defaultExpiresAt) : null } : {}),
         ...(dto.description !== undefined ? { description: clean(dto.description) } : {}),
+        ...(barcodes
+          ? {
+              barcodes: {
+                deleteMany: {},
+                create: barcodes.map((value) => barcodeCreate(value, value === barcode, dto.gtin)),
+              },
+            }
+          : {}),
       },
       include: productInclude,
     });
@@ -635,7 +660,14 @@ export class StockService {
   private async ensureProductExists(productId: string) {
     const product = await this.prisma.product.findUnique({
       where: { id: productId },
-      select: { id: true, barcode: true, stockUnit: true, writeOffUnit: true, packageQuantity: true },
+      select: {
+        id: true,
+        barcode: true,
+        stockUnit: true,
+        writeOffUnit: true,
+        packageQuantity: true,
+        barcodes: { select: { value: true } },
+      },
     });
     if (!product) {
       throw new NotFoundException('Product not found');
@@ -650,7 +682,13 @@ export class StockService {
     }
   }
 
-  private async resolveBarcode(barcode?: string, generateBarcode?: boolean, currentBarcode?: string, barcodeWasProvided = false) {
+  private async resolveBarcode(
+    barcode?: string,
+    generateBarcode?: boolean,
+    currentBarcode?: string,
+    barcodeWasProvided = false,
+    productId?: string,
+  ) {
     const explicit = clean(barcode);
     if (explicit) {
       if (!/^\d{4,32}$/.test(explicit)) {
@@ -658,7 +696,13 @@ export class StockService {
       }
 
       if (explicit !== currentBarcode) {
-        const duplicate = await this.prisma.product.findFirst({ where: { barcode: explicit }, select: { id: true } });
+        const duplicate = await this.prisma.product.findFirst({
+          where: {
+            ...(productId ? { id: { not: productId } } : {}),
+            OR: [{ barcode: explicit }, { barcodes: { some: { value: explicit } } }],
+          },
+          select: { id: true },
+        });
         if (duplicate) {
           throw new BadRequestException('Такой штрих-код уже назначен другому товару');
         }
@@ -674,13 +718,25 @@ export class StockService {
     for (let attempt = 0; attempt < 20; attempt += 1) {
       const body = `20${String(randomInt(0, 10_000_000_000)).padStart(10, '0')}`;
       const candidate = `${body}${ean13CheckDigit(body)}`;
-      const exists = await this.prisma.product.findFirst({ where: { barcode: candidate }, select: { id: true } });
+      const exists = await this.prisma.product.findFirst({
+        where: { OR: [{ barcode: candidate }, { barcodes: { some: { value: candidate } } }] },
+        select: { id: true },
+      });
       if (!exists) {
         return candidate;
       }
     }
 
     throw new BadRequestException('Не удалось создать уникальный внутренний штрих-код. Повторите попытку.');
+  }
+
+  private async ensureBarcodesAvailable(values: string[], productId?: string) {
+    if (!values.length) return;
+    const duplicate = await this.prisma.productBarcode.findFirst({
+      where: { value: { in: values }, ...(productId ? { productId: { not: productId } } : {}) },
+      select: { value: true },
+    });
+    if (duplicate) throw new BadRequestException(`Штрих-код ${duplicate.value} уже назначен другому товару`);
   }
 
   private async ensureServiceExists(serviceId: string) {
@@ -693,6 +749,7 @@ export class StockService {
 
 const productInclude = {
   category: true,
+  barcodes: { orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }] },
   batches: {
     include: {
       warehouse: { select: { id: true, name: true } },
@@ -707,6 +764,7 @@ function getProductInclude(batchWhere?: Prisma.StockBatchWhereInput) {
 
   return {
     category: true,
+    barcodes: { orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }] },
     batches: {
       ...(hasBatchWhere ? { where: batchWhere } : {}),
       include: {
@@ -778,4 +836,23 @@ function decimalToOptionalNumber(value: Prisma.Decimal | null) {
 function ean13CheckDigit(firstTwelveDigits: string) {
   const sum = [...firstTwelveDigits].reduce((total, digit, index) => total + Number(digit) * (index % 2 === 0 ? 1 : 3), 0);
   return (10 - (sum % 10)) % 10;
+}
+
+function normalizeBarcodes(values: string[]) {
+  const normalized = values.flatMap((value) => value.split(/[;,\r\n]+/)).map((value) => value.trim()).filter(Boolean);
+  for (const value of normalized) {
+    if (!/^\d{4,32}$/.test(value)) throw new BadRequestException(`Штрих-код ${value} должен содержать только цифры`);
+  }
+  const unique = [...new Set(normalized)];
+  if (unique.length > 20) throw new BadRequestException('У одного товара может быть не более 20 штрих-кодов');
+  return unique;
+}
+
+function barcodeCreate(value: string, isPrimary: boolean, gtin?: string) {
+  const type = value === clean(gtin)
+    ? ProductBarcodeType.GTIN
+    : /^\d{13}$/.test(value)
+      ? ProductBarcodeType.EAN13
+      : ProductBarcodeType.OTHER;
+  return { value, isPrimary, type };
 }
