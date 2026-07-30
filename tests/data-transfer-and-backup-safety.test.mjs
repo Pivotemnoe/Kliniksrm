@@ -45,6 +45,10 @@ test('перенос на новый компьютер требует точн�
   assert.match(restore, /Get-BackupDirectory/);
   assert.match(restore, /redisRestored = \$false/);
   assert.match(restore, /Set-Location \$RootDir\.Path/);
+  assert.match(restore, /\$countsQuery \| docker exec -i clinic-crm-postgres psql/);
+  assert.match(exportScript, /\$countsQuery \| docker exec -i clinic-crm-postgres psql/);
+  assert.doesNotMatch(restore, /psql[^\n]+-c \$countsQuery/);
+  assert.doesNotMatch(exportScript, /psql[^\n]+-c \$countsQuery/);
   assert.match(exportScript, /pg_restore --list \/tmp\/temichevvet-transfer\.dump/);
   assert.match(exportScript, /temichevvet-computer-transfer-v2/);
   assert.match(restoreLauncher, /%USERPROFILE%\\TemichevVet\\scripts\\restore-clinic-transfer\.ps1/);

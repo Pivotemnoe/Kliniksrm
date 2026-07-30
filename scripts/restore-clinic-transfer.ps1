@@ -123,7 +123,9 @@ $ComparisonCountFields = @(
   $TargetMustBeEmptyFields + @("employees", "tasks", "visitDocuments", "suppliers", "supplyInvoices", "payrollPeriods", "businessEntries", "supportRequests")
 )
 $countsQuery = 'SELECT json_build_object(''owners'',(SELECT count(*) FROM "Owner"),''animals'',(SELECT count(*) FROM "Animal"),''visits'',(SELECT count(*) FROM "Visit"),''vaccinations'',(SELECT count(*) FROM "Vaccination"),''appointments'',(SELECT count(*) FROM "Appointment"),''queueEntries'',(SELECT count(*) FROM "QueueEntry"),''bills'',(SELECT count(*) FROM "Bill"),''payments'',(SELECT count(*) FROM "Payment"),''sales'',(SELECT count(*) FROM "Sale"),''products'',(SELECT count(*) FROM "Product"),''stockBatches'',(SELECT count(*) FROM "StockBatch"),''stockMovements'',(SELECT count(*) FROM "StockMovement"),''files'',(SELECT count(*) FROM "FileObject"),''notifications'',(SELECT count(*) FROM "NotificationOutbox"),''employees'',(SELECT count(*) FROM "Employee"),''tasks'',(SELECT count(*) FROM "Task"),''visitDocuments'',(SELECT count(*) FROM "VisitDocument"),''suppliers'',(SELECT count(*) FROM "Supplier"),''supplyInvoices'',(SELECT count(*) FROM "SupplyInvoice"),''payrollPeriods'',(SELECT count(*) FROM "PayrollPeriod"),''businessEntries'',(SELECT count(*) FROM "BusinessEntry"),''supportRequests'',(SELECT count(*) FROM "SupportRequest"));'
-$targetCountsJson = (docker exec clinic-crm-postgres psql -U $dbUser -d $dbName -At -c $countsQuery | Select-Object -Last 1)
+# Preserve double quotes around Prisma's mixed-case table names on Windows
+# PowerShell 5 by passing the SQL through stdin instead of a native -c argument.
+$targetCountsJson = ($countsQuery | docker exec -i clinic-crm-postgres psql -U $dbUser -d $dbName -At | Select-Object -Last 1)
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($targetCountsJson)) { throw "Не удалось проверить целевую базу." }
 $targetCountsBefore = $targetCountsJson | ConvertFrom-Json
 $nonEmptyTargetFields = @($TargetMustBeEmptyFields | Where-Object { [long]$targetCountsBefore.$_ -gt 0 })
@@ -200,7 +202,7 @@ try {
   & (Join-Path $PSScriptRoot "start-clinic-server.ps1") -NoImageUpdate -ForceRecreate
   if ($LASTEXITCODE -ne 0) { throw "Приложение не запустилось после восстановления." }
 
-  $actualCounts = (docker exec clinic-crm-postgres psql -U $dbUser -d $dbName -At -c $countsQuery | Select-Object -Last 1) | ConvertFrom-Json
+  $actualCounts = ($countsQuery | docker exec -i clinic-crm-postgres psql -U $dbUser -d $dbName -At | Select-Object -Last 1) | ConvertFrom-Json
   $countMismatches = @()
   foreach ($field in $ComparisonCountFields) {
     if ([long]$manifest.counts.$field -ne [long]$actualCounts.$field) { $countMismatches += $field }

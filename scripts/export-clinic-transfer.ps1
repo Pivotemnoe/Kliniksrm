@@ -80,7 +80,10 @@ try {
   }
 
   $countsQuery = 'SELECT json_build_object(''owners'',(SELECT count(*) FROM "Owner"),''animals'',(SELECT count(*) FROM "Animal"),''visits'',(SELECT count(*) FROM "Visit"),''vaccinations'',(SELECT count(*) FROM "Vaccination"),''appointments'',(SELECT count(*) FROM "Appointment"),''queueEntries'',(SELECT count(*) FROM "QueueEntry"),''bills'',(SELECT count(*) FROM "Bill"),''payments'',(SELECT count(*) FROM "Payment"),''sales'',(SELECT count(*) FROM "Sale"),''products'',(SELECT count(*) FROM "Product"),''stockBatches'',(SELECT count(*) FROM "StockBatch"),''stockMovements'',(SELECT count(*) FROM "StockMovement"),''files'',(SELECT count(*) FROM "FileObject"),''notifications'',(SELECT count(*) FROM "NotificationOutbox"),''employees'',(SELECT count(*) FROM "Employee"),''tasks'',(SELECT count(*) FROM "Task"),''visitDocuments'',(SELECT count(*) FROM "VisitDocument"),''suppliers'',(SELECT count(*) FROM "Supplier"),''supplyInvoices'',(SELECT count(*) FROM "SupplyInvoice"),''payrollPeriods'',(SELECT count(*) FROM "PayrollPeriod"),''businessEntries'',(SELECT count(*) FROM "BusinessEntry"),''supportRequests'',(SELECT count(*) FROM "SupportRequest"));'
-  $countsJson = (docker exec clinic-crm-postgres psql -U $dbUser -d $dbName -At -c $countsQuery | Select-Object -Last 1)
+  # PowerShell 5 removes embedded double quotes from a native-command argument
+  # on Windows. Send SQL over stdin so Prisma's mixed-case table names remain
+  # quoted exactly as written ("Owner", "Animal", and so on).
+  $countsJson = ($countsQuery | docker exec -i clinic-crm-postgres psql -U $dbUser -d $dbName -At | Select-Object -Last 1)
   if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($countsJson)) { throw "Не удалось получить контрольные количества записей." }
 
   $images = @{}
