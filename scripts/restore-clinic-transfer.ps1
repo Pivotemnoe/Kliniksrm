@@ -12,6 +12,7 @@ $Utf8NoBom = New-Object System.Text.UTF8Encoding -ArgumentList $false
 $OutputEncoding = $Utf8NoBom
 $RootDir = Resolve-Path (Join-Path $PSScriptRoot "..")
 $EnvFile = Join-Path $RootDir ".env"
+Set-Location $RootDir.Path
 $ApplicationSettingKeys = @(
   "CLIENT_PORTAL_ONLINE_REQUESTS_ENABLED",
   "CLIENT_PORTAL_CODE_TTL_MINUTES",

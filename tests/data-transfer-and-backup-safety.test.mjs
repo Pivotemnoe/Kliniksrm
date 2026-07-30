@@ -26,9 +26,11 @@ test('миграция переноса только добавляет журн
 });
 
 test('перенос на новый компьютер требует точного подтверждения и пустой целевой базы', async () => {
-  const [restore, exportScript] = await Promise.all([
+  const [restore, exportScript, restoreLauncher, exportLauncher] = await Promise.all([
     read('scripts/restore-clinic-transfer.ps1'),
     read('scripts/export-clinic-transfer.ps1'),
+    read('scripts/portable/restore-transfer-windows.bat'),
+    read('scripts/portable/export-transfer-windows.bat'),
   ]);
   assert.match(restore, /RESTORE_TO_NEW_COMPUTER/);
   for (const field of ['vaccinations', 'appointments', 'queueEntries', 'stockBatches', 'stockMovements', 'notifications']) {
@@ -42,8 +44,13 @@ test('перенос на новый компьютер требует точн�
   assert.match(restore, /target-before-transfer-/);
   assert.match(restore, /Get-BackupDirectory/);
   assert.match(restore, /redisRestored = \$false/);
+  assert.match(restore, /Set-Location \$RootDir\.Path/);
   assert.match(exportScript, /pg_restore --list \/tmp\/temichevvet-transfer\.dump/);
   assert.match(exportScript, /temichevvet-computer-transfer-v2/);
+  assert.match(restoreLauncher, /%USERPROFILE%\\TemichevVet\\scripts\\restore-clinic-transfer\.ps1/);
+  assert.match(exportLauncher, /%USERPROFILE%\\TemichevVet\\scripts\\export-clinic-transfer\.ps1/);
+  assert.doesNotMatch(restoreLauncher, /%~dp0CRM\\scripts/);
+  assert.doesNotMatch(exportLauncher, /%~dp0CRM\\scripts/);
   assert.doesNotMatch(restore, /docker\s+(?:volume\s+rm|compose\s+down\s+-v)/i);
 });
 
