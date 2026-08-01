@@ -10,6 +10,7 @@ import {
   MessageOutlined,
   ProfileOutlined,
   RightOutlined,
+  SafetyCertificateOutlined,
   UserOutlined,
 } from '@ant-design/icons';
 import { Button, Card, Typography } from 'antd';
@@ -98,6 +99,13 @@ const settingsSections: SettingsSection[] = [
     path: '/settings/system',
     icon: <DatabaseOutlined />,
     permission: 'settings.read',
+  },
+  {
+    title: 'Удалённый доступ',
+    description: 'Вход директора и управляющего вне клиники, доверенные устройства и отзыв сеансов.',
+    path: '/settings/remote-access',
+    icon: <SafetyCertificateOutlined />,
+    permission: 'remote_access.read',
   },
   {
     title: 'Сообщения',

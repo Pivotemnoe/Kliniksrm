@@ -36,6 +36,11 @@ export class SessionAuthGuard implements CanActivate {
     const session = await this.prisma.session.findUnique({
       where: { id: sessionId },
       include: {
+        remoteDevice: {
+          include: {
+            organization: { include: { remoteAccessPolicy: true } },
+          },
+        },
         user: {
           include: {
             employee: {
@@ -73,6 +78,14 @@ export class SessionAuthGuard implements CanActivate {
       throw new UnauthorizedException('Сотрудник заблокирован или не найден');
     }
 
+    if (
+      session.accessType === 'REMOTE' &&
+      (!session.remoteDevice || session.remoteDevice.revokedAt || !session.remoteDevice.organization.remoteAccessPolicy?.enabled)
+    ) {
+      await this.prisma.session.deleteMany({ where: { id: session.id } });
+      throw new UnauthorizedException('Удалённый доступ или доверие к устройству отозвано');
+    }
+
     try {
       await this.authService.assertEmployeeCanUseCrm(session.user.employee, 'auth.session_outside_shift', getIpAddress(request));
     } catch (error) {
@@ -83,10 +96,21 @@ export class SessionAuthGuard implements CanActivate {
     request.auth = {
       sessionId: session.id,
       userId: session.userId,
+      accessType: session.accessType,
+      remoteDeviceId: session.remoteDeviceId,
       employee: this.authService.serializeEmployee(session.user.employee),
     };
 
-    await this.authService.touchSession(session.id);
+    const idleTimeoutMinutes = session.accessType === 'REMOTE'
+      ? session.remoteDevice?.organization.remoteAccessPolicy?.idleTimeoutMinutes
+      : undefined;
+    await this.authService.touchSession(session.id, idleTimeoutMinutes);
+    if (session.remoteDeviceId) {
+      await this.prisma.remoteAccessDevice.updateMany({
+        where: { id: session.remoteDeviceId, revokedAt: null },
+        data: { lastSeenAt: new Date(), lastIpAddress: getIpAddress(request) },
+      });
+    }
 
     return true;
   }

@@ -8,6 +8,6 @@ import { ObjectStorageService } from './object-storage.service';
   imports: [AuditModule],
   controllers: [FilesController],
   providers: [FilesService, ObjectStorageService],
-  exports: [FilesService],
+  exports: [FilesService, ObjectStorageService],
 })
 export class FilesModule {}

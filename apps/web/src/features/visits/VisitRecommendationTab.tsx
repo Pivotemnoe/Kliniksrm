@@ -6,6 +6,7 @@ import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
 import { nullToEmpty, optionalString } from '../../shared/utils/forms';
+import type { OrganizationSettings } from '../organization/types';
 import { MedicalTextArea } from './MedicalTextArea';
 import { Visit, VisitRecommendationInput } from './types';
 import { printVisitRecommendation } from './visitPrint';
@@ -23,9 +24,10 @@ type VisitRecommendationTabProps = {
   visit: Visit;
   canManage: boolean;
   locked: boolean;
+  organization?: OrganizationSettings | null;
 };
 
-export function VisitRecommendationTab({ visit, canManage, locked }: VisitRecommendationTabProps) {
+export function VisitRecommendationTab({ visit, canManage, locked, organization }: VisitRecommendationTabProps) {
   const queryClient = useQueryClient();
   const { control, getValues, handleSubmit, reset } = useForm<RecommendationInput, unknown, RecommendationValues>({
     resolver: zodResolver(recommendationSchema),
@@ -94,7 +96,7 @@ export function VisitRecommendationTab({ visit, canManage, locked }: VisitRecomm
         <Button onClick={() => reset(getDefaultValues(visit))} disabled={disabled}>
           Сбросить
         </Button>
-        <Button icon={<PrinterOutlined />} onClick={() => printVisitRecommendation(visit, recommendationSchema.parse(getValues()))}>
+        <Button icon={<PrinterOutlined />} onClick={() => printVisitRecommendation(visit, recommendationSchema.parse(getValues()), organization)}>
           Печать назначений
         </Button>
       </Space>

@@ -27,7 +27,7 @@ export function getAnimal(animalId: string) {
   return apiRequest<Animal>(`/v1/animals/${animalId}`);
 }
 
-export function updateAnimal(animalId: string, input: AnimalMutationInput) {
+export function updateAnimal(animalId: string, input: Partial<AnimalMutationInput>) {
   return apiRequest<Animal>(`/v1/animals/${animalId}`, {
     method: 'PATCH',
     body: input,

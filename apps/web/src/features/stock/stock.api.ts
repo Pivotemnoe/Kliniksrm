@@ -24,6 +24,7 @@ type StockListQuery = {
   search?: string;
   categoryId?: string;
   warehouseId?: string;
+  productId?: string;
   limit?: number;
   offset?: number;
 };

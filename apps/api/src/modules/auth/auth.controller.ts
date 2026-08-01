@@ -7,6 +7,9 @@ import { Public } from './decorators/public.decorator';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { getCookieOptions, SESSION_COOKIE_NAME } from './session-cookie';
+import { REMOTE_DEVICE_COOKIE_NAME } from '../remote-access/remote-access.constants';
+import { isRemoteGatewayRequest } from '../remote-access/remote-request';
+import { parseCookie } from './session-cookie';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -18,10 +21,14 @@ export class AuthController {
   @HttpCode(200)
   @ApiOkResponse({ description: 'Login with phone/email and password.' })
   async login(@Body() dto: LoginDto, @Req() request: AuthenticatedRequest, @Res({ passthrough: true }) response: CookieResponse) {
-    const result = await this.authService.login(dto, getIpAddress(request), getUserAgent(request));
+    const remoteRequest = isRemoteGatewayRequest(request);
+    const result = await this.authService.login(dto, getIpAddress(request), getUserAgent(request), {
+      accessType: remoteRequest ? 'REMOTE' : 'LOCAL',
+      remoteDeviceToken: remoteRequest ? parseCookie(request.headers.cookie, REMOTE_DEVICE_COOKIE_NAME) : null,
+    });
     const maxAgeMs = result.cookieExpiresAt.getTime() - Date.now();
 
-    response.cookie(SESSION_COOKIE_NAME, result.token, getCookieOptions(maxAgeMs));
+    response.cookie(SESSION_COOKIE_NAME, result.token, getCookieOptions(maxAgeMs, remoteRequest));
 
     return {
       employee: result.employee,

@@ -330,10 +330,12 @@ function Set-InstalledEnvValue($Key, $Value) {
     return
   }
 
-  $content = Get-Content $InstalledEnvFile -Raw
   $line = "$Key=$Value"
 
-  $existing = Get-Content $InstalledEnvFile | Where-Object { $_ -match "^$([Regex]::Escape($Key))=" } | Select-Object -Last 1
+  $existing = $null
+  foreach ($candidate in [IO.File]::ReadLines($InstalledEnvFile)) {
+    if ($candidate -match "^$([Regex]::Escape($Key))=") { $existing = $candidate }
+  }
   if ($existing -eq $line) {
     [Environment]::SetEnvironmentVariable($Key, [string]$Value, "Process")
     Remove-InstalledRuntimeEnvValue $Key
@@ -343,15 +345,33 @@ function Set-InstalledEnvValue($Key, $Value) {
   try {
     $envItem = Get-Item -LiteralPath $InstalledEnvFile -Force
     if ($envItem.IsReadOnly) { $envItem.IsReadOnly = $false }
-    if ($content -match "(?m)^$([Regex]::Escape($Key))=") {
-      $content = [Regex]::Replace(
-        $content,
-        "(?m)^$([Regex]::Escape($Key))=.*$",
-        [Text.RegularExpressions.MatchEvaluator]{ param($match) $line }
-      )
-      [IO.File]::WriteAllText($InstalledEnvFile, $content, $Utf8NoBom)
-    } else {
-      [IO.File]::AppendAllText($InstalledEnvFile, [Environment]::NewLine + $line, $Utf8NoBom)
+
+    $tempEnvFile = "$InstalledEnvFile.temichevvet-install.tmp"
+    $reader = $null
+    $writer = $null
+    $found = $false
+    try {
+      $reader = New-Object IO.StreamReader -ArgumentList $InstalledEnvFile, $true
+      $writer = New-Object IO.StreamWriter -ArgumentList $tempEnvFile, $false, $Utf8NoBom
+      while (($currentLine = $reader.ReadLine()) -ne $null) {
+        if ($currentLine -match "^$([Regex]::Escape($Key))=") {
+          if (!$found) {
+            $writer.WriteLine($line)
+            $found = $true
+          }
+        } else {
+          $writer.WriteLine($currentLine)
+        }
+      }
+      if (!$found) { $writer.WriteLine($line) }
+    } finally {
+      if ($reader) { $reader.Dispose() }
+      if ($writer) { $writer.Dispose() }
+    }
+    try {
+      [IO.File]::Copy($tempEnvFile, $InstalledEnvFile, $true)
+    } finally {
+      if (Test-Path $tempEnvFile) { Remove-Item -LiteralPath $tempEnvFile -Force }
     }
     [Environment]::SetEnvironmentVariable($Key, [string]$Value, "Process")
     Remove-InstalledRuntimeEnvValue $Key
@@ -822,12 +842,12 @@ if (Test-Path $PortableVersionFile) {
 }
 
 Initialize-InstalledEnvFile
-if (!$isExistingInstall) {
-  # The Windows machine is the clinic server. Publish only the web frontend to
-  # the local network; API, PostgreSQL, Redis and MinIO remain bound to
-  # 127.0.0.1 in docker-compose.yml.
-  Set-InstalledEnvValue "WEB_BIND_ADDR" "0.0.0.0"
-}
+# The Windows machine is the clinic server. Publish only the web frontend to
+# the local network; API, PostgreSQL, Redis and MinIO remain bound to
+# 127.0.0.1 in docker-compose.yml. Existing installations must be repaired as
+# well: older updates could preserve WEB_BIND_ADDR=127.0.0.1 while displaying
+# a LAN URL that was not actually reachable from workstations.
+Set-InstalledEnvValue "WEB_BIND_ADDR" "0.0.0.0"
 if ((Get-ExistingEnvValue "SESSION_SECRET" "") -eq "change-me") {
   Set-InstalledEnvValue "SESSION_SECRET" (New-InstalledRandomSecret)
 } else {

@@ -282,6 +282,7 @@ fi
 
 write_windows_powershell "$ROOT_DIR/scripts/portable/install-windows.ps1" "$TMP_DIR/portable/install-windows.ps1"
 write_windows_powershell "$ROOT_DIR/scripts/portable/install-workstation-windows.ps1" "$TMP_DIR/portable/install-workstation-windows.ps1"
+write_windows_powershell "$ROOT_DIR/scripts/portable/repair-clinic-lan-windows.ps1" "$TMP_DIR/portable/repair-clinic-lan-windows.ps1"
 cp "$ROOT_DIR/scripts/portable/install-mac.sh" "$TMP_DIR/portable/install-mac.sh"
 cp "$ROOT_DIR/scripts/portable/install-linux.sh" "$TMP_DIR/portable/install-linux.sh"
 write_windows_text "$ROOT_DIR/scripts/portable/start-windows.bat" "$TMP_DIR/Установить TemichevVet - Windows.bat"
@@ -293,7 +294,10 @@ write_windows_text "$ROOT_DIR/scripts/portable/export-transfer-windows.bat" "$TM
 write_windows_text "$ROOT_DIR/scripts/portable/restore-transfer-windows.bat" "$TMP_DIR/Восстановить TemichevVet на новом компьютере - Windows.bat"
 write_windows_text "$ROOT_DIR/scripts/portable/verify-backup-windows.bat" "$TMP_DIR/Проверить резервную копию TemichevVet - Windows.bat"
 write_windows_text "$ROOT_DIR/scripts/portable/configure-backup-storage-windows.bat" "$TMP_DIR/Настроить диск для резервного хранения - Windows.bat"
+write_windows_text "$ROOT_DIR/scripts/portable/start-workstation-windows.bat" "$TMP_DIR/Создать рабочее место - Windows.bat"
+# Старое название сохраняем как совместимый запасной вход для уже выданных инструкций.
 write_windows_text "$ROOT_DIR/scripts/portable/start-workstation-windows.bat" "$TMP_DIR/Подключить рабочее место - Windows.bat"
+write_windows_text "$ROOT_DIR/scripts/portable/repair-clinic-lan-windows.bat" "$TMP_DIR/Исправить доступ с рабочих мест - Windows.bat"
 cp "$ROOT_DIR/scripts/portable/start-mac.command" "$TMP_DIR/Установить TemichevVet - Mac.command"
 cp "$ROOT_DIR/scripts/portable/update-mac.command" "$TMP_DIR/Обновить TemichevVet - Mac.command"
 cp "$ROOT_DIR/scripts/portable/start-linux.sh" "$TMP_DIR/Установить TemichevVet - Linux.sh"
@@ -465,7 +469,7 @@ echo "  Создать комплект переноса TemichevVet - Windows.b
 echo "  Восстановить TemichevVet на новом компьютере - Windows.bat"
 echo "  Проверить резервную копию TemichevVet - Windows.bat"
 echo "  Настроить диск для резервного хранения - Windows.bat"
-echo "  Подключить рабочее место - Windows.bat"
+echo "  Создать рабочее место - Windows.bat"
 echo "  Установить TemichevVet - Mac.command"
 echo "  Обновить TemichevVet - Mac.command"
 echo "  Установить TemichevVet - Linux.sh"

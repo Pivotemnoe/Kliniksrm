@@ -4,6 +4,7 @@ import { App, Button, DatePicker, Drawer, Form, Input, InputNumber, Modal, Selec
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { Dayjs } from 'dayjs';
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
@@ -48,6 +49,8 @@ export function StockOperationsPage() {
   const queryClient = useQueryClient();
   const { data: auth } = useCurrentEmployee();
   const canManage = hasPermission(auth?.employee, 'stock.manage');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialProductId = searchParams.get('inventoryProductId') ?? undefined;
   const [documentOpen, setDocumentOpen] = useState(false);
   const [editingDocument, setEditingDocument] = useState<StockDocument | null>(null);
   const [correctionSource, setCorrectionSource] = useState<StockDocument | null>(null);
@@ -67,6 +70,21 @@ export function StockOperationsPage() {
     queryFn: () => listStockMovements({ limit: historyPageSize, offset: (movementPage - 1) * historyPageSize }),
   });
   const suppliersQuery = useQuery({ queryKey: ['stock', 'supplier-balances'], queryFn: listSupplierBalances, enabled: canManage });
+
+  useEffect(() => {
+    if (canManage && initialProductId) {
+      setEditingDocument(null);
+      setCorrectionSource(null);
+      setDocumentOpen(true);
+    }
+  }, [canManage, initialProductId]);
+
+  function closeDocumentModal() {
+    setDocumentOpen(false);
+    setEditingDocument(null);
+    setCorrectionSource(null);
+    if (initialProductId) setSearchParams({}, { replace: true });
+  }
 
   async function refresh() {
     await Promise.all([
@@ -117,7 +135,7 @@ export function StockOperationsPage() {
       { key: 'movements', label: 'История движения', children: <Table rowKey="id" columns={movementColumns} dataSource={movementsQuery.data?.items ?? []} loading={movementsQuery.isLoading} pagination={{ current: movementPage, pageSize: historyPageSize, total: movementsQuery.data?.total ?? 0, showSizeChanger: false, onChange: setMovementPage }} scroll={{ x: 1100 }} /> },
       ...(canManage ? [{ key: 'suppliers', label: 'Поставщики и расчёты', children: <Table rowKey="id" columns={supplierColumns} dataSource={suppliersQuery.data ?? []} loading={suppliersQuery.isLoading} pagination={false} scroll={{ x: 850 }} /> }] : []),
     ]} /></div>
-    <StockDocumentModal open={documentOpen} document={editingDocument} correctionSource={correctionSource} resources={resourcesQuery.data} onClose={() => { setDocumentOpen(false); setEditingDocument(null); setCorrectionSource(null); }} onSaved={refresh} />
+    <StockDocumentModal open={documentOpen} document={editingDocument} correctionSource={correctionSource} initialProductId={initialProductId} resources={resourcesQuery.data} onClose={closeDocumentModal} onSaved={refresh} />
     <SupplierPaymentModal supplier={paymentSupplier} resources={resourcesQuery.data} onClose={() => setPaymentSupplier(null)} onSaved={refresh} />
     <SupplierModal open={supplierOpen} supplier={editingSupplier} onClose={() => { setSupplierOpen(false); setEditingSupplier(null); }} />
     <StockDocumentDrawer document={selectedDocument} onClose={() => setSelectedDocument(null)} />
@@ -132,10 +150,10 @@ type DocumentFormValues = {
   supplierId?: string;
   occurredAt: Dayjs;
   comment?: string;
-  items: Array<{ sourceBatchId: string; productId?: string; quantity?: number; actualQuantity?: number; targetProductId?: string; comment?: string }>;
+  items: Array<{ sourceBatchId: string; productId?: string; quantity?: number; actualQuantity?: number; unitCost?: number; targetProductId?: string; comment?: string }>;
 };
 
-function StockDocumentModal({ open, document, correctionSource, resources, onClose, onSaved }: { open: boolean; document?: StockDocument | null; correctionSource?: StockDocument | null; resources?: Awaited<ReturnType<typeof getStockResources>>; onClose: () => void; onSaved: () => Promise<void> }) {
+function StockDocumentModal({ open, document, correctionSource, initialProductId, resources, onClose, onSaved }: { open: boolean; document?: StockDocument | null; correctionSource?: StockDocument | null; initialProductId?: string; resources?: Awaited<ReturnType<typeof getStockResources>>; onClose: () => void; onSaved: () => Promise<void> }) {
   const { message } = App.useApp();
   const [form] = Form.useForm<DocumentFormValues>();
   const [batchSearch, setBatchSearch] = useState('');
@@ -147,14 +165,14 @@ function StockDocumentModal({ open, document, correctionSource, resources, onClo
   const supplierId = Form.useWatch('supplierId', form);
   const needsActual = type === 'INVENTORY' || type === 'CORRECTION';
   const batchesQuery = useQuery({
-    queryKey: ['stock', 'batches', 'document', warehouseId, deferredBatchSearch],
-    queryFn: () => listStockBatches({ warehouseId, search: deferredBatchSearch || undefined, limit: 100, offset: 0 }),
+    queryKey: ['stock', 'batches', 'document', warehouseId, initialProductId, deferredBatchSearch],
+    queryFn: () => listStockBatches({ warehouseId, productId: initialProductId, search: deferredBatchSearch || undefined, limit: 100, offset: 0 }),
     enabled: open,
   });
   const productsQuery = useQuery({
-    queryKey: ['stock', 'products', 'document', deferredProductSearch],
-    queryFn: () => listProducts({ search: deferredProductSearch || undefined, limit: 100, offset: 0 }),
-    enabled: open && type === 'RESORTING',
+    queryKey: ['stock', 'products', 'document', initialProductId, deferredProductSearch],
+    queryFn: () => listProducts({ productId: initialProductId, search: deferredProductSearch || undefined, limit: 100, offset: 0 }),
+    enabled: open && (needsActual || type === 'RESORTING'),
   });
   const visibleBatches = (batchesQuery.data?.items ?? []).filter((batch) =>
     (needsActual || Number(batch.rest) > 0)
@@ -164,6 +182,8 @@ function StockDocumentModal({ open, document, correctionSource, resources, onClo
   const rawBatchOptions = [
     ...visibleBatches.map((batch) => ({ value: batch.id, productId: batch.productId, label: `${batch.product?.title ?? batch.productId} · остаток ${batch.rest}${batch.series ? ` · серия ${batch.series}` : ''}` })),
     ...knownItems.filter((item) => item.sourceBatchId && !visibleBatches.some((batch) => batch.id === item.sourceBatchId)).map((item) => ({ value: item.sourceBatchId!, productId: item.productId, label: `${item.product?.title ?? item.productId} · остаток ${item.sourceBatch?.rest ?? '—'}${item.sourceBatch?.series ? ` · серия ${item.sourceBatch.series}` : ''}` })),
+    ...knownItems.filter((item) => !item.sourceBatchId).map((item) => ({ value: `NEW:${item.productId}`, productId: item.productId, label: `${item.product?.title ?? item.productId} · новая учётная партия без накладной` })),
+    ...(needsActual ? (productsQuery.data?.items ?? []).map((product) => ({ value: `NEW:${product.id}`, productId: product.id, label: `${product.title} · новая учётная партия без накладной` })) : []),
   ];
   const batchOptions = Array.from(new Map(rawBatchOptions.map((option) => [option.value, option])).values());
   const mutation = useMutation({
@@ -174,8 +194,8 @@ function StockDocumentModal({ open, document, correctionSource, resources, onClo
 
   useEffect(() => {
     if (!open) return;
-    form.setFieldsValue(getDocumentFormValues(document, correctionSource, resources?.warehouses[0]?.id));
-  }, [correctionSource, document, form, open, resources?.warehouses]);
+    form.setFieldsValue(getDocumentFormValues(document, correctionSource, resources?.warehouses[0]?.id, initialProductId));
+  }, [correctionSource, document, form, initialProductId, open, resources?.warehouses]);
   function submit(values: DocumentFormValues) {
     const input: StockDocumentMutationInput = {
       type: values.type,
@@ -187,7 +207,7 @@ function StockDocumentModal({ open, document, correctionSource, resources, onClo
       comment: values.comment,
       items: values.items.map((item) => {
         if (!item.productId) throw new Error('У выбранной партии не определён товар');
-        return { productId: item.productId, sourceBatchId: item.sourceBatchId, quantity: item.quantity, actualQuantity: item.actualQuantity, targetProductId: item.targetProductId, comment: item.comment };
+        return { productId: item.productId, sourceBatchId: item.sourceBatchId.startsWith('NEW:') ? undefined : item.sourceBatchId, quantity: item.quantity, actualQuantity: item.actualQuantity, unitCost: item.unitCost, targetProductId: item.targetProductId, comment: item.comment };
       }),
     };
     mutation.mutate(input);
@@ -206,7 +226,7 @@ function StockDocumentModal({ open, document, correctionSource, resources, onClo
         <Space direction="vertical" style={{ width: '100%' }}>
           {fields.map((field, index) => (
             <Space key={field.key} wrap align="start">
-              <Form.Item name={[field.name, 'sourceBatchId']} label={index === 0 ? 'Партия' : undefined} rules={[{ required: true }]}>
+              <Form.Item name={[field.name, 'sourceBatchId']} label={index === 0 ? 'Партия или новый остаток' : undefined} rules={[{ required: true, message: 'Выберите партию или товар без накладной' }]}>
                 <Select
                   showSearch
                   filterOption={false}
@@ -215,14 +235,14 @@ function StockDocumentModal({ open, document, correctionSource, resources, onClo
                     const batch = batchOptions.find((candidate) => candidate.value === value);
                     form.setFieldValue(['items', field.name, 'productId'], batch?.productId);
                   }}
-                  loading={batchesQuery.isFetching}
-                  placeholder="Введите товар, код или штрих-код"
+                  loading={batchesQuery.isFetching || productsQuery.isFetching}
+                  placeholder="Выберите партию или новую учётную партию"
                   style={{ width: 390 }}
                   options={batchOptions.map(({ value, label }) => ({ value, label }))}
                 />
               </Form.Item>
               {needsActual ? (
-                <Form.Item name={[field.name, 'actualQuantity']} label={index === 0 ? 'Фактически' : undefined} rules={[{ required: true }]}>
+                <Form.Item name={[field.name, 'actualQuantity']} label={index === 0 ? 'Фактический остаток' : undefined} rules={[{ required: true }]}>
                   <InputNumber min={0} precision={3} />
                 </Form.Item>
               ) : (
@@ -230,6 +250,11 @@ function StockDocumentModal({ open, document, correctionSource, resources, onClo
                   <InputNumber min={0.001} precision={3} />
                 </Form.Item>
               )}
+              {needsActual ? (
+                <Form.Item name={[field.name, 'unitCost']} label={index === 0 ? 'Себестоимость новой партии' : undefined}>
+                  <InputNumber min={0} precision={2} addonAfter="₽" />
+                </Form.Item>
+              ) : null}
               {type === 'RESORTING' ? (
                 <Form.Item name={[field.name, 'targetProductId']} label={index === 0 ? 'Целевой товар' : undefined} rules={[{ required: true }]}>
                   <Select showSearch filterOption={false} onSearch={setProductSearch} loading={productsQuery.isFetching} placeholder="Введите название или код" style={{ width: 300 }} options={(productsQuery.data?.items ?? []).map((item) => ({ value: item.id, label: item.title }))} />
@@ -242,12 +267,15 @@ function StockDocumentModal({ open, document, correctionSource, resources, onClo
         </Space>
       )}</Form.List>
         <Form.Item name="comment" label="Комментарий" style={{ marginTop: 16 }}><Input.TextArea rows={2} /></Form.Item>
-      <Typography.Text type="secondary">Черновик не меняет остатки. Изменение произойдёт только после отдельного подтверждения «Провести».</Typography.Text>
+      <Space direction="vertical" size={4}>
+        <Typography.Text type="secondary">Черновик не меняет остатки. Изменение произойдёт только после отдельного подтверждения «Провести».</Typography.Text>
+        {needsActual ? <Typography.Text type="secondary">Если товар поступил без накладной, выберите вариант «новая учётная партия без накладной», укажите фактическое количество и, если известна, себестоимость. Для существующей партии поле себестоимости не меняет её закупочную цену.</Typography.Text> : null}
+      </Space>
     </Form>
   </Modal>;
 }
 
-function getDocumentFormValues(document?: StockDocument | null, correctionSource?: StockDocument | null, defaultWarehouseId?: string): DocumentFormValues {
+function getDocumentFormValues(document?: StockDocument | null, correctionSource?: StockDocument | null, defaultWarehouseId?: string, initialProductId?: string): DocumentFormValues {
   if (document) {
     return {
       type: document.type,
@@ -258,10 +286,11 @@ function getDocumentFormValues(document?: StockDocument | null, correctionSource
       occurredAt: dayjs(document.occurredAt),
       comment: document.comment ?? undefined,
       items: document.items.map((item) => ({
-        sourceBatchId: item.sourceBatchId ?? '',
+        sourceBatchId: item.sourceBatchId ?? `NEW:${item.productId}`,
         productId: item.productId,
         quantity: item.quantity === null ? undefined : Number(item.quantity),
         actualQuantity: item.actualQuantity === null ? undefined : Number(item.actualQuantity),
+        unitCost: item.unitCost === null ? undefined : Number(item.unitCost),
         targetProductId: item.targetProductId ?? undefined,
         comment: item.comment ?? undefined,
       })),
@@ -281,7 +310,7 @@ function getDocumentFormValues(document?: StockDocument | null, correctionSource
       })),
     };
   }
-  return { type: 'INVENTORY', warehouseId: defaultWarehouseId ?? '', occurredAt: dayjs(), items: [{ sourceBatchId: '' }] };
+  return { type: 'INVENTORY', warehouseId: defaultWarehouseId ?? '', occurredAt: dayjs(), items: [{ sourceBatchId: '', productId: initialProductId }] };
 }
 
 function StockDocumentDrawer({ document, onClose }: { document: StockDocument | null; onClose: () => void }) {

@@ -37,6 +37,11 @@ class CreateStockDocumentItemDto {
   quantity?: number;
 
   @IsOptional()
+  @IsNumber()
+  @Min(0)
+  unitCost?: number;
+
+  @IsOptional()
   @IsString()
   @MaxLength(500)
   comment?: string;

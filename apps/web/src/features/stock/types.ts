@@ -252,9 +252,10 @@ export type StockDocumentMutationInput = {
   items: Array<{
     productId: string;
     targetProductId?: string;
-    sourceBatchId: string;
+    sourceBatchId?: string;
     actualQuantity?: number;
     quantity?: number;
+    unitCost?: number;
     comment?: string;
   }>;
 };

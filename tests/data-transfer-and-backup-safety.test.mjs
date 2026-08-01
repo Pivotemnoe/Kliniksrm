@@ -26,9 +26,11 @@ test('миграция переноса только добавляет журн
 });
 
 test('перенос на новый компьютер требует точного подтверждения и пустой целевой базы', async () => {
-  const [restore, exportScript] = await Promise.all([
+  const [restore, exportScript, restoreLauncher, exportLauncher] = await Promise.all([
     read('scripts/restore-clinic-transfer.ps1'),
     read('scripts/export-clinic-transfer.ps1'),
+    read('scripts/portable/restore-transfer-windows.bat'),
+    read('scripts/portable/export-transfer-windows.bat'),
   ]);
   assert.match(restore, /RESTORE_TO_NEW_COMPUTER/);
   for (const field of ['vaccinations', 'appointments', 'queueEntries', 'stockBatches', 'stockMovements', 'notifications']) {
@@ -42,8 +44,30 @@ test('перенос на новый компьютер требует точн�
   assert.match(restore, /target-before-transfer-/);
   assert.match(restore, /Get-BackupDirectory/);
   assert.match(restore, /redisRestored = \$false/);
+  assert.match(restore, /Set-Location \$RootDir\.Path/);
+  assert.match(restore, /\$countsQuery \| docker exec -i clinic-crm-postgres psql/);
+  assert.match(exportScript, /\$countsQuery \| docker exec -i clinic-crm-postgres psql/);
+  assert.doesNotMatch(restore, /psql[^\n]+-c \$countsQuery/);
+  assert.doesNotMatch(exportScript, /psql[^\n]+-c \$countsQuery/);
+  assert.match(restore, /function Invoke-DockerQuiet/);
+  assert.match(restore, /Arguments @\("compose", "stop", "api", "web", "backup", "minio"\)/);
+  assert.match(restore, /Get-MinIOUserFileCount/);
+  assert.doesNotMatch(restore, /find \/data/);
+  assert.match(restore, /if \(\$servicesStopped\)[\s\S]*"compose", "up"/);
+  assert.match(restore, /Обнаружено ранее прерванное восстановление/);
+  assert.match(restore, /resumeMismatches/);
+  assert.match(restore, /Copy-Item -Force -Path \$targetEnvSnapshot -Destination \$EnvFile/);
+  assert.match(restore, /if \(!\$resumeMode\)[\s\S]*pg_restore -U \$dbUser/);
+  assert.doesNotMatch(restore, /Get-Content \$EnvFile -Raw/);
+  assert.match(restore, /\[IO\.File\]::Copy\(\$tempEnvFile, \$EnvFile, \$true\)/);
+  assert.doesNotMatch(restore, /\[IO\.File\]::Replace\(/);
   assert.match(exportScript, /pg_restore --list \/tmp\/temichevvet-transfer\.dump/);
   assert.match(exportScript, /temichevvet-computer-transfer-v2/);
+  assert.match(restoreLauncher, /%USERPROFILE%\\TemichevVet\\scripts\\restore-clinic-transfer\.ps1/);
+  assert.match(exportLauncher, /%USERPROFILE%\\TemichevVet\\scripts\\export-clinic-transfer\.ps1/);
+  assert.match(restoreLauncher, /copy \/Y "%PORTABLE_SCRIPT%" "%INSTALLED_SCRIPT%"/);
+  assert.match(restoreLauncher, /powershell[^\n]+-File "%INSTALLED_SCRIPT%"/);
+  assert.doesNotMatch(exportLauncher, /%~dp0CRM\\scripts/);
   assert.doesNotMatch(restore, /docker\s+(?:volume\s+rm|compose\s+down\s+-v)/i);
 });
 

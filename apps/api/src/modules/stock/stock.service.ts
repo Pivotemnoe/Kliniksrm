@@ -103,6 +103,7 @@ export class StockService {
     const { limit, offset } = parsePagination(query);
     const search = query.search?.trim();
     const where: Prisma.ProductWhereInput = {
+      ...(query.productId ? { id: query.productId } : {}),
       ...(query.categoryId ? { categoryId: query.categoryId } : {}),
       ...(query.warehouseId ? { batches: { some: batchWarehouseWhere } } : {}),
       ...(search
@@ -448,6 +449,7 @@ export class StockService {
     const search = query.search?.trim();
     const where: Prisma.StockBatchWhereInput = {
       ...this.getBatchWarehouseWhere(query.warehouseId, warehouseScope),
+      ...(query.productId ? { productId: query.productId } : {}),
       ...(search
         ? {
             OR: [

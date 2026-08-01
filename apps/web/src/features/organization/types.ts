@@ -20,6 +20,11 @@ export type OrganizationSettings = {
   account: string | null;
   corrAccount: string | null;
   defaultBillDueDays: number | null;
+  logoUrl: string | null;
+  logoOriginalName: string | null;
+  logoMimeType: string | null;
+  logoSizeBytes: number | null;
+  logoUpdatedAt: string | null;
   offices: OrganizationOffice[];
   createdAt: string;
   updatedAt: string;

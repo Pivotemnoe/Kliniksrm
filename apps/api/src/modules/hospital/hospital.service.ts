@@ -6,6 +6,7 @@ import {
   PaymentStatus,
   Prisma,
   QueueStatus,
+  StockMovementType,
   VisitStatus,
 } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
@@ -18,6 +19,10 @@ import { AdmitExistingHospitalStayDto } from './dto/admit-existing-hospital-stay
 import { CreateHospitalRecordDto } from './dto/create-hospital-record.dto';
 import { ListHospitalQueryDto } from './dto/list-hospital-query.dto';
 import { UpdateHospitalStayDto } from './dto/update-hospital-stay.dto';
+import { UpdateHospitalRecordDto } from './dto/update-hospital-record.dto';
+import { toStockQuantity } from '../stock/stock-units';
+
+type WarehouseScope = string[] | null;
 
 @Injectable()
 export class HospitalService {
@@ -71,6 +76,62 @@ export class HospitalService {
     return { boxes };
   }
 
+  async getCatalog(searchValue: string | undefined, actorId: string) {
+    const search = searchValue?.trim().slice(0, 200);
+    const warehouseScope = await this.getWarehouseScope(actorId);
+    const productWhere: Prisma.ProductWhereInput = search
+      ? {
+          OR: [
+            { title: { contains: search, mode: 'insensitive' } },
+            { sku: { contains: search, mode: 'insensitive' } },
+            { barcode: { contains: search, mode: 'insensitive' } },
+            { barcodes: { some: { value: { contains: search, mode: 'insensitive' } } } },
+          ],
+        }
+      : {};
+    const serviceWhere: Prisma.ServiceWhereInput = search
+      ? { title: { contains: search, mode: 'insensitive' } }
+      : {};
+
+    const [products, services] = await this.prisma.$transaction([
+      this.prisma.product.findMany({
+        where: productWhere,
+        orderBy: { title: 'asc' },
+        take: 100,
+        select: {
+          id: true,
+          title: true,
+          retailPrice: true,
+          stockUnit: true,
+          writeOffUnit: true,
+          billingUnit: true,
+          packageQuantity: true,
+          batches: {
+            where: {
+              rest: { gt: 0 },
+              ...(warehouseScope ? { warehouseId: { in: warehouseScope } } : {}),
+            },
+            select: { rest: true },
+          },
+        },
+      }),
+      this.prisma.service.findMany({
+        where: serviceWhere,
+        orderBy: { title: 'asc' },
+        take: 100,
+        select: { id: true, title: true, price: true, priceType: true },
+      }),
+    ]);
+
+    return {
+      products: products.map(({ batches, ...product }) => ({
+        ...product,
+        stockRest: batches.reduce((sum, batch) => sum.plus(batch.rest), decimal(0)),
+      })),
+      services,
+    };
+  }
+
   async getHospitalStay(stayId: string) {
     const stay = await this.prisma.hospitalStay.findFirst({
       where: { OR: [{ id: stayId }, { sourceVisitId: stayId }] },
@@ -91,18 +152,54 @@ export class HospitalService {
       throw new BadRequestException('Журнал закрыт после выписки или отмены госпитализации');
     }
 
-    const record = await this.prisma.hospitalRecord.create({
-      data: {
-        visitId: stay.sourceVisitId,
-        recordedById: actorId,
-        recordType: dto.recordType,
-        title: dto.title.trim(),
-        recordedAt: dto.recordedAt ? new Date(dto.recordedAt) : undefined,
-        temperatureC: dto.temperatureC,
-        value: dto.value?.trim() || null,
-        notes: dto.notes?.trim() || null,
-      },
-      include: hospitalRecordAuthorInclude,
+    this.ensureTemperatureRecord(dto.recordType, dto.temperatureC);
+    const hasCatalogItem = Boolean(dto.serviceId || dto.productId);
+    this.ensureBillingInputHasCatalogItem(hasCatalogItem, dto);
+    const warehouseScope = hasCatalogItem ? await this.getWarehouseScope(actorId) : null;
+    const dueAt = hasCatalogItem ? await this.financeService.getDefaultBillDueAt() : null;
+
+    const record = await this.prisma.$transaction(async (tx) => {
+      const line = hasCatalogItem ? await this.resolveCatalogLine(tx, dto) : null;
+      let billItemId: string | null = null;
+
+      if (line) {
+        const bill = await this.getEditableHospitalBill(tx, stay.sourceVisitId, dueAt);
+        const billItem = await tx.billItem.create({
+          data: {
+            billId: bill.id,
+            serviceId: line.serviceId,
+            productId: line.productId,
+            title: line.title,
+            quantity: line.quantity,
+            stockQuantity: line.stockQuantity,
+            unitPrice: line.unitPrice,
+            discount: 0,
+            totalAmount: line.totalAmount,
+          },
+        });
+        billItemId = billItem.id;
+
+        if (line.productId) {
+          await this.writeOffHospitalProduct(tx, stay.sourceVisitId, billItem.id, line, warehouseScope);
+        }
+
+        await this.recalculateHospitalBill(tx, bill.id, stay.sourceVisitId);
+      }
+
+      return tx.hospitalRecord.create({
+        data: {
+          visitId: stay.sourceVisitId,
+          billItemId,
+          recordedById: actorId,
+          recordType: dto.recordType,
+          title: dto.title.trim(),
+          recordedAt: dto.recordedAt ? new Date(dto.recordedAt) : undefined,
+          temperatureC: dto.recordType === 'TEMPERATURE' ? dto.temperatureC : null,
+          value: dto.recordType === 'TEMPERATURE' ? null : dto.value?.trim() || null,
+          notes: dto.notes?.trim() || null,
+        },
+        include: hospitalRecordInclude,
+      });
     });
 
     await this.auditService.log({
@@ -110,7 +207,111 @@ export class HospitalService {
       action: 'hospital.record.create',
       entityType: 'HospitalRecord',
       entityId: record.id,
-      metadata: { stayId: stay.id, sourceVisitId: stay.sourceVisitId, recordType: dto.recordType },
+      metadata: {
+        stayId: stay.id,
+        sourceVisitId: stay.sourceVisitId,
+        recordType: dto.recordType,
+        billItemId: record.billItemId,
+        productId: dto.productId,
+        serviceId: dto.serviceId,
+      },
+    });
+
+    return record;
+  }
+
+  async updateRecord(stayId: string, recordId: string, dto: UpdateHospitalRecordDto, actorId: string) {
+    const stay = await this.getExistingHospitalStay(stayId);
+    const existing = await this.prisma.hospitalRecord.findFirst({
+      where: { id: recordId, visitId: stay.sourceVisitId },
+      include: { billItem: true },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Запись журнала стационара не найдена');
+    }
+
+    const nextRecordType = dto.recordType ?? existing.recordType;
+    const nextTemperature = dto.temperatureC ?? decimalToOptionalNumber(existing.temperatureC);
+    this.ensureTemperatureRecord(nextRecordType, nextTemperature);
+    const billingChanged = dto.quantity !== undefined || dto.stockQuantity !== undefined || dto.unitPrice !== undefined;
+
+    if (billingChanged && !existing.billItem) {
+      throw new BadRequestException('У этой записи нет связанной позиции счёта. Добавьте новую запись с товаром или услугой');
+    }
+
+    const warehouseScope = billingChanged && existing.billItem?.productId
+      ? await this.getWarehouseScope(actorId)
+      : null;
+
+    const record = await this.prisma.$transaction(async (tx) => {
+      if (billingChanged && existing.billItem) {
+        const bill = await tx.bill.findUnique({
+          where: { id: existing.billItem.billId },
+          select: { id: true, status: true, paidAmount: true },
+        });
+        this.ensureBillEditable(bill);
+        const line = calculateCatalogLine({
+          serviceId: existing.billItem.serviceId ?? undefined,
+          productId: existing.billItem.productId ?? undefined,
+          title: existing.billItem.title,
+          quantity: dto.quantity ?? decimalToNumber(existing.billItem.quantity),
+          stockQuantity: dto.stockQuantity
+            ?? (existing.billItem.stockQuantity === null
+              ? decimalToNumber(existing.billItem.quantity)
+              : decimalToNumber(existing.billItem.stockQuantity)),
+          unitPrice: dto.unitPrice ?? decimalToNumber(existing.billItem.unitPrice),
+        });
+
+        await tx.billItem.update({
+          where: { id: existing.billItem.id },
+          data: {
+            quantity: line.quantity,
+            stockQuantity: line.stockQuantity,
+            unitPrice: line.unitPrice,
+            totalAmount: line.totalAmount,
+          },
+        });
+
+        if (line.productId) {
+          await this.syncHospitalProductWriteOff(
+            tx,
+            stay.sourceVisitId,
+            existing.billItem.id,
+            line,
+            warehouseScope,
+          );
+        }
+
+        await this.recalculateHospitalBill(tx, existing.billItem.billId, stay.sourceVisitId);
+      }
+
+      return tx.hospitalRecord.update({
+        where: { id: existing.id },
+        data: {
+          ...(dto.recordType !== undefined ? { recordType: dto.recordType } : {}),
+          ...(dto.title !== undefined ? { title: dto.title.trim() } : {}),
+          ...(dto.recordedAt !== undefined ? { recordedAt: new Date(dto.recordedAt) } : {}),
+          ...(nextRecordType === 'TEMPERATURE'
+            ? (dto.temperatureC !== undefined ? { temperatureC: dto.temperatureC, value: null } : { value: null })
+            : { temperatureC: null, ...(dto.value !== undefined ? { value: cleanOrNull(dto.value) } : {}) }),
+          ...(dto.notes !== undefined ? { notes: cleanOrNull(dto.notes) } : {}),
+        },
+        include: hospitalRecordInclude,
+      });
+    });
+
+    await this.auditService.log({
+      actorId,
+      action: 'hospital.record.update',
+      entityType: 'HospitalRecord',
+      entityId: record.id,
+      metadata: {
+        stayId: stay.id,
+        sourceVisitId: stay.sourceVisitId,
+        changedFields: Object.keys(dto),
+        billItemId: existing.billItemId,
+      },
     });
 
     return record;
@@ -337,6 +538,285 @@ export class HospitalService {
     return this.getHospitalStay(existing.id);
   }
 
+  private ensureTemperatureRecord(recordType: string, temperatureC?: number | null) {
+    if (recordType === 'TEMPERATURE' && temperatureC === undefined) {
+      throw new BadRequestException('Для записи температуры укажите значение от 30,0 до 45,0 °C');
+    }
+  }
+
+  private ensureBillingInputHasCatalogItem(
+    hasCatalogItem: boolean,
+    dto: Pick<CreateHospitalRecordDto, 'quantity' | 'stockQuantity' | 'unitPrice'>,
+  ) {
+    if (!hasCatalogItem && (dto.quantity !== undefined || dto.stockQuantity !== undefined || dto.unitPrice !== undefined)) {
+      throw new BadRequestException('Сначала выберите товар или услугу из каталога');
+    }
+  }
+
+  private async resolveCatalogLine(tx: Prisma.TransactionClient, dto: CreateHospitalRecordDto) {
+    if (dto.serviceId && dto.productId) {
+      throw new BadRequestException('В одной записи можно выбрать товар или услугу, но не оба варианта одновременно');
+    }
+
+    const service = dto.serviceId
+      ? await tx.service.findUnique({
+          where: { id: dto.serviceId },
+          select: { id: true, title: true, price: true },
+        })
+      : null;
+    if (dto.serviceId && !service) {
+      throw new NotFoundException('Услуга из каталога не найдена');
+    }
+
+    const product = dto.productId
+      ? await tx.product.findUnique({
+          where: { id: dto.productId },
+          select: { id: true, title: true, retailPrice: true },
+        })
+      : null;
+    if (dto.productId && !product) {
+      throw new NotFoundException('Товар из каталога не найден');
+    }
+
+    return calculateCatalogLine({
+      serviceId: service?.id,
+      productId: product?.id,
+      title: service?.title ?? product?.title,
+      quantity: dto.quantity ?? 1,
+      stockQuantity: product ? dto.stockQuantity ?? dto.quantity ?? 1 : undefined,
+      unitPrice: dto.unitPrice
+        ?? (service ? decimalToNumber(service.price) : undefined)
+        ?? (product ? decimalToNumber(product.retailPrice) : 0),
+    });
+  }
+
+  private async getEditableHospitalBill(
+    tx: Prisma.TransactionClient,
+    visitId: string,
+    dueAt: Date | null,
+  ) {
+    const visit = await tx.visit.findUnique({
+      where: { id: visitId },
+      select: { id: true, ownerId: true, animalId: true },
+    });
+    if (!visit) {
+      throw new NotFoundException('Приём, связанный со стационаром, не найден');
+    }
+
+    const existing = await tx.bill.findUnique({
+      where: { visitId },
+      select: { id: true, status: true, paidAmount: true },
+    });
+    if (existing) {
+      if (existing.status === PaymentStatus.CANCELLED) {
+        throw new BadRequestException('В отменённый счёт нельзя добавлять новые позиции');
+      }
+      return existing;
+    }
+
+    return tx.bill.create({
+      data: {
+        ownerId: visit.ownerId,
+        animalId: visit.animalId,
+        visitId,
+        source: BillSource.VISIT,
+        status: PaymentStatus.UNPAID,
+        dueAt,
+      },
+      select: { id: true, status: true, paidAmount: true },
+    });
+  }
+
+  private ensureBillEditable(bill: { id: string; status: PaymentStatus; paidAmount: Prisma.Decimal } | null) {
+    if (!bill) {
+      throw new NotFoundException('Счёт стационара не найден');
+    }
+    if (bill.status === PaymentStatus.CANCELLED) {
+      throw new BadRequestException('Отменённый счёт нельзя изменять');
+    }
+    if (decimal(bill.paidAmount).greaterThan(0)) {
+      throw new BadRequestException('Позиции уже оплаченного счёта нельзя изменять');
+    }
+  }
+
+  private async writeOffHospitalProduct(
+    tx: Prisma.TransactionClient,
+    visitId: string,
+    billItemId: string,
+    line: HospitalCatalogLine,
+    warehouseScope: WarehouseScope,
+    quantityIsInStockUnits = false,
+  ) {
+    if (!line.productId) {
+      return;
+    }
+
+    const product = await tx.product.findUniqueOrThrow({
+      where: { id: line.productId },
+      select: { stockUnit: true, writeOffUnit: true, packageQuantity: true },
+    });
+    const requested = line.stockQuantity ?? line.quantity;
+    const stockQuantity = quantityIsInStockUnits ? requested : toStockQuantity(product, requested);
+    const batches = await tx.stockBatch.findMany({
+      where: {
+        productId: line.productId,
+        rest: { gt: 0 },
+        ...(warehouseScope ? { warehouseId: { in: warehouseScope } } : {}),
+      },
+      select: { id: true, warehouseId: true, rest: true, expiresAt: true, createdAt: true },
+    });
+    const orderedBatches = batches.sort(compareStockBatches);
+    const available = orderedBatches.reduce((sum, batch) => sum.plus(batch.rest), decimal(0));
+
+    if (available.lessThan(stockQuantity)) {
+      throw new BadRequestException(`Недостаточно остатка товара «${line.title}»`);
+    }
+
+    let remaining = stockQuantity;
+    for (const batch of orderedBatches) {
+      if (remaining.lessThanOrEqualTo(0)) break;
+      const batchRest = decimal(batch.rest);
+      const quantity = batchRest.lessThan(remaining) ? batchRest : remaining;
+      await tx.stockBatch.update({ where: { id: batch.id }, data: { rest: { decrement: quantity } } });
+      await tx.stockMovement.create({
+        data: {
+          productId: line.productId,
+          billItemId,
+          stockBatchId: batch.id,
+          warehouseId: batch.warehouseId,
+          visitId,
+          type: StockMovementType.VISIT_USAGE,
+          quantity: quantity.negated(),
+          comment: `Списание по стационару ${visitId.slice(0, 8)}`,
+        },
+      });
+      remaining = remaining.minus(quantity);
+    }
+  }
+
+  private async syncHospitalProductWriteOff(
+    tx: Prisma.TransactionClient,
+    visitId: string,
+    billItemId: string,
+    line: HospitalCatalogLine,
+    warehouseScope: WarehouseScope,
+  ) {
+    if (!line.productId) return;
+    const product = await tx.product.findUniqueOrThrow({
+      where: { id: line.productId },
+      select: { stockUnit: true, writeOffUnit: true, packageQuantity: true },
+    });
+    const deducted = await this.getHospitalProductDeductedQuantity(tx, billItemId, line.productId);
+    const delta = toStockQuantity(product, line.stockQuantity ?? line.quantity).minus(deducted);
+
+    if (delta.greaterThan(0)) {
+      await this.writeOffHospitalProduct(tx, visitId, billItemId, { ...line, stockQuantity: delta }, warehouseScope, true);
+    } else if (delta.lessThan(0)) {
+      await this.restoreHospitalProduct(tx, visitId, billItemId, line.productId, line.title, delta.abs());
+    }
+  }
+
+  private async restoreHospitalProduct(
+    tx: Prisma.TransactionClient,
+    visitId: string,
+    billItemId: string,
+    productId: string,
+    title: string,
+    quantityToRestore: Prisma.Decimal.Value,
+  ) {
+    let remaining = decimal(quantityToRestore);
+    const movements = await tx.stockMovement.findMany({
+      where: {
+        billItemId,
+        productId,
+        stockBatchId: { not: null },
+        type: { in: [StockMovementType.VISIT_USAGE, StockMovementType.CORRECTION] },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { stockBatchId: true, warehouseId: true, quantity: true, createdAt: true },
+    });
+    const byBatch = new Map<string, { stockBatchId: string; warehouseId: string | null; quantity: Prisma.Decimal; createdAt: Date }>();
+
+    for (const movement of movements) {
+      if (!movement.stockBatchId) continue;
+      const item = byBatch.get(movement.stockBatchId) ?? {
+        stockBatchId: movement.stockBatchId,
+        warehouseId: movement.warehouseId,
+        quantity: decimal(0),
+        createdAt: movement.createdAt,
+      };
+      item.quantity = item.quantity.minus(movement.quantity);
+      if (movement.createdAt > item.createdAt) item.createdAt = movement.createdAt;
+      byBatch.set(movement.stockBatchId, item);
+    }
+
+    const restorable = [...byBatch.values()]
+      .filter((item) => item.quantity.greaterThan(0))
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
+    for (const item of restorable) {
+      if (remaining.lessThanOrEqualTo(0)) break;
+      const quantity = item.quantity.lessThan(remaining) ? item.quantity : remaining;
+      await tx.stockBatch.update({ where: { id: item.stockBatchId }, data: { rest: { increment: quantity } } });
+      await tx.stockMovement.create({
+        data: {
+          productId,
+          billItemId,
+          stockBatchId: item.stockBatchId,
+          warehouseId: item.warehouseId,
+          visitId,
+          type: StockMovementType.CORRECTION,
+          quantity,
+          comment: `Возврат списания «${title}» по стационару`,
+        },
+      });
+      remaining = remaining.minus(quantity);
+    }
+
+    if (remaining.greaterThan(0)) {
+      throw new BadRequestException(`Не удалось полностью вернуть списание товара «${title}»`);
+    }
+  }
+
+  private async getHospitalProductDeductedQuantity(
+    tx: Prisma.TransactionClient,
+    billItemId: string,
+    productId: string,
+  ) {
+    const movements = await tx.stockMovement.findMany({
+      where: {
+        billItemId,
+        productId,
+        type: { in: [StockMovementType.VISIT_USAGE, StockMovementType.CORRECTION] },
+      },
+      select: { quantity: true },
+    });
+    return maxDecimal(
+      movements.reduce((sum, movement) => sum.minus(movement.quantity), decimal(0)),
+      decimal(0),
+    );
+  }
+
+  private async recalculateHospitalBill(tx: Prisma.TransactionClient, billId: string, visitId: string) {
+    const bill = await tx.bill.findUnique({
+      where: { id: billId },
+      include: { items: true, payments: true },
+    });
+    if (!bill) throw new NotFoundException('Счёт стационара не найден');
+    const totalAmount = bill.items.reduce((sum, item) => sum.plus(item.totalAmount), decimal(0));
+    const paidAmount = bill.payments.reduce((sum, payment) => sum.plus(payment.amount), decimal(0));
+    const status = resolvePaymentStatus(totalAmount, paidAmount);
+    await tx.bill.update({ where: { id: billId }, data: { totalAmount, paidAmount, status } });
+    await tx.visit.update({ where: { id: visitId }, data: { totalAmount } });
+  }
+
+  private async getWarehouseScope(employeeId: string): Promise<WarehouseScope> {
+    const accesses = await this.prisma.employeeWarehouseAccess.findMany({
+      where: { employeeId },
+      select: { warehouseId: true },
+    });
+    return accesses.length ? accesses.map((access) => access.warehouseId) : null;
+  }
+
   private async getExistingHospitalStay(stayId: string) {
     const stay = await this.prisma.hospitalStay.findFirst({
       where: { OR: [{ id: stayId }, { sourceVisitId: stayId }] },
@@ -351,8 +831,32 @@ export class HospitalService {
   }
 }
 
-const hospitalRecordAuthorInclude = {
+const hospitalRecordInclude = {
   recordedBy: { select: { id: true, fullName: true, position: true } },
+  billItem: {
+    select: {
+      id: true,
+      productId: true,
+      serviceId: true,
+      title: true,
+      quantity: true,
+      stockQuantity: true,
+      unitPrice: true,
+      discount: true,
+      totalAmount: true,
+      product: {
+        select: {
+          id: true,
+          title: true,
+          stockUnit: true,
+          writeOffUnit: true,
+          billingUnit: true,
+          packageQuantity: true,
+        },
+      },
+      service: { select: { id: true, title: true, priceType: true } },
+    },
+  },
 } satisfies Prisma.HospitalRecordInclude;
 
 const hospitalStayInclude = {
@@ -367,7 +871,7 @@ const hospitalStayInclude = {
       bill: { select: { id: true, status: true, totalAmount: true, paidAmount: true } },
       hospitalRecords: {
         orderBy: { recordedAt: 'desc' as const },
-        include: hospitalRecordAuthorInclude,
+        include: hospitalRecordInclude,
       },
     },
   },
@@ -399,4 +903,68 @@ function serializeHospitalStay(stay: HospitalStayWithRelations) {
     bill: stay.sourceVisit.bill,
     hospitalRecords: stay.sourceVisit.hospitalRecords,
   };
+}
+
+function calculateCatalogLine(input: {
+  serviceId?: string;
+  productId?: string;
+  title?: string;
+  quantity?: Prisma.Decimal.Value;
+  stockQuantity?: Prisma.Decimal.Value;
+  unitPrice?: Prisma.Decimal.Value;
+}) {
+  const title = input.title?.trim();
+  if (!title) throw new BadRequestException('Не удалось определить название товара или услуги');
+  const quantity = decimal(input.quantity ?? 1);
+  const stockQuantity = input.productId ? decimal(input.stockQuantity ?? input.quantity ?? 1) : null;
+  const unitPrice = decimal(input.unitPrice ?? 0);
+  return {
+    serviceId: input.serviceId,
+    productId: input.productId,
+    title,
+    quantity,
+    stockQuantity,
+    unitPrice,
+    totalAmount: maxDecimal(quantity.mul(unitPrice), decimal(0)),
+  };
+}
+
+type HospitalCatalogLine = ReturnType<typeof calculateCatalogLine>;
+
+function compareStockBatches(
+  left: { expiresAt: Date | null; createdAt: Date },
+  right: { expiresAt: Date | null; createdAt: Date },
+) {
+  if (left.expiresAt && right.expiresAt && left.expiresAt.getTime() !== right.expiresAt.getTime()) {
+    return left.expiresAt.getTime() - right.expiresAt.getTime();
+  }
+  if (left.expiresAt && !right.expiresAt) return -1;
+  if (!left.expiresAt && right.expiresAt) return 1;
+  return left.createdAt.getTime() - right.createdAt.getTime();
+}
+
+function resolvePaymentStatus(totalAmount: Prisma.Decimal, paidAmount: Prisma.Decimal) {
+  if (paidAmount.greaterThanOrEqualTo(totalAmount) && totalAmount.greaterThan(0)) return PaymentStatus.PAID;
+  if (paidAmount.greaterThan(0)) return PaymentStatus.PARTIAL;
+  return PaymentStatus.UNPAID;
+}
+
+function decimal(value: Prisma.Decimal.Value) {
+  return new Prisma.Decimal(value);
+}
+
+function decimalToNumber(value: Prisma.Decimal.Value) {
+  return decimal(value).toNumber();
+}
+
+function decimalToOptionalNumber(value: Prisma.Decimal | null) {
+  return value === null ? undefined : value.toNumber();
+}
+
+function maxDecimal(left: Prisma.Decimal, right: Prisma.Decimal) {
+  return left.lessThan(right) ? right : left;
+}
+
+function cleanOrNull(value: string) {
+  return value.trim() || null;
 }

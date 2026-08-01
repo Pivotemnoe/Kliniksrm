@@ -6,6 +6,9 @@ dist/
 build/
 coverage/
 apps/owner-gateway/src/generated/
+__pycache__/
+*.pyc
+/output/
 
 # Local env
 .env

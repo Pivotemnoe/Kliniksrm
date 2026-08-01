@@ -3,13 +3,14 @@ import {
   CheckOutlined,
   CloseOutlined,
   FileTextOutlined,
+  EditOutlined,
   PlusOutlined,
   SwapOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Descriptions, Form, Input, Modal, Select, Space, Table, Tag, Typography } from 'antd';
+import { Alert, App, Button, Descriptions, Form, Input, InputNumber, Modal, Select, Space, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
@@ -23,10 +24,12 @@ import {
   createHospitalRecord,
   dischargeHospitalStay,
   getHospitalResources,
+  getHospitalCatalog,
   getHospitalStay,
+  updateHospitalRecord,
   updateHospitalStay,
 } from './hospital.api';
-import type { CreateHospitalRecordInput, HospitalRecord, HospitalRecordType } from './types';
+import type { CreateHospitalRecordInput, HospitalCatalog, HospitalRecord, HospitalRecordType, UpdateHospitalRecordInput } from './types';
 
 const recordTypeOptions: Array<{ value: HospitalRecordType; label: string; defaultTitle: string }> = [
   { value: 'TEMPERATURE', label: 'Температура', defaultTitle: 'Измерение температуры' },
@@ -46,6 +49,7 @@ export function HospitalCardPage() {
   const { data: auth } = useCurrentEmployee();
   const canManage = hasPermission(auth?.employee, 'hospital.manage');
   const [recordOpen, setRecordOpen] = useState(false);
+  const [editingRecord, setEditingRecord] = useState<HospitalRecord | null>(null);
   const [boxId, setBoxId] = useState<string>();
   const stayQuery = useQuery({
     queryKey: ['hospital', stayId],
@@ -66,6 +70,7 @@ export function HospitalCardPage() {
       queryClient.invalidateQueries({ queryKey: ['hospital'] }),
       queryClient.invalidateQueries({ queryKey: ['visits', stay?.sourceVisitId] }),
       queryClient.invalidateQueries({ queryKey: ['visits'] }),
+      queryClient.invalidateQueries({ queryKey: ['stock'] }),
     ]);
   }
 
@@ -84,11 +89,14 @@ export function HospitalCardPage() {
     onError: (error) => message.error(getErrorMessage(error)),
   });
   const recordMutation = useMutation({
-    mutationFn: (input: CreateHospitalRecordInput) => createHospitalRecord(stayId, input),
+    mutationFn: (input: CreateHospitalRecordInput | UpdateHospitalRecordInput) => editingRecord
+      ? updateHospitalRecord(stayId, editingRecord.id, input as UpdateHospitalRecordInput)
+      : createHospitalRecord(stayId, input as CreateHospitalRecordInput),
     onSuccess: async () => {
       await refresh();
       setRecordOpen(false);
-      message.success('Запись добавлена в карту стационара');
+      message.success(editingRecord ? 'Запись стационара обновлена' : 'Запись добавлена в карту стационара');
+      setEditingRecord(null);
     },
     onError: (error) => message.error(getErrorMessage(error)),
   });
@@ -107,11 +115,37 @@ export function HospitalCardPage() {
           {record.temperatureC !== null ? <Typography.Text>{record.temperatureC} °C</Typography.Text> : null}
           {record.value ? <Typography.Text>{record.value}</Typography.Text> : null}
           {record.notes ? <Typography.Text type="secondary">{record.notes}</Typography.Text> : null}
+          {record.billItem ? (
+            <Space wrap size={6}>
+              <Tag color={record.billItem.productId ? 'gold' : 'green'}>
+                {record.billItem.productId ? 'Товар и списание' : 'Услуга'}
+              </Tag>
+              <Typography.Text>
+                {record.billItem.title}: {record.billItem.quantity} × {formatMoney(record.billItem.unitPrice)} = {formatMoney(record.billItem.totalAmount)}
+              </Typography.Text>
+              {record.billItem.productId && record.billItem.stockQuantity !== null ? (
+                <Typography.Text type="secondary">
+                  списано {record.billItem.stockQuantity} {record.billItem.product?.writeOffUnit || record.billItem.product?.stockUnit || 'ед.'}
+                </Typography.Text>
+              ) : null}
+            </Space>
+          ) : null}
         </Space>
       ),
     },
     { title: 'Выполнил', key: 'employee', width: 220, render: (_, record) => record.recordedBy?.fullName ?? 'Сотрудник не указан' },
-  ], []);
+    ...(canManage ? [{
+      title: 'Действия',
+      key: 'actions',
+      width: 140,
+      fixed: 'right' as const,
+      render: (_: unknown, record: HospitalRecord) => (
+        <Button size="small" icon={<EditOutlined />} onClick={() => { setEditingRecord(record); setRecordOpen(true); }}>
+          Изменить
+        </Button>
+      ),
+    }] : []),
+  ], [canManage]);
 
   if (stayQuery.isError) {
     return <div className="page"><PageHeader title="Карта стационара" /><Alert type="error" showIcon message="Не удалось открыть карту стационара" description={getErrorMessage(stayQuery.error)} /></div>;
@@ -126,7 +160,7 @@ export function HospitalCardPage() {
           <Space wrap>
             <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/hospital')}>К стационару</Button>
             {stay ? <Button icon={<FileTextOutlined />} onClick={() => navigate(`/visits/${stay.sourceVisitId}`)}>Осмотр при поступлении</Button> : null}
-            {canManage && active ? <Button type="primary" icon={<PlusOutlined />} onClick={() => setRecordOpen(true)}>Добавить запись</Button> : null}
+            {canManage && active ? <Button type="primary" icon={<PlusOutlined />} onClick={() => { setEditingRecord(null); setRecordOpen(true); }}>Добавить запись</Button> : null}
           </Space>
         }
       />
@@ -165,7 +199,7 @@ export function HospitalCardPage() {
                 <Typography.Title level={4} className="compact-title">Журнал стационара</Typography.Title>
                 <Typography.Text type="secondary">Температура, препараты, процедуры, наблюдения, кормление и уход — отдельными записями по времени.</Typography.Text>
               </div>
-              {canManage && active ? <Button icon={<PlusOutlined />} onClick={() => setRecordOpen(true)}>Добавить запись</Button> : null}
+              {canManage && active ? <Button icon={<PlusOutlined />} onClick={() => { setEditingRecord(null); setRecordOpen(true); }}>Добавить запись</Button> : null}
             </div>
             <div className="list-panel-body">
               <Table<HospitalRecord>
@@ -183,8 +217,10 @@ export function HospitalCardPage() {
       ) : null}
       <HospitalRecordModal
         open={recordOpen}
+        record={editingRecord}
+        billingLocked={Number(stay?.bill?.paidAmount ?? 0) > 0}
         loading={recordMutation.isPending}
-        onClose={() => setRecordOpen(false)}
+        onClose={() => { setRecordOpen(false); setEditingRecord(null); }}
         onSubmit={(values) => recordMutation.mutate({
           ...values,
           recordedAt: values.recordedAt ? new Date(values.recordedAt).toISOString() : undefined,
@@ -194,13 +230,100 @@ export function HospitalCardPage() {
   );
 }
 
-function HospitalRecordModal({ open, loading, onClose, onSubmit }: { open: boolean; loading: boolean; onClose: () => void; onSubmit: (values: CreateHospitalRecordInput) => void }) {
-  const [form] = Form.useForm<CreateHospitalRecordInput>();
+type HospitalRecordFormValues = CreateHospitalRecordInput & { catalogKind?: 'NONE' | 'PRODUCT' | 'SERVICE' };
+
+function HospitalRecordModal({
+  open,
+  record,
+  billingLocked,
+  loading,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean;
+  record: HospitalRecord | null;
+  billingLocked: boolean;
+  loading: boolean;
+  onClose: () => void;
+  onSubmit: (values: CreateHospitalRecordInput) => void;
+}) {
+  const [form] = Form.useForm<HospitalRecordFormValues>();
   const recordType = Form.useWatch('recordType', form);
+  const catalogKind = Form.useWatch('catalogKind', form) ?? 'NONE';
+  const selectedProductId = Form.useWatch('productId', form);
+  const [catalogSearch, setCatalogSearch] = useState('');
+  const deferredCatalogSearch = useDeferredValue(catalogSearch);
+  const catalogQuery = useQuery({
+    queryKey: ['hospital', 'catalog', deferredCatalogSearch],
+    queryFn: () => getHospitalCatalog(deferredCatalogSearch || undefined),
+    enabled: open && catalogKind !== 'NONE',
+  });
+  const catalogIdentityLocked = Boolean(record);
+
+  useEffect(() => {
+    if (!open) return;
+    setCatalogSearch('');
+    if (!record) {
+      form.setFieldsValue({
+        recordType: 'OBSERVATION',
+        title: 'Состояние пациента',
+        recordedAt: toDatetimeInput(new Date()),
+        value: '',
+        notes: '',
+        temperatureC: undefined,
+        catalogKind: 'NONE',
+        productId: undefined,
+        serviceId: undefined,
+        quantity: 1,
+        stockQuantity: 1,
+        unitPrice: undefined,
+      });
+      return;
+    }
+
+    form.setFieldsValue({
+      recordType: record.recordType,
+      title: record.title,
+      recordedAt: toDatetimeInput(new Date(record.recordedAt)),
+      value: record.value ?? '',
+      notes: record.notes ?? '',
+      temperatureC: record.temperatureC === null ? undefined : Number(record.temperatureC),
+      catalogKind: record.billItem?.productId ? 'PRODUCT' : record.billItem?.serviceId ? 'SERVICE' : 'NONE',
+      productId: record.billItem?.productId ?? undefined,
+      serviceId: record.billItem?.serviceId ?? undefined,
+      quantity: record.billItem ? Number(record.billItem.quantity) : 1,
+      stockQuantity: record.billItem?.stockQuantity === null || record.billItem?.stockQuantity === undefined
+        ? undefined
+        : Number(record.billItem.stockQuantity),
+      unitPrice: record.billItem ? Number(record.billItem.unitPrice) : undefined,
+    });
+  }, [form, open, record]);
+
+  function submit(values: HospitalRecordFormValues) {
+    const { catalogKind: _catalogKind, ...rawInput } = values;
+    const input = normalizeHospitalRecord(rawInput);
+    if (record) {
+      delete input.productId;
+      delete input.serviceId;
+    }
+    if (billingLocked) {
+      delete input.quantity;
+      delete input.stockQuantity;
+      delete input.unitPrice;
+    }
+    if (catalogKind === 'NONE') {
+      delete input.productId;
+      delete input.serviceId;
+      delete input.quantity;
+      delete input.stockQuantity;
+      delete input.unitPrice;
+    }
+    onSubmit(input);
+  }
 
   return (
-    <Modal title="Новая запись стационара" open={open} onCancel={onClose} onOk={() => form.submit()} okText="Добавить" cancelText="Отмена" confirmLoading={loading} destroyOnHidden afterOpenChange={(nextOpen) => nextOpen && form.setFieldsValue({ recordType: 'OBSERVATION', title: 'Состояние пациента', recordedAt: toDatetimeInput(new Date()), value: '', notes: '', temperatureC: undefined })}>
-      <Form form={form} layout="vertical" onFinish={(values) => onSubmit(normalizeHospitalRecord(values))}>
+    <Modal title={record ? 'Изменить запись стационара' : 'Новая запись стационара'} open={open} onCancel={onClose} onOk={() => form.submit()} okText={record ? 'Сохранить' : 'Добавить'} cancelText="Отмена" confirmLoading={loading} destroyOnHidden width={760}>
+      <Form form={form} layout="vertical" onFinish={submit}>
         <Form.Item name="recordType" label="Тип записи" rules={[{ required: true, message: 'Выберите тип записи' }]}>
           <Select
             options={recordTypeOptions.map(({ value, label }) => ({ value, label }))}
@@ -242,6 +365,117 @@ function HospitalRecordModal({ open, loading, onClose, onSubmit }: { open: boole
         <Form.Item name="notes" label="Комментарий">
           <Input.TextArea rows={4} placeholder="Состояние пациента, реакция или дополнительные сведения" />
         </Form.Item>
+        <Typography.Title level={5}>Учёт в счёте и на складе</Typography.Title>
+        <Typography.Paragraph type="secondary">
+          Выбранная услуга попадёт в счёт по цене прайса. Товар попадёт в счёт и одновременно спишется с доступной партии склада.
+        </Typography.Paragraph>
+        {record && !record.billItem ? (
+          <Alert
+            type="info"
+            showIcon
+            className="form-alert"
+            message="У этой записи не было начисления"
+            description="Медицинский текст можно исправить. Чтобы добавить товар или услугу, создайте отдельную запись — так сохранится правильная история действий."
+          />
+        ) : null}
+        {billingLocked && record?.billItem ? (
+          <Alert
+            type="warning"
+            showIcon
+            className="form-alert"
+            message="Счёт уже оплачивался"
+            description="Текст записи можно исправить, но количество списания и цену оплаченного счёта менять нельзя."
+          />
+        ) : null}
+        <Form.Item name="catalogKind" label="Что учесть">
+          <Select
+            disabled={catalogIdentityLocked}
+            options={[
+              { value: 'NONE', label: 'Только запись в журнале, без начисления' },
+              { value: 'PRODUCT', label: 'Товар — начислить и списать со склада' },
+              { value: 'SERVICE', label: 'Услуга — начислить по прайсу' },
+            ]}
+            onChange={(kind: HospitalRecordFormValues['catalogKind']) => {
+              form.setFieldsValue({
+                productId: undefined,
+                serviceId: undefined,
+                quantity: kind === 'NONE' ? undefined : 1,
+                stockQuantity: kind === 'PRODUCT' ? 1 : undefined,
+                unitPrice: undefined,
+              });
+            }}
+          />
+        </Form.Item>
+        {catalogKind === 'PRODUCT' ? (
+          <>
+            <Form.Item name="productId" label="Товар из каталога" rules={[{ required: true, message: 'Выберите товар' }]}>
+              <Select
+                showSearch
+                filterOption={false}
+                onSearch={setCatalogSearch}
+                loading={catalogQuery.isFetching}
+                disabled={catalogIdentityLocked}
+                placeholder="Начните вводить название, артикул или штрих-код"
+                options={mergeProductOptions(record, catalogQuery.data?.products).map((product) => ({
+                  value: product.id,
+                  label: `${product.title} · остаток ${product.stockRest ?? '—'} ${product.stockUnit ?? ''}`,
+                }))}
+                onChange={(productId) => {
+                  const product = catalogQuery.data?.products.find((item) => item.id === productId);
+                  if (!product) return;
+                  form.setFieldsValue({
+                    title: product.title,
+                    quantity: 1,
+                    stockQuantity: 1,
+                    unitPrice: Number(product.retailPrice),
+                  });
+                }}
+              />
+            </Form.Item>
+            <div className="form-grid two-columns">
+              <Form.Item name="stockQuantity" label={`Списать со склада, ${selectedProductWriteOffUnit(selectedProductId, record, catalogQuery.data?.products)}`} rules={[{ required: true, message: 'Укажите количество для списания' }]}>
+                <InputNumber min={0.001} precision={3} disabled={billingLocked} className="full-width" />
+              </Form.Item>
+              <Form.Item name="quantity" label={`Начислить клиенту, ${selectedProductBillingUnit(selectedProductId, record, catalogQuery.data?.products)}`} rules={[{ required: true, message: 'Укажите количество начислений' }]}>
+                <InputNumber min={0.001} precision={3} disabled={billingLocked} className="full-width" />
+              </Form.Item>
+              <Form.Item name="unitPrice" label={`Цена за 1 ${selectedProductBillingUnit(selectedProductId, record, catalogQuery.data?.products)}, ₽`} rules={[{ required: true, message: 'Укажите цену' }]}>
+                <InputNumber min={0} precision={2} disabled={billingLocked} className="full-width" />
+              </Form.Item>
+            </div>
+          </>
+        ) : null}
+        {catalogKind === 'SERVICE' ? (
+          <>
+            <Form.Item name="serviceId" label="Услуга из прайса" rules={[{ required: true, message: 'Выберите услугу' }]}>
+              <Select
+                showSearch
+                filterOption={false}
+                onSearch={setCatalogSearch}
+                loading={catalogQuery.isFetching}
+                disabled={catalogIdentityLocked}
+                placeholder="Начните вводить название услуги"
+                options={mergeServiceOptions(record, catalogQuery.data?.services).map((service) => ({
+                  value: service.id,
+                  label: `${service.title} · ${formatMoney(service.price)}`,
+                }))}
+                onChange={(serviceId) => {
+                  const service = catalogQuery.data?.services.find((item) => item.id === serviceId);
+                  if (!service) return;
+                  form.setFieldsValue({ title: service.title, quantity: 1, unitPrice: Number(service.price) });
+                }}
+              />
+            </Form.Item>
+            <div className="form-grid two-columns">
+              <Form.Item name="quantity" label="Количество услуг" rules={[{ required: true, message: 'Укажите количество' }]}>
+                <InputNumber min={0.001} precision={3} disabled={billingLocked} className="full-width" />
+              </Form.Item>
+              <Form.Item name="unitPrice" label="Цена за одну услугу, ₽" rules={[{ required: true, message: 'Укажите цену' }]}>
+                <InputNumber min={0} precision={2} disabled={billingLocked} className="full-width" />
+              </Form.Item>
+            </div>
+          </>
+        ) : null}
       </Form>
     </Modal>
   );
@@ -284,4 +518,50 @@ function normalizeHospitalRecord(values: CreateHospitalRecordInput): CreateHospi
     ...values,
     temperatureC: Math.round(Number(String(values.temperatureC).replace(',', '.')) * 10) / 10,
   };
+}
+
+function mergeProductOptions(
+  record: HospitalRecord | null,
+  products: HospitalCatalog['products'] | undefined,
+): HospitalCatalog['products'] {
+  const items = [...(products ?? [])];
+  const linked = record?.billItem?.product;
+  if (linked && !items.some((item) => item.id === linked.id)) {
+    items.unshift({
+      ...linked,
+      retailPrice: record?.billItem?.unitPrice ?? 0,
+      stockRest: '—',
+    });
+  }
+  return items;
+}
+
+function mergeServiceOptions(
+  record: HospitalRecord | null,
+  services: HospitalCatalog['services'] | undefined,
+): HospitalCatalog['services'] {
+  const items = [...(services ?? [])];
+  const linked = record?.billItem?.service;
+  if (linked && !items.some((item) => item.id === linked.id)) {
+    items.unshift({ ...linked, price: record?.billItem?.unitPrice ?? 0 });
+  }
+  return items;
+}
+
+function selectedProductWriteOffUnit(
+  productId: string | undefined,
+  record: HospitalRecord | null,
+  products: HospitalCatalog['products'] | undefined,
+) {
+  const product = mergeProductOptions(record, products).find((item) => item.id === productId);
+  return product?.writeOffUnit || product?.stockUnit || 'ед.';
+}
+
+function selectedProductBillingUnit(
+  productId: string | undefined,
+  record: HospitalRecord | null,
+  products: HospitalCatalog['products'] | undefined,
+) {
+  const product = mergeProductOptions(record, products).find((item) => item.id === productId);
+  return product?.billingUnit || product?.writeOffUnit || product?.stockUnit || 'ед.';
 }

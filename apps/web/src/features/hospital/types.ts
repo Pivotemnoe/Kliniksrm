@@ -18,6 +18,25 @@ export type HospitalResources = {
   boxes: HospitalBox[];
 };
 
+export type HospitalCatalog = {
+  products: Array<{
+    id: string;
+    title: string;
+    retailPrice: DecimalValue;
+    stockUnit: string | null;
+    writeOffUnit: string | null;
+    billingUnit: string | null;
+    packageQuantity: DecimalValue | null;
+    stockRest: DecimalValue;
+  }>;
+  services: Array<{
+    id: string;
+    title: string;
+    price: DecimalValue;
+    priceType: string;
+  }>;
+};
+
 export type HospitalStay = {
   id: string;
   sourceVisitId: string;
@@ -68,6 +87,31 @@ export type HospitalRecord = {
   temperatureC: DecimalValue | null;
   value: string | null;
   notes: string | null;
+  billItemId: string | null;
+  billItem?: {
+    id: string;
+    productId: string | null;
+    serviceId: string | null;
+    title: string;
+    quantity: DecimalValue;
+    stockQuantity: DecimalValue | null;
+    unitPrice: DecimalValue;
+    discount: DecimalValue;
+    totalAmount: DecimalValue;
+    product?: {
+      id: string;
+      title: string;
+      stockUnit: string | null;
+      writeOffUnit: string | null;
+      billingUnit: string | null;
+      packageQuantity: DecimalValue | null;
+    } | null;
+    service?: {
+      id: string;
+      title: string;
+      priceType: string;
+    } | null;
+  } | null;
   recordedBy?: {
     id: string;
     fullName: string;
@@ -93,4 +137,11 @@ export type CreateHospitalRecordInput = {
   temperatureC?: number;
   value?: string;
   notes?: string;
+  serviceId?: string;
+  productId?: string;
+  quantity?: number;
+  stockQuantity?: number;
+  unitPrice?: number;
 };
+
+export type UpdateHospitalRecordInput = Omit<Partial<CreateHospitalRecordInput>, 'serviceId' | 'productId'>;

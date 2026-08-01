@@ -113,7 +113,13 @@ export class AnimalsService {
   }
 
   async updateAnimal(animalId: string, dto: UpdateAnimalDto, actorId: string) {
-    await this.ensureAnimalExists(animalId);
+    const currentAnimal = await this.prisma.animal.findUnique({
+      where: { id: animalId },
+      select: { id: true, nickname: true },
+    });
+    if (!currentAnimal) {
+      throw new NotFoundException('Animal not found');
+    }
     if (dto.species !== undefined || dto.breed !== undefined) {
       await this.animalCatalogService.validateSelection(dto.species, dto.breed);
     }
@@ -141,7 +147,12 @@ export class AnimalsService {
       action: 'animal.update',
       entityType: 'Animal',
       entityId: animal.id,
-      metadata: { changedFields: Object.keys(dto) },
+      metadata: {
+        changedFields: Object.keys(dto),
+        ...(dto.nickname !== undefined && dto.nickname !== currentAnimal.nickname
+          ? { nickname: { from: currentAnimal.nickname, to: dto.nickname } }
+          : {}),
+      },
     });
 
     return animal;
