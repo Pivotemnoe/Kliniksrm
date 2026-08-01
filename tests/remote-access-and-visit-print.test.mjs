@@ -107,7 +107,7 @@ test('одноразовое подключение не содержит отк
   assert.doesNotMatch(migration, /DROP TABLE|TRUNCATE|DELETE FROM "(Owner|Animal|Visit|Bill|Product)"/i);
 });
 
-test('внешний шлюз является транзитным и не использует иностранный сервер', async () => {
+test('внешний шлюз не хранит данные, а иностранный узел остаётся слепым TCP-транзитом', async () => {
   const [nginx, readme] = await Promise.all([
     read('deploy/staff-gateway/nginx-staff-https.conf.template'),
     read('deploy/staff-gateway/README.md'),
@@ -116,6 +116,8 @@ test('внешний шлюз является транзитным и не ис
   assert.match(nginx, /proxy_pass http:\/\/127\.0\.0\.1:23000/);
   assert.match(nginx, /X-TemichevVet-Remote-Access "1"/);
   assert.match(nginx, /__REMOTE_ACCESS_GATEWAY_SECRET__/);
+  assert.match(nginx, /access_log off/);
   assert.match(readme, /не хранит медицинские данные/);
-  assert.match(readme, /5\.129\.239\.104` не используется/);
+  assert.match(readme, /5\.129\.239\.104` используется только как слепой TCP-транзит/);
+  assert.match(readme, /нет TLS-терминации, ключа внутреннего туннеля, базы, документов или журналов CRM/);
 });
