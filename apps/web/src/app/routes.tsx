@@ -28,6 +28,8 @@ import { QueueCardPage } from '../features/queue/QueueCardPage';
 import { QueuePage } from '../features/queue/QueuePage';
 import { QueueTvPage } from '../features/queue/QueueTvPage';
 import { ReportsPage } from '../features/reports/ReportsPage';
+import { RemoteAccessEnrollmentPage } from '../features/remoteAccess/RemoteAccessEnrollmentPage';
+import { RemoteAccessSettingsPage } from '../features/remoteAccess/RemoteAccessSettingsPage';
 import { PayrollPage } from '../features/payroll/PayrollPage';
 import { BusinessPage } from '../features/business/BusinessPage';
 import { DailyFinancePage } from '../features/business/DailyFinancePage';
@@ -69,6 +71,10 @@ export const routes: RouteObject[] = [
   {
     path: '/online',
     element: <PublicOnlineRequestPage />,
+  },
+  {
+    path: '/remote/enroll',
+    element: <RemoteAccessEnrollmentPage />,
   },
   {
     element: <ProtectedRoute />,
@@ -131,6 +137,7 @@ export const routes: RouteObject[] = [
           { path: '/settings/finance', element: <FinanceSettingsPage /> },
           { path: '/settings/audit', element: <AuditLogsPage /> },
           { path: '/settings/system', element: <SystemSettingsPage /> },
+          { path: '/settings/remote-access', element: <RemoteAccessSettingsPage /> },
           { path: '/settings/support', element: <SupportPage /> },
           { path: '/settings/import', element: <VetafImportPage /> },
           { path: '/messages', element: <MessagesPage /> },

@@ -14,6 +14,7 @@ import { formatDate, formatDateTime } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
 import { AnimalStatusTag } from '../animals/animalStatus';
 import { admitExistingHospitalStay, getHospitalResources } from '../hospital/hospital.api';
+import { getOrganizationSettings } from '../organization/organization.api';
 import { VisitDocumentsTab } from './VisitDocumentsTab';
 import { VisitExamTab } from './VisitExamTab';
 import { VisitHistoryTab } from './VisitHistoryTab';
@@ -46,6 +47,7 @@ export function VisitCardPage() {
     queryFn: getHospitalResources,
     enabled: canManageHospital,
   });
+  const organizationQuery = useQuery({ queryKey: ['organization'], queryFn: getOrganizationSettings });
   const hospitalAdmissionMutation = useMutation({
     mutationFn: (boxId: string) => admitExistingHospitalStay(visitId!, { hospitalBoxId: boxId }),
     onSuccess: async (stay) => {
@@ -212,10 +214,10 @@ export function VisitCardPage() {
             </div>
             <div className="context-section-body">
               <Space wrap>
-                <Button icon={<PrinterOutlined />} onClick={() => printVisitSheet(visit)}>
+                <Button icon={<PrinterOutlined />} onClick={() => printVisitSheet(visit, organizationQuery.data)}>
                   Лист приёма
                 </Button>
-                <Button icon={<PrinterOutlined />} onClick={() => printVisitRecommendation(visit)}>
+                <Button icon={<PrinterOutlined />} onClick={() => printVisitRecommendation(visit, undefined, organizationQuery.data)}>
                   Лист назначений
                 </Button>
               </Space>
@@ -286,7 +288,7 @@ export function VisitCardPage() {
                 {
                   key: 'recommendation',
                   label: 'Рекомендации',
-                  children: <VisitRecommendationTab visit={visit} canManage={canManage} locked={Boolean(locked)} />,
+                  children: <VisitRecommendationTab visit={visit} canManage={canManage} locked={Boolean(locked)} organization={organizationQuery.data} />,
                 },
                 {
                   key: 'services',

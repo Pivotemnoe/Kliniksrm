@@ -224,10 +224,12 @@ function Remove-RuntimeEnvValue($Key) {
 }
 
 function Set-EnvValue($Key, $Value) {
-  $content = Get-Content $EnvFile -Raw
   $line = "$Key=$Value"
 
-  $existing = Get-Content $EnvFile | Where-Object { $_ -match "^$([Regex]::Escape($Key))=" } | Select-Object -Last 1
+  $existing = $null
+  foreach ($candidate in [IO.File]::ReadLines($EnvFile)) {
+    if ($candidate -match "^$([Regex]::Escape($Key))=") { $existing = $candidate }
+  }
   if ($existing -eq $line) {
     [Environment]::SetEnvironmentVariable($Key, [string]$Value, "Process")
     Remove-RuntimeEnvValue $Key
@@ -240,11 +242,32 @@ function Set-EnvValue($Key, $Value) {
       $envItem.IsReadOnly = $false
     }
 
-    if ($content -match "(?m)^$([Regex]::Escape($Key))=") {
-      $content = [Regex]::Replace($content, "(?m)^$([Regex]::Escape($Key))=.*$", $line)
-      [IO.File]::WriteAllText($EnvFile, $content, $Utf8NoBom)
-    } else {
-      [IO.File]::AppendAllText($EnvFile, [Environment]::NewLine + $line, $Utf8NoBom)
+    $tempEnvFile = "$EnvFile.temichevvet-start.tmp"
+    $reader = $null
+    $writer = $null
+    $found = $false
+    try {
+      $reader = New-Object IO.StreamReader -ArgumentList $EnvFile, $true
+      $writer = New-Object IO.StreamWriter -ArgumentList $tempEnvFile, $false, $Utf8NoBom
+      while (($currentLine = $reader.ReadLine()) -ne $null) {
+        if ($currentLine -match "^$([Regex]::Escape($Key))=") {
+          if (!$found) {
+            $writer.WriteLine($line)
+            $found = $true
+          }
+        } else {
+          $writer.WriteLine($currentLine)
+        }
+      }
+      if (!$found) { $writer.WriteLine($line) }
+    } finally {
+      if ($reader) { $reader.Dispose() }
+      if ($writer) { $writer.Dispose() }
+    }
+    try {
+      [IO.File]::Copy($tempEnvFile, $EnvFile, $true)
+    } finally {
+      if (Test-Path $tempEnvFile) { Remove-Item -LiteralPath $tempEnvFile -Force }
     }
     [Environment]::SetEnvironmentVariable($Key, [string]$Value, "Process")
     Remove-RuntimeEnvValue $Key

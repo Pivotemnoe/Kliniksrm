@@ -1,13 +1,15 @@
 import { appConfig } from '../../app/config';
 import { formatDateTime } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
+import type { OrganizationSettings } from '../organization/types';
 import { Visit, VisitRecommendationInput, visitTypeLabels } from './types';
 
-export function printVisitSheet(visit: Visit) {
+export function printVisitSheet(visit: Visit, organization?: OrganizationSettings | null) {
   openPrintWindow({
     title: `Лист приёма ${visit.animal.nickname}`,
     heading: 'Лист приёма',
     visit,
+    organization,
     sections: [
       { title: 'Анамнез', body: visit.exam?.anamnesis },
       { title: 'Осмотр', body: visit.exam?.examination },
@@ -27,11 +29,16 @@ export function printVisitSheet(visit: Visit) {
   });
 }
 
-export function printVisitRecommendation(visit: Visit, recommendation?: VisitRecommendationInput) {
+export function printVisitRecommendation(
+  visit: Visit,
+  recommendation?: VisitRecommendationInput,
+  organization?: OrganizationSettings | null,
+) {
   openPrintWindow({
     title: `Назначения ${visit.animal.nickname}`,
     heading: 'Лист назначений',
     visit,
+    organization,
     sections: [
       { title: 'Диагнозы', body: formatDiagnoses(visit) },
       { title: 'План лечения', body: recommendation?.treatmentPlan ?? visit.recommendation?.treatmentPlan },
@@ -50,12 +57,14 @@ function openPrintWindow({
   title,
   heading,
   visit,
+  organization,
   sections,
   compactMeta = [],
 }: {
   title: string;
   heading: string;
   visit: Visit;
+  organization?: OrganizationSettings | null;
   sections: PrintSection[];
   compactMeta?: Array<[string, string]>;
 }) {
@@ -65,9 +74,11 @@ function openPrintWindow({
   }
 
   const animalLine = [formatSpecies(visit.animal.species), visit.animal.nickname, visit.animal.breed].filter(Boolean).join(' · ');
-  const ownerPhone = visit.owner.phone ?? visit.owner.extraPhone ?? '—';
   const doctor = visit.employee?.fullName ?? '—';
-  const printedAt = formatDateTime(new Date().toISOString());
+  const logoUrl = organization?.logoUrl ? new URL(organization.logoUrl, window.location.href).href : null;
+  const clinicName = organization?.displayName?.trim() || appConfig.brandName;
+  const clinicDescription = organization?.orgType?.trim() || 'Ветеринарная клиника';
+  const clinicDetails = formatOrganizationDetails(organization);
   const renderedSections = sections
     .filter((section) => section.body !== undefined && section.body !== null && String(section.body).trim() !== '')
     .map(
@@ -91,33 +102,38 @@ function openPrintWindow({
   <title>${escapeHtml(title)}</title>
   <style>
     * { box-sizing: border-box; }
-    body { margin: 0; color: #111827; background: #ffffff; font: 14px/1.45 Arial, sans-serif; }
-    .page { max-width: 860px; margin: 0 auto; padding: 26px 34px 40px; }
-    .header { display: grid; grid-template-columns: 72px 1fr; gap: 16px; align-items: center; padding-bottom: 16px; border-bottom: 2px solid #1f2937; }
-    .logo { width: 68px; height: 68px; object-fit: contain; }
-    .brand { font-size: 23px; font-weight: 700; }
+    @page { size: A4; margin: 0; }
+    body { margin: 0; color: #111827; background: #ffffff; font: 13px/1.4 Arial, sans-serif; }
+    .page { max-width: 860px; margin: 0 auto; padding: 10mm 12mm 13mm; }
+    .header { padding-bottom: 10px; border-bottom: 1.5px solid #1f2937; }
+    .header.with-logo { display: grid; grid-template-columns: 76px 1fr; gap: 13px; align-items: center; }
+    .logo-box { display: grid; place-items: center; width: 72px; height: 72px; }
+    .logo { display: block; width: 72px; height: 72px; object-fit: contain; }
+    .brand { font-size: 19px; line-height: 1.15; font-weight: 700; }
+    .clinic-details { margin-top: 3px; font-size: 11px; line-height: 1.3; }
     .muted { color: #6b7280; }
-    h1 { margin: 22px 0 14px; font-size: 25px; line-height: 1.2; }
-    .meta { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 20px; margin: 0 0 16px; padding: 14px; border: 1px solid #d1d5db; border-radius: 8px; }
+    h1 { margin: 14px 0 10px; font-size: 22px; line-height: 1.2; }
+    .meta { display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px 18px; margin: 0 0 12px; padding: 11px 12px; border: 1px solid #d1d5db; border-radius: 7px; }
     .meta-row span, .compact-meta span { display: block; color: #6b7280; font-size: 11px; text-transform: uppercase; }
     .meta-row strong, .compact-meta strong { display: block; margin-top: 2px; font-size: 14px; }
-    .compact-meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
-    .compact-meta div { padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 8px; }
-    .section { margin-top: 14px; page-break-inside: avoid; }
-    .section h2 { margin: 0 0 7px; font-size: 16px; }
-    .text { min-height: 48px; padding: 11px 12px; border: 1px solid #e5e7eb; border-radius: 8px; white-space: pre-wrap; }
-    .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 40px; }
-    .signature { padding-top: 28px; border-top: 1px solid #111827; color: #374151; font-size: 13px; }
-    @media print { .page { padding: 14mm 13mm; } }
+    .compact-meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+    .compact-meta div { padding: 8px 10px; border: 1px solid #e5e7eb; border-radius: 7px; }
+    .section { margin-top: 11px; page-break-inside: avoid; }
+    .section h2 { margin: 0 0 5px; font-size: 15px; }
+    .text { min-height: 38px; padding: 9px 10px; border: 1px solid #e5e7eb; border-radius: 7px; white-space: pre-wrap; }
+    .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 31px; page-break-inside: avoid; }
+    .signature { padding-top: 22px; border-top: 1px solid #111827; color: #374151; font-size: 12px; }
+    @media print { html, body { width: 210mm; } .page { padding: 10mm 12mm 13mm; } }
   </style>
 </head>
 <body>
   <main class="page">
-    <section class="header">
-      <img class="logo" src="${escapeHtml(appConfig.logoUrl)}" alt="${escapeHtml(appConfig.brandName)}" />
+    <section class="header${logoUrl ? ' with-logo' : ''}">
+      ${logoUrl ? `<div class="logo-box"><img class="logo" src="${escapeHtml(logoUrl)}" alt="Логотип клиники" /></div>` : ''}
       <div>
-        <div class="brand">${escapeHtml(appConfig.brandName)}</div>
-        <div class="muted">Документ приёма ветеринарной клиники</div>
+        <div class="brand">${escapeHtml(clinicName)}</div>
+        <div class="muted">${escapeHtml(clinicDescription)} · документ приёма</div>
+        ${clinicDetails ? `<div class="clinic-details">${escapeHtml(clinicDetails)}</div>` : ''}
       </div>
     </section>
     <h1>${escapeHtml(heading)}</h1>
@@ -125,10 +141,7 @@ function openPrintWindow({
       <div class="meta-row"><span>Дата приёма</span><strong>${escapeHtml(formatDateTime(visit.startedAt))}</strong></div>
       <div class="meta-row"><span>Врач</span><strong>${escapeHtml(doctor)}</strong></div>
       <div class="meta-row"><span>Владелец</span><strong>${escapeHtml(visit.owner.fullName)}</strong></div>
-      <div class="meta-row"><span>Телефон</span><strong>${escapeHtml(ownerPhone)}</strong></div>
       <div class="meta-row"><span>Пациент</span><strong>${escapeHtml(animalLine || '—')}</strong></div>
-      <div class="meta-row"><span>Напечатано</span><strong>${escapeHtml(printedAt)}</strong></div>
-      <div class="meta-row"><span>Напечатал</span><strong>${escapeHtml(doctor)}</strong></div>
     </section>
     ${compactMetaMarkup}
     ${renderedSections || '<section class="section"><div class="text">Данные приёма пока не заполнены</div></section>'}
@@ -137,10 +150,50 @@ function openPrintWindow({
       <div class="signature">Подпись врача</div>
     </section>
   </main>
-  <script>window.print();</script>
+  <script>
+    (() => {
+      const logo = document.querySelector('.logo');
+      let printStarted = false;
+
+      const printWhenReady = () => {
+        if (printStarted) return;
+        printStarted = true;
+        window.setTimeout(() => window.print(), 80);
+      };
+      const hideBrokenLogo = () => {
+        if (logo?.parentElement) logo.parentElement.remove();
+        document.querySelector('.header')?.classList.remove('with-logo');
+        printWhenReady();
+      };
+
+      if (!logo) {
+        printWhenReady();
+      } else if (logo.complete) {
+        logo.naturalWidth > 0 ? printWhenReady() : hideBrokenLogo();
+      } else {
+        logo.addEventListener('load', printWhenReady, { once: true });
+        logo.addEventListener('error', hideBrokenLogo, { once: true });
+        window.setTimeout(() => {
+          if (!logo.complete || logo.naturalWidth === 0) hideBrokenLogo();
+        }, 2000);
+      }
+    })();
+  </script>
 </body>
 </html>`);
   printWindow.document.close();
+}
+
+function formatOrganizationDetails(organization?: OrganizationSettings | null) {
+  if (!organization) {
+    return '';
+  }
+
+  const legalIdentity = organization.legalName?.trim() || organization.orgType?.trim() || null;
+  const inn = organization.inn?.trim() ? `ИНН ${organization.inn.trim()}` : null;
+  const address = (organization.postalAddress || organization.legalAddress)?.trim() || null;
+
+  return [legalIdentity, inn, address].filter(Boolean).join(' · ');
 }
 
 function formatDiagnoses(visit: Visit) {

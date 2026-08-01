@@ -20,10 +20,10 @@ export function parseCookie(cookieHeader: string | string[] | undefined, name: s
   return null;
 }
 
-export function getCookieOptions(maxAgeMs?: number) {
+export function getCookieOptions(maxAgeMs?: number, forceSecure = false) {
   return {
     httpOnly: true,
-    secure: shouldUseSecureSessionCookie(),
+    secure: forceSecure || shouldUseSecureSessionCookie(),
     sameSite: 'strict' as const,
     path: '/',
     ...(maxAgeMs ? { maxAge: maxAgeMs } : {}),

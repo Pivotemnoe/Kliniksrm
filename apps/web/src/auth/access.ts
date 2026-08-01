@@ -17,6 +17,7 @@ const routeAccessRules: RouteAccessRule[] = [
   { path: '/settings/finance', anyOf: ['settings.read', 'settings.manage'] },
   { path: '/settings/audit', anyOf: ['audit.read'] },
   { path: '/settings/system', anyOf: ['backups.manage'] },
+  { path: '/settings/remote-access', anyOf: ['remote_access.read', 'remote_access.manage'] },
   { path: '/settings/support', anyOf: ['support.read', 'support.manage', 'license.manage', 'acceptance.manage'] },
   { path: '/settings/import', anyOf: ['owners.manage', 'stock.manage'] },
   {
@@ -33,6 +34,8 @@ const routeAccessRules: RouteAccessRule[] = [
       'laboratory.manage',
       'audit.read',
       'backups.manage',
+      'remote_access.read',
+      'remote_access.manage',
       'support.read',
       'support.manage',
       'license.manage',

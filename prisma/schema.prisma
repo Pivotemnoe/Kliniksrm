@@ -297,6 +297,11 @@ enum ServerAcceptanceStatus {
   REJECTED
 }
 
+enum SessionAccessType {
+  LOCAL
+  REMOTE
+}
+
 model User {
   id              String    @id @default(uuid())
   email           String?   @unique
@@ -360,6 +365,9 @@ model Employee {
   preparedAcceptances       ServerAcceptance[]           @relation("ServerAcceptancePreparer")
   acceptedAcceptances       ServerAcceptance[]           @relation("ServerAcceptanceAcceptor")
   uploadedFiles             FileObject[]                 @relation("FileUploader")
+  remoteAccessInvitations   RemoteAccessInvitation[]     @relation("RemoteAccessInvitationEmployee")
+  createdRemoteInvitations  RemoteAccessInvitation[]     @relation("RemoteAccessInvitationCreator")
+  remoteAccessDevices       RemoteAccessDevice[]
   createdAt                 DateTime                     @default(now())
   updatedAt                 DateTime                     @updatedAt
 
@@ -436,15 +444,19 @@ model EmployeePermissionOverride {
 }
 
 model Session {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  expiresAt DateTime
-  ipAddress String?
-  userAgent String?
-  createdAt DateTime @default(now())
+  id             String            @id @default(uuid())
+  userId         String
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessType     SessionAccessType @default(LOCAL)
+  remoteDeviceId String?
+  remoteDevice   RemoteAccessDevice? @relation(fields: [remoteDeviceId], references: [id], onDelete: SetNull)
+  expiresAt      DateTime
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime          @default(now())
 
   @@index([userId])
+  @@index([remoteDeviceId])
   @@index([expiresAt])
 }
 
@@ -478,11 +490,73 @@ model Organization {
   account             String?
   corrAccount         String?
   defaultBillDueDays  Int?
+  logoStorageKey      String?
+  logoOriginalName    String?
+  logoMimeType        String?
+  logoSizeBytes       Int?
+  logoUpdatedAt       DateTime?
   offices             ClinicOffice[]
   businessDailyCloses BusinessDailyClose[]
   installation        ClinicInstallation?
+  remoteAccessPolicy  RemoteAccessPolicy?
+  remoteInvitations   RemoteAccessInvitation[]
+  remoteDevices       RemoteAccessDevice[]
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
+}
+
+model RemoteAccessPolicy {
+  id                     String       @id @default(uuid())
+  organizationId         String       @unique
+  organization           Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  enabled                Boolean      @default(false)
+  requireTrustedDevice   Boolean      @default(true)
+  enrollmentTtlMinutes   Int          @default(10)
+  idleTimeoutMinutes     Int          @default(15)
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+}
+
+model RemoteAccessInvitation {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId     String
+  employee       Employee     @relation("RemoteAccessInvitationEmployee", fields: [employeeId], references: [id], onDelete: Cascade)
+  createdById    String?
+  createdBy      Employee?    @relation("RemoteAccessInvitationCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  tokenHash      String       @unique
+  deviceName     String?
+  expiresAt      DateTime
+  usedAt         DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([employeeId, createdAt])
+  @@index([expiresAt])
+}
+
+model RemoteAccessDevice {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId     String
+  employee       Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  tokenHash      String       @unique
+  name           String
+  userAgent      String?
+  lastIpAddress  String?
+  lastSeenAt     DateTime?
+  trustedAt      DateTime     @default(now())
+  revokedAt      DateTime?
+  sessions       Session[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId, revokedAt])
+  @@index([employeeId, revokedAt])
+  @@index([lastSeenAt])
 }
 
 model ClinicInstallation {

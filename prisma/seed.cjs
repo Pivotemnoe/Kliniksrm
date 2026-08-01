@@ -53,6 +53,8 @@ const permissions = [
   ['roles.manage', 'Назначение ролей и прав'],
   ['audit.read', 'Просмотр журнала действий'],
   ['backups.manage', 'Резервные копии'],
+  ['remote_access.read', 'Просмотр удалённого доступа'],
+  ['remote_access.manage', 'Управление удалённым доступом'],
   ['support.read', 'Просмотр обращений в поддержку'],
   ['support.manage', 'Создание и ведение обращений в поддержку'],
   ['license.manage', 'Управление лицензией установки'],
@@ -97,6 +99,7 @@ const roles = [
       'daily_finance.read',
       'daily_finance.manage',
       'daily_finance.submit',
+      'remote_access.read',
     ],
   ],
   [

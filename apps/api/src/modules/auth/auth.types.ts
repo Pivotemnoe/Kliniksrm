@@ -14,6 +14,8 @@ export type AuthEmployee = {
 export type AuthContext = {
   sessionId: string;
   userId: string;
+  accessType: 'LOCAL' | 'REMOTE';
+  remoteDeviceId: string | null;
   employee: AuthEmployee;
 };
 

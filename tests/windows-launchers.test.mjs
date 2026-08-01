@@ -17,7 +17,7 @@ test('Windows-скрипты сохраняют конфигурацию в UTF-
   for (const source of [launcher, installer]) {
     assert.match(source, /New-Object System\.Text\.UTF8Encoding(?:\(\$false\)| -ArgumentList \$false)/);
     assert.match(source, /\[IO\.File\]::WriteAllText/);
-    assert.match(source, /\[IO\.File\]::AppendAllText/);
+    assert.match(source, /(?:\[IO\.File\]::AppendAllText|IO\.StreamWriter)/);
   }
 });
 
@@ -71,7 +71,7 @@ test('чистая Windows-установка публикует только в
     readProjectFile('docker-compose.yml'),
   ]);
 
-  assert.match(installer, /if \(!\$isExistingInstall\) \{[\s\S]*Set-InstalledEnvValue "WEB_BIND_ADDR" "0\.0\.0\.0"/);
+  assert.match(installer, /Set-InstalledEnvValue "WEB_BIND_ADDR" "0\.0\.0\.0"/);
   assert.match(compose, /\$\{WEB_BIND_ADDR:-127\.0\.0\.1\}:\$\{WEB_PORT:-3000\}:80/);
   assert.match(compose, /127\.0\.0\.1:\$\{API_HOST_PORT:-4000\}:4000/);
   assert.match(compose, /127\.0\.0\.1:\$\{POSTGRES_PORT:-5433\}:5432/);
@@ -80,6 +80,49 @@ test('чистая Windows-установка публикует только в
   assert.match(installer, /New-NetFirewallRule[\s\S]*-LocalPort \$WebPort[\s\S]*-RemoteAddress LocalSubnet[\s\S]*-Profile Private/);
   assert.match(installer, /Docker Desktop Backend/);
   assert.match(installer, /Set-NetFirewallRule -Name \$dockerRule\.Name -Profile Public/);
+});
+
+test('portable LAN repair only republishes web and preserves stateful services', async () => {
+  const repair = await readProjectFile('scripts/portable/repair-clinic-lan-windows.ps1');
+  const launcher = await readProjectFile('scripts/portable/repair-clinic-lan-windows.bat');
+  const builder = await readProjectFile('scripts/create-portable-flash.sh');
+
+  assert.match(repair, /Set-InstalledEnvValue -Key "WEB_BIND_ADDR" -Value "0\.0\.0\.0"/);
+  assert.match(repair, /RemoteAddress LocalSubnet/);
+  assert.match(repair, /Profile Private/);
+  assert.match(repair, /docker compose up -d --no-deps --force-recreate web/);
+  assert.doesNotMatch(repair, /docker compose down/);
+  assert.doesNotMatch(repair, /docker volume/);
+  assert.match(launcher, /repair-clinic-lan-windows\.ps1/);
+  assert.match(builder, /Исправить доступ с рабочих мест - Windows\.bat/);
+});
+
+test('portable bundle exposes a clear create-workstation command and keeps the old alias', async () => {
+  const builder = await readProjectFile('scripts/create-portable-flash.sh');
+
+  assert.match(builder, /Создать рабочее место - Windows\.bat/);
+  assert.match(builder, /Подключить рабочее место - Windows\.bat/);
+  assert.match(builder, /start-workstation-windows\.bat/);
+});
+
+test('Windows restore refreshes the installed transfer script from the flash drive', async () => {
+  const restoreLauncher = await readProjectFile('scripts/portable/restore-transfer-windows.bat');
+
+  assert.match(restoreLauncher, /PORTABLE_SCRIPT=%~dp0CRM\\scripts\\restore-clinic-transfer\.ps1/);
+  assert.match(restoreLauncher, /copy \/Y "%PORTABLE_SCRIPT%" "%INSTALLED_SCRIPT%"/);
+  assert.match(restoreLauncher, /copy \/Y "%PORTABLE_START_SCRIPT%" "%INSTALLED_START_SCRIPT%"/);
+  assert.match(restoreLauncher, /актуальный скрипт восстановления с флешки/);
+});
+
+test('Windows launcher and portable installer update .env without loading the whole file into memory', async () => {
+  const starter = await readProjectFile('scripts/start-clinic-server.ps1');
+  const installer = await readProjectFile('scripts/portable/install-windows.ps1');
+
+  for (const source of [starter, installer]) {
+    assert.doesNotMatch(source, /Get-Content \$(?:EnvFile|InstalledEnvFile) -Raw/);
+    assert.match(source, /IO\.StreamReader/);
+    assert.match(source, /\[IO\.File\]::Copy\(\$tempEnvFile, \$(?:EnvFile|InstalledEnvFile), \$true\)/);
+  }
 });
 
 test('чистая Windows-установка тихо проверяет ещё не созданные Docker-объекты', async () => {

@@ -45,7 +45,10 @@ $ApplicationSettingKeys = @(
 
 function Get-EnvValue($Key, $Fallback) {
   if (!(Test-Path $EnvFile)) { return $Fallback }
-  $line = Get-Content $EnvFile | Where-Object { $_ -match "^$([Regex]::Escape($Key))=" } | Select-Object -Last 1
+  $line = $null
+  foreach ($candidate in [IO.File]::ReadLines($EnvFile)) {
+    if ($candidate -match "^$([Regex]::Escape($Key))=") { $line = $candidate }
+  }
   if (!$line) { return $Fallback }
   $value = $line.Substring($Key.Length + 1)
   if ([string]::IsNullOrWhiteSpace($value)) { return $Fallback }
@@ -58,19 +61,104 @@ function Get-BackupDirectory {
   return Join-Path $RootDir.Path ($configured -replace '^\.[/\\]', '')
 }
 
+function Invoke-DockerQuiet {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string[]]$Arguments,
+    [string]$FailureMessage
+  )
+
+  $previousErrorActionPreference = $ErrorActionPreference
+  try {
+    # Windows PowerShell 5 converts normal Docker progress written to stderr
+    # (for example, "Container ... Stopping") into NativeCommandError when the
+    # script-wide preference is Stop. Capture it and decide from the real exit
+    # code instead.
+    $ErrorActionPreference = "Continue"
+    & docker @Arguments 2>&1 | Out-Null
+    $exitCode = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $previousErrorActionPreference
+  }
+
+  if ($exitCode -ne 0) {
+    if ([string]::IsNullOrWhiteSpace($FailureMessage)) { $FailureMessage = "Команда Docker завершилась с ошибкой." }
+    throw $FailureMessage
+  }
+}
+
+function Invoke-DockerCapture {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string[]]$Arguments,
+    [string]$FailureMessage
+  )
+
+  $previousErrorActionPreference = $ErrorActionPreference
+  try {
+    $ErrorActionPreference = "Continue"
+    $output = @(& docker @Arguments 2>&1 | ForEach-Object { $_.ToString() })
+    $exitCode = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $previousErrorActionPreference
+  }
+
+  if ($exitCode -ne 0) {
+    if ([string]::IsNullOrWhiteSpace($FailureMessage)) { $FailureMessage = "Команда Docker завершилась с ошибкой." }
+    throw $FailureMessage
+  }
+  return $output
+}
+
+function Get-MinIOUserFileCount {
+  $listing = Invoke-DockerCapture `
+    -Arguments @("exec", "clinic-crm-minio", "sh", "-c", "ls -laR /data") `
+    -FailureMessage "Не удалось проверить хранилище документов MinIO."
+
+  $count = 0L
+  $insideSystemDirectory = $false
+  foreach ($line in $listing) {
+    if ($line -match '^(/data[^:]*):$') {
+      $insideSystemDirectory = $Matches[1] -like "/data/.minio.sys*"
+      continue
+    }
+    if (!$insideSystemDirectory -and $line -match '^-[rwx-]{9}\s') {
+      $count++
+    }
+  }
+  return $count
+}
+
 function Set-EnvValue($Key, $Value) {
   if (!(Test-Path $EnvFile)) { throw "Файл настроек нового компьютера не найден: $EnvFile" }
-  $content = Get-Content $EnvFile -Raw
   $line = "$Key=$Value"
-  if ($content -match "(?m)^$([Regex]::Escape($Key))=") {
-    $content = [Regex]::Replace(
-      $content,
-      "(?m)^$([Regex]::Escape($Key))=.*$",
-      [Text.RegularExpressions.MatchEvaluator]{ param($match) $line }
-    )
-    [IO.File]::WriteAllText($EnvFile, $content, $Utf8NoBom)
-  } else {
-    [IO.File]::AppendAllText($EnvFile, [Environment]::NewLine + $line, $Utf8NoBom)
+  $tempEnvFile = "$EnvFile.temichevvet-transfer.tmp"
+  $reader = $null
+  $writer = $null
+  $found = $false
+  try {
+    $reader = New-Object IO.StreamReader -ArgumentList $EnvFile, $true
+    $writer = New-Object IO.StreamWriter -ArgumentList $tempEnvFile, $false, $Utf8NoBom
+    while (($currentLine = $reader.ReadLine()) -ne $null) {
+      if ($currentLine -match "^$([Regex]::Escape($Key))=") {
+        if (!$found) {
+          $writer.WriteLine($line)
+          $found = $true
+        }
+      } else {
+        $writer.WriteLine($currentLine)
+      }
+    }
+    if (!$found) { $writer.WriteLine($line) }
+  } finally {
+    if ($reader) { $reader.Dispose() }
+    if ($writer) { $writer.Dispose() }
+  }
+
+  try {
+    [IO.File]::Copy($tempEnvFile, $EnvFile, $true)
+  } finally {
+    if (Test-Path $tempEnvFile) { Remove-Item -LiteralPath $tempEnvFile -Force }
   }
 }
 
@@ -113,6 +201,12 @@ foreach ($container in @("clinic-crm-postgres", "clinic-crm-redis", "clinic-crm-
   if ($LASTEXITCODE -ne 0) { throw "Не найден контейнер $container. Сначала установите и один раз запустите TemichevVet на новом компьютере." }
 }
 
+# Recover safely from an earlier interrupted attempt before performing any
+# checks. This starts existing containers only and never recreates volumes.
+Invoke-DockerQuiet `
+  -Arguments @("compose", "up", "-d", "postgres", "redis", "minio") `
+  -FailureMessage "Не удалось запустить PostgreSQL, Redis и MinIO нового компьютера перед восстановлением."
+
 $dbUser = Get-EnvValue "POSTGRES_USER" "clinic_crm"
 $dbName = Get-EnvValue "POSTGRES_DB" "clinic_crm"
 $TargetMustBeEmptyFields = @(
@@ -129,11 +223,9 @@ $targetCountsJson = ($countsQuery | docker exec -i clinic-crm-postgres psql -U $
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($targetCountsJson)) { throw "Не удалось проверить целевую базу." }
 $targetCountsBefore = $targetCountsJson | ConvertFrom-Json
 $nonEmptyTargetFields = @($TargetMustBeEmptyFields | Where-Object { [long]$targetCountsBefore.$_ -gt 0 })
-if ($nonEmptyTargetFields.Count -gt 0) {
-  throw "На целевом компьютере уже есть рабочие данные ($($nonEmptyTargetFields -join ', ')). Восстановление разрешено только в новую пустую базу."
-}
 
 $temp = Join-Path ([IO.Path]::GetTempPath()) "TemichevVet-restore-$([Guid]::NewGuid().ToString('N'))"
+$servicesStopped = $false
 New-Item -ItemType Directory -Path $temp | Out-Null
 try {
   & tar.exe -xzf $Archive -C $temp
@@ -154,38 +246,73 @@ try {
     }
   }
 
+  $resumeMode = $false
+  $targetBackupDir = Get-BackupDirectory
+  $targetEnvSnapshot = $null
+  $targetDatabaseSnapshot = $null
+  if ($nonEmptyTargetFields.Count -gt 0) {
+    $resumeMismatches = @($ComparisonCountFields | Where-Object {
+      [long]$manifest.counts.$_ -ne [long]$targetCountsBefore.$_
+    })
+    if ($resumeMismatches.Count -gt 0) {
+      throw "На целевом компьютере уже есть данные, но они не совпадают с архивом ($($resumeMismatches -join ', ')). Автоматическое продолжение запрещено."
+    }
+
+    $latestEnvSnapshot = Get-ChildItem -Path $targetBackupDir -Filter "target-before-transfer-*.env" -File -ErrorAction SilentlyContinue |
+      Sort-Object LastWriteTime -Descending |
+      Select-Object -First 1
+    if (!$latestEnvSnapshot) {
+      throw "База уже совпадает с архивом, но не найдена страховочная копия настроек TECNO. Автоматическое продолжение остановлено."
+    }
+    $targetEnvSnapshot = $latestEnvSnapshot.FullName
+    $targetDatabaseSnapshot = [IO.Path]::ChangeExtension($targetEnvSnapshot, ".dump")
+    if (!(Test-Path $targetDatabaseSnapshot -PathType Leaf)) {
+      throw "Не найдена парная страховочная копия базы TECNO: $targetDatabaseSnapshot"
+    }
+
+    Copy-Item -Force -Path $targetEnvSnapshot -Destination $EnvFile
+    $resumeMode = $true
+    Write-Host "Обнаружено ранее прерванное восстановление: контрольные количества PostgreSQL уже совпадают с архивом."
+    Write-Host "Чистые настройки TECNO восстановлены из страховочной копии. Продолжаю с каналов связи, файлов и запуска приложения."
+  }
+
   docker cp (Join-Path $temp "postgres.dump") "clinic-crm-postgres:/tmp/temichevvet-transfer.dump"
   if ($LASTEXITCODE -ne 0) { throw "Копия PostgreSQL не передана для предварительной проверки." }
   docker exec clinic-crm-postgres pg_restore --list /tmp/temichevvet-transfer.dump *> $null
   if ($LASTEXITCODE -ne 0) { throw "PostgreSQL dump повреждён или имеет неподдерживаемый формат." }
 
-  if (Test-Path (Join-Path $temp "minio-data")) {
-    $targetObjects = (docker exec clinic-crm-minio sh -c 'find /data -mindepth 1 -maxdepth 1 ! -name .minio.sys | head -n 1' | Select-Object -First 1)
-    if (![string]::IsNullOrWhiteSpace($targetObjects)) { throw "Хранилище файлов на новом компьютере не пустое. Автоматическая очистка запрещена." }
+  if (!$resumeMode -and (Test-Path (Join-Path $temp "minio-data"))) {
+    if ((Get-MinIOUserFileCount) -gt 0) { throw "Хранилище файлов на новом компьютере не пустое. Автоматическая очистка запрещена." }
   }
 
-  $preflightTimestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-  $targetBackupDir = Get-BackupDirectory
-  $targetEnvSnapshot = Join-Path $targetBackupDir "target-before-transfer-$preflightTimestamp.env"
-  $targetDatabaseSnapshot = Join-Path $targetBackupDir "target-before-transfer-$preflightTimestamp.dump"
-  New-Item -ItemType Directory -Force -Path $targetBackupDir | Out-Null
-  if (Test-Path $EnvFile) { Copy-Item $EnvFile $targetEnvSnapshot -Force }
-  if (Test-Path (Join-Path $temp "source-clinic.env")) {
-    Copy-Item (Join-Path $temp "source-clinic.env") (Join-Path $targetBackupDir "source-clinic-settings-for-review-$preflightTimestamp.env") -Force
+  if (!$resumeMode) {
+    $preflightTimestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    $targetEnvSnapshot = Join-Path $targetBackupDir "target-before-transfer-$preflightTimestamp.env"
+    $targetDatabaseSnapshot = Join-Path $targetBackupDir "target-before-transfer-$preflightTimestamp.dump"
+    New-Item -ItemType Directory -Force -Path $targetBackupDir | Out-Null
+    if (Test-Path $EnvFile) { Copy-Item $EnvFile $targetEnvSnapshot -Force }
+    if (Test-Path (Join-Path $temp "source-clinic.env")) {
+      Copy-Item (Join-Path $temp "source-clinic.env") (Join-Path $targetBackupDir "source-clinic-settings-for-review-$preflightTimestamp.env") -Force
+    }
+    docker exec clinic-crm-postgres pg_dump -U $dbUser -d $dbName --format=custom --no-owner --no-privileges -f /tmp/target-before-transfer.dump
+    if ($LASTEXITCODE -ne 0) { throw "Не удалось создать страховочную копию новой целевой базы." }
+    docker cp "clinic-crm-postgres:/tmp/target-before-transfer.dump" $targetDatabaseSnapshot
+    docker exec clinic-crm-postgres rm -f /tmp/target-before-transfer.dump *> $null
+    if (!(Test-Path $targetDatabaseSnapshot)) { throw "Страховочная копия новой целевой базы не записана на диск." }
+    $targetSnapshotHash = (Get-FileHash $targetDatabaseSnapshot -Algorithm SHA256).Hash.ToLowerInvariant()
+    [IO.File]::WriteAllText("$targetDatabaseSnapshot.sha256", "$targetSnapshotHash  $([IO.Path]::GetFileName($targetDatabaseSnapshot))`r`n", $Utf8NoBom)
   }
-  docker exec clinic-crm-postgres pg_dump -U $dbUser -d $dbName --format=custom --no-owner --no-privileges -f /tmp/target-before-transfer.dump
-  if ($LASTEXITCODE -ne 0) { throw "Не удалось создать страховочную копию новой целевой базы." }
-  docker cp "clinic-crm-postgres:/tmp/target-before-transfer.dump" $targetDatabaseSnapshot
-  docker exec clinic-crm-postgres rm -f /tmp/target-before-transfer.dump *> $null
-  if (!(Test-Path $targetDatabaseSnapshot)) { throw "Страховочная копия новой целевой базы не записана на диск." }
-  $targetSnapshotHash = (Get-FileHash $targetDatabaseSnapshot -Algorithm SHA256).Hash.ToLowerInvariant()
-  [IO.File]::WriteAllText("$targetDatabaseSnapshot.sha256", "$targetSnapshotHash  $([IO.Path]::GetFileName($targetDatabaseSnapshot))`r`n", $Utf8NoBom)
 
   Write-Host "Останавливаю API, web, службу backup и MinIO только на новом целевом компьютере, чтобы восстановление было согласованным..."
-  docker compose stop api web backup minio *> $null
+  Invoke-DockerQuiet `
+    -Arguments @("compose", "stop", "api", "web", "backup", "minio") `
+    -FailureMessage "Не удалось согласованно остановить прикладные сервисы перед восстановлением."
+  $servicesStopped = $true
 
-  docker exec clinic-crm-postgres pg_restore -U $dbUser -d $dbName --clean --if-exists --no-owner --no-privileges /tmp/temichevvet-transfer.dump
-  if ($LASTEXITCODE -ne 0) { throw "PostgreSQL не восстановлен." }
+  if (!$resumeMode) {
+    docker exec clinic-crm-postgres pg_restore -U $dbUser -d $dbName --clean --if-exists --no-owner --no-privileges /tmp/temichevvet-transfer.dump
+    if ($LASTEXITCODE -ne 0) { throw "PostgreSQL не восстановлен." }
+  }
   docker exec clinic-crm-postgres rm -f /tmp/temichevvet-transfer.dump *> $null
 
   if (Test-Path (Join-Path $temp "minio-data")) {
@@ -201,14 +328,14 @@ try {
   Write-Host "Запускаю приложение на восстановленной базе и применяю только штатные миграции..."
   & (Join-Path $PSScriptRoot "start-clinic-server.ps1") -NoImageUpdate -ForceRecreate
   if ($LASTEXITCODE -ne 0) { throw "Приложение не запустилось после восстановления." }
+  $servicesStopped = $false
 
   $actualCounts = ($countsQuery | docker exec -i clinic-crm-postgres psql -U $dbUser -d $dbName -At | Select-Object -Last 1) | ConvertFrom-Json
   $countMismatches = @()
   foreach ($field in $ComparisonCountFields) {
     if ([long]$manifest.counts.$field -ne [long]$actualCounts.$field) { $countMismatches += $field }
   }
-  $targetMinioFiles = [long]((docker exec clinic-crm-minio sh -c 'find /data -type f ! -path "/data/.minio.sys/*" | wc -l' | Select-Object -Last 1).Trim())
-  if ($LASTEXITCODE -ne 0) { throw "Не удалось проверить количество восстановленных документов MinIO." }
+  $targetMinioFiles = Get-MinIOUserFileCount
   $minioCountMatches = [long]$manifest.minioUserFiles -eq $targetMinioFiles
   $report = [ordered]@{
     reportFormat = "temichevvet-restore-report-v1"
@@ -244,6 +371,16 @@ try {
   Write-Host "Отчёт: $reportPath"
   Write-Host "Откройте несколько реальных карточек. Старый сервер пока не очищайте."
 } finally {
+  if ($servicesStopped) {
+    try {
+      Invoke-DockerQuiet `
+        -Arguments @("compose", "up", "-d", "postgres", "redis", "minio", "api", "web", "backup") `
+        -FailureMessage "Не удалось автоматически перезапустить сервисы после остановленного восстановления."
+      Write-Host "Сервисы нового компьютера снова запущены после остановленного восстановления."
+    } catch {
+      Write-Host "ВНИМАНИЕ: $($_.Exception.Message)" -ForegroundColor Red
+    }
+  }
   docker container inspect clinic-crm-postgres *> $null
   if ($LASTEXITCODE -eq 0) { docker exec clinic-crm-postgres rm -f /tmp/temichevvet-transfer.dump *> $null }
   if (Test-Path $temp) { Remove-Item -LiteralPath $temp -Recurse -Force }

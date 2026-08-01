@@ -1,10 +1,12 @@
 import { EditOutlined, LeftOutlined, PlusOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Card, Descriptions, Tabs, Tag, Typography } from 'antd';
+import { App, Button, Card, Descriptions, Input, Modal, Tabs, Tag, Typography } from 'antd';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';
+import { hasPermission } from '../../auth/permissions';
+import { useCurrentEmployee } from '../../auth/useAuth';
 import { formatAnimalBirthDateDisplay } from '../../shared/utils/animalBirthDate';
 import { formatDate as formatRuDate, formatDateTime } from '../../shared/utils/date';
 import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
@@ -25,7 +27,11 @@ export function AnimalCardPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { message } = App.useApp();
+  const { data: auth } = useCurrentEmployee();
+  const canManage = hasPermission(auth?.employee, 'animals.manage');
   const [editOpen, setEditOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [nickname, setNickname] = useState('');
   const animalQuery = useQuery({
     queryKey: ['animals', animalId],
     queryFn: () => getAnimal(animalId!),
@@ -46,6 +52,20 @@ export function AnimalCardPage() {
       ]);
       setEditOpen(false);
       message.success('Карточка пациента сохранена');
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
+  const renameMutation = useMutation({
+    mutationFn: (nextNickname: string) => updateAnimal(animalId!, { nickname: nextNickname.trim() }),
+    onSuccess: async (updatedAnimal) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['animals', animalId] }),
+        queryClient.invalidateQueries({ queryKey: ['animals'] }),
+        queryClient.invalidateQueries({ queryKey: ['owners', updatedAnimal.ownerId, 'animals'] }),
+        queryClient.invalidateQueries({ queryKey: ['visits'] }),
+      ]);
+      setRenameOpen(false);
+      message.success('Кличка пациента изменена');
     },
     onError: (error) => message.error(getErrorMessage(error)),
   });
@@ -79,13 +99,25 @@ export function AnimalCardPage() {
           </div>
           <div className="context-section-body">
             <h2 className="context-title">{animal?.nickname ?? 'Пациент'}</h2>
+            {animal && canManage ? (
+              <Button
+                size="small"
+                icon={<EditOutlined />}
+                onClick={() => {
+                  setNickname(animal.nickname);
+                  setRenameOpen(true);
+                }}
+              >
+                Изменить кличку
+              </Button>
+            ) : null}
           </div>
         </div>
         <div className="context-section">
           <div className="context-section-header">
             <strong>Профиль</strong>
-            <Button size="small" type="link" icon={<EditOutlined />} onClick={() => setEditOpen(true)} disabled={!animal}>
-              профиль
+            <Button size="small" type="link" icon={<EditOutlined />} onClick={() => setEditOpen(true)} disabled={!animal || !canManage}>
+              Редактировать профиль
             </Button>
           </div>
           <div className="context-section-body context-grid">
@@ -225,6 +257,31 @@ export function AnimalCardPage() {
         isSubmitting={updateMutation.isPending}
         submitError={updateMutation.error}
       />
+      <Modal
+        title="Изменить кличку пациента"
+        open={renameOpen}
+        okText="Сохранить"
+        cancelText="Отмена"
+        confirmLoading={renameMutation.isPending}
+        okButtonProps={{ disabled: !nickname.trim() || nickname.trim() === animal?.nickname || nickname.trim().length > 120 }}
+        onCancel={() => setRenameOpen(false)}
+        onOk={() => renameMutation.mutate(nickname)}
+      >
+        <Typography.Paragraph type="secondary">
+          Новая кличка появится в карточке пациента, приёмах и печатных документах. Изменение сохранится в журнале аудита.
+        </Typography.Paragraph>
+        <Input
+          value={nickname}
+          maxLength={120}
+          showCount
+          autoFocus
+          placeholder="Кличка пациента"
+          onChange={(event) => setNickname(event.target.value)}
+          onPressEnter={() => {
+            if (nickname.trim() && nickname.trim() !== animal?.nickname) renameMutation.mutate(nickname);
+          }}
+        />
+      </Modal>
     </div>
   );
 }

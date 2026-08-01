@@ -19,7 +19,12 @@ export class AuthService {
     private readonly auditService: AuditService,
   ) {}
 
-  async login(dto: LoginDto, ipAddress?: string | null, userAgent?: string | null) {
+  async login(
+    dto: LoginDto,
+    ipAddress?: string | null,
+    userAgent?: string | null,
+    access: { accessType: 'LOCAL' | 'REMOTE'; remoteDeviceToken?: string | null } = { accessType: 'LOCAL' },
+  ) {
     const login = dto.login.trim();
     const normalizedEmail = login.includes('@') ? login.toLowerCase() : undefined;
     const normalizedPhone = normalizeLoginPhoneForLookup(login);
@@ -85,15 +90,55 @@ export class AuthService {
 
     await this.assertEmployeeCanUseCrm(user.employee, 'auth.login_outside_shift', ipAddress);
 
+    let remoteDeviceId: string | null = null;
+    let idleTimeoutMinutes = SESSION_IDLE_TIMEOUT_MINUTES;
+    if (access.accessType === 'REMOTE') {
+      const policy = await this.prisma.remoteAccessPolicy.findFirst();
+      if (!policy?.enabled) {
+        await this.auditService.log({
+          actorId: user.employee.id,
+          action: 'auth.remote_login_blocked',
+          entityType: 'RemoteAccessPolicy',
+          metadata: { reason: 'disabled' },
+          ipAddress,
+        });
+        throw new UnauthorizedException('Удалённый доступ клиники отключён');
+      }
+
+      const tokenHash = access.remoteDeviceToken ? this.hashSessionToken(access.remoteDeviceToken) : null;
+      const device = tokenHash
+        ? await this.prisma.remoteAccessDevice.findUnique({ where: { tokenHash } })
+        : null;
+      if (!device || device.revokedAt || device.employeeId !== user.employee.id) {
+        await this.auditService.log({
+          actorId: user.employee.id,
+          action: 'auth.remote_login_blocked',
+          entityType: 'RemoteAccessDevice',
+          metadata: { reason: 'device_not_trusted' },
+          ipAddress,
+        });
+        throw new UnauthorizedException('Это устройство не привязано к учётной записи руководителя');
+      }
+
+      remoteDeviceId = device.id;
+      idleTimeoutMinutes = policy.idleTimeoutMinutes;
+      await this.prisma.remoteAccessDevice.update({
+        where: { id: device.id },
+        data: { lastSeenAt: new Date(), lastIpAddress: ipAddress ?? null, userAgent: userAgent ?? device.userAgent },
+      });
+    }
+
     const token = randomBytes(48).toString('base64url');
     const sessionId = this.hashSessionToken(token);
-    const expiresAt = this.getIdleSessionExpiresAt();
+    const expiresAt = this.getIdleSessionExpiresAt(idleTimeoutMinutes);
     const cookieExpiresAt = new Date(Date.now() + SESSION_TTL_HOURS * 60 * 60 * 1000);
 
     await this.prisma.session.create({
       data: {
         id: sessionId,
         userId: user.id,
+        accessType: access.accessType,
+        remoteDeviceId,
         expiresAt,
         ipAddress,
         userAgent,
@@ -106,6 +151,7 @@ export class AuthService {
       entityType: 'Session',
       entityId: sessionId,
       ipAddress,
+      metadata: { accessType: access.accessType, remoteDeviceId },
     });
 
     return {
@@ -116,10 +162,10 @@ export class AuthService {
     };
   }
 
-  async touchSession(sessionId: string) {
+  async touchSession(sessionId: string, idleTimeoutMinutes = SESSION_IDLE_TIMEOUT_MINUTES) {
     await this.prisma.session.updateMany({
       where: { id: sessionId },
-      data: { expiresAt: this.getIdleSessionExpiresAt() },
+      data: { expiresAt: this.getIdleSessionExpiresAt(idleTimeoutMinutes) },
     });
   }
 
@@ -225,8 +271,8 @@ export class AuthService {
     return createHash('sha256').update(token).digest('hex');
   }
 
-  private getIdleSessionExpiresAt() {
-    return new Date(Date.now() + SESSION_IDLE_TIMEOUT_MINUTES * 60 * 1000);
+  private getIdleSessionExpiresAt(idleTimeoutMinutes = SESSION_IDLE_TIMEOUT_MINUTES) {
+    return new Date(Date.now() + idleTimeoutMinutes * 60 * 1000);
   }
 
   serializeEmployee(employee: {

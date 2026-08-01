@@ -1,4 +1,4 @@
-import { apiRequest } from '../../api/client';
+import { apiRequest, apiUpload } from '../../api/client';
 import { OrganizationSettings, UpdateOrganizationPayload } from './types';
 
 export function getOrganizationSettings() {
@@ -7,4 +7,12 @@ export function getOrganizationSettings() {
 
 export function updateOrganizationSettings(payload: UpdateOrganizationPayload) {
   return apiRequest<OrganizationSettings>('/v1/organization', { method: 'PATCH', body: payload });
+}
+
+export function uploadOrganizationLogo(file: File) {
+  return apiUpload<OrganizationSettings>('/v1/organization/logo', file);
+}
+
+export function deleteOrganizationLogo() {
+  return apiRequest<OrganizationSettings>('/v1/organization/logo', { method: 'DELETE' });
 }

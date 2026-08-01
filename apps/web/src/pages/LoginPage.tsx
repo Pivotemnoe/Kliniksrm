@@ -33,6 +33,7 @@ export function LoginPage() {
   const searchParams = new URLSearchParams(location.search);
   const forceLogin = searchParams.get('force') === '1';
   const separateLogin = searchParams.get('separate') === '1';
+  const remotePaired = searchParams.get('remote') === 'paired';
   const [isClearingSession, setIsClearingSession] = useState(forceLogin);
   const { data, isLoading } = useCurrentEmployee();
   const loginMutation = useLoginMutation();
@@ -124,6 +125,15 @@ export function LoginPage() {
                 showIcon
                 message="Отдельное окно для другого сотрудника"
                 description="Войдите под своим телефоном и паролем. Основная вкладка другого сотрудника останется открытой."
+                className="form-alert"
+              />
+            ) : null}
+            {remotePaired ? (
+              <Alert
+                type="success"
+                showIcon
+                message="Устройство привязано"
+                description="Теперь войдите под личным логином и паролем руководителя. Общий пароль клиники не используется."
                 className="form-alert"
               />
             ) : null}

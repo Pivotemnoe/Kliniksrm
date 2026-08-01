@@ -1,7 +1,7 @@
-import { EditOutlined, PlusOutlined, SaveOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined, FileImageOutlined, PlusOutlined, SaveOutlined, UploadOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Alert, Button, Form, Input, Modal, Space, Table, Tabs, Tag, Typography } from 'antd';
+import { App, Alert, Button, Form, Input, Modal, Popconfirm, Space, Table, Tabs, Tag, Typography, Upload } from 'antd';
 import { ColumnsType } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
@@ -12,8 +12,8 @@ import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { createClinicOffice, updateClinicOffice } from '../scheduling/scheduling.api';
-import { getOrganizationSettings, updateOrganizationSettings } from './organization.api';
-import { OrganizationOffice } from './types';
+import { deleteOrganizationLogo, getOrganizationSettings, updateOrganizationSettings, uploadOrganizationLogo } from './organization.api';
+import { OrganizationOffice, OrganizationSettings } from './types';
 
 const organizationSchema = z.object({
   displayName: z.string().trim().min(2, 'Укажите название').max(160),
@@ -98,6 +98,24 @@ export function OrganizationSettingsPage() {
     },
     onError: (error) => message.error(getErrorMessage(error)),
   });
+  const uploadLogoMutation = useMutation({
+    mutationFn: uploadOrganizationLogo,
+    onSuccess: async (updated) => {
+      queryClient.setQueryData(['organization'], updated);
+      await queryClient.invalidateQueries({ queryKey: ['organization'] });
+      message.success('Логотип клиники сохранён');
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
+  const deleteLogoMutation = useMutation({
+    mutationFn: deleteOrganizationLogo,
+    onSuccess: async (updated) => {
+      queryClient.setQueryData(['organization'], updated);
+      await queryClient.invalidateQueries({ queryKey: ['organization'] });
+      message.success('Логотип клиники удалён');
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
   const createOfficeMutation = useMutation({
     mutationFn: (values: OfficeFormValues) => createClinicOffice(normalizeOfficeForm(values)),
     onSuccess: async () => {
@@ -170,6 +188,23 @@ export function OrganizationSettingsPage() {
               children: (
                 <div className="list-panel-body">
                   <Form layout="vertical">
+                    <OrganizationLogoEditor
+                      organization={organization}
+                      canManage={canManage}
+                      loading={uploadLogoMutation.isPending || deleteLogoMutation.isPending}
+                      onUpload={(file) => {
+                        if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+                          message.error('Выберите изображение JPG, PNG или WEBP');
+                          return;
+                        }
+                        if (file.size > 5 * 1024 * 1024) {
+                          message.error('Логотип должен быть не больше 5 МБ');
+                          return;
+                        }
+                        uploadLogoMutation.mutate(file);
+                      }}
+                      onDelete={() => deleteLogoMutation.mutate()}
+                    />
                     <div className="form-grid two-columns">
                       <Controller
                         control={control}
@@ -342,6 +377,63 @@ export function OrganizationSettingsPage() {
           />
         </Form>
       </Modal>
+    </div>
+  );
+}
+
+function OrganizationLogoEditor({
+  organization,
+  canManage,
+  loading,
+  onUpload,
+  onDelete,
+}: {
+  organization?: OrganizationSettings;
+  canManage: boolean;
+  loading: boolean;
+  onUpload: (file: File) => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div style={{ display: 'flex', gap: 16, alignItems: 'center', padding: 16, marginBottom: 20, border: '1px solid #e5e7eb', borderRadius: 10 }}>
+      <div style={{ width: 96, height: 96, flex: '0 0 96px', display: 'grid', placeItems: 'center', overflow: 'hidden', border: '1px solid #d1d5db', borderRadius: 10, background: '#fff' }}>
+        {organization?.logoUrl ? (
+          <img src={organization.logoUrl} alt="Логотип клиники" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+        ) : (
+          <FileImageOutlined style={{ fontSize: 34, color: '#9ca3af' }} />
+        )}
+      </div>
+      <Space direction="vertical" size={6} style={{ flex: 1 }}>
+        <Typography.Text strong>Логотип клиники</Typography.Text>
+        <Typography.Text type="secondary">
+          Печатается на бланках приёма и назначений. Если логотип не загружен, место под него на документе не показывается.
+        </Typography.Text>
+        {organization?.logoOriginalName ? <Typography.Text>{organization.logoOriginalName}</Typography.Text> : null}
+        {canManage ? (
+          <Space wrap>
+            <Upload
+              accept=".jpg,.jpeg,.png,.webp"
+              maxCount={1}
+              showUploadList={false}
+              disabled={loading}
+              beforeUpload={(file) => {
+                onUpload(file);
+                return Upload.LIST_IGNORE;
+              }}
+            >
+              <Button icon={<UploadOutlined />} loading={loading}>
+                {organization?.logoUrl ? 'Заменить логотип' : 'Загрузить логотип'}
+              </Button>
+            </Upload>
+            {organization?.logoUrl ? (
+              <Popconfirm title="Удалить логотип клиники?" okText="Удалить" cancelText="Отмена" onConfirm={onDelete}>
+                <Button danger icon={<DeleteOutlined />} disabled={loading}>Удалить</Button>
+              </Popconfirm>
+            ) : null}
+          </Space>
+        ) : null}
+        <Typography.Text type="secondary">JPG, PNG или WEBP, не больше 5 МБ. Лучше использовать горизонтальный логотип на светлом фоне.</Typography.Text>
+      </Space>
     </div>
   );
 }

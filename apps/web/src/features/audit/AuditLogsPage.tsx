@@ -210,6 +210,8 @@ const actionLabels: Record<string, string> = {
   'payment.refund': 'Возврат оплаты',
   'employee.create': 'Сотрудник создан',
   'employee.update': 'Сотрудник изменён',
+  'organization.logo_upload': 'Логотип клиники загружен',
+  'organization.logo_delete': 'Логотип клиники удалён',
   'notification.queue': 'Уведомление поставлено в очередь',
   'notification.retry': 'Уведомление повторено',
   'notification.cancel': 'Уведомление отменено',
