@@ -6,6 +6,11 @@ server {
     listen [::]:80;
     server_name staff.temichevvet.ru;
 
+    # Одноразовый токен приглашения может находиться в URL. Не сохраняем его
+    # в access.log ни на HTTP, ни на HTTPS-контуре.
+    access_log off;
+    add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
+
     location ^~ /.well-known/acme-challenge/ {
         root /var/www/certbot;
         default_type text/plain;
@@ -17,9 +22,13 @@ server {
 }
 
 server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
+    listen 443 ssl;
+    listen [::]:443 ssl;
     server_name staff.temichevvet.ru;
+
+    access_log off;
+    proxy_headers_hash_max_size 1024;
+    proxy_headers_hash_bucket_size 128;
 
     ssl_certificate /etc/letsencrypt/live/staff.temichevvet.ru/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/staff.temichevvet.ru/privkey.pem;
@@ -31,6 +40,7 @@ server {
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-Frame-Options "DENY" always;
     add_header Referrer-Policy "same-origin" always;
+    add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
 
     location ~ ^/api/(auth/login|v1/remote-access/enroll)$ {
         limit_req zone=staff_gateway_login burst=5 nodelay;

@@ -33,7 +33,7 @@ export class TelegramWebhookService {
 
     if (
       !invitation
-      || invitation.channel !== PortalInviteChannel.TELEGRAM
+      || (invitation.channel !== PortalInviteChannel.TELEGRAM && invitation.channel !== PortalInviteChannel.WEB)
       || invitation.status !== PortalInviteStatus.ACTIVE
       || invitation.expiresAt <= new Date()
     ) {

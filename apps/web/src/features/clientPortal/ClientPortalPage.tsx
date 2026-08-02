@@ -1,5 +1,6 @@
 import {
   CalendarOutlined,
+  ExportOutlined,
   FileTextOutlined,
   HistoryOutlined,
   MessageOutlined,
@@ -174,6 +175,16 @@ export function ClientPortalPage() {
             <Statistic title="Пациентов" value={data.owner.animals.length} />
             <Statistic title="Баланс" value={formatMoney(data.owner.balance)} />
           </Space>
+        </section>
+
+        <section className="portal-service-promo">
+          <div>
+            <Typography.Title level={4}>TemichevVet — сервис для владельцев животных</Typography.Title>
+            <Typography.Text type="secondary">Полезный онлайн-сервис для владельцев собак и кошек.</Typography.Text>
+          </div>
+          <Button type="primary" icon={<ExportOutlined />} href="https://temichevvet.ru" target="_blank" rel="noopener noreferrer">
+            Открыть сервис
+          </Button>
         </section>
 
         <section className="portal-grid portal-grid-single">

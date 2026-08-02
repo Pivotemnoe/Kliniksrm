@@ -99,7 +99,9 @@ export class InternalSyncService {
         data: {
           ownerId,
           tokenHash: hashToken(dto.token.trim()),
-          channel: dto.channel,
+          // Один одноразовый токен используется в трёх понятных вариантах:
+          // браузер, Telegram и MAX. WEB здесь означает универсальное приглашение.
+          channel: PortalInviteChannel.WEB,
           expiresAt,
         },
         select: { id: true, ownerId: true, channel: true, expiresAt: true, createdAt: true },
@@ -111,6 +113,7 @@ export class InternalSyncService {
     return {
       ...invitation,
       deliveryUrl: buildDeliveryUrl(dto.channel, dto.token.trim()),
+      deliveryUrls: buildDeliveryUrls(dto.token.trim()),
       automaticDelivery,
     };
   }
@@ -332,6 +335,16 @@ function buildDeliveryUrl(channel: PortalInviteChannel, token: string) {
   }
 
   return activationUrl;
+}
+
+function buildDeliveryUrls(token: string) {
+  const telegramBotName = normalizeBotName(process.env.TELEGRAM_BOT_USERNAME);
+  const maxBotName = normalizeBotName(process.env.MAX_BOT_NAME);
+  return {
+    [PortalInviteChannel.WEB]: buildDeliveryUrl(PortalInviteChannel.WEB, token),
+    [PortalInviteChannel.TELEGRAM]: telegramBotName ? `https://t.me/${telegramBotName}?start=${encodeURIComponent(token)}` : null,
+    [PortalInviteChannel.MAX]: maxBotName ? `https://max.ru/${maxBotName}?start=${encodeURIComponent(token)}` : null,
+  };
 }
 
 function resolveDeliveryChannels(channel: SendOwnerMessageDto['channel'], preferred?: SendOwnerMessageDto['preferredChannel']) {

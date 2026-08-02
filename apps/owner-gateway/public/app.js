@@ -104,6 +104,13 @@ function renderPortal(response) {
         <span id="push-status" class="push-status" role="status" aria-live="polite" hidden></span>
       </div>
     </section>
+    <section class="service-promo" aria-label="Сервис TemichevVet для владельцев животных">
+      <div>
+        <strong>TemichevVet — сервис для владельцев животных</strong>
+        <span>Полезный онлайн-сервис для владельцев собак и кошек.</span>
+      </div>
+      <a class="button service-promo-link" href="https://temichevvet.ru" target="_blank" rel="noopener noreferrer">Открыть сервис</a>
+    </section>
     <nav class="tabs" aria-label="Разделы личного кабинета">
       ${tabButton('animals', `Пациенты · ${animals.length}`, true)}
       ${tabButton('appointments', `Записи · ${appointments.length}`)}

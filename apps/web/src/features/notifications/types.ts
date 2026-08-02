@@ -114,6 +114,7 @@ export type ClientPortalInvite = ClientPortalAccess & {
   inviteChannel: PortalInviteChannel;
   directDeliveryAvailable: boolean;
   deliveryUrl: string | null;
+  deliveryUrls?: Partial<Record<PortalInviteChannel, string>>;
   automaticDelivery: 'sent' | 'failed' | 'skipped_not_configured' | 'manual_required' | 'not_implemented';
 };
 

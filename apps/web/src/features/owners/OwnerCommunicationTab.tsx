@@ -1,9 +1,9 @@
-import { CopyOutlined, LinkOutlined, LockOutlined, MailOutlined, ReloadOutlined, StopOutlined, UserAddOutlined } from '@ant-design/icons';
+import { CopyOutlined, LinkOutlined, LockOutlined, MailOutlined, PrinterOutlined, ReloadOutlined, StopOutlined, UserAddOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Alert, Button, Checkbox, Descriptions, Drawer, Input, Popconfirm, QRCode, Radio, Space, Table, Tag, Typography } from 'antd';
 import { ColumnsType } from 'antd/es/table';
-import type { ChangeEvent } from 'react';
-import { useState } from 'react';
+import type { ChangeEvent, RefObject } from 'react';
+import { useRef, useState } from 'react';
 import { getErrorMessage } from '../../api/errors';
 import { formatDateTime, fromDatetimeLocal } from '../../shared/utils/date';
 import {
@@ -45,6 +45,9 @@ export function OwnerCommunicationTab({ owner }: OwnerCommunicationTabProps) {
   const [messageBody, setMessageBody] = useState('');
   const [messageScheduledAt, setMessageScheduledAt] = useState('');
   const [messageMessengerChannels, setMessageMessengerChannels] = useState<Array<'MAX' | 'TELEGRAM'>>([]);
+  const webInviteQrRef = useRef<HTMLDivElement | null>(null);
+  const telegramInviteQrRef = useRef<HTMLDivElement | null>(null);
+  const maxInviteQrRef = useRef<HTMLDivElement | null>(null);
   const portalQuery = useQuery({
     queryKey: ['owners', owner.id, 'portal-access'],
     queryFn: () => getPortalAccess(owner.id),
@@ -171,19 +174,45 @@ export function OwnerCommunicationTab({ owner }: OwnerCommunicationTabProps) {
   const additionalDeliveryChannels = [maxLinked ? 'MAX' : null, telegramLinked ? 'Telegram' : null].filter(Boolean).join(', ');
   const inviteToken = lastInvite?.inviteToken ?? portalAccess?.inviteToken ?? null;
   const activeInviteChannel = lastInvite?.inviteChannel ?? inviteChannel;
-  const portalInviteLink = inviteToken ? buildPortalInviteLink(inviteToken, portalBaseUrl, activeInviteChannel) : null;
-  const publicMessengerInviteUnavailable = Boolean(
-    lastInvite
-      && activeInviteChannel !== 'WEB'
-      && lastInvite.gatewaySync !== 'synced',
-  );
-  const inviteLink = lastInvite?.deliveryUrl ?? (publicMessengerInviteUnavailable ? null : portalInviteLink);
-  const inviteUsesLoopback = inviteLink ? isLoopbackUrl(inviteLink) : false;
+  const portalInviteLinks = getPortalInviteLinks(lastInvite, inviteToken, portalBaseUrl);
+  const inviteLink = portalInviteLinks[activeInviteChannel] ?? lastInvite?.deliveryUrl ?? portalInviteLinks.WEB ?? null;
+  const hasCompleteInviteBundle = Boolean(portalInviteLinks.WEB && portalInviteLinks.TELEGRAM && portalInviteLinks.MAX);
+  const inviteUsesLoopback = portalInviteLinks.WEB ? isLoopbackUrl(portalInviteLinks.WEB) : false;
+  const inviteExpiresAt = lastInvite?.inviteExpiresAt ?? portalAccess?.inviteExpiresAt ?? null;
 
   function handlePortalBaseUrlChange(event: ChangeEvent<HTMLInputElement>) {
     const nextValue = event.target.value;
     setPortalBaseUrl(nextValue);
     savePortalBaseUrl(nextValue);
+  }
+
+  function handlePrintInvite() {
+    if (!hasCompleteInviteBundle || !portalInviteLinks.WEB || !portalInviteLinks.TELEGRAM || !portalInviteLinks.MAX) {
+      message.warning('Сначала создайте приглашение');
+      return;
+    }
+
+    const webQrSvg = webInviteQrRef.current?.querySelector('svg')?.outerHTML;
+    const telegramQrSvg = telegramInviteQrRef.current?.querySelector('svg')?.outerHTML;
+    const maxQrSvg = maxInviteQrRef.current?.querySelector('svg')?.outerHTML;
+    if (!webQrSvg || !telegramQrSvg || !maxQrSvg) {
+      message.error('QR-код ещё формируется. Повторите печать через несколько секунд.');
+      return;
+    }
+
+    const printed = printPortalInvite({
+      ownerName: owner.fullName,
+      inviteExpiresAt,
+      webLink: portalInviteLinks.WEB,
+      telegramLink: portalInviteLinks.TELEGRAM,
+      maxLink: portalInviteLinks.MAX,
+      webQrSvg,
+      telegramQrSvg,
+      maxQrSvg,
+    });
+    if (!printed) {
+      message.warning('Браузер заблокировал окно печати. Разрешите всплывающие окна и повторите.');
+    }
   }
 
   return (
@@ -241,7 +270,7 @@ export function OwnerCommunicationTab({ owner }: OwnerCommunicationTabProps) {
           {portalMutation.error ? <Alert type="error" showIcon message={getErrorMessage(portalMutation.error)} className="form-alert" /> : null}
           {inviteMutation.error ? <Alert type="error" showIcon message={getErrorMessage(inviteMutation.error)} className="form-alert" /> : null}
           <Space direction="vertical" size={8} className="full-width form-alert">
-            <Typography.Text strong>Куда владелец хочет получить приглашение?</Typography.Text>
+            <Typography.Text strong>Куда дополнительно отправить приглашение, если канал уже подключён?</Typography.Text>
             <Radio.Group
               value={inviteChannel}
               optionType="button"
@@ -260,17 +289,17 @@ export function OwnerCommunicationTab({ owner }: OwnerCommunicationTabProps) {
                 loading={inviteMutation.isPending}
                 onClick={() => inviteMutation.mutate(inviteChannel)}
               >
-                {portalAccess?.status === 'INVITED' ? 'Создать новую ссылку / QR' : 'Создать приглашение'}
+                {portalAccess?.status === 'INVITED' ? 'Создать новый комплект QR' : 'Создать комплект приглашения'}
               </Button>
             </div>
           </Space>
-          {publicMessengerInviteUnavailable ? (
+          {lastInvite && lastInvite.gatewaySync !== 'synced' ? (
             <Alert
               type="error"
               showIcon
               className="form-alert"
-              message="Не удалось создать приглашение"
-              description="Проверьте подключение к интернету и нажмите «Создать приглашение» ещё раз."
+              message="Не удалось подготовить все три QR-кода"
+              description="Публичный шлюз личного кабинета недоступен. Проверьте подключение к интернету и создайте комплект ещё раз."
             />
           ) : null}
           {portalAccess?.status === 'INVITED' && !inviteLink && !inviteMutation.isPending ? (
@@ -279,7 +308,7 @@ export function OwnerCommunicationTab({ owner }: OwnerCommunicationTabProps) {
               showIcon
               className="form-alert"
               message="Приглашение уже создано"
-              description="Одноразовая ссылка не показывается повторно после обновления страницы. Чтобы снова получить ссылку или QR-код, нажмите «Создать новую ссылку / QR» — прежняя ссылка перестанет работать."
+              description="Одноразовые ссылки не показываются повторно после обновления страницы. Чтобы снова распечатать три QR-кода, создайте новый комплект — прежний перестанет работать."
             />
           ) : null}
           {inviteLink ? (
@@ -287,42 +316,45 @@ export function OwnerCommunicationTab({ owner }: OwnerCommunicationTabProps) {
               type="success"
               showIcon
               className="form-alert"
-              message={`Приглашение: ${formatInviteChannel(activeInviteChannel)}`}
+              message={hasCompleteInviteBundle ? 'Комплект приглашения: браузер, Telegram и MAX' : `Приглашение: ${formatInviteChannel(activeInviteChannel)}`}
               description={
-                <div className="portal-invite-layout">
-                  <div className="portal-qr-card">
-                    <QRCode value={inviteLink} size={132} />
-                  </div>
+                <div>
                   <Space direction="vertical" size={8} className="full-width">
-                    {activeInviteChannel === 'WEB' && inviteUsesLoopback ? (
+                    {inviteUsesLoopback ? (
                       <Typography.Text type="warning">
                         Эта ссылка работает только на серверном компьютере. Для телефона укажите сетевой адрес, например{' '}
                         http://192.168.0.80:3000.
                       </Typography.Text>
                     ) : null}
-                    {activeInviteChannel === 'WEB' ? (
-                      <Input
-                        addonBefore="Адрес кабинета"
-                        value={portalBaseUrl}
-                        placeholder="http://192.168.0.80:3000"
-                        onChange={handlePortalBaseUrlChange}
-                      />
-                    ) : null}
-                    <Typography.Text className="portal-invite-link">{inviteLink}</Typography.Text>
+                    <Input
+                      addonBefore="Резервный адрес кабинета"
+                      value={portalBaseUrl}
+                      placeholder="http://192.168.0.80:3000"
+                      onChange={handlePortalBaseUrlChange}
+                    />
+                    {hasCompleteInviteBundle ? (
+                      <div className="portal-invite-qr-grid">
+                        <PortalInviteQrCard label="Открыть в браузере" link={portalInviteLinks.WEB!} qrRef={webInviteQrRef} />
+                        <PortalInviteQrCard label="Подключить Telegram" link={portalInviteLinks.TELEGRAM!} qrRef={telegramInviteQrRef} />
+                        <PortalInviteQrCard label="Подключить MAX" link={portalInviteLinks.MAX!} qrRef={maxInviteQrRef} />
+                      </div>
+                    ) : (
+                      <div className="portal-qr-card" ref={webInviteQrRef}>
+                        <QRCode value={inviteLink} size={132} type="svg" />
+                      </div>
+                    )}
                     <Typography.Text type="secondary">
-                      {getGeneratedInviteHint(
-                        activeInviteChannel,
-                        lastInvite?.directDeliveryAvailable ?? false,
-                        Boolean(lastInvite?.deliveryUrl),
-                        lastInvite?.automaticDelivery,
-                      )}
+                      Все три QR-кода используют одно одноразовое приглашение и действуют 24 часа. После регистрации остальные варианты перестанут работать.
                     </Typography.Text>
                     <Space wrap>
                       <Button size="small" icon={<CopyOutlined />} onClick={() => copyInviteLink(inviteLink, message)}>
-                        Скопировать ссылку
+                        Скопировать выбранную ссылку
                       </Button>
                       <Button size="small" icon={<LinkOutlined />} onClick={() => window.open(inviteLink, '_blank', 'noopener,noreferrer')}>
                         Открыть
+                      </Button>
+                      <Button size="small" type="primary" icon={<PrinterOutlined />} disabled={!hasCompleteInviteBundle} onClick={handlePrintInvite}>
+                        Распечатать А5 — 3 QR-кода
                       </Button>
                     </Space>
                   </Space>
@@ -514,6 +546,17 @@ export function OwnerCommunicationTab({ owner }: OwnerCommunicationTabProps) {
   );
 }
 
+function PortalInviteQrCard({ label, link, qrRef }: { label: string; link: string; qrRef: RefObject<HTMLDivElement | null> }) {
+  return (
+    <div className="portal-invite-qr-option">
+      <Typography.Text strong>{label}</Typography.Text>
+      <div className="portal-qr-card" ref={qrRef}>
+        <QRCode value={link} size={132} type="svg" />
+      </div>
+    </div>
+  );
+}
+
 function toggleChannel(
   channels: Array<'MAX' | 'TELEGRAM'>,
   channel: 'MAX' | 'TELEGRAM',
@@ -552,6 +595,21 @@ const portalBaseUrlStorageKey = 'temichevvet.portalBaseUrl';
 
 function buildPortalInviteLink(token: string, baseUrl: string, channel: PortalInviteChannel) {
   return `${normalizePortalBaseUrl(baseUrl)}/portal/${encodeURIComponent(token)}?via=${channel.toLowerCase()}`;
+}
+
+function getPortalInviteLinks(
+  invite: ClientPortalInvite | null,
+  inviteToken: string | null,
+  portalBaseUrl: string,
+): Partial<Record<PortalInviteChannel, string>> {
+  const links = { ...(invite?.deliveryUrls ?? {}) };
+  if (invite?.deliveryUrl && invite.inviteChannel) {
+    links[invite.inviteChannel] ??= invite.deliveryUrl;
+  }
+  if (inviteToken) {
+    links.WEB ??= buildPortalInviteLink(inviteToken, portalBaseUrl, 'WEB');
+  }
+  return links;
 }
 
 function getInitialPortalBaseUrl() {
@@ -630,31 +688,93 @@ function getChannelPrompt(channel: PortalInviteChannel, owner: Owner) {
   return 'Владелец откроет кабинет обычной ссылкой в браузере, без мессенджера.';
 }
 
-function getGeneratedInviteHint(
-  channel: PortalInviteChannel,
-  directDeliveryAvailable: boolean,
-  messengerLinkConfigured: boolean,
-  automaticDelivery?: ClientPortalInvite['automaticDelivery'],
-) {
-  if (channel === 'WEB') {
-    return 'Покажите QR-код владельцу или скопируйте ссылку. Она действует 24 часа.';
+const ownerServiceUrl = 'https://temichevvet.ru';
+
+type PortalInvitePrintInput = {
+  ownerName: string;
+  inviteExpiresAt: string | null;
+  webLink: string;
+  telegramLink: string;
+  maxLink: string;
+  webQrSvg: string;
+  telegramQrSvg: string;
+  maxQrSvg: string;
+};
+
+function printPortalInvite(input: PortalInvitePrintInput) {
+  const printWindow = window.open('', '_blank', 'width=880,height=760');
+  if (!printWindow) {
+    return false;
   }
 
-  if (automaticDelivery === 'sent') {
-    return `Приглашение уже отправлено владельцу в ${formatInviteChannel(channel)}. QR-код и ссылка остаются резервным вариантом.`;
-  }
+  printWindow.opener = null;
+  const expiresAt = input.inviteExpiresAt ? formatDateTime(input.inviteExpiresAt) : 'в течение 24 часов после создания';
 
-  if (automaticDelivery === 'failed') {
-    return `Автоматическая отправка в ${formatInviteChannel(channel)} завершилась ошибкой. Покажите QR-код или передайте ссылку вручную.`;
-  }
+  printWindow.document.write(`<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Приглашение в личный кабинет</title>
+  <style>
+    @page { size: A5 portrait; margin: 8mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #182433; font-family: Arial, sans-serif; font-size: 10.5px; line-height: 1.32; }
+    h1 { margin: 0 0 4px; color: #17324d; font-size: 19px; }
+    h2 { margin: 0 0 3px; color: #17324d; font-size: 12px; }
+    p { margin: 3px 0; }
+    ul { columns: 2; column-gap: 20px; margin: 5px 0 0; padding-left: 17px; }
+    li { margin: 2px 0; break-inside: avoid; }
+    .brand { margin-bottom: 8px; padding-bottom: 6px; border-bottom: 2px solid #246a73; color: #246a73; font-size: 13px; font-weight: 800; }
+    .intro { font-size: 12px; }
+    .cta { margin: 7px 0 4px; text-align: center; font-size: 13px; font-weight: 800; }
+    .qr-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+    .qr-option { min-width: 0; padding: 7px 5px; border: 1px solid #b9ccd4; border-radius: 8px; text-align: center; }
+    .qr-option strong { display: block; min-height: 27px; color: #17324d; font-size: 10.5px; }
+    .qr-option svg { display: block; width: 104px; height: 104px; max-width: 100%; margin: 3px auto; }
+    .qr-option span { display: block; color: #60717d; font-size: 8.5px; }
+    .expires { margin-top: 6px; padding: 5px 7px; border-radius: 6px; color: #8a3412; background: #fff7ed; text-align: center; font-weight: 700; }
+    .service { margin-top: 7px; padding: 7px 9px; border: 1px solid #cbd8df; border-radius: 8px; background: #f4f8fa; }
+    .service a { color: #176b73; font-weight: 700; }
+    .footer { margin-top: 6px; color: #60717d; font-size: 8.5px; }
+  </style>
+</head>
+<body>
+  <div class="brand">Личный кабинет владельца животного</div>
+  <h1>Приглашение в личный кабинет</h1>
+  <p class="intro">Уважаемый(ая) <strong>${escapePrintHtml(input.ownerName)}</strong>!</p>
+  <p>Зарегистрируйтесь в личном кабинете клиники. После регистрации вы сможете:</p>
+  <ul>
+    <li>видеть своих питомцев и записи на приём;</li>
+    <li>просматривать историю приёмов, рекомендации и документы;</li>
+    <li>получать сообщения клиники и информацию по счетам;</li>
+    <li>отправлять заявку на новый приём.</li>
+  </ul>
+  <p class="cta">Выберите удобный способ и отсканируйте один QR-код</p>
+  <section class="qr-grid">
+    <div class="qr-option"><strong>Открыть в браузере</strong>${input.webQrSvg}<span>Обычная защищённая ссылка</span></div>
+    <div class="qr-option"><strong>Подключить Telegram</strong>${input.telegramQrSvg}<span>Откройте бота и нажмите Start</span></div>
+    <div class="qr-option"><strong>Подключить MAX</strong>${input.maxQrSvg}<span>Откройте и запустите бота</span></div>
+  </section>
+  <p class="expires">Приглашение действует до: ${escapePrintHtml(expiresAt)}. Использовать можно только один вариант.</p>
+  <section class="service">
+    <h2>TemichevVet — сервис для владельцев животных</h2>
+    <p>Полезный онлайн-сервис для владельцев собак и кошек: <a href="${ownerServiceUrl}">${ownerServiceUrl}</a></p>
+  </section>
+  <p class="footer">Если интернет временно недоступен, сохраните приглашение и отсканируйте любой регистрационный QR-код позже, но до окончания указанного срока.</p>
+</body>
+</html>`);
+  printWindow.document.close();
+  printWindow.focus();
+  printWindow.setTimeout(() => printWindow.print(), 250);
+  return true;
+}
 
-  if (!messengerLinkConfigured) {
-    return `Не удалось подготовить переход в ${formatInviteChannel(channel)}. Скопируйте обычную ссылку на кабинет или повторите позже.`;
-  }
-
-  if (directDeliveryAvailable) {
-    return `${formatInviteChannel(channel)} уже связан с владельцем. При необходимости покажите QR-код или отправьте ссылку вручную.`;
-  }
-
-  return `Это первое подключение через ${formatInviteChannel(channel)}. Покажите QR-код или передайте ссылку: она откроет бота и привяжет канал к владельцу.`;
+function escapePrintHtml(value: string) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
 }

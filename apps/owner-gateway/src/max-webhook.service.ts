@@ -26,7 +26,7 @@ export class MaxWebhookService {
 
     if (
       !invitation ||
-      invitation.channel !== PortalInviteChannel.MAX ||
+      (invitation.channel !== PortalInviteChannel.MAX && invitation.channel !== PortalInviteChannel.WEB) ||
       invitation.status !== PortalInviteStatus.ACTIVE ||
       invitation.expiresAt <= new Date()
     ) {
