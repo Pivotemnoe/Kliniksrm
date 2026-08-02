@@ -27,6 +27,20 @@ test('онлайн-заявка не создаёт запись автомат�
   assert.doesNotMatch(syncService, /createAppointment|appointment\.create/);
 });
 
+test('сотрудник видит действия заявки и может сразу ответить владельцу', async () => {
+  const requestsPage = await read('apps/web/src/features/onlineRequests/OnlineRequestsPage.tsx');
+  const messagesPage = await read('apps/web/src/features/notifications/MessagesPage.tsx');
+
+  assert.match(requestsPage, />\s*Подтвердить\s*</);
+  assert.match(requestsPage, /Редактировать/);
+  assert.match(requestsPage, />\s*Ответить\s*</);
+  assert.match(requestsPage, /Связаться/);
+  assert.match(requestsPage, /acceptOnlineRequest/);
+  assert.match(requestsPage, /compose: '1'/);
+  assert.match(messagesPage, /searchParams\.get\('compose'\) !== '1'/);
+  assert.match(messagesPage, /reset\(getNotificationDefaults\(initialValues\)\)/);
+});
+
 test('Telegram-рассылка требует предпросмотр и явное подтверждение', async () => {
   const controller = await read('apps/api/src/modules/notifications/notifications.controller.ts');
   const dto = await read('apps/api/src/modules/notifications/dto/create-telegram-broadcast.dto.ts');

@@ -105,11 +105,15 @@ function renderPortal(response) {
       </div>
     </section>
     <section class="service-promo" aria-label="Сервис TemichevVet для владельцев животных">
-      <div>
-        <strong>TemichevVet — сервис для владельцев животных</strong>
-        <span>Полезный онлайн-сервис для владельцев собак и кошек.</span>
+      <div class="service-promo-copy">
+        <strong class="service-promo-title">Сомневаетесь, можно ли подождать?</strong>
+        <p class="service-promo-description">Опишите, что происходит с питомцем. TemichevVet поможет заметить тревожные признаки и понять следующий шаг: наблюдать дома, обратиться за консультацией или не откладывать поездку в клинику.</p>
+        <p class="service-promo-benefits">Понять срочность <span aria-hidden="true">·</span> Разобрать симптомы <span aria-hidden="true">·</span> Проверить питание <span aria-hidden="true">·</span> Сохранить историю</p>
       </div>
-      <a class="button service-promo-link" href="https://temichevvet.ru" target="_blank" rel="noopener noreferrer">Открыть сервис</a>
+      <div class="service-promo-action">
+        <a class="button service-promo-link" href="https://temichevvet.ru" target="_blank" rel="noopener noreferrer">Оценить состояние питомца</a>
+        <p class="service-promo-note">Первичный ориентир — без звонка и ожидания ответа. Сервис не ставит диагноз и не заменяет врача.</p>
+      </div>
     </section>
     <nav class="tabs" aria-label="Разделы личного кабинета">
       ${tabButton('animals', `Пациенты · ${animals.length}`, true)}

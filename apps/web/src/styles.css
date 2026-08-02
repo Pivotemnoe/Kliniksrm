@@ -2144,20 +2144,74 @@ body {
   text-align: center;
 }
 
-.portal-service-promo {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.online-request-drawer-sections {
+  display: grid;
   gap: 18px;
+}
+
+.online-request-drawer-confirm .online-request-confirm-section {
+  order: -1;
+}
+
+.portal-service-promo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(210px, 250px);
+  align-items: center;
+  gap: 20px;
   margin-bottom: 18px;
-  padding: 16px 18px;
-  border: 1px solid #bfd8da;
-  border-radius: 8px;
-  background: #eff8f7;
+  padding: 17px 18px;
+  overflow: hidden;
+  border: 1px solid #b8d7d7;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f1faf8 0%, #e7f5f3 100%);
+  box-shadow: 0 6px 20px rgb(36 106 115 / 7%);
 }
 
 .portal-service-promo h4 {
-  margin: 0 0 3px;
+  margin: 0;
+  color: #17324d;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.portal-service-promo-copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.portal-service-promo-description.ant-typography {
+  max-width: 720px;
+  margin: 0;
+  color: #455d6c;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.portal-service-promo-benefits.ant-typography {
+  color: #1f6d72;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.portal-service-promo-action {
+  display: grid;
+  gap: 7px;
+  align-content: center;
+}
+
+.portal-service-promo-action .ant-btn {
+  min-height: 44px;
+  height: auto;
+  padding-block: 9px;
+  white-space: normal;
+  line-height: 1.25;
+}
+
+.portal-service-promo-note.ant-typography {
+  color: #60737f;
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .portal-qr-card {
@@ -2907,8 +2961,21 @@ body {
   }
 
   .portal-service-promo {
-    align-items: stretch;
-    flex-direction: column;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .portal-service-promo h4 {
+    font-size: 17px;
+  }
+
+  .portal-service-promo-description.ant-typography {
+    font-size: 13px;
+  }
+
+  .portal-service-promo-action .ant-btn {
+    width: 100%;
   }
 
   .form-grid-two {

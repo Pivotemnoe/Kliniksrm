@@ -178,13 +178,24 @@ export function ClientPortalPage() {
         </section>
 
         <section className="portal-service-promo">
-          <div>
-            <Typography.Title level={4}>TemichevVet — сервис для владельцев животных</Typography.Title>
-            <Typography.Text type="secondary">Полезный онлайн-сервис для владельцев собак и кошек.</Typography.Text>
+          <div className="portal-service-promo-copy">
+            <Typography.Title level={4}>Сомневаетесь, можно ли подождать?</Typography.Title>
+            <Typography.Paragraph className="portal-service-promo-description">
+              Опишите, что происходит с питомцем. TemichevVet поможет заметить тревожные признаки и понять следующий шаг: наблюдать дома,
+              обратиться за консультацией или не откладывать поездку в клинику.
+            </Typography.Paragraph>
+            <Typography.Text className="portal-service-promo-benefits" strong>
+              Понять срочность · Разобрать симптомы · Проверить питание · Сохранить историю
+            </Typography.Text>
           </div>
-          <Button type="primary" icon={<ExportOutlined />} href="https://temichevvet.ru" target="_blank" rel="noopener noreferrer">
-            Открыть сервис
-          </Button>
+          <div className="portal-service-promo-action">
+            <Button type="primary" icon={<ExportOutlined />} href="https://temichevvet.ru" target="_blank" rel="noopener noreferrer">
+              Оценить состояние питомца
+            </Button>
+            <Typography.Text className="portal-service-promo-note" type="secondary">
+              Первичный ориентир — без звонка и ожидания ответа. Сервис не ставит диагноз и не заменяет врача.
+            </Typography.Text>
+          </div>
         </section>
 
         <section className="portal-grid portal-grid-single">

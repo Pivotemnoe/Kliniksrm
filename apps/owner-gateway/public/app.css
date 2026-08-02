@@ -46,11 +46,15 @@ button { font: inherit; }
 .push-button:disabled { cursor: default; opacity: .78; }
 .push-status { max-width: 340px; color: #526978; font-weight: 600; line-height: 1.4; }
 .browser-hint { max-width: 260px; color: #246a73; font-weight: 700; line-height: 1.35; }
-.service-promo { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 14px; padding: 15px 18px; border: 1px solid #bcd6d8; border-radius: 14px; background: #edf8f7; }
-.service-promo div { display: grid; gap: 3px; }
-.service-promo strong { color: #17324d; font-size: 16px; }
-.service-promo span { color: #536574; }
-.service-promo-link { display: inline-flex; align-items: center; justify-content: center; flex: none; text-decoration: none; }
+.service-promo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(210px, 250px); align-items: center; gap: 20px; margin-top: 14px; padding: 17px 18px; overflow: hidden; border: 1px solid #b8d7d7; border-radius: 16px; background: linear-gradient(135deg, #f1faf8 0%, #e7f5f3 100%); box-shadow: 0 6px 20px rgb(36 106 115 / 7%); }
+.service-promo-copy { display: grid; gap: 6px; min-width: 0; }
+.service-promo-title { color: #17324d; font-size: 18px; line-height: 1.25; }
+.service-promo-description { max-width: 720px; margin: 0; color: #455d6c; font-size: 14px; line-height: 1.45; }
+.service-promo-benefits { margin: 0; color: #1f6d72; font-size: 13px; font-weight: 800; line-height: 1.4; }
+.service-promo-benefits span { padding: 0 2px; color: #75a5a8; }
+.service-promo-action { display: grid; gap: 7px; align-content: center; }
+.service-promo-link { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 10px 14px; text-align: center; text-decoration: none; line-height: 1.25; }
+.service-promo-note { margin: 0; color: #60737f; font-size: 11px; line-height: 1.35; }
 
 .tabs { display: flex; gap: 8px; margin: 20px 0 14px; overflow-x: auto; padding: 2px; }
 .tab, .button { cursor: pointer; border: 0; border-radius: 10px; padding: 10px 14px; }
@@ -111,7 +115,10 @@ button { font: inherit; }
 @media (max-width: 700px) {
   .shell { width: min(100% - 20px, 1120px); margin-top: 14px; }
   .hero { flex-direction: column; padding: 19px; }
-  .service-promo { align-items: stretch; flex-direction: column; }
+  .service-promo { grid-template-columns: 1fr; gap: 12px; padding: 16px; }
+  .service-promo-title { font-size: 17px; }
+  .service-promo-description { font-size: 13px; }
+  .service-promo-link { width: 100%; }
   .hero-meta { align-items: flex-start; flex-direction: column; }
   .grid { grid-template-columns: 1fr; }
   .booking-layout { grid-template-columns: 1fr; }

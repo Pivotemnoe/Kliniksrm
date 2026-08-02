@@ -5,6 +5,7 @@ import { App, Alert, Button, Checkbox, Descriptions, Drawer, Form, Input, Select
 import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
+import { useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
@@ -40,6 +41,7 @@ const pageSize = 10;
 const channelOptions = Object.entries(notificationChannelLabels).map(([value, label]) => ({ value, label }));
 
 export function MessagesPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const { message } = App.useApp();
   const { data: auth } = useCurrentEmployee();
@@ -48,6 +50,7 @@ export function MessagesPage() {
   const [channel, setChannel] = useState<NotificationChannel | undefined>();
   const [offset, setOffset] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
+  const [composerDefaults, setComposerDefaults] = useState<NotificationComposerDefaults>({});
   const [broadcastOpen, setBroadcastOpen] = useState(false);
   const [templateOpen, setTemplateOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<NotificationTemplate | null>(null);
@@ -104,6 +107,26 @@ export function MessagesPage() {
       setSelectedOutbox(updatedItem);
     }
   }, [outboxQuery.data, selectedOutbox]);
+
+  useEffect(() => {
+    if (!canManage || searchParams.get('compose') !== '1') {
+      return;
+    }
+
+    setComposerDefaults({
+      ownerId: searchParams.get('ownerId') ?? '',
+      animalId: searchParams.get('animalId') ?? '',
+      subject: searchParams.get('subject') ?? '',
+      body: searchParams.get('body') ?? '',
+    });
+    setCreateOpen(true);
+
+    const nextSearchParams = new URLSearchParams(searchParams);
+    for (const key of ['compose', 'ownerId', 'animalId', 'subject', 'body']) {
+      nextSearchParams.delete(key);
+    }
+    setSearchParams(nextSearchParams, { replace: true });
+  }, [canManage, searchParams, setSearchParams]);
 
   const outboxColumns = useMemo<ColumnsType<NotificationOutboxItem>>(
     () => [
@@ -243,7 +266,14 @@ export function MessagesPage() {
               <Button onClick={() => setBroadcastOpen(true)}>
                 Рассылка Telegram
               </Button>
-              <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                onClick={() => {
+                  setComposerDefaults({});
+                  setCreateOpen(true);
+                }}
+              >
                 Написать владельцу
               </Button>
             </Space>
@@ -331,6 +361,7 @@ export function MessagesPage() {
       />
       <NotificationFormDrawer
         open={createOpen}
+        initialValues={composerDefaults}
         templates={templatesQuery.data ?? []}
         submitError={createMutation.error}
         isSubmitting={createMutation.isPending}
@@ -572,9 +603,11 @@ const notificationSchema = z.object({
 
 type NotificationFormValues = z.infer<typeof notificationSchema>;
 type NotificationFormInput = z.input<typeof notificationSchema>;
+type NotificationComposerDefaults = Partial<Pick<NotificationFormInput, 'ownerId' | 'animalId' | 'subject' | 'body'>>;
 
 function NotificationFormDrawer({
   open,
+  initialValues,
   templates,
   submitError,
   isSubmitting,
@@ -582,6 +615,7 @@ function NotificationFormDrawer({
   onSubmit,
 }: {
   open: boolean;
+  initialValues: Partial<NotificationComposerDefaults>;
   templates: NotificationTemplate[];
   submitError?: unknown;
   isSubmitting?: boolean;
@@ -610,12 +644,27 @@ function NotificationFormDrawer({
     enabled: open && Boolean(ownerId),
   });
   const selectedOwner = selectedOwnerQuery.data;
+  const ownerOptions = useMemo(() => {
+    const options = (ownersQuery.data?.items ?? []).map((owner) => ({
+      value: owner.id,
+      label: owner.phone ? `${owner.fullName}, ${owner.phone}` : owner.fullName,
+    }));
+
+    if (selectedOwner && !options.some((option) => option.value === selectedOwner.id)) {
+      options.unshift({
+        value: selectedOwner.id,
+        label: selectedOwner.phone ? `${selectedOwner.fullName}, ${selectedOwner.phone}` : selectedOwner.fullName,
+      });
+    }
+
+    return options;
+  }, [ownersQuery.data, selectedOwner]);
   const maxConnected = Boolean(selectedOwner?.allowMax && selectedOwner.maxUserId);
   const telegramConnected = Boolean(selectedOwner?.allowTelegram && selectedOwner.telegramChatId);
 
   function handleOpenChange(nextOpen: boolean) {
     if (nextOpen) {
-      reset(getNotificationDefaults());
+      reset(getNotificationDefaults(initialValues));
       setOwnerSearch('');
     }
   }
@@ -667,10 +716,7 @@ function NotificationFormDrawer({
                   onSearch={setOwnerSearch}
                   loading={ownersQuery.isLoading}
                   placeholder="Найти владельца"
-                  options={ownersQuery.data?.items.map((owner) => ({
-                    value: owner.id,
-                    label: owner.phone ? `${owner.fullName}, ${owner.phone}` : owner.fullName,
-                  }))}
+                  options={ownerOptions}
                   onChange={(value) => {
                     field.onChange(value ?? '');
                     setValue('animalId', '');
@@ -917,15 +963,15 @@ function TemplateFormDrawer({
   );
 }
 
-function getNotificationDefaults(): NotificationFormInput {
+function getNotificationDefaults(initialValues: Partial<NotificationComposerDefaults> = {}): NotificationFormInput {
   return {
     channel: 'MESSENGER',
-    ownerId: '',
-    animalId: '',
+    ownerId: initialValues.ownerId ?? '',
+    animalId: initialValues.animalId ?? '',
     templateId: '',
     recipient: '',
-    subject: '',
-    body: '',
+    subject: initialValues.subject ?? '',
+    body: initialValues.body ?? '',
     scheduledAt: '',
     messengerChannels: [],
   };

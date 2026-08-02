@@ -1,7 +1,21 @@
-import { CalendarOutlined, CheckCircleOutlined, CloseOutlined, CopyOutlined, InboxOutlined, LinkOutlined, PlusOutlined } from '@ant-design/icons';
+import {
+  CalendarOutlined,
+  CheckCircleOutlined,
+  CloseOutlined,
+  CopyOutlined,
+  DownOutlined,
+  EditOutlined,
+  InboxOutlined,
+  LinkOutlined,
+  MessageOutlined,
+  PhoneOutlined,
+  PlusOutlined,
+  UserOutlined,
+} from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Alert, Button, Drawer, Form, Input, QRCode, Select, Space, Table, Tag, Typography } from 'antd';
+import { App, Alert, Button, Drawer, Dropdown, Form, Input, Popconfirm, QRCode, Select, Space, Table, Tag, Typography } from 'antd';
+import type { MenuProps } from 'antd';
 import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
@@ -62,6 +76,7 @@ const acceptSchema = z.object({
 
 type RequestFormValues = z.infer<typeof requestSchema>;
 type AcceptFormValues = z.infer<typeof acceptSchema>;
+type RequestDrawerIntent = 'confirm' | 'edit';
 
 export function OnlineRequestsPage() {
   const navigate = useNavigate();
@@ -74,6 +89,7 @@ export function OnlineRequestsPage() {
   const [offset, setOffset] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<OnlineAppointmentRequest | null>(null);
+  const [drawerIntent, setDrawerIntent] = useState<RequestDrawerIntent>('confirm');
   const publicRequestUrl = useMemo(() => getPublicOnlineRequestUrl(), []);
 
   const requestsQuery = useQuery({
@@ -99,6 +115,34 @@ export function OnlineRequestsPage() {
     },
     onError: (error) => message.error(getErrorMessage(error)),
   });
+  const quickAcceptMutation = useMutation({
+    mutationFn: ({ request, input }: { request: OnlineAppointmentRequest; input: AcceptOnlineRequestInput }) =>
+      acceptOnlineRequest(request.id, input),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['online-requests'] }),
+        queryClient.invalidateQueries({ queryKey: ['appointments'] }),
+      ]);
+      message.success('Запись подтверждена и добавлена в расписание');
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
+
+  function openRequest(request: OnlineAppointmentRequest, intent: RequestDrawerIntent) {
+    setDrawerIntent(intent);
+    setSelectedRequest(request);
+  }
+
+  function answerRequest(request: OnlineAppointmentRequest) {
+    if (!request.ownerId) {
+      message.warning('Сначала привяжите заявку к карточке владельца');
+      openRequest(request, 'edit');
+      return;
+    }
+
+    const draft = buildReplyDraft(request);
+    navigate(`/messages?${new URLSearchParams(draft).toString()}`);
+  }
 
   const columns = useMemo<ColumnsType<OnlineAppointmentRequest>>(
     () => [
@@ -146,8 +190,57 @@ export function OnlineRequestsPage() {
           ),
       },
       { title: 'Создана', dataIndex: 'createdAt', key: 'createdAt', width: 180, render: formatDateTime },
+      {
+        title: 'Действия',
+        key: 'actions',
+        width: 430,
+        fixed: 'right',
+        render: (_, request) => {
+          const locked = isRequestLocked(request);
+          const quickAcceptInput = getQuickAcceptInput(request);
+          const accepting = quickAcceptMutation.isPending && quickAcceptMutation.variables?.request.id === request.id;
+          const contactItems = getContactItems(request, navigate, message);
+
+          return (
+            <Space wrap size={[6, 6]}>
+              {canManage && !locked ? (
+                quickAcceptInput ? (
+                  <Popconfirm
+                    title="Подтвердить запись?"
+                    description={`${request.animalNickname}: ${formatDateTime(request.preferredAt)}`}
+                    okText="Подтвердить"
+                    cancelText="Отмена"
+                    onConfirm={() => quickAcceptMutation.mutate({ request, input: quickAcceptInput })}
+                  >
+                    <Button size="small" type="primary" icon={<CheckCircleOutlined />} loading={accepting}>
+                      Подтвердить
+                    </Button>
+                  </Popconfirm>
+                ) : (
+                  <Button size="small" type="primary" icon={<CheckCircleOutlined />} onClick={() => openRequest(request, 'confirm')}>
+                    Подтвердить
+                  </Button>
+                )
+              ) : null}
+              <Button size="small" icon={<EditOutlined />} onClick={() => openRequest(request, 'edit')}>
+                {locked ? 'Открыть' : 'Редактировать'}
+              </Button>
+              {!locked ? (
+                <Button size="small" icon={<MessageOutlined />} onClick={() => answerRequest(request)}>
+                  Ответить
+                </Button>
+              ) : null}
+              <Dropdown menu={{ items: contactItems }} trigger={['click']}>
+                <Button size="small" icon={<PhoneOutlined />}>
+                  Связаться <DownOutlined />
+                </Button>
+              </Dropdown>
+            </Space>
+          );
+        },
+      },
     ],
-    [navigate],
+    [canManage, message, navigate, quickAcceptMutation],
   );
 
   function handleTableChange(pagination: TablePaginationConfig) {
@@ -235,7 +328,8 @@ export function OnlineRequestsPage() {
               showSizeChanger: false,
             }}
             onChange={handleTableChange}
-            onRow={(request) => ({ onDoubleClick: () => setSelectedRequest(request) })}
+            scroll={{ x: 1580 }}
+            onRow={(request) => ({ onDoubleClick: () => openRequest(request, 'edit') })}
           />
         </div>
       </div>
@@ -247,6 +341,7 @@ export function OnlineRequestsPage() {
       />
       <RequestDrawer
         request={selectedRequest}
+        intent={drawerIntent}
         canManage={canManage}
         actionLoading={actionMutation.isPending}
         onClose={() => setSelectedRequest(null)}
@@ -310,12 +405,14 @@ function CreateRequestDrawer({
 
 function RequestDrawer({
   request,
+  intent,
   canManage,
   actionLoading,
   onClose,
   onAction,
 }: {
   request: OnlineAppointmentRequest | null;
+  intent: RequestDrawerIntent;
   canManage: boolean;
   actionLoading: boolean;
   onClose: () => void;
@@ -409,18 +506,29 @@ function RequestDrawer({
       extra={request ? <Tag color={onlineRequestStatusColors[request.status]}>{onlineRequestStatusLabels[request.status]}</Tag> : null}
     >
       {request ? (
-        <Space direction="vertical" size={18} className="full-width">
-          <Form layout="vertical">
-            <RequestFields control={updateForm.control} disabled={!canManage || locked} />
-            {canManage && !locked ? (
-              <Button loading={updateMutation.isPending} onClick={updateForm.handleSubmit(submitUpdate)}>
-                Сохранить заявку
-              </Button>
-            ) : null}
-          </Form>
-          <div className="list-panel">
+        <div className={`online-request-drawer-sections online-request-drawer-${intent}`}>
+          <div className="online-request-edit-section">
+            <Alert
+              type="info"
+              showIcon
+              className="form-alert"
+              message={intent === 'edit' ? 'Проверьте и исправьте данные заявки' : 'Данные клиента и пациента'}
+            />
+            <Form layout="vertical">
+              <RequestFields control={updateForm.control} disabled={!canManage || locked} />
+              {canManage && !locked ? (
+                <Button loading={updateMutation.isPending} onClick={updateForm.handleSubmit(submitUpdate)}>
+                  Сохранить изменения
+                </Button>
+              ) : null}
+            </Form>
+          </div>
+          <div className="list-panel online-request-confirm-section">
             <div className="list-panel-header">
-              <Typography.Text strong>Перевод в расписание</Typography.Text>
+              <Space direction="vertical" size={0}>
+                <Typography.Text strong>Подтверждение записи</Typography.Text>
+                <Typography.Text type="secondary">Проверьте время и добавьте запись в расписание.</Typography.Text>
+              </Space>
             </div>
             <div className="list-panel-body">
               <Form layout="vertical">
@@ -539,7 +647,7 @@ function RequestDrawer({
                 <Space wrap>
                   {canManage && !locked ? (
                     <Button type="primary" icon={<CheckCircleOutlined />} loading={acceptMutation.isPending} onClick={acceptForm.handleSubmit(submitAccept)}>
-                      Принять в расписание
+                      Подтвердить и поставить в расписание
                     </Button>
                   ) : null}
                   {canManage && request.status !== 'CANCELLED' && request.status !== 'ACCEPTED' ? (
@@ -556,7 +664,7 @@ function RequestDrawer({
               </Form>
             </div>
           </div>
-        </Space>
+        </div>
       ) : null}
     </Drawer>
   );
@@ -690,4 +798,75 @@ async function copyPublicOnlineRequestUrl(url: string, message: ReturnType<typeo
   } catch {
     message.warning('Не удалось скопировать ссылку автоматически');
   }
+}
+
+function isRequestLocked(request: OnlineAppointmentRequest) {
+  return request.status === 'ACCEPTED' || request.status === 'ARCHIVED' || request.status === 'CANCELLED';
+}
+
+function getQuickAcceptInput(request: OnlineAppointmentRequest): AcceptOnlineRequestInput | null {
+  if (!request.ownerId || !request.animalId || !request.preferredAt) {
+    return null;
+  }
+
+  return {
+    ownerId: request.ownerId,
+    animalId: request.animalId,
+    startsAt: request.preferredAt,
+    comment: request.comment ?? undefined,
+  };
+}
+
+function buildReplyDraft(request: OnlineAppointmentRequest): Record<string, string> {
+  const preferredTime = request.preferredAt ? ` на ${formatDateTime(request.preferredAt)}` : '';
+  const draft: Record<string, string> = {
+    compose: '1',
+    ownerId: request.ownerId ?? '',
+    subject: 'Ваша заявка на запись',
+    body: `Здравствуйте, ${request.ownerName}! Пишем по вашей заявке на запись питомца ${request.animalNickname}${preferredTime}. `,
+  };
+
+  if (request.animalId) {
+    draft.animalId = request.animalId;
+  }
+
+  return draft;
+}
+
+function getContactItems(
+  request: OnlineAppointmentRequest,
+  navigate: ReturnType<typeof useNavigate>,
+  message: ReturnType<typeof App.useApp>['message'],
+): NonNullable<MenuProps['items']> {
+  const items: NonNullable<MenuProps['items']> = [
+    {
+      key: 'call',
+      icon: <PhoneOutlined />,
+      label: <a href={`tel:${request.phone}`}>Позвонить: {request.phone}</a>,
+    },
+    {
+      key: 'copy-phone',
+      icon: <CopyOutlined />,
+      label: 'Скопировать телефон',
+      onClick: async () => {
+        try {
+          await navigator.clipboard.writeText(request.phone);
+          message.success('Телефон скопирован');
+        } catch {
+          message.warning('Не удалось скопировать телефон автоматически');
+        }
+      },
+    },
+  ];
+
+  if (request.ownerId) {
+    items.push({
+      key: 'owner',
+      icon: <UserOutlined />,
+      label: 'Открыть карточку клиента',
+      onClick: () => navigate(`/owners/${request.ownerId}`),
+    });
+  }
+
+  return items;
 }

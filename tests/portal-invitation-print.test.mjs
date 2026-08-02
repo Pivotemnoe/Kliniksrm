@@ -51,8 +51,14 @@ test('личный кабинет рекламирует отдельный се
   const publicPortal = await read('apps/owner-gateway/public/app.js');
   const localPortal = await read('apps/web/src/features/clientPortal/ClientPortalPage.tsx');
 
-  assert.match(publicPortal, /TemichevVet — сервис для владельцев животных/);
+  assert.match(publicPortal, /Сомневаетесь, можно ли подождать\?/);
+  assert.match(publicPortal, /Понять срочность/);
+  assert.match(publicPortal, /Оценить состояние питомца/);
+  assert.match(publicPortal, /Сервис не ставит диагноз и не заменяет врача/);
   assert.match(publicPortal, /href="https:\/\/temichevvet\.ru"/);
-  assert.match(localPortal, /TemichevVet — сервис для владельцев животных/);
+  assert.match(localPortal, /Сомневаетесь, можно ли подождать\?/);
+  assert.match(localPortal, /Понять срочность/);
+  assert.match(localPortal, /Оценить состояние питомца/);
+  assert.match(localPortal, /Сервис не ставит диагноз и не заменяет врача/);
   assert.match(localPortal, /href="https:\/\/temichevvet\.ru"/);
 });
