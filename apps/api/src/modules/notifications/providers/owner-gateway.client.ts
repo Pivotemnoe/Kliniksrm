@@ -8,6 +8,7 @@ export type OwnerGatewayAutomaticDelivery = 'sent' | 'failed' | 'manual_required
 export type OwnerGatewayInviteResult = {
   status: OwnerGatewaySyncStatus;
   deliveryUrl: string | null;
+  deliveryUrls: Partial<Record<PortalInviteChannel, string>>;
   automaticDelivery: OwnerGatewayAutomaticDelivery;
   failureReason?: 'network' | 'timeout' | 'rejected';
 };
@@ -60,6 +61,7 @@ export class OwnerGatewayClient {
       return {
         status: 'skipped_not_configured',
         deliveryUrl: null,
+        deliveryUrls: {},
         automaticDelivery: 'manual_required',
       };
     }
@@ -78,6 +80,7 @@ export class OwnerGatewayClient {
 
       const invitation = await requestGateway<{
         deliveryUrl?: unknown;
+        deliveryUrls?: unknown;
         automaticDelivery?: unknown;
       }>(`${baseUrl}/internal/v1/owners/${encodeURIComponent(input.ownerId)}/invitations`, syncSecret, {
         method: 'POST',
@@ -91,12 +94,14 @@ export class OwnerGatewayClient {
       return {
         status: 'synced',
         deliveryUrl: typeof invitation.deliveryUrl === 'string' ? invitation.deliveryUrl : null,
+        deliveryUrls: normalizeDeliveryUrls(invitation.deliveryUrls),
         automaticDelivery: normalizeAutomaticDelivery(invitation.automaticDelivery),
       };
     } catch (error) {
       return {
         status: 'failed',
         deliveryUrl: null,
+        deliveryUrls: {},
         automaticDelivery: 'failed',
         failureReason: classifyFailure(error),
       };
@@ -280,6 +285,19 @@ export class OwnerGatewayClient {
       return null;
     }
   }
+}
+
+function normalizeDeliveryUrls(value: unknown): Partial<Record<PortalInviteChannel, string>> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+
+  const source = value as Record<string, unknown>;
+  return Object.fromEntries(
+    Object.values(PortalInviteChannel)
+      .filter((channel) => typeof source[channel] === 'string' && source[channel])
+      .map((channel) => [channel, source[channel] as string]),
+  ) as Partial<Record<PortalInviteChannel, string>>;
 }
 
 async function requestGateway<T = unknown>(

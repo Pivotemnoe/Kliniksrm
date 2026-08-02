@@ -479,6 +479,7 @@ export class NotificationsService {
       inviteChannel: dto.channel,
       directDeliveryAvailable: Boolean(directRecipient),
       deliveryUrl: gatewayResult.deliveryUrl,
+      deliveryUrls: gatewayResult.deliveryUrls,
       automaticDelivery,
       gatewaySync: gatewayResult.status,
     };
