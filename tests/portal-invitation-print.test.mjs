@@ -31,6 +31,20 @@ test('один универсальный токен выдаёт ссылки �
   assert.match(maxWebhook, /invitation\.channel !== PortalInviteChannel\.WEB/);
   assert.match(telegramWebhook, /invitation\.channel !== PortalInviteChannel\.WEB/);
   assert.match(apiClient, /normalizeDeliveryUrls/);
+  assert.match(apiClient, /buildCompatibleDeliveryUrls/);
+  assert.match(apiClient, /TELEGRAM_BOT_USERNAME/);
+  assert.match(apiClient, /MAX_BOT_NAME/);
+  assert.match(apiClient, /portal\/activate\?token=/);
+});
+
+test('CRM дополняет старый ответ шлюза до полного печатного комплекта', async () => {
+  const compose = await read('docker-compose.yml');
+  const exampleEnv = await read('.env.example');
+
+  assert.match(compose, /TELEGRAM_BOT_USERNAME: \$\{TELEGRAM_BOT_USERNAME:-TemichevVetCabinetBot\}/);
+  assert.match(compose, /MAX_BOT_NAME: \$\{MAX_BOT_NAME:-id230210303969_2_bot\}/);
+  assert.match(exampleEnv, /TELEGRAM_BOT_USERNAME=TemichevVetCabinetBot/);
+  assert.match(exampleEnv, /MAX_BOT_NAME=id230210303969_2_bot/);
 });
 
 test('личный кабинет рекламирует отдельный сервис для владельцев животных', async () => {

@@ -91,10 +91,19 @@ export class OwnerGatewayClient {
         },
       });
 
+      const deliveryUrl = typeof invitation.deliveryUrl === 'string' ? invitation.deliveryUrl : null;
+      const deliveryUrls = buildCompatibleDeliveryUrls({
+        token: input.token,
+        channel: input.channel,
+        gatewayBaseUrl: baseUrl,
+        deliveryUrl,
+        deliveryUrls: normalizeDeliveryUrls(invitation.deliveryUrls),
+      });
+
       return {
         status: 'synced',
-        deliveryUrl: typeof invitation.deliveryUrl === 'string' ? invitation.deliveryUrl : null,
-        deliveryUrls: normalizeDeliveryUrls(invitation.deliveryUrls),
+        deliveryUrl,
+        deliveryUrls,
         automaticDelivery: normalizeAutomaticDelivery(invitation.automaticDelivery),
       };
     } catch (error) {
@@ -298,6 +307,34 @@ function normalizeDeliveryUrls(value: unknown): Partial<Record<PortalInviteChann
       .filter((channel) => typeof source[channel] === 'string' && source[channel])
       .map((channel) => [channel, source[channel] as string]),
   ) as Partial<Record<PortalInviteChannel, string>>;
+}
+
+function buildCompatibleDeliveryUrls(input: {
+  token: string;
+  channel: PortalInviteChannel;
+  gatewayBaseUrl: string;
+  deliveryUrl: string | null;
+  deliveryUrls: Partial<Record<PortalInviteChannel, string>>;
+}): Partial<Record<PortalInviteChannel, string>> {
+  const token = encodeURIComponent(input.token);
+  const publicUrl = normalizeBaseUrl(process.env.CLIENT_PORTAL_PUBLIC_URL) || input.gatewayBaseUrl;
+  const telegramBotName = normalizeBotName(process.env.TELEGRAM_BOT_USERNAME);
+  const maxBotName = normalizeBotName(process.env.MAX_BOT_NAME);
+  const compatible: Partial<Record<PortalInviteChannel, string>> = {
+    ...(publicUrl ? { [PortalInviteChannel.WEB]: `${publicUrl}/portal/activate?token=${token}` } : {}),
+    ...(telegramBotName ? { [PortalInviteChannel.TELEGRAM]: `https://t.me/${telegramBotName}?start=${token}` } : {}),
+    ...(maxBotName ? { [PortalInviteChannel.MAX]: `https://max.ru/${maxBotName}?start=${token}` } : {}),
+  };
+
+  if (input.deliveryUrl) {
+    compatible[input.channel] = input.deliveryUrl;
+  }
+
+  return { ...compatible, ...input.deliveryUrls };
+}
+
+function normalizeBotName(value: string | undefined) {
+  return value?.trim().replace(/^@/, '') || '';
 }
 
 async function requestGateway<T = unknown>(
