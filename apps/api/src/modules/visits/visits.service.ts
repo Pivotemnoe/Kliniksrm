@@ -224,6 +224,7 @@ export class VisitsService {
   async upsertExam(visitId: string, dto: UpsertVisitExamDto, actor: AuthEmployee) {
     const visit = await this.getExistingVisit(visitId);
     ensureVisitEditable(visit, actor);
+    await this.ensurePrimaryVisitDiagnosesReady(visit);
 
     const exam = await this.prisma.$transaction(async (tx) => {
       const savedExam = await tx.visitExam.upsert({

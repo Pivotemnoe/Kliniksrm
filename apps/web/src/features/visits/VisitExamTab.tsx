@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Alert, Button, Form, Input, Select, Space } from 'antd';
+import { Alert, App, Button, Form, Input, Select, Space } from 'antd';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
@@ -32,6 +32,7 @@ type VisitExamTabProps = {
 
 export function VisitExamTab({ visit, canManage, locked }: VisitExamTabProps) {
   const queryClient = useQueryClient();
+  const { message, modal } = App.useApp();
   const { control, handleSubmit, reset } = useForm<ExamInput, unknown, ExamValues>({
     resolver: zodResolver(examSchema),
     defaultValues: getDefaultValues(visit),
@@ -53,6 +54,7 @@ export function VisitExamTab({ visit, canManage, locked }: VisitExamTabProps) {
         queryClient.invalidateQueries({ queryKey: ['animals', visit.animalId] }),
         queryClient.invalidateQueries({ queryKey: ['medical-phrases'] }),
       ]);
+      message.success('Лист осмотра сохранён');
     },
   });
   const disabled = locked || !canManage;
@@ -60,6 +62,18 @@ export function VisitExamTab({ visit, canManage, locked }: VisitExamTabProps) {
   const diagnoses = visit.diagnoses.map((diagnosis) => diagnosis.title);
 
   function submit(values: ExamValues) {
+    const effectiveVisitType = values.visitType ?? visit.visitType;
+    const diagnosisIssue = getPrimaryDiagnosisSaveIssue(effectiveVisitType, visit.diagnoses);
+
+    if (diagnosisIssue) {
+      modal.warning({
+        title: diagnosisIssue,
+        content: 'Добавьте диагноз и выберите его тип. После этого сохраните лист осмотра.',
+        okText: 'Понятно',
+      });
+      return;
+    }
+
     mutation.mutate(values);
   }
 
@@ -67,7 +81,6 @@ export function VisitExamTab({ visit, canManage, locked }: VisitExamTabProps) {
     <Form layout="vertical" disabled={disabled} className="visit-tab-form">
       {locked ? <Alert type="info" showIcon message="Редактирование закрыто: отменённый приём нельзя менять, завершённый доступен директору или в течение 30 минут после завершения." className="form-alert" /> : null}
       {mutation.isError ? <Alert type="error" showIcon message={getErrorMessage(mutation.error)} className="form-alert" /> : null}
-      {mutation.isSuccess ? <Alert type="success" showIcon message="Лист осмотра сохранён" className="form-alert" /> : null}
       <div className="form-grid visit-exam-vitals-grid">
         <Controller
           control={control}
@@ -207,6 +220,22 @@ export function VisitExamTab({ visit, canManage, locked }: VisitExamTabProps) {
       </Space>
     </Form>
   );
+}
+
+function getPrimaryDiagnosisSaveIssue(visitType: VisitType | null | undefined, diagnoses: Visit['diagnoses']) {
+  if (visitType !== 'PRIMARY') {
+    return null;
+  }
+
+  if (!diagnoses.length) {
+    return 'Вы не указали ни одного диагноза';
+  }
+
+  if (diagnoses.some((diagnosis) => !diagnosis.diagnosisType?.trim())) {
+    return 'Укажите тип для каждого диагноза';
+  }
+
+  return null;
 }
 
 const examSnippets = {

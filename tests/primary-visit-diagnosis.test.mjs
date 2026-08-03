@@ -21,7 +21,7 @@ test('первичный приём не завершается без диаг�
   assert.doesNotThrow(() => assertPrimaryVisitDiagnosesReady({ visitType: 'FOLLOW_UP' }, []));
 });
 
-test('запрет нельзя обойти прямым PATCH или переводом в стационар', async () => {
+test('запрет нельзя обойти сохранением осмотра, прямым PATCH или переводом в стационар', async () => {
   const [visits, hospital] = await Promise.all([
     read('apps/api/src/modules/visits/visits.service.ts'),
     read('apps/api/src/modules/hospital/hospital.service.ts'),
@@ -29,14 +29,16 @@ test('запрет нельзя обойти прямым PATCH или пере�
 
   assert.match(visits, /dto\.status === VisitStatus\.COMPLETED[\s\S]*ensurePrimaryVisitDiagnosesReady/);
   assert.match(visits, /status === VisitStatus\.COMPLETED[\s\S]*ensurePrimaryVisitDiagnosesReady/);
+  assert.match(visits, /async upsertExam[\s\S]*ensurePrimaryVisitDiagnosesReady\(visit\)/);
   assert.match(hospital, /assertPrimaryVisitDiagnosesReady\([\s\S]*visit\.diagnoses/);
 });
 
-test('тип диагноза обязателен в API и в быстром вводе', async () => {
-  const [createDto, tab, card] = await Promise.all([
+test('тип диагноза обязателен, а предупреждение появляется только при действии врача', async () => {
+  const [createDto, tab, card, exam] = await Promise.all([
     read('apps/api/src/modules/visits/dto/create-visit-diagnosis.dto.ts'),
     read('apps/web/src/features/visits/VisitDiagnosesTab.tsx'),
     read('apps/web/src/features/visits/VisitCardPage.tsx'),
+    read('apps/web/src/features/visits/VisitExamTab.tsx'),
   ]);
 
   assert.match(createDto, /@ApiProperty\(\{ enum: VISIT_DIAGNOSIS_TYPES \}\)/);
@@ -44,4 +46,8 @@ test('тип диагноза обязателен в API и в быстром �
   assert.match(tab, /placeholder="Тип диагноза"/);
   assert.match(tab, /quickTitle\.trim\(\)\.length < 2 \|\| !quickDiagnosisType/);
   assert.match(card, /Вы не указали ни одного диагноза/);
+  assert.doesNotMatch(card, /visit\.status === 'IN_PROGRESS' && primaryDiagnosisIssue/);
+  assert.match(exam, /getPrimaryDiagnosisSaveIssue/);
+  assert.match(exam, /modal\.warning/);
+  assert.doesNotMatch(exam, /mutation\.isSuccess/);
 });

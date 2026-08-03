@@ -296,15 +296,6 @@ export function VisitCardPage() {
           {visit ? (
             <>
               {completedEditNotice ? <Alert type="info" showIcon message={completedEditNotice} className="form-alert" /> : null}
-              {visit.status === 'IN_PROGRESS' && primaryDiagnosisIssue ? (
-                <Alert
-                  type="warning"
-                  showIcon
-                  message={primaryDiagnosisIssue}
-                  description="Для первичного приёма добавьте диагноз и выберите его тип в листе осмотра. До этого завершить приём нельзя."
-                  className="form-alert"
-                />
-              ) : null}
               <Tabs
                 items={[
                   {
