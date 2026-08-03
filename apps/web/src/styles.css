@@ -1998,6 +1998,150 @@ body {
   margin-top: 16px;
 }
 
+.hospital-full-sheet-panel .list-panel-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  min-width: 0;
+}
+
+.hospital-temperature-chart,
+.hospital-temperature-empty {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid #dce5eb;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #fbfefe 0%, #f4f8fa 100%);
+}
+
+.hospital-temperature-empty,
+.hospital-temperature-chart-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.hospital-temperature-chart svg {
+  display: block;
+  width: 100%;
+  max-height: 260px;
+  margin-top: 10px;
+  overflow: visible;
+}
+
+.hospital-chart-grid {
+  stroke: #d9e3e8;
+  stroke-width: 1;
+}
+
+.hospital-chart-line {
+  fill: none;
+  stroke: #1f7a83;
+  stroke-width: 3;
+}
+
+.hospital-chart-point {
+  fill: #ffffff;
+  stroke: #1f7a83;
+  stroke-width: 3;
+}
+
+.hospital-chart-label {
+  fill: #637789;
+  font: 12px Arial, sans-serif;
+}
+
+.hospital-sheet-days {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  min-width: 0;
+}
+
+.hospital-sheet-day {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #d9e3e8;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.hospital-sheet-day-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 16px;
+  border-bottom: 1px solid #d9e3e8;
+  background: #eef4f7;
+}
+
+.hospital-sheet-grid {
+  display: grid;
+  grid-template-columns: 120px minmax(220px, 1.05fr) minmax(280px, 1.45fr) minmax(190px, 0.8fr);
+}
+
+.hospital-sheet-grid > div {
+  min-width: 0;
+  padding: 12px 14px;
+  border-right: 1px solid #e4ebef;
+}
+
+.hospital-sheet-grid > div:last-child {
+  border-right: 0;
+}
+
+.hospital-sheet-grid-head {
+  color: #526a7c;
+  background: #f7f9fa;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.hospital-sheet-row {
+  border-top: 1px solid #e4ebef;
+}
+
+.hospital-sheet-grid-head + .hospital-sheet-row {
+  border-top: 0;
+}
+
+.hospital-sheet-row-planned {
+  background: #fffdf6;
+}
+
+.hospital-sheet-row-skipped {
+  background: #fafafa;
+}
+
+.hospital-sheet-time,
+.hospital-sheet-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.hospital-sheet-title.ant-typography {
+  margin: 7px 0 2px;
+}
+
+.hospital-amendments {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.hospital-amendment {
+  display: grid;
+  gap: 3px;
+  padding: 9px 11px;
+  border-left: 3px solid #7c3aed;
+  border-radius: 0 7px 7px 0;
+  background: #f7f2ff;
+}
+
 .visit-work-area .visit-action-row .ant-btn[disabled],
 .visit-work-area .visit-action-row .ant-btn[disabled]:hover {
   color: #8f98a3 !important;
@@ -2950,6 +3094,38 @@ body {
   .hospital-card-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .hospital-temperature-empty,
+  .hospital-temperature-chart-heading,
+  .hospital-sheet-day-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .hospital-temperature-chart {
+    overflow-x: auto;
+  }
+
+  .hospital-temperature-chart svg {
+    min-width: 720px;
+  }
+
+  .hospital-sheet-grid-head {
+    display: none;
+  }
+
+  .hospital-sheet-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hospital-sheet-row {
+    padding: 10px 0;
+  }
+
+  .hospital-sheet-grid > div {
+    padding: 6px 14px;
+    border-right: 0;
   }
 
   .portal-invite-layout {

@@ -1,13 +1,18 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsDateString, IsIn, IsNumber, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
-import { hospitalRecordTypes } from './create-hospital-record.dto';
+import { hospitalRecordStatuses, hospitalRecordTypes } from './create-hospital-record.dto';
 
 export class UpdateHospitalRecordDto {
   @ApiPropertyOptional({ enum: hospitalRecordTypes })
   @IsOptional()
   @IsIn(hospitalRecordTypes)
   recordType?: (typeof hospitalRecordTypes)[number];
+
+  @ApiPropertyOptional({ enum: [...hospitalRecordStatuses, 'SKIPPED'] })
+  @IsOptional()
+  @IsIn([...hospitalRecordStatuses, 'SKIPPED'])
+  recordStatus?: (typeof hospitalRecordStatuses)[number] | 'SKIPPED';
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -20,6 +25,11 @@ export class UpdateHospitalRecordDto {
   @IsOptional()
   @IsDateString()
   recordedAt?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  completedAt?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

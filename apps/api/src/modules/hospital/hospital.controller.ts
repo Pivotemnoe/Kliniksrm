@@ -5,6 +5,7 @@ import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { AdmitHospitalPatientDto } from './dto/admit-hospital-patient.dto';
 import { AdmitExistingHospitalStayDto } from './dto/admit-existing-hospital-stay.dto';
+import { CreateHospitalAmendmentDto } from './dto/create-hospital-amendment.dto';
 import { CreateHospitalRecordDto } from './dto/create-hospital-record.dto';
 import { ListHospitalQueryDto } from './dto/list-hospital-query.dto';
 import { UpdateHospitalStayDto } from './dto/update-hospital-stay.dto';
@@ -83,6 +84,18 @@ export class HospitalController {
     @CurrentEmployee() actor: AuthEmployee,
   ) {
     return this.hospitalService.updateRecord(stayId, recordId, dto, actor.id);
+  }
+
+  @Post(':stayId/records/:recordId/amendments')
+  @RequirePermissions('hospital.manage')
+  @ApiCreatedResponse({ description: 'Append-only amendment for a locked hospital journal record.' })
+  createAmendment(
+    @Param('stayId') stayId: string,
+    @Param('recordId') recordId: string,
+    @Body() dto: CreateHospitalAmendmentDto,
+    @CurrentEmployee() actor: AuthEmployee,
+  ) {
+    return this.hospitalService.createAmendment(stayId, recordId, dto, actor.id);
   }
 
   @Patch(':stayId')

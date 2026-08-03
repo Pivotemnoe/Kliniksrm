@@ -12,6 +12,8 @@ export const hospitalRecordTypes = [
   'OTHER',
 ] as const;
 
+export const hospitalRecordStatuses = ['PLANNED', 'COMPLETED'] as const;
+
 export class CreateHospitalRecordDto {
   @ApiProperty({ enum: hospitalRecordTypes })
   @IsIn(hospitalRecordTypes)
@@ -23,10 +25,20 @@ export class CreateHospitalRecordDto {
   @MaxLength(500)
   title!: string;
 
+  @ApiPropertyOptional({ enum: hospitalRecordStatuses, default: 'COMPLETED' })
+  @IsOptional()
+  @IsIn(hospitalRecordStatuses)
+  recordStatus?: (typeof hospitalRecordStatuses)[number];
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsDateString()
   recordedAt?: string;
+
+  @ApiPropertyOptional({ description: 'Actual completion time for a completed plan item.' })
+  @IsOptional()
+  @IsDateString()
+  completedAt?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

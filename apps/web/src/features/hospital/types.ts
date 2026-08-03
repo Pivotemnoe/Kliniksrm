@@ -3,6 +3,7 @@ import { Owner } from '../owners/types';
 import { DecimalValue, VisitExam, VisitRecommendation } from '../visits/types';
 
 export type HospitalStayStatus = 'ACTIVE' | 'DISCHARGED' | 'CANCELLED';
+export type HospitalRecordStatus = 'PLANNED' | 'COMPLETED' | 'SKIPPED' | 'AMENDMENT';
 
 export type HospitalBox = {
   id: string;
@@ -48,6 +49,7 @@ export type HospitalStay = {
   purpose: string | null;
   startedAt: string;
   completedAt: string | null;
+  timezone: string;
   totalAmount: DecimalValue;
   owner?: Pick<Owner, 'id' | 'fullName' | 'phone' | 'extraPhone'>;
   animal?: Pick<Animal, 'id' | 'nickname' | 'species' | 'breed' | 'sex' | 'status'>;
@@ -82,11 +84,19 @@ export type HospitalRecord = {
   visitId: string;
   recordedById: string | null;
   recordType: HospitalRecordType;
+  recordStatus: HospitalRecordStatus;
+  createdAsPlan: boolean;
   title: string;
   recordedAt: string;
+  completedAt: string | null;
   temperatureC: DecimalValue | null;
   value: string | null;
   notes: string | null;
+  parentRecordId: string | null;
+  amendmentReason: string | null;
+  amendments?: HospitalRecord[];
+  canEditDirectly?: boolean;
+  editRule?: 'DIRECT' | 'AMENDMENT_REQUIRED';
   billItemId: string | null;
   billItem?: {
     id: string;
@@ -132,8 +142,10 @@ export type AdmitHospitalInput = {
 
 export type CreateHospitalRecordInput = {
   recordType: HospitalRecordType;
+  recordStatus?: Extract<HospitalRecordStatus, 'PLANNED' | 'COMPLETED'>;
   title: string;
   recordedAt?: string;
+  completedAt?: string;
   temperatureC?: number;
   value?: string;
   notes?: string;
@@ -144,4 +156,15 @@ export type CreateHospitalRecordInput = {
   unitPrice?: number;
 };
 
-export type UpdateHospitalRecordInput = Omit<Partial<CreateHospitalRecordInput>, 'serviceId' | 'productId'>;
+export type UpdateHospitalRecordInput = Omit<Partial<CreateHospitalRecordInput>, 'serviceId' | 'productId' | 'recordStatus'> & {
+  recordStatus?: Extract<HospitalRecordStatus, 'PLANNED' | 'COMPLETED' | 'SKIPPED'>;
+};
+
+export type CreateHospitalAmendmentInput = {
+  reason: string;
+  recordType: HospitalRecordType;
+  title: string;
+  temperatureC?: number;
+  value?: string;
+  notes?: string;
+};

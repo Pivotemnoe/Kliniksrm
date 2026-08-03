@@ -52,6 +52,13 @@ enum HospitalStayStatus {
   CANCELLED
 }
 
+enum HospitalRecordStatus {
+  PLANNED
+  COMPLETED
+  SKIPPED
+  AMENDMENT
+}
+
 enum VisitType {
   PRIMARY
   FOLLOW_UP
@@ -1079,24 +1086,33 @@ model HospitalStay {
 }
 
 model HospitalRecord {
-  id           String    @id @default(uuid())
-  visitId      String
-  visit        Visit     @relation(fields: [visitId], references: [id], onDelete: Cascade)
-  billItemId   String?   @unique
-  billItem     BillItem? @relation(fields: [billItemId], references: [id], onDelete: SetNull)
-  recordedById String?
-  recordedBy   Employee? @relation("HospitalRecordAuthor", fields: [recordedById], references: [id], onDelete: SetNull)
-  recordType   String
-  title        String
-  recordedAt   DateTime  @default(now())
-  temperatureC Decimal?  @db.Decimal(4, 1)
-  value        String?
-  notes        String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id              String               @id @default(uuid())
+  visitId         String
+  visit           Visit                @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  billItemId      String?               @unique
+  billItem        BillItem?             @relation(fields: [billItemId], references: [id], onDelete: SetNull)
+  recordedById    String?
+  recordedBy      Employee?             @relation("HospitalRecordAuthor", fields: [recordedById], references: [id], onDelete: SetNull)
+  recordType      String
+  recordStatus    HospitalRecordStatus @default(COMPLETED)
+  createdAsPlan   Boolean              @default(false)
+  title           String
+  recordedAt      DateTime             @default(now())
+  completedAt     DateTime?
+  temperatureC    Decimal?             @db.Decimal(4, 1)
+  value           String?
+  notes           String?
+  parentRecordId  String?
+  parentRecord    HospitalRecord?      @relation("HospitalRecordAmendments", fields: [parentRecordId], references: [id], onDelete: Restrict)
+  amendments      HospitalRecord[]     @relation("HospitalRecordAmendments")
+  amendmentReason String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
 
   @@index([visitId, recordedAt])
   @@index([recordedById])
+  @@index([parentRecordId])
+  @@index([visitId, recordStatus, recordedAt])
 }
 
 model VisitExam {

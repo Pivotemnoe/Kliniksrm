@@ -3,14 +3,13 @@ import {
   CheckOutlined,
   CloseOutlined,
   FileTextOutlined,
-  EditOutlined,
   PlusOutlined,
+  PrinterOutlined,
   SwapOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Descriptions, Form, Input, InputNumber, Modal, Select, Space, Table, Tag, Typography } from 'antd';
-import type { ColumnsType } from 'antd/es/table';
-import { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { Alert, App, Button, Descriptions, Form, Input, InputNumber, Modal, Select, Space, Tag, Typography } from 'antd';
+import { useDeferredValue, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
@@ -19,8 +18,12 @@ import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDateTime } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
+import { AttachmentsPanel } from '../files/AttachmentsPanel';
+import { listVisitFiles, uploadVisitFile } from '../files/files.api';
+import { getOrganizationSettings } from '../organization/organization.api';
 import {
   cancelHospitalStay,
+  createHospitalAmendment,
   createHospitalRecord,
   dischargeHospitalStay,
   getHospitalResources,
@@ -29,7 +32,9 @@ import {
   updateHospitalRecord,
   updateHospitalStay,
 } from './hospital.api';
-import type { CreateHospitalRecordInput, HospitalCatalog, HospitalRecord, HospitalRecordType, UpdateHospitalRecordInput } from './types';
+import { HospitalSheet } from './HospitalSheet';
+import { printHospitalSheet } from './hospitalPrint';
+import type { CreateHospitalAmendmentInput, CreateHospitalRecordInput, HospitalCatalog, HospitalRecord, HospitalRecordStatus, HospitalRecordType, UpdateHospitalRecordInput } from './types';
 
 const recordTypeOptions: Array<{ value: HospitalRecordType; label: string; defaultTitle: string }> = [
   { value: 'TEMPERATURE', label: 'Температура', defaultTitle: 'Измерение температуры' },
@@ -48,8 +53,13 @@ export function HospitalCardPage() {
   const { message, modal } = App.useApp();
   const { data: auth } = useCurrentEmployee();
   const canManage = hasPermission(auth?.employee, 'hospital.manage');
+  const canReadDocuments = hasPermission(auth?.employee, 'documents.read');
+  const canManageDocuments = hasPermission(auth?.employee, 'documents.manage');
+  const canPrint = hasPermission(auth?.employee, 'documents.print');
   const [recordOpen, setRecordOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<HospitalRecord | null>(null);
+  const [initialRecordStatus, setInitialRecordStatus] = useState<Extract<HospitalRecordStatus, 'PLANNED' | 'COMPLETED'>>('COMPLETED');
+  const [amendmentRecord, setAmendmentRecord] = useState<HospitalRecord | null>(null);
   const [boxId, setBoxId] = useState<string>();
   const stayQuery = useQuery({
     queryKey: ['hospital', stayId],
@@ -57,6 +67,7 @@ export function HospitalCardPage() {
     enabled: Boolean(stayId),
   });
   const resourcesQuery = useQuery({ queryKey: ['hospital', 'resources'], queryFn: getHospitalResources });
+  const organizationQuery = useQuery({ queryKey: ['organization'], queryFn: getOrganizationSettings });
   const stay = stayQuery.data;
   const active = stay?.status === 'ACTIVE';
 
@@ -100,52 +111,41 @@ export function HospitalCardPage() {
     },
     onError: (error) => message.error(getErrorMessage(error)),
   });
-
-  const journalColumns = useMemo<ColumnsType<HospitalRecord>>(() => [
-    { title: 'Дата и время', dataIndex: 'recordedAt', width: 175, render: formatDateTime },
-    {
-      title: 'Запись',
-      key: 'record',
-      render: (_, record) => (
-        <Space direction="vertical" size={2}>
-          <Space wrap size={6}>
-            <Tag color={recordTypeColor[record.recordType]}>{recordTypeLabel[record.recordType]}</Tag>
-            <Typography.Text strong>{record.title}</Typography.Text>
-          </Space>
-          {record.temperatureC !== null ? <Typography.Text>{record.temperatureC} °C</Typography.Text> : null}
-          {record.value ? <Typography.Text>{record.value}</Typography.Text> : null}
-          {record.notes ? <Typography.Text type="secondary">{record.notes}</Typography.Text> : null}
-          {record.billItem ? (
-            <Space wrap size={6}>
-              <Tag color={record.billItem.productId ? 'gold' : 'green'}>
-                {record.billItem.productId ? 'Товар и списание' : 'Услуга'}
-              </Tag>
-              <Typography.Text>
-                {record.billItem.title}: {record.billItem.quantity} × {formatMoney(record.billItem.unitPrice)} = {formatMoney(record.billItem.totalAmount)}
-              </Typography.Text>
-              {record.billItem.productId && record.billItem.stockQuantity !== null ? (
-                <Typography.Text type="secondary">
-                  списано {record.billItem.stockQuantity} {record.billItem.product?.writeOffUnit || record.billItem.product?.stockUnit || 'ед.'}
-                </Typography.Text>
-              ) : null}
-            </Space>
-          ) : null}
-        </Space>
-      ),
+  const recordStatusMutation = useMutation({
+    mutationFn: ({ recordId, input }: { recordId: string; input: UpdateHospitalRecordInput }) => updateHospitalRecord(stayId, recordId, input),
+    onSuccess: async (_, variables) => {
+      await refresh();
+      message.success(variables.input.recordStatus === 'SKIPPED' ? 'План отмечен как пропущенный' : 'Выполнение зафиксировано');
     },
-    { title: 'Выполнил', key: 'employee', width: 220, render: (_, record) => record.recordedBy?.fullName ?? 'Сотрудник не указан' },
-    ...(canManage ? [{
-      title: 'Действия',
-      key: 'actions',
-      width: 140,
-      fixed: 'right' as const,
-      render: (_: unknown, record: HospitalRecord) => (
-        <Button size="small" icon={<EditOutlined />} onClick={() => { setEditingRecord(record); setRecordOpen(true); }}>
-          Изменить
-        </Button>
-      ),
-    }] : []),
-  ], [canManage]);
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
+  const amendmentMutation = useMutation({
+    mutationFn: ({ recordId, input }: { recordId: string; input: CreateHospitalAmendmentInput }) => createHospitalAmendment(stayId, recordId, input),
+    onSuccess: async () => {
+      await refresh();
+      setAmendmentRecord(null);
+      message.success('Исправление добавлено; исходная запись сохранена');
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
+
+  function openNewRecord(status: Extract<HospitalRecordStatus, 'PLANNED' | 'COMPLETED'>) {
+    setEditingRecord(null);
+    setInitialRecordStatus(status);
+    setRecordOpen(true);
+  }
+
+  function openEditRecord(record: HospitalRecord) {
+    setEditingRecord(record);
+    setInitialRecordStatus(record.recordStatus === 'PLANNED' ? 'PLANNED' : 'COMPLETED');
+    setRecordOpen(true);
+  }
+
+  function openCompleteRecord(record: HospitalRecord) {
+    setEditingRecord(record);
+    setInitialRecordStatus('COMPLETED');
+    setRecordOpen(true);
+  }
 
   if (stayQuery.isError) {
     return <div className="page"><PageHeader title="Карта стационара" /><Alert type="error" showIcon message="Не удалось открыть карту стационара" description={getErrorMessage(stayQuery.error)} /></div>;
@@ -160,7 +160,11 @@ export function HospitalCardPage() {
           <Space wrap>
             <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/hospital')}>К стационару</Button>
             {stay ? <Button icon={<FileTextOutlined />} onClick={() => navigate(`/visits/${stay.sourceVisitId}`)}>Осмотр при поступлении</Button> : null}
-            {canManage && active ? <Button type="primary" icon={<PlusOutlined />} onClick={() => { setEditingRecord(null); setRecordOpen(true); }}>Добавить запись</Button> : null}
+            {stay && canPrint ? <Button icon={<PrinterOutlined />} onClick={() => {
+              if (!printHospitalSheet(stay, organizationQuery.data)) message.warning('Браузер заблокировал окно печати');
+            }}>Печать / PDF</Button> : null}
+            {canManage && active ? <Button icon={<PlusOutlined />} onClick={() => openNewRecord('PLANNED')}>Добавить план</Button> : null}
+            {canManage && active ? <Button type="primary" icon={<PlusOutlined />} onClick={() => openNewRecord('COMPLETED')}>Добавить факт</Button> : null}
           </Space>
         }
       />
@@ -193,31 +197,63 @@ export function HospitalCardPage() {
               ) : null}
             </div>
           </div>
-          <div className="list-panel">
+          <div className="list-panel hospital-full-sheet-panel">
             <div className="list-panel-header">
               <div>
-                <Typography.Title level={4} className="compact-title">Журнал стационара</Typography.Title>
-                <Typography.Text type="secondary">Температура, препараты, процедуры, наблюдения, кормление и уход — отдельными записями по времени.</Typography.Text>
+                <Typography.Title level={4} className="compact-title">Полный лист стационара</Typography.Title>
+                <Typography.Text type="secondary">Всё пребывание на одном экране: план и факт, температура, назначения, наблюдения и исправления.</Typography.Text>
               </div>
-              {canManage && active ? <Button icon={<PlusOutlined />} onClick={() => { setEditingRecord(null); setRecordOpen(true); }}>Добавить запись</Button> : null}
+              <Space wrap>
+                {canManage && active ? <Button onClick={() => openNewRecord('PLANNED')}>План</Button> : null}
+                {canManage && active ? <Button type="primary" onClick={() => openNewRecord('COMPLETED')}>Факт</Button> : null}
+              </Space>
             </div>
             <div className="list-panel-body">
-              <Table<HospitalRecord>
-                rowKey="id"
-                columns={journalColumns}
-                dataSource={stay.hospitalRecords ?? []}
-                pagination={false}
-                loading={stayQuery.isLoading}
-                locale={{ emptyText: 'В журнале пока нет записей' }}
-                scroll={{ x: 760 }}
+              <Alert
+                type="info"
+                showIcon
+                className="form-alert"
+                message={`Правило правки: записи текущих суток (${stay.timezone}) редактируются напрямую`}
+                description="Прошлые сутки не переписываются: врач добавляет исправление с причиной, автором и временем. Исходная запись остаётся видна."
+              />
+              <HospitalSheet
+                records={stay.hospitalRecords ?? []}
+                timeZone={stay.timezone}
+                canManage={canManage}
+                active={active}
+                onEdit={openEditRecord}
+                onAmend={setAmendmentRecord}
+                onComplete={openCompleteRecord}
+                onSkip={(record) => modal.confirm({
+                  title: `Отметить «${record.title}» как пропущенное?`,
+                  content: 'Запись останется в листе как невыполненное плановое назначение.',
+                  okText: 'Отметить пропущенным',
+                  cancelText: 'Отмена',
+                  onOk: () => recordStatusMutation.mutateAsync({ recordId: record.id, input: { recordStatus: 'SKIPPED', completedAt: new Date().toISOString() } }),
+                })}
               />
             </div>
           </div>
+          {canReadDocuments ? (
+            <div className="list-panel">
+              <div className="list-panel-body">
+                <AttachmentsPanel
+                  queryKey={['files', 'hospital-sheet', stay.sourceVisitId]}
+                  listFiles={() => listVisitFiles(stay.sourceVisitId)}
+                  uploadFile={(file) => uploadVisitFile(stay.sourceVisitId, file)}
+                  canManage={canManageDocuments}
+                  title="Итоговый лист в истории пациента"
+                  description="Нажмите «Печать / PDF», сохраните полный лист как PDF и прикрепите его сюда. Файл останется в медицинской истории исходного приёма пациента."
+                />
+              </div>
+            </div>
+          ) : null}
         </>
       ) : null}
       <HospitalRecordModal
         open={recordOpen}
         record={editingRecord}
+        initialStatus={initialRecordStatus}
         billingLocked={Number(stay?.bill?.paidAmount ?? 0) > 0}
         loading={recordMutation.isPending}
         onClose={() => { setRecordOpen(false); setEditingRecord(null); }}
@@ -226,15 +262,26 @@ export function HospitalCardPage() {
           recordedAt: values.recordedAt ? new Date(values.recordedAt).toISOString() : undefined,
         })}
       />
+      <HospitalAmendmentModal
+        open={Boolean(amendmentRecord)}
+        record={amendmentRecord}
+        loading={amendmentMutation.isPending}
+        onClose={() => setAmendmentRecord(null)}
+        onSubmit={(input) => amendmentRecord && amendmentMutation.mutate({ recordId: amendmentRecord.id, input })}
+      />
     </div>
   );
 }
 
-type HospitalRecordFormValues = CreateHospitalRecordInput & { catalogKind?: 'NONE' | 'PRODUCT' | 'SERVICE' };
+type HospitalRecordFormValues = Omit<CreateHospitalRecordInput, 'recordStatus'> & {
+  recordStatus?: Extract<HospitalRecordStatus, 'PLANNED' | 'COMPLETED' | 'SKIPPED'>;
+  catalogKind?: 'NONE' | 'PRODUCT' | 'SERVICE';
+};
 
 function HospitalRecordModal({
   open,
   record,
+  initialStatus,
   billingLocked,
   loading,
   onClose,
@@ -242,13 +289,15 @@ function HospitalRecordModal({
 }: {
   open: boolean;
   record: HospitalRecord | null;
+  initialStatus: Extract<HospitalRecordStatus, 'PLANNED' | 'COMPLETED'>;
   billingLocked: boolean;
   loading: boolean;
   onClose: () => void;
-  onSubmit: (values: CreateHospitalRecordInput) => void;
+  onSubmit: (values: CreateHospitalRecordInput | UpdateHospitalRecordInput) => void;
 }) {
   const [form] = Form.useForm<HospitalRecordFormValues>();
   const recordType = Form.useWatch('recordType', form);
+  const recordStatus = Form.useWatch('recordStatus', form) ?? initialStatus;
   const catalogKind = Form.useWatch('catalogKind', form) ?? 'NONE';
   const selectedProductId = Form.useWatch('productId', form);
   const [catalogSearch, setCatalogSearch] = useState('');
@@ -266,6 +315,7 @@ function HospitalRecordModal({
     if (!record) {
       form.setFieldsValue({
         recordType: 'OBSERVATION',
+        recordStatus: initialStatus,
         title: 'Состояние пациента',
         recordedAt: toDatetimeInput(new Date()),
         value: '',
@@ -283,6 +333,9 @@ function HospitalRecordModal({
 
     form.setFieldsValue({
       recordType: record.recordType,
+      recordStatus: record.recordStatus === 'PLANNED' && initialStatus === 'COMPLETED'
+        ? 'COMPLETED'
+        : record.recordStatus === 'AMENDMENT' ? 'COMPLETED' : record.recordStatus,
       title: record.title,
       recordedAt: toDatetimeInput(new Date(record.recordedAt)),
       value: record.value ?? '',
@@ -297,11 +350,11 @@ function HospitalRecordModal({
         : Number(record.billItem.stockQuantity),
       unitPrice: record.billItem ? Number(record.billItem.unitPrice) : undefined,
     });
-  }, [form, open, record]);
+  }, [form, initialStatus, open, record]);
 
   function submit(values: HospitalRecordFormValues) {
     const { catalogKind: _catalogKind, ...rawInput } = values;
-    const input = normalizeHospitalRecord(rawInput);
+    const input = normalizeHospitalRecord(rawInput as CreateHospitalRecordInput);
     if (record) {
       delete input.productId;
       delete input.serviceId;
@@ -311,7 +364,7 @@ function HospitalRecordModal({
       delete input.stockQuantity;
       delete input.unitPrice;
     }
-    if (catalogKind === 'NONE') {
+    if (catalogKind === 'NONE' || recordStatus === 'PLANNED') {
       delete input.productId;
       delete input.serviceId;
       delete input.quantity;
@@ -324,6 +377,18 @@ function HospitalRecordModal({
   return (
     <Modal title={record ? 'Изменить запись стационара' : 'Новая запись стационара'} open={open} onCancel={onClose} onOk={() => form.submit()} okText={record ? 'Сохранить' : 'Добавить'} cancelText="Отмена" confirmLoading={loading} destroyOnHidden width={760}>
       <Form form={form} layout="vertical" onFinish={submit}>
+        <Form.Item name="recordStatus" label="План или факт" rules={[{ required: true, message: 'Выберите режим записи' }]}>
+          <Select
+            options={[
+              { value: 'PLANNED', label: 'План — назначено на указанное время' },
+              { value: 'COMPLETED', label: 'Факт — уже выполнено или измерено' },
+              ...(record ? [{ value: 'SKIPPED', label: 'Пропущено — не выполнено' }] : []),
+            ]}
+            onChange={(status) => {
+              if (status === 'PLANNED') form.setFieldsValue({ catalogKind: 'NONE', productId: undefined, serviceId: undefined, temperatureC: undefined });
+            }}
+          />
+        </Form.Item>
         <Form.Item name="recordType" label="Тип записи" rules={[{ required: true, message: 'Выберите тип записи' }]}>
           <Select
             options={recordTypeOptions.map(({ value, label }) => ({ value, label }))}
@@ -344,9 +409,10 @@ function HospitalRecordModal({
             name="temperatureC"
             label="Температура, °C"
             rules={[
-              { required: true, message: 'Введите температуру' },
+              { required: recordStatus === 'COMPLETED', message: 'Введите температуру' },
               {
                 validator: (_, value) => {
+                  if ((value === undefined || value === null || value === '') && recordStatus !== 'COMPLETED') return Promise.resolve();
                   const temperature = Number(String(value ?? '').replace(',', '.'));
                   return Number.isFinite(temperature) && temperature >= 30 && temperature <= 45
                     ? Promise.resolve()
@@ -365,10 +431,23 @@ function HospitalRecordModal({
         <Form.Item name="notes" label="Комментарий">
           <Input.TextArea rows={4} placeholder="Состояние пациента, реакция или дополнительные сведения" />
         </Form.Item>
-        <Typography.Title level={5}>Учёт в счёте и на складе</Typography.Title>
-        <Typography.Paragraph type="secondary">
-          Выбранная услуга попадёт в счёт по цене прайса. Товар попадёт в счёт и одновременно спишется с доступной партии склада.
-        </Typography.Paragraph>
+        {recordStatus === 'PLANNED' ? (
+          <Alert
+            type="info"
+            showIcon
+            className="form-alert"
+            message="План не создаёт начисление и не списывает товар"
+            description="Цена и склад фиксируются в момент фактического выполнения, чтобы план не искажал счёт и остатки."
+          />
+        ) : null}
+        {recordStatus !== 'PLANNED' ? (
+          <>
+            <Typography.Title level={5}>Учёт в счёте и на складе</Typography.Title>
+            <Typography.Paragraph type="secondary">
+              Выбранная услуга попадёт в счёт по цене прайса. Товар попадёт в счёт и одновременно спишется с доступной партии склада.
+            </Typography.Paragraph>
+          </>
+        ) : null}
         {record && !record.billItem ? (
           <Alert
             type="info"
@@ -387,7 +466,7 @@ function HospitalRecordModal({
             description="Текст записи можно исправить, но количество списания и цену оплаченного счёта менять нельзя."
           />
         ) : null}
-        <Form.Item name="catalogKind" label="Что учесть">
+        <Form.Item name="catalogKind" label="Что учесть" hidden={recordStatus === 'PLANNED'}>
           <Select
             disabled={catalogIdentityLocked}
             options={[
@@ -406,7 +485,7 @@ function HospitalRecordModal({
             }}
           />
         </Form.Item>
-        {catalogKind === 'PRODUCT' ? (
+        {recordStatus !== 'PLANNED' && catalogKind === 'PRODUCT' ? (
           <>
             <Form.Item name="productId" label="Товар из каталога" rules={[{ required: true, message: 'Выберите товар' }]}>
               <Select
@@ -445,7 +524,7 @@ function HospitalRecordModal({
             </div>
           </>
         ) : null}
-        {catalogKind === 'SERVICE' ? (
+        {recordStatus !== 'PLANNED' && catalogKind === 'SERVICE' ? (
           <>
             <Form.Item name="serviceId" label="Услуга из прайса" rules={[{ required: true, message: 'Выберите услугу' }]}>
               <Select
@@ -481,16 +560,82 @@ function HospitalRecordModal({
   );
 }
 
-const recordTypeLabel: Record<HospitalRecordType, string> = Object.fromEntries(recordTypeOptions.map((item) => [item.value, item.label])) as Record<HospitalRecordType, string>;
-const recordTypeColor: Record<HospitalRecordType, string> = {
-  TEMPERATURE: 'volcano',
-  MEDICATION: 'blue',
-  PROCEDURE: 'purple',
-  OBSERVATION: 'cyan',
-  FEEDING: 'green',
-  CARE: 'geekblue',
-  OTHER: 'default',
-};
+function HospitalAmendmentModal({
+  open,
+  record,
+  loading,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean;
+  record: HospitalRecord | null;
+  loading: boolean;
+  onClose: () => void;
+  onSubmit: (input: CreateHospitalAmendmentInput) => void;
+}) {
+  const [form] = Form.useForm<CreateHospitalAmendmentInput>();
+  const recordType = Form.useWatch('recordType', form);
+
+  useEffect(() => {
+    if (!open || !record) return;
+    form.setFieldsValue({
+      reason: '',
+      recordType: record.recordType,
+      title: record.title,
+      temperatureC: record.temperatureC === null ? undefined : Number(record.temperatureC),
+      value: record.value ?? '',
+      notes: record.notes ?? '',
+    });
+  }, [form, open, record]);
+
+  return (
+    <Modal
+      title="Добавить исправление без перезаписи истории"
+      open={open}
+      onCancel={onClose}
+      onOk={() => form.submit()}
+      okText="Добавить исправление"
+      cancelText="Отмена"
+      confirmLoading={loading}
+      destroyOnHidden
+      width={680}
+    >
+      <Alert
+        type="warning"
+        showIcon
+        className="form-alert"
+        message={record ? `Исходная запись от ${formatDateTime(record.recordedAt)} останется неизменной` : 'Исходная запись останется неизменной'}
+        description="Исправление будет отдельным событием с причиной, автором и текущим временем."
+      />
+      <Form
+        form={form}
+        layout="vertical"
+        onFinish={(values) => onSubmit({
+          ...values,
+          temperatureC: values.temperatureC === undefined
+            ? undefined
+            : Math.round(Number(String(values.temperatureC).replace(',', '.')) * 10) / 10,
+        })}
+      >
+        <Form.Item name="reason" label="Почему требуется исправление" rules={[{ required: true, message: 'Укажите причину' }, { min: 3, message: 'Минимум 3 символа' }]}>
+          <Input.TextArea rows={2} placeholder="Например: уточнение после проверки врачом" />
+        </Form.Item>
+        <Form.Item name="recordType" label="Тип записи" rules={[{ required: true }]}>
+          <Select options={recordTypeOptions.map(({ value, label }) => ({ value, label }))} />
+        </Form.Item>
+        <Form.Item name="title" label="Исправленный заголовок" rules={[{ required: true, min: 2 }]}><Input /></Form.Item>
+        {recordType === 'TEMPERATURE' ? (
+          <Form.Item name="temperatureC" label="Исправленная температура, °C" rules={[{ required: true, message: 'Введите температуру' }]}>
+            <Input inputMode="decimal" />
+          </Form.Item>
+        ) : (
+          <Form.Item name="value" label="Исправленное значение / результат"><Input /></Form.Item>
+        )}
+        <Form.Item name="notes" label="Исправленный комментарий"><Input.TextArea rows={4} /></Form.Item>
+      </Form>
+    </Modal>
+  );
+}
 
 function toDatetimeInput(value: Date) {
   const offsetDate = new Date(value.getTime() - value.getTimezoneOffset() * 60_000);

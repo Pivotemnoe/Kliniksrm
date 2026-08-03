@@ -23,8 +23,8 @@ test('стационар имеет отдельную карту и време�
   const hospitalList = await read('apps/web/src/features/hospital/HospitalPage.tsx');
 
   assert.match(routes, /path: '\/hospital\/:stayId'/);
-  assert.match(card, /Журнал стационара/);
-  assert.match(card, /Температура, препараты, процедуры, наблюдения, кормление и уход/);
+  assert.match(card, /Полный лист стационара/);
+  assert.match(card, /Всё пребывание на одном экране/);
   assert.match(hospitalList, /label: animal\.nickname/);
   assert.doesNotMatch(hospitalList, /label: `\$\{animal\.nickname\} · \$\{owner\.fullName\}`/);
 });
@@ -95,4 +95,60 @@ test('запись стационара редактируется и может
   assert.match(card, /Товар — начислить и списать со склада/);
   assert.match(card, /Услуга — начислить по прайсу/);
   assert.match(api, /updateHospitalRecord/);
+});
+
+test('многосуточный лист стационара добавляется совместимой миграцией без перезаписи истории', async () => {
+  const [schema, migration] = await Promise.all([
+    read('prisma/schema.prisma'),
+    read('prisma/migrations/20260803000100_hospital_full_sheet/migration.sql'),
+  ]);
+
+  assert.match(schema, /enum HospitalRecordStatus[\s\S]*PLANNED[\s\S]*COMPLETED[\s\S]*SKIPPED[\s\S]*AMENDMENT/);
+  assert.match(schema, /createdAsPlan\s+Boolean\s+@default\(false\)/);
+  assert.match(schema, /parentRecord\s+HospitalRecord\?/);
+  assert.match(migration, /SET "completedAt" = "recordedAt"/);
+  assert.match(migration, /FOREIGN KEY \("parentRecordId"\) REFERENCES "HospitalRecord"\("id"\) ON DELETE RESTRICT/);
+  assert.doesNotMatch(migration, /\b(?:DROP|DELETE\s+FROM|TRUNCATE)\b/i);
+});
+
+test('прошлые сутки стационара исправляются дополнением, а не прямой перезаписью', async () => {
+  const [controller, service, dto] = await Promise.all([
+    read('apps/api/src/modules/hospital/hospital.controller.ts'),
+    read('apps/api/src/modules/hospital/hospital.service.ts'),
+    read('apps/api/src/modules/hospital/dto/create-hospital-amendment.dto.ts'),
+  ]);
+
+  assert.match(controller, /records\/:recordId\/amendments/);
+  assert.match(service, /ensureDirectRecordEditAllowed/);
+  assert.match(service, /Прошлые сутки закрыты/);
+  assert.match(service, /recordStatus: HospitalRecordStatus\.AMENDMENT/);
+  assert.match(service, /parentRecordId: existing\.id/);
+  assert.match(service, /action: 'hospital\.record\.amend'/);
+  assert.match(dto, /reason!:/);
+});
+
+test('врач видит полный лист, график, план и факт и может печатать A4/PDF', async () => {
+  const [service, card, sheet, print, help, styles] = await Promise.all([
+    read('apps/api/src/modules/hospital/hospital.service.ts'),
+    read('apps/web/src/features/hospital/HospitalCardPage.tsx'),
+    read('apps/web/src/features/hospital/HospitalSheet.tsx'),
+    read('apps/web/src/features/hospital/hospitalPrint.ts'),
+    read('apps/web/src/features/help/HelpPage.tsx'),
+    read('apps/web/src/styles.css'),
+  ]);
+
+  assert.match(card, /Полный лист стационара/);
+  assert.match(card, /Добавить план/);
+  assert.match(card, /Печать \/ PDF/);
+  assert.match(card, /Итоговый лист в истории пациента/);
+  assert.match(service, /dto\.completedAt \? new Date\(dto\.completedAt\) : recordedAt/);
+  assert.match(sheet, /Температура за всё пребывание/);
+  assert.match(sheet, /План выполнен/);
+  assert.match(sheet, /Исправление/);
+  assert.match(print, /@page \{ size: A4 portrait/);
+  assert.match(print, /Температура за всё пребывание/);
+  assert.match(help, /Запись текущих суток можно изменить напрямую/);
+  assert.match(styles, /\.hospital-sheet-day \{\s+min-width: 0;/);
+  assert.match(styles, /\.hospital-full-sheet-panel \.list-panel-body \{[\s\S]*grid-template-columns: minmax\(0, 1fr\);/);
+  assert.match(styles, /@media \(max-width: 760px\)[\s\S]*\.hospital-sheet-grid \{\s+grid-template-columns: 1fr;/);
 });

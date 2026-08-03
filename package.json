@@ -31,6 +31,8 @@
     "backup:local": "scripts/backup-local.sh",
     "backup:postgres": "scripts/backup-postgres.sh",
     "restore:local": "scripts/restore-local.sh",
+    "plan": "node scripts/roadmap-status.mjs",
+    "plan:word": "/Users/konstantin/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 scripts/build_temichevvet_plan_docx.py",
     "license:generate-keys": "node scripts/generate-license-keypair.mjs",
     "license:issue": "node scripts/issue-offline-license.mjs",
     "infra:up": "docker compose up -d postgres redis minio",

@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import {
   AppointmentStatus,
   BillSource,
+  HospitalRecordStatus,
   HospitalStayStatus,
   PaymentStatus,
   Prisma,
@@ -16,6 +17,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { AdmitHospitalPatientDto } from './dto/admit-hospital-patient.dto';
 import { AdmitExistingHospitalStayDto } from './dto/admit-existing-hospital-stay.dto';
+import { CreateHospitalAmendmentDto } from './dto/create-hospital-amendment.dto';
 import { CreateHospitalRecordDto } from './dto/create-hospital-record.dto';
 import { ListHospitalQueryDto } from './dto/list-hospital-query.dto';
 import { UpdateHospitalStayDto } from './dto/update-hospital-stay.dto';
@@ -152,8 +154,16 @@ export class HospitalService {
       throw new BadRequestException('Журнал закрыт после выписки или отмены госпитализации');
     }
 
-    this.ensureTemperatureRecord(dto.recordType, dto.temperatureC);
+    const recordStatus = dto.recordStatus ?? HospitalRecordStatus.COMPLETED;
+    const recordedAt = dto.recordedAt ? new Date(dto.recordedAt) : new Date();
+    this.ensureRecordWithinStay(recordedAt, stay.startedAt, stay.completedAt);
+    if (recordStatus !== HospitalRecordStatus.PLANNED) {
+      this.ensureTemperatureRecord(dto.recordType, dto.temperatureC);
+    }
     const hasCatalogItem = Boolean(dto.serviceId || dto.productId);
+    if (recordStatus === HospitalRecordStatus.PLANNED && hasCatalogItem) {
+      throw new BadRequestException('Плановое назначение не списывает товар и не начисляет услугу. Проведите позицию при выполнении');
+    }
     this.ensureBillingInputHasCatalogItem(hasCatalogItem, dto);
     const warehouseScope = hasCatalogItem ? await this.getWarehouseScope(actorId) : null;
     const dueAt = hasCatalogItem ? await this.financeService.getDefaultBillDueAt() : null;
@@ -192,8 +202,13 @@ export class HospitalService {
           billItemId,
           recordedById: actorId,
           recordType: dto.recordType,
+          recordStatus,
+          createdAsPlan: recordStatus === HospitalRecordStatus.PLANNED,
           title: dto.title.trim(),
-          recordedAt: dto.recordedAt ? new Date(dto.recordedAt) : undefined,
+          recordedAt,
+          completedAt: recordStatus === HospitalRecordStatus.COMPLETED
+            ? (dto.completedAt ? new Date(dto.completedAt) : recordedAt)
+            : null,
           temperatureC: dto.recordType === 'TEMPERATURE' ? dto.temperatureC : null,
           value: dto.recordType === 'TEMPERATURE' ? null : dto.value?.trim() || null,
           notes: dto.notes?.trim() || null,
@@ -211,6 +226,7 @@ export class HospitalService {
         stayId: stay.id,
         sourceVisitId: stay.sourceVisitId,
         recordType: dto.recordType,
+        recordStatus,
         billItemId: record.billItemId,
         productId: dto.productId,
         serviceId: dto.serviceId,
@@ -231,13 +247,29 @@ export class HospitalService {
       throw new NotFoundException('Запись журнала стационара не найдена');
     }
 
+    if (stay.status !== HospitalStayStatus.ACTIVE) {
+      throw new BadRequestException('После выписки прямое редактирование закрыто. Добавьте исправление с причиной');
+    }
+    if (existing.recordStatus === HospitalRecordStatus.AMENDMENT) {
+      throw new BadRequestException('Исправление является неизменяемым событием. Создайте новое исправление к исходной записи');
+    }
+    this.ensureDirectRecordEditAllowed(existing.recordedAt, stay.hospitalBox.office.timezone);
+
     const nextRecordType = dto.recordType ?? existing.recordType;
+    const nextRecordStatus = dto.recordStatus ?? existing.recordStatus;
     const nextTemperature = dto.temperatureC ?? decimalToOptionalNumber(existing.temperatureC);
-    this.ensureTemperatureRecord(nextRecordType, nextTemperature);
+    if (nextRecordStatus !== HospitalRecordStatus.PLANNED && nextRecordStatus !== HospitalRecordStatus.SKIPPED) {
+      this.ensureTemperatureRecord(nextRecordType, nextTemperature);
+    }
+    const nextRecordedAt = dto.recordedAt ? new Date(dto.recordedAt) : existing.recordedAt;
+    this.ensureRecordWithinStay(nextRecordedAt, stay.startedAt, stay.completedAt);
     const billingChanged = dto.quantity !== undefined || dto.stockQuantity !== undefined || dto.unitPrice !== undefined;
 
     if (billingChanged && !existing.billItem) {
       throw new BadRequestException('У этой записи нет связанной позиции счёта. Добавьте новую запись с товаром или услугой');
+    }
+    if (nextRecordStatus === HospitalRecordStatus.PLANNED && existing.billItem) {
+      throw new BadRequestException('Начисленную позицию нельзя вернуть в план. Создайте отдельное плановое назначение');
     }
 
     const warehouseScope = billingChanged && existing.billItem?.productId
@@ -290,8 +322,16 @@ export class HospitalService {
         where: { id: existing.id },
         data: {
           ...(dto.recordType !== undefined ? { recordType: dto.recordType } : {}),
+          ...(dto.recordStatus !== undefined ? { recordStatus: dto.recordStatus } : {}),
           ...(dto.title !== undefined ? { title: dto.title.trim() } : {}),
           ...(dto.recordedAt !== undefined ? { recordedAt: new Date(dto.recordedAt) } : {}),
+          ...(dto.completedAt !== undefined
+            ? { completedAt: new Date(dto.completedAt) }
+            : dto.recordStatus === HospitalRecordStatus.PLANNED
+              ? { completedAt: null }
+              : dto.recordStatus === HospitalRecordStatus.COMPLETED || dto.recordStatus === HospitalRecordStatus.SKIPPED
+                ? { completedAt: existing.completedAt ?? new Date() }
+                : {}),
           ...(nextRecordType === 'TEMPERATURE'
             ? (dto.temperatureC !== undefined ? { temperatureC: dto.temperatureC, value: null } : { value: null })
             : { temperatureC: null, ...(dto.value !== undefined ? { value: cleanOrNull(dto.value) } : {}) }),
@@ -311,10 +351,63 @@ export class HospitalService {
         sourceVisitId: stay.sourceVisitId,
         changedFields: Object.keys(dto),
         billItemId: existing.billItemId,
+        previousStatus: existing.recordStatus,
+        nextStatus: record.recordStatus,
       },
     });
 
     return record;
+  }
+
+  async createAmendment(stayId: string, recordId: string, dto: CreateHospitalAmendmentDto, actorId: string) {
+    const stay = await this.getExistingHospitalStay(stayId);
+    const existing = await this.prisma.hospitalRecord.findFirst({
+      where: { id: recordId, visitId: stay.sourceVisitId },
+      select: { id: true, recordStatus: true, recordedAt: true },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Исходная запись журнала стационара не найдена');
+    }
+    if (existing.recordStatus === HospitalRecordStatus.AMENDMENT) {
+      throw new BadRequestException('Исправление добавляется к исходной записи, а не к другому исправлению');
+    }
+
+    this.ensureTemperatureRecord(dto.recordType, dto.temperatureC);
+    const amendment = await this.prisma.hospitalRecord.create({
+      data: {
+        visitId: stay.sourceVisitId,
+        recordedById: actorId,
+        recordType: dto.recordType,
+        recordStatus: HospitalRecordStatus.AMENDMENT,
+        createdAsPlan: false,
+        title: dto.title.trim(),
+        recordedAt: new Date(),
+        completedAt: new Date(),
+        temperatureC: dto.recordType === 'TEMPERATURE' ? dto.temperatureC : null,
+        value: dto.recordType === 'TEMPERATURE' ? null : (dto.value === undefined ? null : cleanOrNull(dto.value)),
+        notes: dto.notes === undefined ? null : cleanOrNull(dto.notes),
+        parentRecordId: existing.id,
+        amendmentReason: dto.reason.trim(),
+      },
+      include: hospitalRecordBaseInclude,
+    });
+
+    await this.auditService.log({
+      actorId,
+      action: 'hospital.record.amend',
+      entityType: 'HospitalRecord',
+      entityId: amendment.id,
+      metadata: {
+        stayId: stay.id,
+        sourceVisitId: stay.sourceVisitId,
+        parentRecordId: existing.id,
+        originalRecordedAt: existing.recordedAt,
+        reason: dto.reason.trim(),
+      },
+    });
+
+    return amendment;
   }
 
   async admitExisting(visitId: string, dto: AdmitExistingHospitalStayDto, actorId: string) {
@@ -817,10 +910,34 @@ export class HospitalService {
     return accesses.length ? accesses.map((access) => access.warehouseId) : null;
   }
 
+  private ensureDirectRecordEditAllowed(recordedAt: Date, timeZone: string) {
+    const recordDate = dateKeyInTimeZone(recordedAt, timeZone);
+    const today = dateKeyInTimeZone(new Date(), timeZone);
+    if (recordDate < today) {
+      throw new BadRequestException('Прошлые сутки закрыты. Добавьте исправление с причиной — исходная запись останется в истории');
+    }
+  }
+
+  private ensureRecordWithinStay(recordedAt: Date, startedAt: Date, completedAt: Date | null) {
+    if (recordedAt.getTime() < startedAt.getTime() - 60_000) {
+      throw new BadRequestException('Время записи не может быть раньше поступления в стационар');
+    }
+    if (completedAt && recordedAt.getTime() > completedAt.getTime() + 60_000) {
+      throw new BadRequestException('Время записи не может быть позже выписки из стационара');
+    }
+  }
+
   private async getExistingHospitalStay(stayId: string) {
     const stay = await this.prisma.hospitalStay.findFirst({
       where: { OR: [{ id: stayId }, { sourceVisitId: stayId }] },
-      select: { id: true, sourceVisitId: true, status: true },
+      select: {
+        id: true,
+        sourceVisitId: true,
+        status: true,
+        startedAt: true,
+        completedAt: true,
+        hospitalBox: { select: { office: { select: { timezone: true } } } },
+      },
     });
 
     if (!stay) {
@@ -831,7 +948,7 @@ export class HospitalService {
   }
 }
 
-const hospitalRecordInclude = {
+const hospitalRecordBaseInclude = {
   recordedBy: { select: { id: true, fullName: true, position: true } },
   billItem: {
     select: {
@@ -859,17 +976,33 @@ const hospitalRecordInclude = {
   },
 } satisfies Prisma.HospitalRecordInclude;
 
+const hospitalRecordInclude = {
+  ...hospitalRecordBaseInclude,
+  amendments: {
+    orderBy: { recordedAt: 'asc' as const },
+    include: hospitalRecordBaseInclude,
+  },
+} satisfies Prisma.HospitalRecordInclude;
+
 const hospitalStayInclude = {
   owner: { select: { id: true, fullName: true, phone: true, extraPhone: true } },
   animal: { select: { id: true, nickname: true, species: true, breed: true, sex: true, status: true } },
   employee: { select: { id: true, fullName: true, position: true } },
-  hospitalBox: { select: { id: true, name: true, officeId: true } },
+  hospitalBox: {
+    select: {
+      id: true,
+      name: true,
+      officeId: true,
+      office: { select: { timezone: true } },
+    },
+  },
   sourceVisit: {
     include: {
       exam: true,
       recommendation: true,
       bill: { select: { id: true, status: true, totalAmount: true, paidAmount: true } },
       hospitalRecords: {
+        where: { parentRecordId: null },
         orderBy: { recordedAt: 'desc' as const },
         include: hospitalRecordInclude,
       },
@@ -897,12 +1030,35 @@ function serializeHospitalStay(stay: HospitalStayWithRelations) {
     owner: stay.owner,
     animal: stay.animal,
     employee: stay.employee,
-    hospitalBox: stay.hospitalBox,
+    hospitalBox: {
+      id: stay.hospitalBox.id,
+      name: stay.hospitalBox.name,
+      officeId: stay.hospitalBox.officeId,
+    },
+    timezone: stay.hospitalBox.office.timezone,
     exam: stay.sourceVisit.exam,
     recommendation: stay.sourceVisit.recommendation,
     bill: stay.sourceVisit.bill,
-    hospitalRecords: stay.sourceVisit.hospitalRecords,
+    hospitalRecords: stay.sourceVisit.hospitalRecords.map((record) => ({
+      ...record,
+      canEditDirectly: stay.status === HospitalStayStatus.ACTIVE
+        && dateKeyInTimeZone(record.recordedAt, stay.hospitalBox.office.timezone) >= dateKeyInTimeZone(new Date(), stay.hospitalBox.office.timezone),
+      editRule: dateKeyInTimeZone(record.recordedAt, stay.hospitalBox.office.timezone) < dateKeyInTimeZone(new Date(), stay.hospitalBox.office.timezone)
+        ? 'AMENDMENT_REQUIRED'
+        : stay.status === HospitalStayStatus.ACTIVE ? 'DIRECT' : 'AMENDMENT_REQUIRED',
+    })),
   };
+}
+
+function dateKeyInTimeZone(value: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(value);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
 }
 
 function calculateCatalogLine(input: {
