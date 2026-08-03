@@ -28,6 +28,7 @@ export type QueueEntry = {
   startedAt: string | null;
   lastCalledAt: string | null;
   callCount: number;
+  acceptWaitSeconds: number;
   completedAt: string | null;
   updatedAt: string;
   office?: Pick<SchedulingOffice, 'id' | 'name' | 'timezone'> | null;

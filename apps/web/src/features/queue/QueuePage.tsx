@@ -26,8 +26,6 @@ import {
 } from './types';
 
 const pageSize = 10;
-const queueAcceptDelayMs = 10_000;
-
 export function QueuePage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -49,6 +47,8 @@ export function QueuePage() {
   const queueQuery = useQuery({
     queryKey: ['queue', { search, status, urgency, employeeId, limit: pageSize, offset, ...dateRange }],
     queryFn: () => listQueue({ search, status, urgency, employeeId, limit: pageSize, offset, ...dateRange }),
+    refetchInterval: (query) =>
+      query.state.data?.items.some((item) => item.status === 'IN_PROGRESS' && item.acceptWaitSeconds > 0) ? 1000 : false,
   });
 
   useEffect(() => {
@@ -154,7 +154,6 @@ export function QueuePage() {
           canCallQueue || canManageVisits ? (
             <QueueActionButton
               record={record}
-              now={now}
               loading={actionMutation.isPending}
               canCallQueue={canCallQueue}
               canManageVisits={canManageVisits}
@@ -304,7 +303,6 @@ export function QueuePage() {
 
 function QueueActionButton({
   record,
-  now,
   loading,
   onCall,
   onRepeat,
@@ -315,7 +313,6 @@ function QueueActionButton({
   onCreateVisit,
 }: {
   record: QueueEntry;
-  now: number;
   loading: boolean;
   canCallQueue: boolean;
   canManageVisits: boolean;
@@ -334,7 +331,7 @@ function QueueActionButton({
   }
 
   if (record.status === 'IN_PROGRESS' && canCallQueue) {
-    const waitSeconds = getQueueAcceptWaitSeconds(record.lastCalledAt ?? record.startedAt, now);
+    const waitSeconds = record.acceptWaitSeconds;
 
     return (
       <Space size={6} wrap>
@@ -388,16 +385,6 @@ function useNow() {
   }, []);
 
   return now;
-}
-
-function getQueueAcceptWaitSeconds(startedAt: string | null, now: number) {
-  if (!startedAt) {
-    return Math.ceil(queueAcceptDelayMs / 1000);
-  }
-
-  const elapsedMs = now - new Date(startedAt).getTime();
-
-  return Math.max(0, Math.ceil((queueAcceptDelayMs - elapsedMs) / 1000));
 }
 
 function getWaitingTime(record: QueueEntry, now: number) {

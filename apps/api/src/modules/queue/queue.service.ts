@@ -10,7 +10,7 @@ import { CreateQueueEntryDto } from './dto/create-queue-entry.dto';
 import { ListQueueQueryDto } from './dto/list-queue-query.dto';
 import { UpdateQueueEntryDto } from './dto/update-queue-entry.dto';
 
-const QUEUE_ACCEPT_DELAY_MS = 10_000;
+const QUEUE_ACCEPT_DELAY_MS = 15_000;
 
 @Injectable()
 export class QueueService {
@@ -75,7 +75,8 @@ export class QueueService {
       this.prisma.queueEntry.count({ where }),
     ]);
 
-    return { items, total, limit, offset };
+    const responseTime = Date.now();
+    return { items: items.map((item) => toQueueEntryResponse(item, responseTime)), total, limit, offset };
   }
 
   async getQueueScreen() {
@@ -122,7 +123,7 @@ export class QueueService {
       },
     });
 
-    return queueEntry;
+    return toQueueEntryResponse(queueEntry);
   }
 
   async getQueueEntry(queueEntryId: string) {
@@ -135,7 +136,7 @@ export class QueueService {
       throw new NotFoundException('Queue entry not found');
     }
 
-    return queueEntry;
+    return toQueueEntryResponse(queueEntry);
   }
 
   async updateQueueEntry(queueEntryId: string, dto: UpdateQueueEntryDto, actorId: string) {
@@ -160,7 +161,7 @@ export class QueueService {
       metadata: { changedFields: Object.keys(dto), status: queueEntry.status },
     });
 
-    return queueEntry;
+    return toQueueEntryResponse(queueEntry);
   }
 
   async startQueueEntry(queueEntryId: string, actorId: string) {
@@ -203,7 +204,7 @@ export class QueueService {
       },
     });
 
-    return queueEntry;
+    return toQueueEntryResponse(queueEntry);
   }
 
   async completeQueueEntry(queueEntryId: string, actorId: string) {
@@ -251,7 +252,7 @@ export class QueueService {
       metadata: { status },
     });
 
-    return queueEntry;
+    return toQueueEntryResponse(queueEntry);
   }
 
   private async resolveQueueData(
@@ -377,6 +378,32 @@ const queueScreenSelect = {
 } satisfies Prisma.QueueEntrySelect;
 
 type QueueScreenRecord = Prisma.QueueEntryGetPayload<{ select: typeof queueScreenSelect }>;
+
+type QueueAcceptTiming = {
+  status: QueueStatus;
+  startedAt: Date | null;
+  lastCalledAt: Date | null;
+};
+
+export function resolveQueueAcceptWaitSeconds(entry: QueueAcceptTiming, now = Date.now()) {
+  if (entry.status !== QueueStatus.IN_PROGRESS) {
+    return 0;
+  }
+
+  const lastCallAt = entry.lastCalledAt ?? entry.startedAt;
+  if (!lastCallAt) {
+    return Math.ceil(QUEUE_ACCEPT_DELAY_MS / 1000);
+  }
+
+  return Math.max(0, Math.ceil((lastCallAt.getTime() + QUEUE_ACCEPT_DELAY_MS - now) / 1000));
+}
+
+function toQueueEntryResponse<T extends QueueAcceptTiming>(entry: T, now = Date.now()) {
+  return {
+    ...entry,
+    acceptWaitSeconds: resolveQueueAcceptWaitSeconds(entry, now),
+  };
+}
 
 function toQueueScreenItem(item: QueueScreenRecord) {
   return {

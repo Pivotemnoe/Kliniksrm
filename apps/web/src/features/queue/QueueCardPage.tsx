@@ -9,7 +9,7 @@ import {
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Button, Card, Descriptions, Space, Tag, Typography } from 'antd';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
@@ -38,8 +38,6 @@ type QueueCardsInput = {
   afterCreate?: 'visit';
 };
 
-const queueAcceptDelayMs = 10_000;
-
 export function QueueCardPage() {
   const { queueEntryId } = useParams<{ queueEntryId: string }>();
   const navigate = useNavigate();
@@ -51,11 +49,12 @@ export function QueueCardPage() {
   const canManageVisits = hasPermission(auth?.employee, 'visits.manage');
   const [editOpen, setEditOpen] = useState(false);
   const [createCardsOpen, setCreateCardsOpen] = useState(false);
-  const now = useNow();
   const queueQuery = useQuery({
     queryKey: ['queue', queueEntryId],
     queryFn: () => getQueueEntry(queueEntryId!),
     enabled: Boolean(queueEntryId),
+    refetchInterval: (query) =>
+      query.state.data?.status === 'IN_PROGRESS' && query.state.data.acceptWaitSeconds > 0 ? 1000 : false,
   });
   const updateMutation = useMutation({
     mutationFn: (values: QueueMutationInput) => updateQueueEntry(queueEntryId!, values),
@@ -123,8 +122,7 @@ export function QueueCardPage() {
   }
 
   const queueEntry = queueQuery.data;
-  const acceptWaitSeconds =
-    queueEntry?.status === 'IN_PROGRESS' ? getQueueAcceptWaitSeconds(queueEntry.lastCalledAt ?? queueEntry.startedAt, now) : 0;
+  const acceptWaitSeconds = queueEntry?.status === 'IN_PROGRESS' ? queueEntry.acceptWaitSeconds : 0;
   const statusView = queueEntry ? getQueueDisplayStatus(queueEntry) : null;
 
   if (queueQuery.isError) {
@@ -271,26 +269,4 @@ export function QueueCardPage() {
 
 function getClientName(queueEntry: { owner?: { fullName: string } | null; ownerName: string | null }) {
   return queueEntry.owner?.fullName ?? queueEntry.ownerName ?? 'Клиент без карточки';
-}
-
-function useNow() {
-  const [now, setNow] = useState(Date.now());
-
-  useEffect(() => {
-    const timerId = window.setInterval(() => setNow(Date.now()), 1000);
-
-    return () => window.clearInterval(timerId);
-  }, []);
-
-  return now;
-}
-
-function getQueueAcceptWaitSeconds(startedAt: string | null, now: number) {
-  if (!startedAt) {
-    return Math.ceil(queueAcceptDelayMs / 1000);
-  }
-
-  const elapsedMs = now - new Date(startedAt).getTime();
-
-  return Math.max(0, Math.ceil((queueAcceptDelayMs - elapsedMs) / 1000));
 }
