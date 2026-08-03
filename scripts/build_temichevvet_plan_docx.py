@@ -339,13 +339,14 @@ def build():
         set_cell_text(row.cells[2], status_labels[item["status"]], size=8.0, color=color, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER)
         set_cell_text(row.cells[3], item["next_action"], size=8.1)
 
-    add_item_detail(doc, items["P0.1"], status_labels, page_break=True)
+    add_item_detail(doc, items["P0.1"], status_labels)
     add_item_detail(doc, items["P0.2"], status_labels, page_break=True)
     add_item_detail(doc, items["P0.3"], status_labels, page_break=True)
     add_item_detail(doc, items["P0.4"], status_labels, page_break=True)
+    add_item_detail(doc, items["P0.5"], status_labels, page_break=True)
 
     doc.add_page_break()
-    add_heading(doc, "7. P1 — развитие после основы", 1)
+    add_heading(doc, "8. P1 — развитие после основы", 1)
     add_para(doc, "P1 начинается после фиксации архитектурных основ P0. Документный редактор и архив зависят от «Документов 2.0», сайт — от принятого owner-gateway, а помощник должен сначала оформить уже существующую память фраз.")
     for item_id in ("P1.1", "P1.2", "P1.3", "P1.4"):
         item = items[item_id]
@@ -355,7 +356,7 @@ def build():
         for criterion in item["acceptance_criteria"]:
             add_bullet(doc, criterion)
 
-    add_heading(doc, "8. P2 — осознанно не сейчас", 1)
+    add_heading(doc, "9. P2 — осознанно не сейчас", 1)
     add_callout(doc, "Граница приоритета", "Внешние лаборатории, SMS, полный email, касса, телефония, мультиклиника, OCR, локальная языковая модель и оптимизация чанка сохраняются в плане, но не забирают время у клинических P0/P1.", fill="FFF5DA", accent=GOLD)
     for item_id in ("P2.1", "P2.2", "P2.3"):
         item = items[item_id]
@@ -363,8 +364,9 @@ def build():
         add_para(doc, item["current_state"], size=10)
         add_para(doc, "Условие возврата: " + item["next_action"], size=9.4, color=MUTED, italic=True)
 
-    add_heading(doc, "9. Порядок ближайших решений", 1)
+    add_heading(doc, "10. Порядок ближайших решений", 1)
     sequence = [
+        "Выпустить обязательный диагноз первичного приёма и проверить в клинике блокировку пустого завершения и успешное завершение после выбора типа.",
         "Провести врачебную приёмку готового многосуточного листа на реальном пациенте и зафиксировать результат.",
         "Параллельно наблюдать принятый кабинет владельца и каналы в ежедневной работе до статуса STABLE.",
         "Повысить P0.1 и P0.4 только по факту подтверждённой клинической приёмки.",
@@ -379,7 +381,7 @@ def build():
         set_run(p.add_run(f"{index}. "), size=10.5, color=TEAL, bold=True)
         set_run(p.add_run(step), size=10.5, color=INK)
 
-    add_heading(doc, "10. Как обновляется план", 1)
+    add_heading(doc, "11. Как обновляется план", 1)
     add_para(doc, "После каждой существенной доработки обновляются статус, доказательства, ближайшее действие и дата проверки. Переход между уровнями выполняется только на основании конкретного результата:")
     for text in (
         "коммит или diff подтверждает «Код готов»;",

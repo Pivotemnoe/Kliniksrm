@@ -6,6 +6,7 @@ export type DecimalValue = string | number;
 
 export type VisitStatus = 'DRAFT' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
 export type VisitType = 'PRIMARY' | 'FOLLOW_UP';
+export type VisitDiagnosisType = 'Предварительный' | 'Дифференциальный' | 'Клинический' | 'Окончательный';
 
 export type VisitSummary = {
   id: string;
@@ -270,7 +271,7 @@ export type VisitRecommendationInput = {
 
 export type VisitDiagnosisInput = {
   title: string;
-  diagnosisType?: string;
+  diagnosisType: string;
   description?: string;
   status?: string;
 };

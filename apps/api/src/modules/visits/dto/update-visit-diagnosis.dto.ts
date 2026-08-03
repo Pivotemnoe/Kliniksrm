@@ -1,16 +1,19 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { VISIT_DIAGNOSIS_STATUSES, VISIT_DIAGNOSIS_TYPES } from '../visit-diagnosis-rules';
 
 export class UpdateVisitDiagnosisDto {
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ enum: VISIT_DIAGNOSIS_TYPES })
   @IsOptional()
+  @IsIn(VISIT_DIAGNOSIS_TYPES)
   @IsString()
   @MinLength(2)
   @MaxLength(500)
   title?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ enum: VISIT_DIAGNOSIS_STATUSES })
   @IsOptional()
+  @IsIn(VISIT_DIAGNOSIS_STATUSES)
   @IsString()
   @MaxLength(120)
   diagnosisType?: string;

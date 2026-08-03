@@ -23,6 +23,7 @@ import { ListHospitalQueryDto } from './dto/list-hospital-query.dto';
 import { UpdateHospitalStayDto } from './dto/update-hospital-stay.dto';
 import { UpdateHospitalRecordDto } from './dto/update-hospital-record.dto';
 import { toStockQuantity } from '../stock/stock-units';
+import { assertPrimaryVisitDiagnosesReady } from '../visits/visit-diagnosis-rules';
 
 type WarehouseScope = string[] | null;
 
@@ -420,8 +421,10 @@ export class HospitalService {
         employeeId: true,
         appointmentId: true,
         queueEntryId: true,
+        visitType: true,
         status: true,
         startedAt: true,
+        diagnoses: { select: { diagnosisType: true } },
         exam: { select: { purpose: true } },
         hospitalStay: { select: { id: true } },
       },
@@ -438,6 +441,11 @@ export class HospitalService {
     if (visit.status !== VisitStatus.DRAFT && visit.status !== VisitStatus.IN_PROGRESS) {
       throw new BadRequestException('В стационар можно перевести только пациента из активного приёма');
     }
+
+    assertPrimaryVisitDiagnosesReady(
+      { visitType: visit.visitType },
+      visit.diagnoses,
+    );
 
     const box = await this.schedulingService.ensureHospitalBoxExists(dto.hospitalBoxId);
     const responsibleEmployeeId = dto.employeeId ?? visit.employeeId;

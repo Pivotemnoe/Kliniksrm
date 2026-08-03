@@ -11,9 +11,16 @@ import { nullToEmpty, optionalString } from '../../shared/utils/forms';
 import { Visit, VisitDiagnosis, VisitDiagnosisInput } from './types';
 import { createVisitDiagnosis, deleteVisitDiagnosis, updateVisitDiagnosis } from './visits.api';
 
+const diagnosisTypeOptions = [
+  { value: 'Предварительный', label: 'Предварительный' },
+  { value: 'Дифференциальный', label: 'Дифференциальный' },
+  { value: 'Клинический', label: 'Клинический' },
+  { value: 'Окончательный', label: 'Окончательный' },
+];
+
 const diagnosisSchema = z.object({
   title: z.string().trim().min(2, 'Введите диагноз').max(500),
-  diagnosisType: optionalString(120),
+  diagnosisType: z.string().trim().refine((value) => diagnosisTypeOptions.some((option) => option.value === value), 'Выберите тип диагноза'),
   description: optionalString(2000),
   status: optionalString(120),
 });
@@ -34,6 +41,7 @@ export function VisitDiagnosesTab({ visit, canManage, locked, compact = false, s
   const [editingDiagnosis, setEditingDiagnosis] = useState<VisitDiagnosis | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [quickTitle, setQuickTitle] = useState('');
+  const [quickDiagnosisType, setQuickDiagnosisType] = useState<string>();
   const disabled = locked || !canManage;
   const saveMutation = useMutation({
     mutationFn: (values: VisitDiagnosisInput) =>
@@ -53,11 +61,12 @@ export function VisitDiagnosesTab({ visit, canManage, locked, compact = false, s
     },
   });
   const quickCreateMutation = useMutation({
-    mutationFn: (title: string) => createVisitDiagnosis(visit.id, { title }),
+    mutationFn: (input: VisitDiagnosisInput) => createVisitDiagnosis(visit.id, input),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['visits', visit.id] });
       await queryClient.invalidateQueries({ queryKey: ['visits'] });
       setQuickTitle('');
+      setQuickDiagnosisType(undefined);
     },
   });
   const columns = useMemo<ColumnsType<VisitDiagnosis>>(
@@ -124,13 +133,19 @@ export function VisitDiagnosesTab({ visit, canManage, locked, compact = false, s
                 onSelect={setQuickTitle}
                 placeholder="Выберите или введите диагноз"
               />
+              <Select
+                value={quickDiagnosisType}
+                options={diagnosisTypeOptions}
+                placeholder="Тип диагноза"
+                onChange={setQuickDiagnosisType}
+              />
               <Button
                 type="primary"
                 size="small"
                 icon={<PlusOutlined />}
-                disabled={quickTitle.trim().length < 2}
+                disabled={quickTitle.trim().length < 2 || !quickDiagnosisType}
                 loading={quickCreateMutation.isPending}
-                onClick={() => quickCreateMutation.mutate(quickTitle.trim())}
+                onClick={() => quickDiagnosisType && quickCreateMutation.mutate({ title: quickTitle.trim(), diagnosisType: quickDiagnosisType })}
               >
                 Добавить
               </Button>
@@ -148,7 +163,7 @@ export function VisitDiagnosesTab({ visit, canManage, locked, compact = false, s
                       setDrawerOpen(true);
                     }}
                   >
-                    {diagnosis.title}
+                    {diagnosis.title}{normalizeDiagnosisType(diagnosis.diagnosisType) ? ` · ${normalizeDiagnosisType(diagnosis.diagnosisType)}` : ''}
                   </Button>
                   {!disabled ? (
                     <Popconfirm title="Убрать диагноз?" okText="Убрать" cancelText="Отмена" onConfirm={() => deleteMutation.mutate(diagnosis.id)}>
@@ -268,10 +283,9 @@ function DiagnosisDrawer({
             control={control}
             name="diagnosisType"
             render={({ field, fieldState }) => (
-              <Form.Item label="Тип" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+              <Form.Item label="Тип диагноза" required validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
                 <Select
                   {...field}
-                  allowClear
                   showSearch
                   value={field.value}
                   options={diagnosisTypeOptions}
@@ -314,13 +328,6 @@ function DiagnosisDrawer({
     </Drawer>
   );
 }
-
-const diagnosisTypeOptions = [
-  { value: 'Дифференциальный', label: 'Дифференциальный' },
-  { value: 'Окончательный', label: 'Окончательный' },
-  { value: 'Клинический', label: 'Клинический' },
-  { value: 'Предварительный', label: 'Предварительный' },
-];
 
 const diagnosisStatusOptions = [
   { value: 'На лечении', label: 'На лечении' },

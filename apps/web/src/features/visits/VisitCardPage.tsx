@@ -29,7 +29,7 @@ export function VisitCardPage() {
   const { visitId } = useParams<{ visitId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const { data: auth } = useCurrentEmployee();
   const canManage = hasPermission(auth?.employee, 'visits.manage');
   const canReadBilling = hasPermission(auth?.employee, 'billing.read');
@@ -88,6 +88,7 @@ export function VisitCardPage() {
   });
 
   const visit = visitQuery.data;
+  const primaryDiagnosisIssue = visit ? getPrimaryDiagnosisCompletionIssue(visit) : null;
   const locked = visit ? isVisitLockedForEditing(visit, auth?.employee) : false;
   const completedEditNotice = visit ? getCompletedEditNotice(visit, auth?.employee, locked) : null;
   const latestWeight = visit?.animal.weights?.[0];
@@ -235,7 +236,17 @@ export function VisitCardPage() {
                   Открыть карту стационара
                 </Button>
               ) : canManageHospital && (visit.status === 'DRAFT' || visit.status === 'IN_PROGRESS') ? (
-                <Button icon={<HomeOutlined />} onClick={() => setHospitalModalOpen(true)}>
+                <Button
+                  icon={<HomeOutlined />}
+                  onClick={() => {
+                    if (primaryDiagnosisIssue) {
+                      showDiagnosisWarning(modal, primaryDiagnosisIssue);
+                      return;
+                    }
+
+                    setHospitalModalOpen(true);
+                  }}
+                >
                   Поместить в стационар
                 </Button>
               ) : (
@@ -258,7 +269,14 @@ export function VisitCardPage() {
                     type="primary"
                     icon={<CheckOutlined />}
                     loading={actionMutation.isPending}
-                    onClick={() => actionMutation.mutate('complete')}
+                    onClick={() => {
+                      if (primaryDiagnosisIssue) {
+                        showDiagnosisWarning(modal, primaryDiagnosisIssue);
+                        return;
+                      }
+
+                      actionMutation.mutate('complete');
+                    }}
                   >
                     Завершить
                   </Button>
@@ -278,6 +296,15 @@ export function VisitCardPage() {
           {visit ? (
             <>
               {completedEditNotice ? <Alert type="info" showIcon message={completedEditNotice} className="form-alert" /> : null}
+              {visit.status === 'IN_PROGRESS' && primaryDiagnosisIssue ? (
+                <Alert
+                  type="warning"
+                  showIcon
+                  message={primaryDiagnosisIssue}
+                  description="Для первичного приёма добавьте диагноз и выберите его тип в листе осмотра. До этого завершить приём нельзя."
+                  className="form-alert"
+                />
+              ) : null}
               <Tabs
                 items={[
                   {
@@ -376,6 +403,30 @@ function ContextRow({ label, value }: { label: string; value?: ReactNode }) {
       <span>{value === undefined || value === null || value === '' ? '—' : value}</span>
     </div>
   );
+}
+
+function getPrimaryDiagnosisCompletionIssue(visit: Visit) {
+  if (visit.visitType !== 'PRIMARY') {
+    return null;
+  }
+
+  if (!visit.diagnoses.length) {
+    return 'Вы не указали ни одного диагноза';
+  }
+
+  if (visit.diagnoses.some((diagnosis) => !diagnosis.diagnosisType?.trim())) {
+    return 'Укажите тип для каждого диагноза';
+  }
+
+  return null;
+}
+
+function showDiagnosisWarning(modal: ReturnType<typeof App.useApp>['modal'], issue: string) {
+  modal.warning({
+    title: issue,
+    content: 'Откройте «Лист осмотра», добавьте диагноз и выберите: предварительный, дифференциальный, клинический или окончательный.',
+    okText: 'Понятно',
+  });
 }
 
 const completedVisitEditGraceMs = 30 * 60 * 1000;

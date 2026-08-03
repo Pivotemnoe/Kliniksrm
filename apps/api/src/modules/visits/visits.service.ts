@@ -30,6 +30,7 @@ import { UpdateVisitDto } from './dto/update-visit.dto';
 import { UpsertVisitExamDto } from './dto/upsert-visit-exam.dto';
 import { UpsertVisitRecommendationDto } from './dto/upsert-visit-recommendation.dto';
 import { toStockQuantity } from '../stock/stock-units';
+import { assertPrimaryVisitDiagnosesReady } from './visit-diagnosis-rules';
 
 type WarehouseScope = string[] | null;
 const COMPLETED_VISIT_EDIT_GRACE_MS = 30 * 60 * 1000;
@@ -161,6 +162,13 @@ export class VisitsService {
   async updateVisit(visitId: string, dto: UpdateVisitDto, actor: AuthEmployee) {
     const existing = await this.getExistingVisit(visitId);
     ensureVisitEditable(existing, actor);
+
+    if (dto.status === VisitStatus.COMPLETED) {
+      await this.ensurePrimaryVisitDiagnosesReady({
+        ...existing,
+        visitType: dto.visitType ?? existing.visitType,
+      });
+    }
 
     if (dto.employeeId) {
       await this.schedulingService.ensureEmployeeActive(dto.employeeId);
@@ -707,6 +715,10 @@ export class VisitsService {
     const existing = await this.getExistingVisit(visitId);
     ensureVisitEditable(existing, actor);
 
+    if (status === VisitStatus.COMPLETED) {
+      await this.ensurePrimaryVisitDiagnosesReady(existing);
+    }
+
     const visit = await this.prisma.$transaction(async (tx) => {
       const updatedVisit = await tx.visit.update({
         where: { id: visitId },
@@ -727,6 +739,15 @@ export class VisitsService {
     });
 
     return this.getVisit(visit.id);
+  }
+
+  private async ensurePrimaryVisitDiagnosesReady(visit: Pick<ExistingVisit, 'id' | 'visitType'>) {
+    const diagnoses = await this.prisma.visitDiagnosis.findMany({
+      where: { visitId: visit.id },
+      select: { diagnosisType: true },
+    });
+
+    assertPrimaryVisitDiagnosesReady(visit, diagnoses);
   }
 
   private async resolveVisitCreationData(dto: CreateVisitDto, actor: AuthEmployee): Promise<VisitCreationData> {
@@ -1149,6 +1170,7 @@ export class VisitsService {
         appointmentId: true,
         queueEntryId: true,
         hospitalBoxId: true,
+        visitType: true,
         status: true,
         startedAt: true,
         completedAt: true,
@@ -1295,6 +1317,7 @@ type ExistingVisit = Prisma.VisitGetPayload<{
     appointmentId: true;
     queueEntryId: true;
     hospitalBoxId: true;
+    visitType: true;
     status: true;
     startedAt: true;
     completedAt: true;
