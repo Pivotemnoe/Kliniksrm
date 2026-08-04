@@ -1,4 +1,12 @@
-import { DeleteOutlined, EditOutlined, PlusOutlined, PrinterOutlined, SendOutlined } from '@ant-design/icons';
+import {
+  CheckOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  FileDoneOutlined,
+  PlusOutlined,
+  PrinterOutlined,
+  SendOutlined,
+} from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, App, Button, Card, Drawer, Form, Input, Select, Space, Table, Tag, Timeline, Typography } from 'antd';
@@ -30,14 +38,11 @@ import { createNotification } from '../notifications/notifications.api';
 import { CreateNotificationInput, NotificationChannel, notificationChannelLabels } from '../notifications/types';
 import { Visit } from './types';
 
-const documentStatuses = ['DRAFT', 'GENERATED', 'SIGNED', 'CANCELLED'] as const satisfies readonly DocumentStatus[];
-
 const documentSchema = z
   .object({
     templateId: z.string().optional(),
     title: z.string().trim().optional(),
     body: z.string().trim().optional(),
-    status: z.enum(documentStatuses),
   })
   .refine((value) => Boolean(value.templateId || value.title?.trim()), {
     path: ['title'],
@@ -69,7 +74,6 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
       templateId: undefined,
       title: '',
       body: '',
-      status: 'DRAFT',
     },
   });
   const previewTitle = watch('title');
@@ -80,11 +84,7 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
   const saveMutation = useMutation({
     mutationFn: (values: DocumentFormValues) =>
       editingDocument
-        ? updateVisitDocument(
-            visit.id,
-            editingDocument.id,
-            documentFrozen ? { status: values.status } : values,
-          )
+        ? updateVisitDocument(visit.id, editingDocument.id, values)
         : createVisitDocument(visit.id, values),
     onSuccess: async () => {
       await Promise.all([
@@ -92,7 +92,34 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
         queryClient.invalidateQueries({ queryKey: ['visits', visit.id] }),
         queryClient.invalidateQueries({ queryKey: ['visits'] }),
       ]);
-      message.success(editingDocument ? 'Документ обновлён' : 'Документ создан');
+      message.success(editingDocument ? 'Черновик обновлён' : 'Черновик сохранён');
+      closeDrawer();
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
+  const generateMutation = useMutation({
+    mutationFn: (values: DocumentFormValues) =>
+      editingDocument
+        ? updateVisitDocument(visit.id, editingDocument.id, { ...values, status: 'GENERATED' })
+        : createVisitDocument(visit.id, { ...values, status: 'GENERATED' }),
+    onSuccess: async () => {
+      await refreshDocuments();
+      message.success('Документ сформирован. Теперь его можно подписать или распечатать.');
+      closeDrawer();
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
+  const transitionMutation = useMutation({
+    mutationFn: ({ document, status }: { document: VisitDocument; status: 'GENERATED' | 'SIGNED' | 'CANCELLED' }) =>
+      updateVisitDocument(visit.id, document.id, { status }),
+    onSuccess: async (document) => {
+      await refreshDocuments();
+      const successMessages: Record<'GENERATED' | 'SIGNED' | 'CANCELLED', string> = {
+        GENERATED: 'Документ сформирован. Теперь его можно подписать или распечатать.',
+        SIGNED: 'Документ подписан и сохранён в истории.',
+        CANCELLED: 'Документ отменён и сохранён в истории.',
+      };
+      message.success(successMessages[document.status as 'GENERATED' | 'SIGNED' | 'CANCELLED']);
       closeDrawer();
     },
     onError: (error) => message.error(getErrorMessage(error)),
@@ -167,34 +194,61 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
       {
         title: '',
         key: 'actions',
-        width: 330,
+        width: 520,
         render: (_, record) =>
           (
             <Space wrap>
-              {canPrint ? (
+              {canManage ? (
+                <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(record)}>
+                  {record.status === 'DRAFT' ? 'Редактировать' : 'Просмотреть'}
+                </Button>
+              ) : null}
+              {canManage && record.status === 'DRAFT' && !record.generatedDocument ? (
+                <Button
+                  type="primary"
+                  size="small"
+                  icon={<FileDoneOutlined />}
+                  loading={transitionMutation.isPending}
+                  onClick={() => confirmGenerate(record)}
+                >
+                  Сформировать
+                </Button>
+              ) : null}
+              {canManage && record.status === 'GENERATED' ? (
+                <Button
+                  type="primary"
+                  size="small"
+                  icon={<CheckOutlined />}
+                  loading={transitionMutation.isPending}
+                  onClick={() => confirmSign(record)}
+                >
+                  Подписать
+                </Button>
+              ) : null}
+              {canPrint && record.generatedDocument && record.status !== 'CANCELLED' ? (
                 <Button
                   size="small"
                   icon={<PrinterOutlined />}
                   loading={printingDocumentId === record.id}
                   onClick={() => handlePrint(record)}
                 >
-                  Печать
+                  Печать PDF
                 </Button>
               ) : null}
-              {canSend ? (
+              {canSend && canQueueDocument(record) ? (
                 <Button
                   size="small"
                   icon={<SendOutlined />}
                   loading={sendMutation.isPending}
-                  disabled={!canQueueDocument(record) || !notificationTarget}
+                  disabled={!notificationTarget}
                   onClick={() => sendMutation.mutate(record)}
                 >
                   Отправить
                 </Button>
               ) : null}
-              {canManage ? (
-                <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(record)}>
-                  Открыть
+              {canManage && (record.status === 'GENERATED' || record.status === 'SIGNED') ? (
+                <Button danger size="small" loading={transitionMutation.isPending} onClick={() => confirmCancel(record)}>
+                  Отменить
                 </Button>
               ) : null}
               {canManage && canDeleteVisitDocument(record) ? (
@@ -206,7 +260,16 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
           ),
       },
     ],
-    [canManage, canPrint, canSend, deleteMutation.isPending, notificationTarget, sendMutation],
+    [
+      canManage,
+      canPrint,
+      canSend,
+      deleteMutation.isPending,
+      notificationTarget,
+      printingDocumentId,
+      sendMutation,
+      transitionMutation.isPending,
+    ],
   );
 
   function confirmDelete(document: VisitDocument) {
@@ -220,9 +283,52 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
     });
   }
 
+  function confirmGenerate(document: VisitDocument) {
+    modal.confirm({
+      title: 'Сформировать документ?',
+      content:
+        'Будет создан и сохранён точный PDF этого документа. После формирования текст изменить нельзя, но документ можно подписать, распечатать или отправить клиенту.',
+      okText: 'Сформировать',
+      cancelText: 'Вернуться к проверке',
+      onOk: () => transitionMutation.mutateAsync({ document, status: 'GENERATED' }),
+    });
+  }
+
+  function confirmGenerateFromEditor(values: DocumentFormValues) {
+    modal.confirm({
+      title: 'Сформировать документ?',
+      content:
+        'Сначала будут сохранены текущие данные, затем будет создан точный PDF. После формирования текст изменить нельзя.',
+      okText: 'Сформировать',
+      cancelText: 'Вернуться к проверке',
+      onOk: () => generateMutation.mutateAsync(values),
+    });
+  }
+
+  function confirmSign(document: VisitDocument) {
+    modal.confirm({
+      title: 'Подписать документ?',
+      content: `Подтвердите, что документ «${document.title}» проверен и принят врачом.`,
+      okText: 'Подписать',
+      cancelText: 'Отмена',
+      onOk: () => transitionMutation.mutateAsync({ document, status: 'SIGNED' }),
+    });
+  }
+
+  function confirmCancel(document: VisitDocument) {
+    modal.confirm({
+      title: 'Отменить документ?',
+      content: `Документ «${document.title}» останется в истории со статусом «Отменён», но его нельзя будет отправить или распечатать как действующий.`,
+      okText: 'Отменить документ',
+      cancelText: 'Назад',
+      okButtonProps: { danger: true },
+      onOk: () => transitionMutation.mutateAsync({ document, status: 'CANCELLED' }),
+    });
+  }
+
   function openCreate() {
     setEditingDocument(null);
-    reset({ templateId: undefined, title: '', body: '', status: 'DRAFT' });
+    reset({ templateId: undefined, title: '', body: '' });
     setDrawerOpen(true);
   }
 
@@ -232,7 +338,6 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
       templateId: document.templateId ?? undefined,
       title: document.title,
       body: document.body ?? '',
-      status: document.status,
     });
     setDrawerOpen(true);
   }
@@ -240,12 +345,12 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
   function closeDrawer() {
     setDrawerOpen(false);
     setEditingDocument(null);
-    reset({ templateId: undefined, title: '', body: '', status: 'DRAFT' });
+    reset({ templateId: undefined, title: '', body: '' });
   }
 
   async function handlePrint(document: VisitDocument) {
     if (!document.generatedDocument) {
-      printDocument(document, visit);
+      message.warning('Сначала сформируйте документ. После этого появится точный PDF для печати.');
       return;
     }
 
@@ -267,6 +372,14 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
     } finally {
       setPrintingDocumentId(null);
     }
+  }
+
+  async function refreshDocuments() {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['visits', visit.id, 'documents'] }),
+      queryClient.invalidateQueries({ queryKey: ['visits', visit.id] }),
+      queryClient.invalidateQueries({ queryKey: ['visits'] }),
+    ]);
   }
 
   function insertVariable(variable: string) {
@@ -314,30 +427,51 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
         />
       </Card>
       <Drawer
-        title={editingDocument ? 'Документ приёма' : 'Новый документ приёма'}
+        title={
+          !editingDocument
+            ? 'Новый документ приёма'
+            : editingDocument.status === 'DRAFT'
+              ? 'Редактирование черновика'
+              : 'Просмотр документа'
+        }
         width={760}
         open={drawerOpen}
         onClose={closeDrawer}
         destroyOnHidden
         extra={
           <Space>
-            {editingDocument && canPrint ? (
+            {editingDocument?.generatedDocument && editingDocument.status !== 'CANCELLED' && canPrint ? (
               <Button
                 icon={<PrinterOutlined />}
                 loading={printingDocumentId === editingDocument.id}
                 onClick={() => handlePrint(editingDocument)}
               >
-                Печать
+                Печать PDF
               </Button>
             ) : null}
-            {editingDocument && canSend ? (
+            {editingDocument && canSend && canQueueDocument(editingDocument) ? (
               <Button
                 icon={<SendOutlined />}
                 loading={sendMutation.isPending}
-                disabled={!canQueueDocument(editingDocument) || !notificationTarget}
+                disabled={!notificationTarget}
                 onClick={() => sendMutation.mutate(editingDocument)}
               >
                 Отправить
+              </Button>
+            ) : null}
+            {editingDocument?.status === 'GENERATED' && canManage ? (
+              <Button
+                type="primary"
+                icon={<CheckOutlined />}
+                loading={transitionMutation.isPending}
+                onClick={() => confirmSign(editingDocument)}
+              >
+                Подписать
+              </Button>
+            ) : null}
+            {editingDocument && canManage && (editingDocument.status === 'GENERATED' || editingDocument.status === 'SIGNED') ? (
+              <Button danger loading={transitionMutation.isPending} onClick={() => confirmCancel(editingDocument)}>
+                Отменить
               </Button>
             ) : null}
             {editingDocument && canManage && canDeleteVisitDocument(editingDocument) ? (
@@ -345,15 +479,34 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
                 Удалить
               </Button>
             ) : null}
-            {canManage ? (
-              <Button type="primary" loading={saveMutation.isPending} onClick={handleSubmit((values) => saveMutation.mutate(values))}>
-                Сохранить
+            {canManage && (!editingDocument || editingDocument.status === 'DRAFT') ? (
+              <Button loading={saveMutation.isPending} onClick={handleSubmit((values) => saveMutation.mutate(values))}>
+                Сохранить черновик
+              </Button>
+            ) : null}
+            {canManage && (!editingDocument || editingDocument.status === 'DRAFT') ? (
+              <Button
+                type="primary"
+                icon={<FileDoneOutlined />}
+                loading={generateMutation.isPending}
+                onClick={handleSubmit(confirmGenerateFromEditor)}
+              >
+                Сформировать
               </Button>
             ) : null}
           </Space>
         }
       >
         <Form layout="vertical">
+          {!documentFrozen ? (
+            <Alert
+              type="info"
+              showIcon
+              style={{ marginBottom: 16 }}
+              message="Сначала проверьте документ"
+              description="Черновик можно сохранить и продолжить позже. Когда текст готов, нажмите «Сформировать» — система создаст неизменяемый PDF и откроет действия «Подписать», «Печать PDF» и «Отправить»."
+            />
+          ) : null}
           {documentFrozen ? (
             <Alert
               type="info"
@@ -402,21 +555,16 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
                 </Form.Item>
               )}
             />
-            <Controller
-              control={control}
-              name="status"
-              render={({ field }) => (
-                <Form.Item label="Статус">
-                  <Select
-                    {...field}
-                    options={getAvailableDocumentStatuses(editingDocument).map((status) => ({
-                      value: status,
-                      label: documentStatusLabels[status],
-                    }))}
-                  />
-                </Form.Item>
-              )}
-            />
+            <Form.Item label="Состояние">
+              <Space direction="vertical" size={2}>
+                <Tag color={documentStatusColors[editingDocument?.status ?? 'DRAFT']}>
+                  {documentStatusLabels[editingDocument?.status ?? 'DRAFT']}
+                </Tag>
+                <Typography.Text type="secondary">
+                  {getDocumentStateHint(editingDocument?.status ?? 'DRAFT')}
+                </Typography.Text>
+              </Space>
+            </Form.Item>
           </div>
           <Controller
             control={control}
@@ -487,76 +635,6 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
   );
 }
 
-function printDocument(document: VisitDocument, visit: Visit) {
-  const printWindow = window.open('', '_blank', 'width=900,height=700');
-  if (!printWindow) {
-    return;
-  }
-  const visitDate = new Date(visit.startedAt).toLocaleString('ru-RU');
-  const ownerPhone = [visit.owner.phone, visit.owner.extraPhone].filter(Boolean).join(', ');
-  const animalLine = [
-    visit.animal.nickname,
-    visit.animal.species,
-    visit.animal.breed,
-    visit.animal.sex === 'MALE' ? 'самец' : visit.animal.sex === 'FEMALE' ? 'самка' : null,
-  ].filter(Boolean).join(', ');
-
-  const content = getFrozenDocumentContent(document);
-
-  printWindow.document.write(`<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8" />
-  <title>${escapeHtml(content.title)}</title>
-  <style>
-    * { box-sizing: border-box; }
-    body { margin: 0; color: #111827; background: #ffffff; font: 15px/1.5 Arial, sans-serif; }
-    .page { max-width: 820px; margin: 0 auto; padding: 30px 34px 42px; }
-    .header { display: grid; grid-template-columns: 72px 1fr; gap: 16px; align-items: center; padding-bottom: 18px; border-bottom: 2px solid #111827; }
-    .logo { width: 68px; height: 68px; object-fit: contain; }
-    .brand { font-size: 22px; font-weight: 700; }
-    .muted { color: #6b7280; }
-    h1 { margin: 26px 0 14px; font-size: 24px; line-height: 1.2; }
-    .meta-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 18px; margin: 0 0 24px; padding: 14px; border: 1px solid #d1d5db; border-radius: 8px; }
-    .meta-row span { display: block; color: #6b7280; font-size: 12px; }
-    .meta-row strong { display: block; font-weight: 600; }
-    .status { display: inline-block; margin-bottom: 18px; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 999px; color: #374151; font-size: 12px; }
-    .body { min-height: 300px; white-space: pre-wrap; }
-    .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 46px; }
-    .signature { padding-top: 28px; border-top: 1px solid #111827; color: #374151; font-size: 13px; }
-    @media print { .page { padding: 20mm 16mm; } }
-  </style>
-</head>
-<body>
-  <main class="page">
-    <section class="header">
-      <img class="logo" src="/brand/temichevvet-logo.jpg" alt="TemichevVet" />
-      <div>
-        <div class="brand">TemichevVet</div>
-        <div class="muted">Документ ветеринарной клиники</div>
-      </div>
-    </section>
-    <h1>${escapeHtml(content.title)}</h1>
-    <div class="status">Документ приёма · ${documentStatusLabels[document.status]}</div>
-    <section class="meta-grid">
-      <div class="meta-row"><span>Дата приёма</span><strong>${escapeHtml(visitDate)}</strong></div>
-      <div class="meta-row"><span>Врач</span><strong>${escapeHtml(visit.employee?.fullName ?? '—')}</strong></div>
-      <div class="meta-row"><span>Владелец</span><strong>${escapeHtml(visit.owner.fullName)}</strong></div>
-      <div class="meta-row"><span>Телефон</span><strong>${escapeHtml(ownerPhone || '—')}</strong></div>
-      <div class="meta-row"><span>Пациент</span><strong>${escapeHtml(animalLine || '—')}</strong></div>
-    </section>
-    <section class="body">${escapeHtml(content.body)}</section>
-    <section class="signatures">
-      <div class="signature">Подпись владельца</div>
-      <div class="signature">Подпись врача</div>
-    </section>
-  </main>
-  <script>window.print();</script>
-</body>
-</html>`);
-  printWindow.document.close();
-}
-
 export function renderVisitDocumentPreview(text: string, visit: Visit) {
   const values: Record<string, string> = {
     'organization.displayName': 'TemichevVet',
@@ -607,15 +685,14 @@ function canDeleteVisitDocument(document: VisitDocument) {
   return !document.generatedDocument && (document.status === 'DRAFT' || document.status === 'CANCELLED');
 }
 
-function getAvailableDocumentStatuses(document: VisitDocument | null) {
-  if (!document) return [...documentStatuses];
-  const transitions: Record<DocumentStatus, readonly DocumentStatus[]> = {
-    DRAFT: ['DRAFT', 'GENERATED', 'SIGNED', 'CANCELLED'],
-    GENERATED: ['GENERATED', 'SIGNED', 'CANCELLED'],
-    SIGNED: ['SIGNED', 'CANCELLED'],
-    CANCELLED: ['CANCELLED'],
+function getDocumentStateHint(status: DocumentStatus) {
+  const hints: Record<DocumentStatus, string> = {
+    DRAFT: 'Можно редактировать. Печать появится после формирования.',
+    GENERATED: 'Текст зафиксирован. Документ можно подписать, распечатать или отправить.',
+    SIGNED: 'Документ подписан и сохранён в истории.',
+    CANCELLED: 'Документ отменён и сохранён только для истории.',
   };
-  return transitions[document.status];
+  return hints[status];
 }
 
 function getFrozenDocumentContent(document: VisitDocument) {
@@ -698,13 +775,4 @@ function buildDocumentNotification(visit: Visit, document: VisitDocument, target
       content.body,
     ].join('\n'),
   };
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
 }

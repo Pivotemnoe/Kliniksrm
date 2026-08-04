@@ -103,6 +103,34 @@ test('сформированный PDF сохраняется с SHA-256, отк
   assert.match(portal, /getGeneratedDocumentText\(generatedDocument\?\.snapshot\)/);
 });
 
+test('врач видит прямой путь от черновика к сформированному и подписанному документу', async () => {
+  const ui = await read('apps/web/src/features/visits/VisitDocumentsTab.tsx');
+
+  assert.match(ui, /Сохранить черновик/);
+  assert.match(ui, /Сформировать/);
+  assert.match(ui, /Подписать/);
+  assert.match(ui, /Печать PDF/);
+  assert.match(ui, /Сначала сформируйте документ/);
+  assert.match(ui, /record\.generatedDocument && record\.status !== 'CANCELLED'/);
+  assert.doesNotMatch(ui, /name="status"/);
+  assert.doesNotMatch(ui, /temichevvet-logo\.jpg/);
+});
+
+test('печатная форма документа не выводит телефон владельца, а русские имена файлов восстанавливаются', async () => {
+  const [pdfService, documentsService, filesService] = await Promise.all([
+    read('apps/api/src/modules/documents/document-pdf.service.ts'),
+    read('apps/api/src/modules/documents/documents.service.ts'),
+    read('apps/api/src/modules/files/files.service.ts'),
+  ]);
+
+  assert.doesNotMatch(pdfService, /ownerPhone|['"]Телефон['"]/);
+  assert.doesNotMatch(documentsService, /ownerPhone:/);
+  assert.match(documentsService, /schemaVersion: 2/);
+  assert.match(filesService, /decodeMojibakeFileName/);
+  assert.match(filesService, /Buffer\.from\(value, 'latin1'\)\.toString\('utf8'\)/);
+  assert.match(filesService, /normalizedOriginalName\(file\.originalName\)/);
+});
+
 test('отправка сформированного документа связана с журналом доставки', async () => {
   const [dto, notifications, ui] = await Promise.all([
     read('apps/api/src/modules/notifications/dto/create-notification.dto.ts'),

@@ -58,7 +58,6 @@ export type VisitDocument = {
       visitStartedAt: string;
       employeeName: string;
       ownerName: string;
-      ownerPhone: string;
       animalName: string;
       animalDescription: string;
     } | null;

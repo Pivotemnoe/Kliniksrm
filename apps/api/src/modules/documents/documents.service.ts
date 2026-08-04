@@ -603,8 +603,6 @@ export class DocumentsService {
             owner: {
               select: {
                 fullName: true,
-                phone: true,
-                extraPhone: true,
                 office: {
                   select: {
                     organization: { select: { displayName: true } },
@@ -629,7 +627,6 @@ export class DocumentsService {
       visitStartedAt: document.visit.startedAt.toISOString(),
       employeeName: document.visit.employee?.fullName ?? '',
       ownerName: document.visit.owner.fullName,
-      ownerPhone: [document.visit.owner.phone, document.visit.owner.extraPhone].filter(Boolean).join(', '),
       animalName: document.visit.animal.nickname,
       animalDescription: [
         document.visit.animal.species,
@@ -640,7 +637,7 @@ export class DocumentsService {
         .join(', '),
     };
     const snapshot = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       visitDocumentId: document.id,
       visitId: document.visitId,
       templateId: document.templateId,

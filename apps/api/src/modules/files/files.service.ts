@@ -102,14 +102,15 @@ export class FilesService {
     const file = await this.getActiveFile(fileId);
     this.ensurePurposePermission(file.purpose, actor, false);
     const stream = await this.storage.getObject(file.storageKey);
+    const originalName = normalizedOriginalName(file.originalName);
     await this.auditService.log({
       actorId: actor.id,
       action: 'file.download',
       entityType: 'FileObject',
       entityId: file.id,
-      metadata: { purpose: file.purpose, originalName: file.originalName },
+      metadata: { purpose: file.purpose, originalName },
     });
-    return { file, stream };
+    return { file: { ...file, originalName }, stream };
   }
 
   async delete(fileId: string, actor: AuthEmployee) {
@@ -128,18 +129,19 @@ export class FilesService {
     return { deleted: true };
   }
 
-  private list(where: Prisma.FileObjectWhereInput) {
-    return this.prisma.fileObject.findMany({
+  private async list(where: Prisma.FileObjectWhereInput) {
+    const files = await this.prisma.fileObject.findMany({
       where: { ...where, deletedAt: null },
       orderBy: { createdAt: 'desc' },
       select: publicFileSelect,
     });
+    return files.map((file) => ({ ...file, originalName: normalizedOriginalName(file.originalName) }));
   }
 
   private async upload(scope: FileScope, file: UploadedFilePayload | undefined, actorId: string) {
-    this.validateFile(file);
-    const extension = extname(file.originalname).toLowerCase();
-    const originalName = safeOriginalName(file.originalname);
+    const originalName = normalizedOriginalName(file?.originalname ?? '');
+    this.validateFile(file, originalName);
+    const extension = extname(originalName).toLowerCase();
     const purpose = purposeFor(scope);
     const storageKey = `${purpose.toLowerCase()}/${new Date().getUTCFullYear()}/${randomUUID()}${extension}`;
     const checksumSha256 = createHash('sha256').update(file.buffer).digest('hex');
@@ -173,14 +175,14 @@ export class FilesService {
     }
   }
 
-  private validateFile(file: UploadedFilePayload | undefined): asserts file is UploadedFilePayload {
+  private validateFile(file: UploadedFilePayload | undefined, originalName: string): asserts file is UploadedFilePayload {
     if (!file?.buffer?.length) {
       throw new BadRequestException('Выберите непустой файл');
     }
     if (file.size > maxFileBytes) {
       throw new BadRequestException('Файл больше 15 МБ. Уменьшите его и повторите загрузку');
     }
-    const extension = extname(file.originalname).toLowerCase();
+    const extension = extname(originalName).toLowerCase();
     const mimeTypes = allowedFiles.get(extension);
     if (!mimeTypes || !mimeTypes.has(file.mimetype.toLowerCase())) {
       throw new BadRequestException('Допустимы PDF, JPG, PNG, WEBP, DOCX, XLSX, XLS и CSV');
@@ -279,6 +281,23 @@ function purposeFor(scope: FileScope) {
 function safeOriginalName(value: string) {
   const normalized = value.normalize('NFC').replace(/[\u0000-\u001f\u007f]/g, '').replace(/[\\/]/g, '_').trim();
   return (normalized || 'файл').slice(0, 240);
+}
+
+function normalizedOriginalName(value: string) {
+  return safeOriginalName(decodeMojibakeFileName(value));
+}
+
+function decodeMojibakeFileName(value: string) {
+  const markerCount = (value.match(/[ÃÂÐÑ]/g) ?? []).length;
+  if (!markerCount) return value;
+
+  const candidate = Buffer.from(value, 'latin1').toString('utf8');
+  const candidateMarkerCount = (candidate.match(/[ÃÂÐÑ]/g) ?? []).length;
+  const looksLikeReadableCyrillic = /[А-Яа-яЁё]/.test(candidate);
+  if (!candidate.includes('\uFFFD') && looksLikeReadableCyrillic && candidateMarkerCount < markerCount) {
+    return candidate;
+  }
+  return value;
 }
 
 function clean(value?: string | null) {

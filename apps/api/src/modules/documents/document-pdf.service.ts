@@ -12,7 +12,6 @@ export type DocumentPdfSnapshot = {
   visitStartedAt: string;
   employeeName: string;
   ownerName: string;
-  ownerPhone: string;
   animalName: string;
   animalDescription: string;
 };
@@ -55,9 +54,8 @@ export class DocumentPdfService {
       drawMeta(document, 52, metaTop, 'Дата приёма', formatDateTime(snapshot.visitStartedAt));
       drawMeta(document, 300, metaTop, 'Врач', snapshot.employeeName || '—');
       drawMeta(document, 52, metaTop + 38, 'Владелец', snapshot.ownerName || '—');
-      drawMeta(document, 300, metaTop + 38, 'Телефон', snapshot.ownerPhone || '—');
-      drawMeta(document, 52, metaTop + 76, 'Пациент', snapshot.animalName || '—');
-      drawMeta(document, 300, metaTop + 76, 'Вид / порода', snapshot.animalDescription || '—');
+      drawMeta(document, 300, metaTop + 38, 'Пациент', snapshot.animalName || '—');
+      drawMeta(document, 52, metaTop + 76, 'Вид / порода / пол', snapshot.animalDescription || '—', 491);
       document.y = metaTop + 126;
 
       document.font('Roboto').fontSize(11).fillColor('#17202a').text(snapshot.body || '—', 52, document.y, {
@@ -87,9 +85,9 @@ export class DocumentPdfService {
   }
 }
 
-function drawMeta(document: PDFKit.PDFDocument, x: number, y: number, label: string, value: string) {
-  document.font('Roboto').fontSize(8).fillColor('#7b8794').text(label, x, y, { width: 230, lineBreak: false });
-  document.font('Roboto-Bold').fontSize(10).fillColor('#25384a').text(value, x, y + 12, { width: 230, height: 22 });
+function drawMeta(document: PDFKit.PDFDocument, x: number, y: number, label: string, value: string, width = 230) {
+  document.font('Roboto').fontSize(8).fillColor('#7b8794').text(label, x, y, { width, lineBreak: false });
+  document.font('Roboto-Bold').fontSize(10).fillColor('#25384a').text(value, x, y + 12, { width, height: 22 });
 }
 
 function drawSignature(document: PDFKit.PDFDocument, x: number, y: number, label: string) {
