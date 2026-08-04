@@ -1088,37 +1088,46 @@ model HospitalStay {
 }
 
 model HospitalRecord {
-  id                  String                 @id @default(uuid())
-  visitId             String
-  visit               Visit                  @relation(fields: [visitId], references: [id], onDelete: Cascade)
-  billItemId          String?                @unique
-  billItem            BillItem?              @relation(fields: [billItemId], references: [id], onDelete: SetNull)
-  treatmentPlanId     String?
-  treatmentPlan       HospitalTreatmentPlan? @relation(fields: [treatmentPlanId], references: [id], onDelete: Restrict)
-  treatmentPlanItemId String?
-  recordedById        String?
-  recordedBy          Employee?              @relation("HospitalRecordAuthor", fields: [recordedById], references: [id], onDelete: SetNull)
-  recordType          String
-  recordStatus        HospitalRecordStatus   @default(COMPLETED)
-  createdAsPlan       Boolean                @default(false)
-  title               String
-  recordedAt          DateTime               @default(now())
-  completedAt         DateTime?
-  temperatureC        Decimal?               @db.Decimal(4, 1)
-  value               String?
-  notes               String?
-  parentRecordId      String?
-  parentRecord        HospitalRecord?        @relation("HospitalRecordAmendments", fields: [parentRecordId], references: [id], onDelete: Restrict)
-  amendments          HospitalRecord[]       @relation("HospitalRecordAmendments")
-  amendmentReason     String?
-  createdAt           DateTime               @default(now())
-  updatedAt           DateTime               @updatedAt
+  id                   String                 @id @default(uuid())
+  visitId              String
+  visit                Visit                  @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  billItemId           String?                @unique
+  billItem             BillItem?              @relation(fields: [billItemId], references: [id], onDelete: SetNull)
+  treatmentPlanId      String?
+  treatmentPlan        HospitalTreatmentPlan? @relation(fields: [treatmentPlanId], references: [id], onDelete: Restrict)
+  treatmentPlanItemId  String?
+  plannedProductId     String?
+  plannedProduct       Product?               @relation("HospitalPlannedProduct", fields: [plannedProductId], references: [id], onDelete: SetNull)
+  plannedServiceId     String?
+  plannedService       Service?               @relation("HospitalPlannedService", fields: [plannedServiceId], references: [id], onDelete: SetNull)
+  plannedQuantity      Decimal?               @db.Decimal(12, 3)
+  plannedStockQuantity Decimal?               @db.Decimal(12, 3)
+  plannedUnitPrice     Decimal?               @db.Decimal(12, 2)
+  recordedById         String?
+  recordedBy           Employee?              @relation("HospitalRecordAuthor", fields: [recordedById], references: [id], onDelete: SetNull)
+  recordType           String
+  recordStatus         HospitalRecordStatus   @default(COMPLETED)
+  createdAsPlan        Boolean                @default(false)
+  title                String
+  recordedAt           DateTime               @default(now())
+  completedAt          DateTime?
+  temperatureC         Decimal?               @db.Decimal(4, 1)
+  value                String?
+  notes                String?
+  parentRecordId       String?
+  parentRecord         HospitalRecord?        @relation("HospitalRecordAmendments", fields: [parentRecordId], references: [id], onDelete: Restrict)
+  amendments           HospitalRecord[]       @relation("HospitalRecordAmendments")
+  amendmentReason      String?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
 
   @@index([visitId, recordedAt])
   @@index([recordedById])
   @@index([parentRecordId])
   @@index([visitId, recordStatus, recordedAt])
   @@index([treatmentPlanId, treatmentPlanItemId, recordedAt])
+  @@index([plannedProductId])
+  @@index([plannedServiceId])
 }
 
 model HospitalTreatmentPlan {
@@ -1339,6 +1348,7 @@ model Product {
   stockMovements           StockMovement[]
   supplyItems              SupplyInvoiceItem[]
   billItems                BillItem[]
+  plannedHospitalRecords   HospitalRecord[]     @relation("HospitalPlannedProduct")
   saleItems                SaleItem[]
   payrollRules             PayrollProductRule[]
   stockDocumentItems       StockDocumentItem[]  @relation("StockDocumentProduct")
@@ -1376,21 +1386,22 @@ model ServiceCategory {
 }
 
 model Service {
-  id                 String               @id @default(uuid())
-  categoryId         String?
-  category           ServiceCategory?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  title              String
-  price              Decimal              @default(0) @db.Decimal(12, 2)
-  priceType          String               @default("FIXED")
-  vatRate            Decimal?             @db.Decimal(5, 2)
-  description        String?
-  billItems          BillItem[]
-  saleItems          SaleItem[]
-  laboratoryTests    LaboratoryTest[]
-  laboratoryProfiles LaboratoryProfile[]
-  payrollRules       PayrollServiceRule[]
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
+  id                     String               @id @default(uuid())
+  categoryId             String?
+  category               ServiceCategory?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  title                  String
+  price                  Decimal              @default(0) @db.Decimal(12, 2)
+  priceType              String               @default("FIXED")
+  vatRate                Decimal?             @db.Decimal(5, 2)
+  description            String?
+  billItems              BillItem[]
+  plannedHospitalRecords HospitalRecord[]     @relation("HospitalPlannedService")
+  saleItems              SaleItem[]
+  laboratoryTests        LaboratoryTest[]
+  laboratoryProfiles     LaboratoryProfile[]
+  payrollRules           PayrollServiceRule[]
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
 
   @@index([title])
 }

@@ -100,6 +100,26 @@ export type HospitalRecord = {
   billItemId: string | null;
   treatmentPlanId: string | null;
   treatmentPlanItemId: string | null;
+  plannedProductId: string | null;
+  plannedServiceId: string | null;
+  plannedQuantity: DecimalValue | null;
+  plannedStockQuantity: DecimalValue | null;
+  plannedUnitPrice: DecimalValue | null;
+  plannedProduct?: {
+    id: string;
+    title: string;
+    retailPrice: DecimalValue;
+    stockUnit: string | null;
+    writeOffUnit: string | null;
+    billingUnit: string | null;
+    packageQuantity: DecimalValue | null;
+  } | null;
+  plannedService?: {
+    id: string;
+    title: string;
+    price: DecimalValue;
+    priceType: string;
+  } | null;
   treatmentPlan?: {
     id: string;
     title: string | null;
@@ -144,6 +164,11 @@ export type CreateHospitalTreatmentPlanInput = {
     title: string;
     value?: string;
     notes?: string;
+    productId?: string;
+    serviceId?: string;
+    quantity?: number;
+    stockQuantity?: number;
+    unitPrice?: number;
     scheduledAt: string[];
   }>;
 };
@@ -183,7 +208,7 @@ export type CreateHospitalRecordInput = {
   unitPrice?: number;
 };
 
-export type UpdateHospitalRecordInput = Omit<Partial<CreateHospitalRecordInput>, 'serviceId' | 'productId' | 'recordStatus'> & {
+export type UpdateHospitalRecordInput = Omit<Partial<CreateHospitalRecordInput>, 'recordStatus'> & {
   recordStatus?: Extract<HospitalRecordStatus, 'PLANNED' | 'COMPLETED' | 'SKIPPED'>;
 };
 

@@ -251,48 +251,70 @@ export class HospitalService {
       throw new BadRequestException('В одном плане лечения может быть не более 200 отдельных выполнений');
     }
 
-    const records = dto.items.flatMap((item) => {
-      const uniqueDates = new Set(item.scheduledAt);
-      if (uniqueDates.size !== item.scheduledAt.length) {
-        throw new BadRequestException(`В назначении «${item.title.trim()}» повторяется одна и та же дата`);
-      }
+    const plan = await this.prisma.$transaction(async (tx) => {
+      const records: Prisma.HospitalRecordCreateWithoutTreatmentPlanInput[] = [];
 
-      const treatmentPlanItemId = randomUUID();
-      return [...uniqueDates]
-        .map((value) => new Date(value))
-        .sort((left, right) => left.getTime() - right.getTime())
-        .map((recordedAt) => {
+      for (const item of dto.items) {
+        const uniqueDates = new Set(item.scheduledAt);
+        if (uniqueDates.size !== item.scheduledAt.length) {
+          throw new BadRequestException(`В назначении «${item.title.trim()}» повторяется одна и та же дата`);
+        }
+
+        const hasCatalogItem = Boolean(item.productId || item.serviceId);
+        this.ensureBillingInputHasCatalogItem(hasCatalogItem, item);
+        const line = hasCatalogItem
+          ? await this.resolveCatalogLine(tx, {
+              recordType: item.recordType,
+              title: item.title,
+              productId: item.productId,
+              serviceId: item.serviceId,
+              quantity: item.quantity,
+              stockQuantity: item.stockQuantity,
+              unitPrice: item.unitPrice,
+            })
+          : null;
+        const treatmentPlanItemId = randomUUID();
+
+        for (const recordedAt of [...uniqueDates]
+          .map((value) => new Date(value))
+          .sort((left, right) => left.getTime() - right.getTime())) {
           this.ensureRecordWithinStay(recordedAt, stay.startedAt, stay.completedAt);
-          return {
-            visitId: stay.sourceVisitId,
-            recordedById: actorId,
+          records.push({
+            visit: { connect: { id: stay.sourceVisitId } },
+            recordedBy: { connect: { id: actorId } },
             treatmentPlanItemId,
+            plannedProduct: line?.productId ? { connect: { id: line.productId } } : undefined,
+            plannedService: line?.serviceId ? { connect: { id: line.serviceId } } : undefined,
+            plannedQuantity: line?.quantity,
+            plannedStockQuantity: line?.stockQuantity,
+            plannedUnitPrice: line?.unitPrice,
             recordType: item.recordType,
             recordStatus: HospitalRecordStatus.PLANNED,
             createdAsPlan: true,
-            title: item.title.trim(),
+            title: line?.title ?? item.title.trim(),
             recordedAt,
             completedAt: null,
             temperatureC: null,
             value: cleanOrNull(item.value ?? ''),
             notes: cleanOrNull(item.notes ?? ''),
-          };
-        });
-    });
+          });
+        }
+      }
 
-    const plan = await this.prisma.hospitalTreatmentPlan.create({
-      data: {
-        visitId: stay.sourceVisitId,
-        createdById: actorId,
-        title: cleanOrNull(dto.title ?? ''),
-        records: { create: records },
-      },
-      include: {
-        records: {
-          orderBy: { recordedAt: 'asc' },
-          include: hospitalRecordBaseInclude,
+      return tx.hospitalTreatmentPlan.create({
+        data: {
+          visitId: stay.sourceVisitId,
+          createdById: actorId,
+          title: cleanOrNull(dto.title ?? ''),
+          records: { create: records },
         },
-      },
+        include: {
+          records: {
+            orderBy: { recordedAt: 'asc' },
+            include: hospitalRecordBaseInclude,
+          },
+        },
+      });
     });
 
     await this.auditService.log({
@@ -305,6 +327,7 @@ export class HospitalService {
         sourceVisitId: stay.sourceVisitId,
         itemCount: dto.items.length,
         recordCount,
+        catalogItemCount: dto.items.filter((item) => item.productId || item.serviceId).length,
       },
     });
 
@@ -339,19 +362,96 @@ export class HospitalService {
     const nextRecordedAt = dto.recordedAt ? new Date(dto.recordedAt) : existing.recordedAt;
     this.ensureRecordWithinStay(nextRecordedAt, stay.startedAt, stay.completedAt);
     const billingChanged = dto.quantity !== undefined || dto.stockQuantity !== undefined || dto.unitPrice !== undefined;
+    const completingPlannedRecord = existing.recordStatus === HospitalRecordStatus.PLANNED
+      && nextRecordStatus === HospitalRecordStatus.COMPLETED;
+    const plannedProductId = dto.productId ?? existing.plannedProductId ?? undefined;
+    const plannedServiceId = dto.serviceId ?? existing.plannedServiceId ?? undefined;
+    const hasCatalogItemForCompletion = Boolean(plannedProductId || plannedServiceId);
+    const shouldPostPlannedCatalog = completingPlannedRecord && !existing.billItem && hasCatalogItemForCompletion;
 
-    if (billingChanged && !existing.billItem) {
+    if (dto.productId && dto.serviceId) {
+      throw new BadRequestException('В одной записи можно выбрать товар или услугу, но не оба варианта одновременно');
+    }
+    if (existing.plannedProductId && (dto.serviceId || (dto.productId && dto.productId !== existing.plannedProductId))) {
+      throw new BadRequestException('Товар уже зафиксирован в плане лечения. Для другого товара создайте новое назначение');
+    }
+    if (existing.plannedServiceId && (dto.productId || (dto.serviceId && dto.serviceId !== existing.plannedServiceId))) {
+      throw new BadRequestException('Услуга уже зафиксирована в плане лечения. Для другой услуги создайте новое назначение');
+    }
+    if ((dto.productId || dto.serviceId) && !completingPlannedRecord) {
+      throw new BadRequestException('Товар или услугу можно выбрать только при выполнении планового назначения');
+    }
+    if (billingChanged && !existing.billItem && !shouldPostPlannedCatalog) {
       throw new BadRequestException('У этой записи нет связанной позиции счёта. Добавьте новую запись с товаром или услугой');
     }
     if (nextRecordStatus === HospitalRecordStatus.PLANNED && existing.billItem) {
       throw new BadRequestException('Начисленную позицию нельзя вернуть в план. Создайте отдельное плановое назначение');
     }
 
-    const warehouseScope = billingChanged && existing.billItem?.productId
+    const warehouseScope = (billingChanged && existing.billItem?.productId) || (shouldPostPlannedCatalog && plannedProductId)
       ? await this.getWarehouseScope(actorId)
       : null;
+    const dueAt = shouldPostPlannedCatalog ? await this.financeService.getDefaultBillDueAt() : null;
 
     const record = await this.prisma.$transaction(async (tx) => {
+      let nextBillItemId = existing.billItemId;
+      let postedLine: HospitalCatalogLine | null = null;
+
+      if (shouldPostPlannedCatalog) {
+        await tx.$queryRaw`SELECT "id" FROM "HospitalRecord" WHERE "id" = ${existing.id} FOR UPDATE`;
+        const lockedRecord = await tx.hospitalRecord.findUniqueOrThrow({
+          where: { id: existing.id },
+          select: {
+            recordStatus: true,
+            billItemId: true,
+            plannedProductId: true,
+            plannedServiceId: true,
+            plannedQuantity: true,
+            plannedStockQuantity: true,
+            plannedUnitPrice: true,
+          },
+        });
+
+        if (lockedRecord.recordStatus === HospitalRecordStatus.PLANNED && !lockedRecord.billItemId) {
+          postedLine = await this.resolveCatalogLine(tx, {
+            recordType: nextRecordType as CreateHospitalRecordDto['recordType'],
+            title: dto.title ?? existing.title,
+            productId: dto.productId ?? lockedRecord.plannedProductId ?? undefined,
+            serviceId: dto.serviceId ?? lockedRecord.plannedServiceId ?? undefined,
+            quantity: dto.quantity ?? decimalToOptionalNumber(lockedRecord.plannedQuantity),
+            stockQuantity: dto.stockQuantity ?? decimalToOptionalNumber(lockedRecord.plannedStockQuantity),
+            unitPrice: dto.unitPrice ?? decimalToOptionalNumber(lockedRecord.plannedUnitPrice),
+          });
+          const bill = await this.getEditableHospitalBill(tx, stay.sourceVisitId, dueAt);
+          const billItem = await tx.billItem.create({
+            data: {
+              billId: bill.id,
+              serviceId: postedLine.serviceId,
+              productId: postedLine.productId,
+              title: postedLine.title,
+              quantity: postedLine.quantity,
+              stockQuantity: postedLine.stockQuantity,
+              unitPrice: postedLine.unitPrice,
+              discount: 0,
+              totalAmount: postedLine.totalAmount,
+            },
+          });
+          nextBillItemId = billItem.id;
+
+          if (postedLine.productId) {
+            await this.writeOffHospitalProduct(tx, stay.sourceVisitId, billItem.id, postedLine, warehouseScope);
+          }
+          await this.recalculateHospitalBill(tx, bill.id, stay.sourceVisitId);
+        } else if (lockedRecord.recordStatus === HospitalRecordStatus.COMPLETED && lockedRecord.billItemId) {
+          return tx.hospitalRecord.findUniqueOrThrow({
+            where: { id: existing.id },
+            include: hospitalRecordInclude,
+          });
+        } else {
+          throw new BadRequestException('Назначение уже было обработано другим сотрудником. Обновите лист стационара');
+        }
+      }
+
       if (billingChanged && existing.billItem) {
         const bill = await tx.bill.findUnique({
           where: { id: existing.billItem.billId },
@@ -396,6 +496,14 @@ export class HospitalService {
       return tx.hospitalRecord.update({
         where: { id: existing.id },
         data: {
+          ...(nextBillItemId !== existing.billItemId ? { billItemId: nextBillItemId } : {}),
+          ...(postedLine?.productId ? { plannedProductId: postedLine.productId } : {}),
+          ...(postedLine?.serviceId ? { plannedServiceId: postedLine.serviceId } : {}),
+          ...(postedLine ? {
+            plannedQuantity: postedLine.quantity,
+            plannedStockQuantity: postedLine.stockQuantity,
+            plannedUnitPrice: postedLine.unitPrice,
+          } : {}),
           ...(dto.recordType !== undefined ? { recordType: dto.recordType } : {}),
           ...(dto.recordStatus !== undefined ? { recordStatus: dto.recordStatus } : {}),
           ...(dto.title !== undefined ? { title: dto.title.trim() } : {}),
@@ -425,7 +533,9 @@ export class HospitalService {
         stayId: stay.id,
         sourceVisitId: stay.sourceVisitId,
         changedFields: Object.keys(dto),
-        billItemId: existing.billItemId,
+        billItemId: record.billItemId,
+        plannedProductId: record.plannedProductId,
+        plannedServiceId: record.plannedServiceId,
         previousStatus: existing.recordStatus,
         nextStatus: record.recordStatus,
       },
@@ -1033,6 +1143,18 @@ export class HospitalService {
 const hospitalRecordBaseInclude = {
   recordedBy: { select: { id: true, fullName: true, position: true } },
   treatmentPlan: { select: { id: true, title: true } },
+  plannedProduct: {
+    select: {
+      id: true,
+      title: true,
+      retailPrice: true,
+      stockUnit: true,
+      writeOffUnit: true,
+      billingUnit: true,
+      packageQuantity: true,
+    },
+  },
+  plannedService: { select: { id: true, title: true, price: true, priceType: true } },
   billItem: {
     select: {
       id: true,

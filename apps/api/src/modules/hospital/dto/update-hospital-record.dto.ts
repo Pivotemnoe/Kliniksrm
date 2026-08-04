@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsDateString, IsIn, IsNumber, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { IsDateString, IsIn, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength } from 'class-validator';
 import { hospitalRecordStatuses, hospitalRecordTypes } from './create-hospital-record.dto';
 
 export class UpdateHospitalRecordDto {
@@ -50,6 +50,16 @@ export class UpdateHospitalRecordDto {
   @IsString()
   @MaxLength(2000)
   notes?: string;
+
+  @ApiPropertyOptional({ description: 'Catalog product selected while completing an unlinked planned action.' })
+  @IsOptional()
+  @IsUUID()
+  productId?: string;
+
+  @ApiPropertyOptional({ description: 'Catalog service selected while completing an unlinked planned action.' })
+  @IsOptional()
+  @IsUUID()
+  serviceId?: string;
 
   @ApiPropertyOptional({ description: 'Quantity charged to the client for the linked catalog item.' })
   @IsOptional()

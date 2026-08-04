@@ -199,7 +199,7 @@ export function HospitalCardPage() {
             {stay ? <Button icon={<FileTextOutlined />} onClick={() => navigate(`/visits/${stay.sourceVisitId}`)}>Осмотр при поступлении</Button> : null}
             {stay && canPrint ? <Button icon={<PrinterOutlined />} onClick={() => {
               if (!printHospitalSheet(stay, organizationQuery.data)) message.warning('Браузер заблокировал окно печати');
-            }}>Печать / PDF</Button> : null}
+            }}>Отчёт владельцу / PDF</Button> : null}
             {canManage && active ? <Button icon={<PlusOutlined />} onClick={() => setTreatmentPlanOpen(true)}>Назначить план лечения</Button> : null}
             {canManage && active ? <Button type="primary" icon={<PlusOutlined />} onClick={() => openNewRecord('COMPLETED')}>Записать выполненное действие</Button> : null}
           </Space>
@@ -314,7 +314,7 @@ export function HospitalCardPage() {
                   uploadFile={(file) => uploadVisitFile(stay.sourceVisitId, file)}
                   canManage={canManageDocuments}
                   title="Итоговый лист в истории пациента"
-                  description="Нажмите «Печать / PDF», сохраните полный лист как PDF и прикрепите его сюда. Файл останется в медицинской истории исходного приёма пациента."
+                  description="Нажмите «Отчёт владельцу / PDF», сохраните компактный отчёт о выполненном лечении и прикрепите его сюда. Файл останется в медицинской истории исходного приёма пациента."
                 />
               </div>
             </div>
@@ -377,6 +377,8 @@ function HospitalRecordModal({
   const recordStatus = Form.useWatch('recordStatus', form) ?? initialStatus;
   const catalogKind = Form.useWatch('catalogKind', form) ?? 'NONE';
   const selectedProductId = Form.useWatch('productId', form);
+  const completingPlannedRecord = record?.recordStatus === 'PLANNED' && initialStatus === 'COMPLETED';
+  const hasPlannedCatalog = Boolean(record?.plannedProductId || record?.plannedServiceId);
   const [catalogSearch, setCatalogSearch] = useState('');
   const deferredCatalogSearch = useDeferredValue(catalogSearch);
   const catalogQuery = useQuery({
@@ -384,7 +386,8 @@ function HospitalRecordModal({
     queryFn: () => getHospitalCatalog(deferredCatalogSearch || undefined),
     enabled: open && catalogKind !== 'NONE',
   });
-  const catalogIdentityLocked = Boolean(record);
+  const catalogIdentityLocked = Boolean(record)
+    && (!completingPlannedRecord || Boolean(record?.billItem || hasPlannedCatalog));
 
   useEffect(() => {
     if (!open) return;
@@ -408,6 +411,8 @@ function HospitalRecordModal({
       return;
     }
 
+    const productId = record.billItem?.productId ?? record.plannedProductId ?? undefined;
+    const serviceId = record.billItem?.serviceId ?? record.plannedServiceId ?? undefined;
     form.setFieldsValue({
       recordType: record.recordType,
       recordStatus: record.recordStatus === 'PLANNED' && initialStatus === 'COMPLETED'
@@ -418,21 +423,21 @@ function HospitalRecordModal({
       value: record.value ?? '',
       notes: record.notes ?? '',
       temperatureC: record.temperatureC === null ? undefined : Number(record.temperatureC),
-      catalogKind: record.billItem?.productId ? 'PRODUCT' : record.billItem?.serviceId ? 'SERVICE' : 'NONE',
-      productId: record.billItem?.productId ?? undefined,
-      serviceId: record.billItem?.serviceId ?? undefined,
-      quantity: record.billItem ? Number(record.billItem.quantity) : 1,
-      stockQuantity: record.billItem?.stockQuantity === null || record.billItem?.stockQuantity === undefined
-        ? undefined
-        : Number(record.billItem.stockQuantity),
-      unitPrice: record.billItem ? Number(record.billItem.unitPrice) : undefined,
+      catalogKind: productId ? 'PRODUCT' : serviceId ? 'SERVICE' : 'NONE',
+      productId,
+      serviceId,
+      quantity: Number(record.billItem?.quantity ?? record.plannedQuantity ?? 1),
+      stockQuantity: productId
+        ? Number(record.billItem?.stockQuantity ?? record.plannedStockQuantity ?? 1)
+        : undefined,
+      unitPrice: Number(record.billItem?.unitPrice ?? record.plannedUnitPrice ?? 0),
     });
   }, [form, initialStatus, open, record]);
 
   function submit(values: HospitalRecordFormValues) {
     const { catalogKind: _catalogKind, ...rawInput } = values;
     const input = normalizeHospitalRecord(rawInput as CreateHospitalRecordInput);
-    if (record) {
+    if (record && catalogIdentityLocked) {
       delete input.productId;
       delete input.serviceId;
     }
@@ -440,6 +445,9 @@ function HospitalRecordModal({
       delete input.quantity;
       delete input.stockQuantity;
       delete input.unitPrice;
+    }
+    if (catalogKind === 'SERVICE') {
+      delete input.stockQuantity;
     }
     if (catalogKind === 'NONE' || recordStatus === 'PLANNED') {
       delete input.productId;
@@ -451,7 +459,6 @@ function HospitalRecordModal({
     onSubmit(input);
   }
 
-  const completingPlannedRecord = record?.recordStatus === 'PLANNED' && initialStatus === 'COMPLETED';
   const modalTitle = completingPlannedRecord
     ? 'Отметить выполнение лечения'
     : record
@@ -521,7 +528,25 @@ function HospitalRecordModal({
             </Typography.Paragraph>
           </>
         ) : null}
-        {record && !record.billItem ? (
+        {completingPlannedRecord && hasPlannedCatalog ? (
+          <Alert
+            type="success"
+            showIcon
+            className="form-alert"
+            message="Склад и счёт будут проведены по отметке «Выполнено»"
+            description={describePlannedCatalogPosting(record)}
+          />
+        ) : null}
+        {completingPlannedRecord && !hasPlannedCatalog ? (
+          <Alert
+            type="info"
+            showIcon
+            className="form-alert"
+            message="Можно связать выполнение с товаром или услугой"
+            description="Выберите товар и фактический объём, например 0,5 мл: после сохранения он один раз спишется со склада и добавится в счёт."
+          />
+        ) : null}
+        {record && !record.billItem && !completingPlannedRecord ? (
           <Alert
             type="info"
             showIcon
@@ -762,11 +787,11 @@ function mergeProductOptions(
   products: HospitalCatalog['products'] | undefined,
 ): HospitalCatalog['products'] {
   const items = [...(products ?? [])];
-  const linked = record?.billItem?.product;
+  const linked = record?.billItem?.product ?? record?.plannedProduct;
   if (linked && !items.some((item) => item.id === linked.id)) {
     items.unshift({
       ...linked,
-      retailPrice: record?.billItem?.unitPrice ?? 0,
+      retailPrice: record?.billItem?.unitPrice ?? record?.plannedUnitPrice ?? record?.plannedProduct?.retailPrice ?? 0,
       stockRest: '—',
     });
   }
@@ -778,11 +803,24 @@ function mergeServiceOptions(
   services: HospitalCatalog['services'] | undefined,
 ): HospitalCatalog['services'] {
   const items = [...(services ?? [])];
-  const linked = record?.billItem?.service;
+  const linked = record?.billItem?.service ?? record?.plannedService;
   if (linked && !items.some((item) => item.id === linked.id)) {
-    items.unshift({ ...linked, price: record?.billItem?.unitPrice ?? 0 });
+    items.unshift({ ...linked, price: record?.billItem?.unitPrice ?? record?.plannedUnitPrice ?? record?.plannedService?.price ?? 0 });
   }
   return items;
+}
+
+function describePlannedCatalogPosting(record: HospitalRecord | null) {
+  if (!record) return '';
+  if (record.plannedProductId) {
+    const writeOffUnit = record.plannedProduct?.writeOffUnit || record.plannedProduct?.stockUnit || 'ед.';
+    const billingUnit = record.plannedProduct?.billingUnit || writeOffUnit;
+    return `Будет списано ${record.plannedStockQuantity ?? record.plannedQuantity ?? 1} ${writeOffUnit} и начислено ${record.plannedQuantity ?? 1} ${billingUnit} по ${record.plannedUnitPrice ?? 0} ₽.`;
+  }
+  if (record.plannedServiceId) {
+    return `В счёт будет добавлено ${record.plannedQuantity ?? 1} услуги по ${record.plannedUnitPrice ?? 0} ₽.`;
+  }
+  return '';
 }
 
 function selectedProductWriteOffUnit(

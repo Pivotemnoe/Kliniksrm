@@ -6,9 +6,13 @@ import {
   IsArray,
   IsDateString,
   IsIn,
+  IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
+  Max,
   MaxLength,
+  Min,
   MinLength,
   ValidateNested,
 } from 'class-validator';
@@ -36,6 +40,40 @@ export class CreateHospitalTreatmentPlanItemDto {
   @IsString()
   @MaxLength(2000)
   notes?: string;
+
+  @ApiPropertyOptional({ description: 'Catalog product to charge and deduct when each occurrence is completed.' })
+  @IsOptional()
+  @IsUUID()
+  productId?: string;
+
+  @ApiPropertyOptional({ description: 'Catalog service to charge when each occurrence is completed.' })
+  @IsOptional()
+  @IsUUID()
+  serviceId?: string;
+
+  @ApiPropertyOptional({ description: 'Quantity charged to the client per completion.' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.001)
+  @Max(999999)
+  quantity?: number;
+
+  @ApiPropertyOptional({ description: 'Quantity deducted from stock per completion in the product write-off unit.' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.001)
+  @Max(999999)
+  stockQuantity?: number;
+
+  @ApiPropertyOptional({ description: 'Price charged per quantity unit when completed.' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(999999999)
+  unitPrice?: number;
 
   @ApiProperty({ type: [String], description: 'Exact planned date-times for this treatment item.' })
   @IsArray()

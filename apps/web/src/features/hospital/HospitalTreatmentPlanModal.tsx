@@ -3,7 +3,16 @@ import { useQuery } from '@tanstack/react-query';
 import { Alert, App, AutoComplete, Button, Form, Input, InputNumber, Modal, Select, Space, Typography } from 'antd';
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { getHospitalCatalog } from './hospital.api';
-import type { CreateHospitalTreatmentPlanInput, HospitalRecordType } from './types';
+import type { CreateHospitalTreatmentPlanInput, HospitalCatalog, HospitalRecordType } from './types';
+
+type CatalogPlanOption = {
+  key: string;
+  value: string;
+  label: string;
+  catalogKind: 'PRODUCT' | 'SERVICE';
+  product?: HospitalCatalog['products'][number];
+  service?: HospitalCatalog['services'][number];
+};
 
 type TreatmentPlanFormValues = {
   title?: string;
@@ -12,6 +21,16 @@ type TreatmentPlanFormValues = {
     title: string;
     value?: string;
     notes?: string;
+    catalogKind?: 'PRODUCT' | 'SERVICE';
+    productId?: string;
+    serviceId?: string;
+    quantity?: number;
+    stockQuantity?: number;
+    unitPrice?: number;
+    writeOffUnit?: string;
+    billingUnit?: string;
+    stockUnit?: string;
+    stockRest?: string | number;
     dates: Array<{ at: string }>;
     repeatEvery?: number;
     repeatUnit?: 'HOURS' | 'DAYS';
@@ -48,16 +67,26 @@ export function HospitalTreatmentPlanModal({
   }, [form, open]);
 
   const catalogOptions = useMemo(() => {
-    const values = new Map<string, { value: string; label: string; kind: HospitalRecordType }>();
+    const values: CatalogPlanOption[] = [];
     for (const product of catalogQuery.data?.products ?? []) {
-      values.set(product.title, { value: product.title, label: `${product.title} · препарат или товар`, kind: 'MEDICATION' });
+      values.push({
+        key: `PRODUCT:${product.id}`,
+        value: product.title,
+        label: `${product.title} · товар · остаток ${product.stockRest} ${product.stockUnit ?? ''}`,
+        catalogKind: 'PRODUCT',
+        product,
+      });
     }
     for (const service of catalogQuery.data?.services ?? []) {
-      if (!values.has(service.title)) {
-        values.set(service.title, { value: service.title, label: `${service.title} · процедура или услуга`, kind: 'PROCEDURE' });
-      }
+      values.push({
+        key: `SERVICE:${service.id}`,
+        value: service.title,
+        label: `${service.title} · услуга`,
+        catalogKind: 'SERVICE',
+        service,
+      });
     }
-    return [...values.values()];
+    return values;
   }, [catalogQuery.data]);
 
   const plannedCount = items.reduce((sum, item) => sum + (item?.dates?.filter((date) => date?.at).length ?? 0), 0);
@@ -95,6 +124,11 @@ export function HospitalTreatmentPlanModal({
         title: item.title.trim(),
         value: item.value?.trim() || undefined,
         notes: item.notes?.trim() || undefined,
+        productId: item.productId,
+        serviceId: item.serviceId,
+        quantity: item.catalogKind ? item.quantity : undefined,
+        stockQuantity: item.catalogKind === 'PRODUCT' ? item.stockQuantity : undefined,
+        unitPrice: item.catalogKind ? item.unitPrice : undefined,
         scheduledAt: item.dates.map((date) => new Date(date.at).toISOString()),
       })),
     });
@@ -141,15 +175,103 @@ export function HospitalTreatmentPlanModal({
                       <AutoComplete
                         options={catalogOptions}
                         placeholder="Начните вводить название"
-                        onSearch={setCatalogSearch}
+                        onSearch={(value) => {
+                          setCatalogSearch(value);
+                          const current = form.getFieldValue(['items', field.name]);
+                          if (!current?.productId && !current?.serviceId) return;
+                          form.setFieldsValue({
+                            items: replaceTreatmentPlanItem(form.getFieldValue('items'), field.name, {
+                              catalogKind: undefined,
+                              productId: undefined,
+                              serviceId: undefined,
+                              quantity: undefined,
+                              stockQuantity: undefined,
+                              unitPrice: undefined,
+                              writeOffUnit: undefined,
+                              billingUnit: undefined,
+                              stockUnit: undefined,
+                              stockRest: undefined,
+                            }),
+                          });
+                        }}
                         filterOption={(input, option) => String(option?.value ?? '').toLocaleLowerCase('ru-RU').includes(input.toLocaleLowerCase('ru-RU'))}
                         onSelect={(_, option) => {
-                          const kind = (option as { kind?: HospitalRecordType }).kind;
-                          if (kind) form.setFieldValue(['items', field.name, 'recordType'], kind);
+                          const selected = option as CatalogPlanOption;
+                          const product = selected.product;
+                          const service = selected.service;
+                          form.setFieldsValue({
+                            items: replaceTreatmentPlanItem(form.getFieldValue('items'), field.name, {
+                              recordType: product ? 'MEDICATION' : 'PROCEDURE',
+                              title: product?.title ?? service?.title ?? '',
+                              catalogKind: selected.catalogKind,
+                              productId: product?.id,
+                              serviceId: service?.id,
+                              quantity: 1,
+                              stockQuantity: product ? 1 : undefined,
+                              unitPrice: Number(product?.retailPrice ?? service?.price ?? 0),
+                              writeOffUnit: product?.writeOffUnit ?? undefined,
+                              billingUnit: product?.billingUnit ?? undefined,
+                              stockUnit: product?.stockUnit ?? undefined,
+                              stockRest: product?.stockRest === undefined ? undefined : String(product.stockRest),
+                            }),
+                          });
                         }}
                       />
                     </Form.Item>
                   </div>
+                  {items[field.name]?.catalogKind === 'PRODUCT' ? (
+                    <>
+                      <Alert
+                        type="success"
+                        showIcon
+                        className="form-alert"
+                        message="Товар связан со складом и счётом"
+                        description={`Остаток: ${items[field.name]?.stockRest ?? '—'} ${items[field.name]?.stockUnit ?? ''}. Списание и начисление произойдут только после отметки «Выполнено».`}
+                      />
+                      <div className="form-grid two-columns">
+                        <Form.Item
+                          name={[field.name, 'stockQuantity']}
+                          label={`Списать при каждом выполнении, ${planWriteOffUnit(items[field.name])}`}
+                          rules={[{ required: true, message: 'Укажите объём для списания' }]}
+                        >
+                          <InputNumber min={0.001} precision={3} className="full-width" placeholder="Например: 0,5" />
+                        </Form.Item>
+                        <Form.Item
+                          name={[field.name, 'quantity']}
+                          label={`Начислить владельцу, ${planBillingUnit(items[field.name])}`}
+                          rules={[{ required: true, message: 'Укажите количество для счёта' }]}
+                        >
+                          <InputNumber min={0.001} precision={3} className="full-width" />
+                        </Form.Item>
+                        <Form.Item
+                          name={[field.name, 'unitPrice']}
+                          label={`Цена за 1 ${planBillingUnit(items[field.name])}, ₽`}
+                          rules={[{ required: true, message: 'Укажите цену' }]}
+                        >
+                          <InputNumber min={0} precision={2} className="full-width" />
+                        </Form.Item>
+                      </div>
+                    </>
+                  ) : null}
+                  {items[field.name]?.catalogKind === 'SERVICE' ? (
+                    <>
+                      <Alert
+                        type="success"
+                        showIcon
+                        className="form-alert"
+                        message="Услуга связана со счётом"
+                        description="Начисление произойдёт только после отметки «Выполнено»."
+                      />
+                      <div className="form-grid two-columns">
+                        <Form.Item name={[field.name, 'quantity']} label="Количество услуг при выполнении" rules={[{ required: true, message: 'Укажите количество' }]}>
+                          <InputNumber min={0.001} precision={3} className="full-width" />
+                        </Form.Item>
+                        <Form.Item name={[field.name, 'unitPrice']} label="Цена за одну услугу, ₽" rules={[{ required: true, message: 'Укажите цену' }]}>
+                          <InputNumber min={0} precision={2} className="full-width" />
+                        </Form.Item>
+                      </div>
+                    </>
+                  ) : null}
                   <div className="form-grid two-columns">
                     <Form.Item name={[field.name, 'value']} label="Доза, способ введения или объём">
                       <Input placeholder="Например: 0,5 мл внутримышечно" maxLength={500} />
@@ -228,11 +350,35 @@ function newTreatmentPlanItem(): TreatmentPlanFormValues['items'][number] {
     title: '',
     value: '',
     notes: '',
+    catalogKind: undefined,
+    productId: undefined,
+    serviceId: undefined,
+    quantity: undefined,
+    stockQuantity: undefined,
+    unitPrice: undefined,
     dates: [{ at: toDatetimeInput(new Date(Date.now() + 5 * 60_000)) }],
     repeatEvery: 1,
     repeatUnit: 'DAYS',
     repeatCount: 3,
   };
+}
+
+function replaceTreatmentPlanItem(
+  items: TreatmentPlanFormValues['items'] | undefined,
+  index: number,
+  changes: Partial<TreatmentPlanFormValues['items'][number]>,
+) {
+  const next = [...(items ?? [])];
+  next[index] = { ...next[index], ...changes };
+  return next;
+}
+
+function planWriteOffUnit(item: TreatmentPlanFormValues['items'][number] | undefined) {
+  return item?.writeOffUnit || item?.stockUnit || 'ед.';
+}
+
+function planBillingUnit(item: TreatmentPlanFormValues['items'][number] | undefined) {
+  return item?.billingUnit || item?.writeOffUnit || item?.stockUnit || 'ед.';
 }
 
 function nextSuggestedDate(dates: Array<{ at?: string }> | undefined) {

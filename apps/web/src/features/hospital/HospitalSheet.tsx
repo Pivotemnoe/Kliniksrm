@@ -77,7 +77,10 @@ export function HospitalSheet({
                 </div>
                 <div>
                   {record.recordStatus === 'PLANNED' ? (
-                    <Typography.Text type="secondary">Ожидает выполнения</Typography.Text>
+                    <Space direction="vertical" size={2}>
+                      <Typography.Text type="secondary">Ожидает выполнения</Typography.Text>
+                      {describePlannedPosting(record) ? <Typography.Text>{describePlannedPosting(record)}</Typography.Text> : null}
+                    </Space>
                   ) : record.recordStatus === 'SKIPPED' ? (
                     <Typography.Text type="warning">Не выполнено{record.notes ? `: ${record.notes}` : ''}</Typography.Text>
                   ) : (
@@ -148,11 +151,32 @@ function RecordResult({ record }: { record: HospitalRecord }) {
       {record.notes ? <Typography.Text type="secondary">{record.notes}</Typography.Text> : null}
       {record.billItem ? (
         <Typography.Text type="secondary">
-          {record.billItem.title}: {record.billItem.quantity} × {record.billItem.unitPrice} ₽
+          {describeCompletedPosting(record)}
         </Typography.Text>
       ) : null}
     </Space>
   );
+}
+
+function describePlannedPosting(record: HospitalRecord) {
+  if (record.plannedProductId) {
+    const unit = record.plannedProduct?.writeOffUnit || record.plannedProduct?.stockUnit || 'ед.';
+    return `При выполнении списать ${record.plannedStockQuantity ?? record.plannedQuantity ?? 1} ${unit}`;
+  }
+  if (record.plannedServiceId) {
+    return `При выполнении начислить услугу: ${record.plannedQuantity ?? 1}`;
+  }
+  return '';
+}
+
+function describeCompletedPosting(record: HospitalRecord) {
+  const item = record.billItem;
+  if (!item) return '';
+  if (item.productId) {
+    const unit = item.product?.writeOffUnit || item.product?.stockUnit || 'ед.';
+    return `Списано ${item.stockQuantity ?? item.quantity} ${unit}; начислено ${item.quantity} × ${item.unitPrice} ₽`;
+  }
+  return `${item.title}: ${item.quantity} × ${item.unitPrice} ₽`;
 }
 
 function TemperatureChart({ points, timeZone }: { points: Array<{ at: string; value: number }>; timeZone: string }) {

@@ -142,7 +142,7 @@ test('врач видит полный лист, назначения и вып�
   assert.match(card, /Записать выполненное действие/);
   assert.match(card, /Требуется выполнить лечение/);
   assert.match(card, /Напоминание появится к указанному времени/);
-  assert.match(card, /Печать \/ PDF/);
+  assert.match(card, /Отчёт владельцу \/ PDF/);
   assert.match(card, /Итоговый лист в истории пациента/);
   assert.match(service, /dto\.completedAt \? new Date\(dto\.completedAt\) : recordedAt/);
   assert.match(sheet, /Температура за всё пребывание/);
@@ -151,8 +151,19 @@ test('врач видит полный лист, назначения и вып�
   assert.match(sheet, /Указать результат/);
   assert.match(sheet, /Исправление/);
   assert.match(print, /@page \{ size: A4 portrait/);
-  assert.match(print, /Температура за всё пребывание/);
-  assert.match(print, /Назначение \/ выполнение/);
+  assert.match(print, /Отчёт о лечении в стационаре/);
+  assert.match(print, /<th>Выполнено<\/th>/);
+  assert.match(print, /recordStatus === 'COMPLETED'/);
+  assert.match(print, /recordType !== 'TEMPERATURE'/);
+  assert.match(print, /groupOwnerReportRecords/);
+  assert.match(print, /class="date-column">Дата/);
+  assert.match(print, /day\.products\.set\(productKey/);
+  assert.match(print, /\(current\?\.quantity \?\? 0\) \+ productAmount\.quantity/);
+  assert.match(print, /readProductAmount/);
+  assert.match(print, /formatDecimalAmount/);
+  assert.doesNotMatch(print, /Выполнено \$\{.*count.*\} раза/);
+  assert.doesNotMatch(print, /Температура за всё пребывание|renderTemperatureChart/);
+  assert.doesNotMatch(print, /Назначение \/ выполнение|Исполнитель|recordedBy|class="time"|Выполнено:.*formatTime/);
   assert.doesNotMatch(`${card}\n${sheet}\n${print}`, /Добавить факт|План \/ факт|Факт \/ результат|План выполнен/);
   assert.match(help, /Запись текущих суток можно изменить напрямую/);
   assert.match(styles, /\.hospital-sheet-day \{\s+min-width: 0;/);
@@ -160,10 +171,11 @@ test('врач видит полный лист, назначения и вып�
   assert.match(styles, /@media \(max-width: 760px\)[\s\S]*\.hospital-sheet-grid \{\s+grid-template-columns: 1fr;/);
 });
 
-test('план лечения создаёт несколько действий и повторов без перезаписи старых записей', async () => {
-  const [schema, migration, controller, service, dto, modal, sheet, api, types] = await Promise.all([
+test('план лечения создаёт несколько действий, повторов и складских списаний без перезаписи старых записей', async () => {
+  const [schema, migration, catalogMigration, controller, service, dto, modal, sheet, api, types] = await Promise.all([
     read('prisma/schema.prisma'),
     read('prisma/migrations/20260804000100_hospital_treatment_plans/migration.sql'),
+    read('prisma/migrations/20260804000200_hospital_planned_catalog_items/migration.sql'),
     read('apps/api/src/modules/hospital/hospital.controller.ts'),
     read('apps/api/src/modules/hospital/hospital.service.ts'),
     read('apps/api/src/modules/hospital/dto/create-hospital-treatment-plan.dto.ts'),
@@ -175,19 +187,34 @@ test('план лечения создаёт несколько действий
 
   assert.match(schema, /model HospitalTreatmentPlan/);
   assert.match(schema, /treatmentPlanItemId\s+String\?/);
+  assert.match(schema, /plannedProductId\s+String\?/);
+  assert.match(schema, /plannedStockQuantity\s+Decimal\?/);
   assert.match(migration, /ADD COLUMN "treatmentPlanId" TEXT/);
   assert.doesNotMatch(migration, /\b(?:DROP|DELETE\s+FROM|TRUNCATE|UPDATE\s+"HospitalRecord")\b/i);
+  assert.match(catalogMigration, /ADD COLUMN "plannedProductId" TEXT/);
+  assert.match(catalogMigration, /ADD COLUMN "plannedStockQuantity" DECIMAL\(12,3\)/);
+  assert.doesNotMatch(catalogMigration, /^\s*(?:DROP\b|DELETE\s+FROM\b|TRUNCATE\b|UPDATE\s+)/im);
   assert.match(controller, /:stayId\/treatment-plans/);
   assert.match(dto, /scheduledAt!:\s*string\[\]/);
   assert.match(dto, /ArrayMaxSize\(60\)/);
+  assert.match(dto, /productId\?: string/);
+  assert.match(dto, /stockQuantity\?: number/);
   assert.match(service, /hospitalTreatmentPlan\.create/);
   assert.match(service, /hospital\.treatment_plan\.create/);
   assert.match(service, /recordCount > 200/);
+  assert.match(service, /plannedStockQuantity: line\?\.stockQuantity/);
+  assert.match(service, /SELECT "id" FROM "HospitalRecord" WHERE "id" = \$\{existing\.id\} FOR UPDATE/);
+  assert.match(service, /writeOffHospitalProduct\(tx, stay\.sourceVisitId, billItem\.id, postedLine, warehouseScope\)/);
+  assert.match(service, /lockedRecord\.recordStatus === HospitalRecordStatus\.COMPLETED && lockedRecord\.billItemId/);
   assert.match(modal, /Добавить препарат, процедуру или другое действие/);
   assert.match(modal, /Добавить точную дату/);
   assert.match(modal, /Сформировать даты/);
+  assert.match(modal, /Списать при каждом выполнении/);
+  assert.match(modal, /Списание и начисление произойдут только после отметки «Выполнено»/);
   assert.match(modal, /Каждое появится в листе стационара в своё время/);
   assert.match(sheet, /План: \{record\.treatmentPlan\.title\}/);
+  assert.match(sheet, /При выполнении списать/);
   assert.match(api, /createHospitalTreatmentPlan/);
   assert.match(types, /CreateHospitalTreatmentPlanInput/);
+  assert.match(types, /plannedProductId: string \| null/);
 });
