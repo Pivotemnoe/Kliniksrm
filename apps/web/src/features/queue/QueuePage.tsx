@@ -11,7 +11,7 @@ import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDateTime } from '../../shared/utils/date';
 import { createVisit } from '../visits/visits.api';
-import { visitTypeLabels } from '../visits/types';
+import { visitStatusColors, visitStatusLabels, visitTypeLabels } from '../visits/types';
 import { completeQueueEntry, listQueue, startQueueEntry } from './queue.api';
 import { createQueueEntryFromForm } from './createQueueEntryFromForm';
 import { QueueFormDrawer, QueueFormSubmitInput } from './QueueFormDrawer';
@@ -177,6 +177,26 @@ export function QueuePage() {
         key: 'visitType',
         width: 120,
         render: (_, record) => (record.visitType ? visitTypeLabels[record.visitType] : '—'),
+      },
+      {
+        title: 'Состояние приёма',
+        key: 'visitStatus',
+        width: 155,
+        render: (_, record) => {
+          if (record.visit) {
+            return <Tag color={visitStatusColors[record.visit.status]}>{visitStatusLabels[record.visit.status]}</Tag>;
+          }
+
+          if (record.status === 'IN_PROGRESS') {
+            return <Tag color="gold">Вызван</Tag>;
+          }
+
+          if (record.status === 'WAITING') {
+            return <Tag color="blue">Ожидает вызова</Tag>;
+          }
+
+          return '—';
+        },
       },
       { title: 'Вызовов', dataIndex: 'callCount', key: 'callCount', width: 100, render: (value: number) => value || '—' },
       { title: 'Ожидание', key: 'waiting', width: 120, render: (_, record) => getWaitingTime(record, now) },

@@ -231,12 +231,12 @@ export function DashboardPage() {
             dataSource={todayVisits}
             locale={{ emptyText: 'Приёмов сегодня нет' }}
             renderItem={(item) => (
-              <List.Item onClick={() => navigate(`/hospital/${item.id}`)}>
+              <List.Item onClick={() => navigate(`/visits/${item.id}`)}>
                 <List.Item.Meta
                   title={`${item.animal?.nickname ?? 'Пациент'} · ${item.owner?.fullName ?? 'Владелец не указан'}`}
                   description={
                     <Space wrap size={6}>
-                      <Tag color="processing">В стационаре</Tag>
+                      <Tag color={visitStatusColors[item.status]}>{visitStatusLabels[item.status]}</Tag>
                       <span>{item.employee?.fullName ?? 'Сотрудник не назначен'}</span>
                       <span>{formatDateTime(item.completedAt ?? item.startedAt)}</span>
                     </Space>

@@ -1,7 +1,8 @@
-import { CheckCircleOutlined, FileAddOutlined, SearchOutlined } from '@ant-design/icons';
+import { DownOutlined, FileAddOutlined, SearchOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Form, Input, Modal, Select, Space, Table, Tag, Typography } from 'antd';
+import { App, Button, Dropdown, Form, Input, Modal, Select, Space, Table, Tag, Typography } from 'antd';
+import type { MenuProps } from 'antd';
 import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
@@ -14,7 +15,7 @@ import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDate, formatDateTime } from '../../shared/utils/date';
 import { formatMoney, toMoneyNumber } from '../../shared/utils/money';
 import { listOwnerAnimals, listOwners } from '../owners/owners.api';
-import { createBill, listBills } from './billing.api';
+import { cancelBill, createBill, listBills } from './billing.api';
 import {
   BillListItem,
   BillSource,
@@ -30,6 +31,8 @@ type BillStatusFilter = PaymentStatus | 'DEBT';
 export function BillsPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const queryClient = useQueryClient();
+  const { message, modal } = App.useApp();
   const { data: auth } = useCurrentEmployee();
   const canManage = hasPermission(auth?.employee, 'billing.manage');
   const canManagePayments = hasPermission(auth?.employee, 'payments.manage');
@@ -44,6 +47,15 @@ export function BillsPage() {
     queryKey: ['bills', { search, status, debtOnly, source, limit: pageSize, offset }],
     queryFn: () => listBills({ search, status, debtOnly, source, limit: pageSize, offset }),
   });
+  const cancelMutation = useMutation({
+    mutationFn: cancelBill,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['bills'] });
+      message.success('Счёт отменён');
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
+  const { isPending: cancelPending, mutateAsync: cancelBillAsync } = cancelMutation;
 
   useEffect(() => {
     setStatusFilter(getInitialStatusFilter(searchParams));
@@ -55,18 +67,46 @@ export function BillsPage() {
       {
         title: 'Действия',
         key: 'bill',
-        width: 210,
+        width: 130,
         render: (_, record) => {
           const debt = toMoneyNumber(record.totalAmount) - toMoneyNumber(record.paidAmount);
+          const actionItems: MenuProps['items'] = [
+            { key: 'open', label: 'Открыть' },
+            { key: 'pay', label: 'Оплатить', disabled: !canManagePayments || debt <= 0 || record.status === 'CANCELLED' },
+            ...(canManage
+              ? [{ key: 'cancel', label: 'Отменить', disabled: record.status === 'CANCELLED' || toMoneyNumber(record.paidAmount) > 0, danger: true }]
+              : []),
+          ];
+
+          function handleAction(key: string) {
+            if (key === 'open') {
+              navigate(`/bills/${record.id}`);
+              return;
+            }
+
+            if (key === 'pay') {
+              navigate(`/bills/${record.id}?pay=1`);
+              return;
+            }
+
+            if (key === 'cancel') {
+              modal.confirm({
+                title: 'Отменить счёт?',
+                content: 'Отменить можно только счёт без оплат.',
+                okText: 'Отменить',
+                cancelText: 'Назад',
+                okButtonProps: { danger: true },
+                onOk: () => cancelBillAsync(record.id),
+              });
+            }
+          }
+
           return (
-            <Space>
-              <Button size="small" onClick={() => navigate(`/bills/${record.id}`)}>Открыть</Button>
-              {canManagePayments && debt > 0 && record.status !== 'CANCELLED' ? (
-                <Button size="small" type="primary" icon={<CheckCircleOutlined />} onClick={() => navigate(`/bills/${record.id}?pay=1`)}>
-                  Оплатить
-                </Button>
-              ) : null}
-            </Space>
+            <Dropdown menu={{ items: actionItems, onClick: ({ key }) => handleAction(key) }} trigger={['click']}>
+              <Button size="small" loading={cancelPending}>
+                Действие <DownOutlined />
+              </Button>
+            </Dropdown>
           );
         },
       },
@@ -134,7 +174,7 @@ export function BillsPage() {
         },
       },
     ],
-    [canManagePayments, navigate],
+    [canManage, canManagePayments, cancelBillAsync, cancelPending, modal, navigate],
   );
 
   function handleTableChange(pagination: TablePaginationConfig) {

@@ -312,6 +312,7 @@ function AppointmentsWeekBoard({
 }) {
   const appointmentsByDay = useMemo(() => groupAppointmentsByDay(appointments), [appointments]);
   const shiftsByDay = useMemo(() => groupShiftsByDay(days, shifts), [days, shifts]);
+  const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const visibleCount = appointments.length;
 
   return (
@@ -344,8 +345,9 @@ function AppointmentsWeekBoard({
           const dayAppointments = appointmentsByDay.get(day.value) ?? [];
           const dayShifts = shiftsByDay.get(day.value) ?? [];
           const isSelected = day.value === selectedDate;
-          const appointmentsToShow = dayAppointments.slice(0, 3);
-          const shiftsToShow = dayShifts.slice(0, 3);
+          const isExpanded = expandedDay === day.value;
+          const appointmentsToShow = isExpanded ? dayAppointments : dayAppointments.slice(0, 3);
+          const shiftsToShow = isExpanded ? dayShifts : dayShifts.slice(0, 3);
 
           return (
             <section key={day.value} className={`schedule-day-card${isSelected ? ' is-active' : ''}`}>
@@ -378,7 +380,15 @@ function AppointmentsWeekBoard({
                     ))
                   : null}
                 {!loading && dayAppointments.length > appointmentsToShow.length ? (
-                  <button type="button" className="schedule-more-button" onClick={() => onSelectDate(day.value)}>
+                  <button
+                    type="button"
+                    className="schedule-more-button"
+                    aria-expanded={isExpanded}
+                    onClick={() => {
+                      onSelectDate(day.value);
+                      setExpandedDay((current) => (current === day.value ? null : day.value));
+                    }}
+                  >
                     Ещё записей: {dayAppointments.length - appointmentsToShow.length}
                   </button>
                 ) : null}
@@ -398,8 +408,21 @@ function AppointmentsWeekBoard({
                     ))
                   : null}
                 {!loading && dayShifts.length > shiftsToShow.length ? (
-                  <button type="button" className="schedule-more-button" onClick={() => onSelectDate(day.value)}>
+                  <button
+                    type="button"
+                    className="schedule-more-button"
+                    aria-expanded={isExpanded}
+                    onClick={() => {
+                      onSelectDate(day.value);
+                      setExpandedDay((current) => (current === day.value ? null : day.value));
+                    }}
+                  >
                     Ещё смен: {dayShifts.length - shiftsToShow.length}
+                  </button>
+                ) : null}
+                {isExpanded && (dayAppointments.length > 3 || dayShifts.length > 3) ? (
+                  <button type="button" className="schedule-more-button" onClick={() => setExpandedDay(null)}>
+                    Скрыть дополнительные
                   </button>
                 ) : null}
               </div>

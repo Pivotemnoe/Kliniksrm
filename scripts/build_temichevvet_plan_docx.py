@@ -14,7 +14,7 @@ from docx.shared import Cm, Pt, RGBColor
 
 ROOT = Path(__file__).resolve().parents[1]
 PLAN_PATH = ROOT / "docs/product/temichevvet-improvement-plan.json"
-OUTPUT_PATH = ROOT / "output/docx/Plan_dorabotki_TemichevVet_2026-08-03.docx"
+OUTPUT_DIR = ROOT / "output/docx"
 
 NAVY = "173A5E"
 TEAL = "1F7A83"
@@ -204,7 +204,7 @@ def add_item_detail(doc, item, status_labels, *, page_break=False):
     if item.get("dependencies"):
         add_para(doc, "Зависимости: " + "; ".join(item["dependencies"]) + ".", size=9.3, color=MUTED)
     if item.get("evidence"):
-        add_para(doc, "Зафиксированные факты: " + " ".join(item["evidence"]), size=9.3, color=MUTED, italic=True)
+        add_para(doc, "Зафиксированные факты: " + " ".join(item["evidence"]), size=8.7, color=MUTED, italic=True, after=1)
 
 
 def configure_document(doc: Document):
@@ -339,15 +339,16 @@ def build():
         set_cell_text(row.cells[2], status_labels[item["status"]], size=8.0, color=color, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER)
         set_cell_text(row.cells[3], item["next_action"], size=8.1)
 
-    add_item_detail(doc, items["P0.1"], status_labels)
+    add_item_detail(doc, items["P0.1"], status_labels, page_break=True)
     add_item_detail(doc, items["P0.2"], status_labels, page_break=True)
     add_item_detail(doc, items["P0.3"], status_labels, page_break=True)
     add_item_detail(doc, items["P0.4"], status_labels, page_break=True)
     add_item_detail(doc, items["P0.5"], status_labels, page_break=True)
+    add_item_detail(doc, items["P0.6"], status_labels, page_break=True)
 
     doc.add_page_break()
     add_heading(doc, "8. P1 — развитие после основы", 1)
-    add_para(doc, "P1 начинается после фиксации архитектурных основ P0. Документный редактор и архив зависят от «Документов 2.0», сайт — от принятого owner-gateway, а помощник должен сначала оформить уже существующую память фраз.")
+    add_para(doc, "P1 запускается параллельно с закрытием эксплуатационного P0.6. Первым выбран помощник на памяти фраз; документный редактор и архив по-прежнему зависят от «Документов 2.0», а сайт — от принятого owner-gateway.")
     for item_id in ("P1.1", "P1.2", "P1.3", "P1.4"):
         item = items[item_id]
         add_heading(doc, f"{item['id']}. {item['title']}", 2)
@@ -366,11 +367,12 @@ def build():
 
     add_heading(doc, "10. Порядок ближайших решений", 1)
     sequence = [
-        "Выпустить обязательный диагноз первичного приёма и проверить в клинике блокировку пустого завершения и успешное завершение после выбора типа.",
+        "Закрыть локальную часть P0.6: принять расписание, очередь, счета и сводку на рабочих сценариях.",
+        "Перед серверным изменением проверить целевой staff-хост, upstream и rollback; затем повторить вход по QR с телефона.",
+        "Начать P1.2: вывести память фраз в один измеримый сценарий на анамнезе, осмотре и рекомендациях.",
         "Провести врачебную приёмку готового многосуточного листа на реальном пациенте и зафиксировать результат.",
         "Параллельно наблюдать принятый кабинет владельца и каналы в ежедневной работе до статуса STABLE.",
-        "Повысить P0.1 и P0.4 только по факту подтверждённой клинической приёмки.",
-        "После принятия стационара начать основу «Документы 2.0»: версии, неизменяемый снимок, PDF и архив.",
+        "После фиксации модели версий начать основу «Документы 2.0»: неизменяемый снимок, PDF и архив.",
         "Отдельно подготовить безопасные очереди нормализации каталога без изменения рабочих данных до подтверждения.",
     ]
     for index, step in enumerate(sequence, 1):
@@ -390,9 +392,10 @@ def build():
         "согласованный период эксплуатации подтверждает «Работает стабильно».",
     ):
         add_bullet(doc, text)
-    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    doc.save(OUTPUT_PATH)
-    print(OUTPUT_PATH)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    output_path = OUTPUT_DIR / f"Plan_dorabotki_TemichevVet_{plan['updated_at']}.docx"
+    doc.save(output_path)
+    print(output_path)
 
 
 if __name__ == "__main__":
