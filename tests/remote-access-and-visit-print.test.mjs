@@ -114,6 +114,11 @@ test('внешний шлюз не хранит данные, а иностра�
   ]);
 
   assert.match(nginx, /proxy_pass http:\/\/127\.0\.0\.1:23000/);
+  assert.match(
+    nginx,
+    /location ~ \^\/api\/\(auth\/login\|v1\/remote-access\/enroll\)\$ \{[\s\S]*?proxy_pass http:\/\/127\.0\.0\.1:23000;[\s\S]*?proxy_http_version 1\.1;/,
+  );
+  assert.doesNotMatch(nginx, /include \/etc\/nginx\/proxy_params;/);
   assert.match(nginx, /X-TemichevVet-Remote-Access "1"/);
   assert.match(nginx, /__REMOTE_ACCESS_GATEWAY_SECRET__/);
   assert.match(nginx, /access_log off/);
