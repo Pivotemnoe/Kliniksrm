@@ -203,6 +203,21 @@ enum DocumentStatus {
   CANCELLED
 }
 
+enum DocumentEventType {
+  CREATED
+  GENERATED
+  SIGNED
+  CANCELLED
+  DELIVERY_QUEUED
+  PRINTED
+}
+
+enum DocumentSignatureMethod {
+  PAPER
+  ELECTRONIC
+  STATUS_CONFIRMATION
+}
+
 enum FileVisibility {
   PRIVATE
   INTERNAL
@@ -792,6 +807,7 @@ model Owner {
   balanceOperations            OwnerBalanceOperation[]
   notifications                NotificationOutbox[]
   onlineRequests               OnlineAppointmentRequest[]
+  files                        FileObject[]
   createdAt                    DateTime                   @default(now())
   updatedAt                    DateTime                   @updatedAt
 
@@ -861,6 +877,7 @@ model Animal {
   sales          Sale[]
   notifications  NotificationOutbox[]
   onlineRequests OnlineAppointmentRequest[]
+  files          FileObject[]
   createdAt      DateTime                   @default(now())
   updatedAt      DateTime                   @updatedAt
 
@@ -1213,20 +1230,25 @@ model MedicalPhrase {
 }
 
 model VisitDocument {
-  id                String             @id @default(uuid())
+  id                String                   @id @default(uuid())
   visitId           String
-  visit             Visit              @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  visit             Visit                    @relation(fields: [visitId], references: [id], onDelete: Cascade)
   templateId        String?
-  template          DocumentTemplate?  @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  template          DocumentTemplate?        @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  templateVersionId String?
+  templateVersion   DocumentTemplateVersion? @relation(fields: [templateVersionId], references: [id], onDelete: SetNull)
   title             String
   body              String?
-  status            DocumentStatus     @default(DRAFT)
+  status            DocumentStatus           @default(DRAFT)
   generatedDocument GeneratedDocument?
+  events            DocumentEvent[]
+  deliveries        NotificationOutbox[]
   files             FileObject[]
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
 
   @@index([visitId])
+  @@index([templateVersionId])
 }
 
 model NewsPost {
@@ -1289,33 +1311,36 @@ model Task {
 }
 
 model NotificationOutbox {
-  id          String                @id @default(uuid())
-  ownerId     String?
-  owner       Owner?                @relation(fields: [ownerId], references: [id], onDelete: SetNull)
-  animalId    String?
-  animal      Animal?               @relation(fields: [animalId], references: [id], onDelete: SetNull)
-  templateId  String?
-  template    NotificationTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  createdById String?
-  createdBy   Employee?             @relation("NotificationCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  channel     NotificationChannel
-  recipient   String
-  subject     String?
-  body        String
-  status      NotificationStatus    @default(QUEUED)
-  attempts    Int                   @default(0)
-  scheduledAt DateTime              @default(now())
-  sentAt      DateTime?
-  lastError   String?
-  metadata    Json?
-  dedupeKey   String?               @unique
-  createdAt   DateTime              @default(now())
-  updatedAt   DateTime              @updatedAt
+  id              String                @id @default(uuid())
+  ownerId         String?
+  owner           Owner?                @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  animalId        String?
+  animal          Animal?               @relation(fields: [animalId], references: [id], onDelete: SetNull)
+  templateId      String?
+  template        NotificationTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  visitDocumentId String?
+  visitDocument   VisitDocument?        @relation(fields: [visitDocumentId], references: [id], onDelete: SetNull)
+  createdById     String?
+  createdBy       Employee?             @relation("NotificationCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  channel         NotificationChannel
+  recipient       String
+  subject         String?
+  body            String
+  status          NotificationStatus    @default(QUEUED)
+  attempts        Int                   @default(0)
+  scheduledAt     DateTime              @default(now())
+  sentAt          DateTime?
+  lastError       String?
+  metadata        Json?
+  dedupeKey       String?               @unique
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
 
   @@index([status, scheduledAt])
   @@index([channel])
   @@index([ownerId])
   @@index([animalId])
+  @@index([visitDocumentId])
 }
 
 model ProductCategory {
@@ -2079,6 +2104,8 @@ model DocumentTemplate {
   title              String
   body               String?
   variables          Json?
+  currentVersion     Int                       @default(1)
+  versions           DocumentTemplateVersion[]
   visitDocuments     VisitDocument[]
   generatedDocuments GeneratedDocument[]
   createdAt          DateTime                  @default(now())
@@ -2087,18 +2114,68 @@ model DocumentTemplate {
   @@index([title])
 }
 
+model DocumentTemplateVersion {
+  id                 String              @id @default(uuid())
+  templateId         String
+  template           DocumentTemplate    @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  version            Int
+  categoryTitle      String?
+  title              String
+  body               String?
+  variables          Json?
+  createdById        String?
+  createdByName      String?
+  publishedAt        DateTime            @default(now())
+  visitDocuments     VisitDocument[]
+  generatedDocuments GeneratedDocument[]
+  createdAt          DateTime            @default(now())
+
+  @@unique([templateId, version])
+  @@index([templateId, publishedAt])
+}
+
 model GeneratedDocument {
+  id                String                   @id @default(uuid())
+  templateId        String?
+  template          DocumentTemplate?        @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  templateVersionId String?
+  templateVersion   DocumentTemplateVersion? @relation(fields: [templateVersionId], references: [id], onDelete: SetNull)
+  visitDocumentId   String?                  @unique
+  visitDocument     VisitDocument?           @relation(fields: [visitDocumentId], references: [id], onDelete: SetNull)
+  fileId            String?
+  file              FileObject?              @relation(fields: [fileId], references: [id], onDelete: SetNull)
+  title             String
+  status            DocumentStatus           @default(GENERATED)
+  snapshot          Json?
+  contentSha256     String?
+  pdfSha256         String?
+  generatedById     String?
+  generatedByName   String?
+  generatedAt       DateTime?
+  signedById        String?
+  signedByName      String?
+  signedAt          DateTime?
+  signatureMethod   DocumentSignatureMethod?
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+
+  @@index([templateVersionId])
+  @@index([contentSha256])
+}
+
+model DocumentEvent {
   id              String            @id @default(uuid())
-  templateId      String?
-  template        DocumentTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  visitDocumentId String?           @unique
-  visitDocument   VisitDocument?    @relation(fields: [visitDocumentId], references: [id], onDelete: SetNull)
-  fileId          String?
-  file            FileObject?       @relation(fields: [fileId], references: [id], onDelete: SetNull)
-  title           String
-  status          DocumentStatus    @default(GENERATED)
+  visitDocumentId String
+  visitDocument   VisitDocument     @relation(fields: [visitDocumentId], references: [id], onDelete: Cascade)
+  type            DocumentEventType
+  actorId         String?
+  actorName       String?
+  channel         String?
+  details         Json?
   createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+
+  @@index([visitDocumentId, createdAt])
+  @@index([type, createdAt])
 }
 
 model NotificationTemplate {
@@ -2129,6 +2206,10 @@ model TemplateVariable {
 
 model FileObject {
   id                    String               @id @default(uuid())
+  ownerId               String?
+  owner                 Owner?               @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  animalId              String?
+  animal                Animal?              @relation(fields: [animalId], references: [id], onDelete: SetNull)
   visitId               String?
   visit                 Visit?               @relation(fields: [visitId], references: [id], onDelete: SetNull)
   visitDocumentId       String?
@@ -2154,6 +2235,8 @@ model FileObject {
   updatedAt             DateTime             @updatedAt
 
   @@index([visitId])
+  @@index([ownerId])
+  @@index([animalId])
   @@index([visitDocumentId])
   @@index([laboratoryOrderId])
   @@index([laboratoryOrderItemId])

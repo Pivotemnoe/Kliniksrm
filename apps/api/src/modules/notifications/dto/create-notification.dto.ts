@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { NotificationChannel } from '@prisma/client';
-import { ArrayUnique, IsArray, IsDateString, IsEnum, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { ArrayUnique, IsArray, IsDateString, IsEnum, IsIn, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
 
 export class CreateNotificationDto {
   @ApiProperty({ enum: NotificationChannel })
@@ -50,6 +50,11 @@ export class CreateNotificationDto {
   @IsOptional()
   @IsString()
   templateId?: string | null;
+
+  @ApiPropertyOptional({ description: 'Сформированный документ приёма, отправка которого фиксируется в журнале.' })
+  @IsOptional()
+  @IsUUID()
+  visitDocumentId?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()

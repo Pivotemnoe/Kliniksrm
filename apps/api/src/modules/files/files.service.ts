@@ -16,6 +16,7 @@ export type UploadedFilePayload = {
 
 type FileScope =
   | { kind: 'visit'; visitId: string; visitDocumentId?: string | null }
+  | { kind: 'animal'; animalId: string; ownerId: string }
   | { kind: 'laboratory'; orderId: string; itemId?: string }
   | { kind: 'supply'; supplyInvoiceId: string };
 
@@ -49,6 +50,19 @@ export class FilesService {
     const scope: FileScope = { kind: 'visit', visitId, visitDocumentId: clean(visitDocumentId) };
     await this.ensureVisitScope(scope);
     return this.upload(scope, file, actorId);
+  }
+
+  async listAnimalFiles(animalId: string) {
+    await this.ensureAnimalScope(animalId);
+    return this.list({
+      purpose: FilePurpose.MEDICAL_DOCUMENT,
+      OR: [{ animalId }, { visit: { animalId } }],
+    });
+  }
+
+  async uploadAnimalFile(animalId: string, file: UploadedFilePayload | undefined, actorId: string) {
+    const animal = await this.ensureAnimalScope(animalId);
+    return this.upload({ kind: 'animal', animalId, ownerId: animal.ownerId }, file, actorId);
   }
 
   async listLaboratoryFiles(orderId: string, itemId: string) {
@@ -185,6 +199,15 @@ export class FilesService {
     }
   }
 
+  private async ensureAnimalScope(animalId: string) {
+    const animal = await this.prisma.animal.findUnique({
+      where: { id: animalId },
+      select: { id: true, ownerId: true },
+    });
+    if (!animal) throw new NotFoundException('Пациент не найден');
+    return animal;
+  }
+
   private async ensureLaboratoryScope(scope: Extract<FileScope, { kind: 'laboratory' }>) {
     if (!scope.itemId) {
       const order = await this.prisma.laboratoryOrder.findUnique({ where: { id: scope.orderId }, select: { id: true } });
@@ -237,6 +260,9 @@ const publicFileSelect = {
 function scopeData(scope: FileScope): Prisma.FileObjectUncheckedCreateInput {
   if (scope.kind === 'visit') {
     return { visitId: scope.visitId, visitDocumentId: scope.visitDocumentId ?? null, storageKey: '', originalName: '' };
+  }
+  if (scope.kind === 'animal') {
+    return { ownerId: scope.ownerId, animalId: scope.animalId, storageKey: '', originalName: '' };
   }
   if (scope.kind === 'laboratory') {
     return { laboratoryOrderId: scope.orderId, laboratoryOrderItemId: scope.itemId ?? null, storageKey: '', originalName: '' };

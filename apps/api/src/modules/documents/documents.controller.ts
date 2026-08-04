@@ -1,5 +1,6 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Header, Param, Patch, Post, Res, StreamableFile } from '@nestjs/common';
 import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { AuthEmployee } from '../auth/auth.types';
 import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
@@ -69,6 +70,23 @@ export class DocumentsController {
     return this.documentsService.updateVisitDocument(visitId, documentId, dto, actor.id);
   }
 
+  @Get('visits/:visitId/documents/:documentId/pdf')
+  @RequirePermissions('documents.print')
+  @Header('Cache-Control', 'private, no-store')
+  @ApiOkResponse({ description: 'Immutable generated PDF.' })
+  async openGeneratedPdf(
+    @Param('visitId') visitId: string,
+    @Param('documentId') documentId: string,
+    @CurrentEmployee() actor: AuthEmployee,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const { file, stream } = await this.documentsService.openGeneratedPdf(visitId, documentId, actor.id);
+    response.setHeader('Content-Type', 'application/pdf');
+    response.setHeader('Content-Disposition', inlineContentDisposition(file.originalName));
+    if (file.sizeBytes !== null) response.setHeader('Content-Length', String(file.sizeBytes));
+    return new StreamableFile(stream);
+  }
+
   @Delete('visits/:visitId/documents/:documentId')
   @RequirePermissions('documents.manage')
   @ApiOkResponse({ description: 'Draft visit document deleted.' })
@@ -79,4 +97,9 @@ export class DocumentsController {
   ) {
     return this.documentsService.deleteVisitDocument(visitId, documentId, actor.id);
   }
+}
+
+function inlineContentDisposition(fileName: string) {
+  const ascii = fileName.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '_') || 'document.pdf';
+  return `inline; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
 }

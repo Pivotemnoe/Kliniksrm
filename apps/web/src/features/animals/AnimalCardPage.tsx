@@ -21,6 +21,8 @@ import { AnimalWeightsTab } from './AnimalWeightsTab';
 import { AnimalStatusTag, getAnimalStatusLabel } from './animalStatus';
 import { getAnimal, updateAnimal } from './animals.api';
 import { AnimalMutationInput, Vaccination } from './types';
+import { AttachmentsPanel } from '../files/AttachmentsPanel';
+import { listAnimalFiles, uploadAnimalFile } from '../files/files.api';
 
 export function AnimalCardPage() {
   const { animalId } = useParams<{ animalId: string }>();
@@ -242,6 +244,22 @@ export function AnimalCardPage() {
                   key: 'tasks',
                   label: 'Задачи',
                   children: <AnimalTasksTab ownerId={animal.ownerId} animalId={animal.id} />,
+                },
+                {
+                  key: 'archive',
+                  label: 'Архив документов',
+                  children: (
+                    <Card size="small">
+                      <AttachmentsPanel
+                        queryKey={['animals', animal.id, 'files']}
+                        listFiles={() => listAnimalFiles(animal.id)}
+                        uploadFile={(file) => uploadAnimalFile(animal.id, file)}
+                        canManage={hasPermission(auth?.employee, 'documents.manage')}
+                        title="Документы пациента"
+                        description="Общий архив пациента: файлы из приёмов и документы, загруженные напрямую в карточку. PDF, изображения, Word и таблицы до 15 МБ."
+                      />
+                    </Card>
+                  ),
                 },
               ]}
             />

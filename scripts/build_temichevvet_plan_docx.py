@@ -135,12 +135,23 @@ def add_heading(doc, text: str, level=1):
     return p
 
 
-def add_para(doc, text: str, *, size=10.5, color=INK, bold=False, italic=False, after=6, align=None):
+def add_para(
+    doc,
+    text: str,
+    *,
+    size=10.5,
+    color=INK,
+    bold=False,
+    italic=False,
+    after=6,
+    align=None,
+    line_spacing=1.2,
+):
     p = doc.add_paragraph()
     if align is not None:
         p.alignment = align
     p.paragraph_format.space_after = Pt(after)
-    p.paragraph_format.line_spacing = 1.2
+    p.paragraph_format.line_spacing = line_spacing
     set_run(p.add_run(text), size=size, color=color, bold=bold, italic=italic)
     return p
 
@@ -204,7 +215,15 @@ def add_item_detail(doc, item, status_labels, *, page_break=False):
     if item.get("dependencies"):
         add_para(doc, "Зависимости: " + "; ".join(item["dependencies"]) + ".", size=9.3, color=MUTED)
     if item.get("evidence"):
-        add_para(doc, "Зафиксированные факты: " + " ".join(item["evidence"]), size=8.7, color=MUTED, italic=True, after=1)
+        add_para(
+            doc,
+            "Зафиксированные факты: " + " ".join(item["evidence"]),
+            size=8.0,
+            color=MUTED,
+            italic=True,
+            after=1,
+            line_spacing=1.05,
+        )
 
 
 def configure_document(doc: Document):
@@ -367,13 +386,13 @@ def build():
 
     add_heading(doc, "10. Порядок ближайших решений", 1)
     sequence = [
-        "Закрыть локальную часть P0.6: принять расписание, очередь, счета и сводку на рабочих сценариях.",
-        "Перед серверным изменением проверить целевой staff-хост, upstream и rollback; затем повторить вход по QR с телефона.",
-        "Начать P1.2: вывести память фраз в один измеримый сценарий на анамнезе, осмотре и рекомендациях.",
+        "Принять локально «Документы 2.0»: версия шаблона, неизменяемый документ, PDF, подпись, отправка и архив пациента.",
+        "После подтверждения выпустить P0.2 только с backup и заменой API/Web; состояние PostgreSQL, MinIO и других сервисов не перезапускать.",
+        "Начать P0.3: сформировать безопасные очереди нормализации каталога и нулевых цен без изменения рабочих данных.",
+        "Подготовить изолированную приёмку накладной: партии, остаток, цена, отмена и повторное открытие с доказанным восстановлением.",
         "Провести врачебную приёмку готового многосуточного листа на реальном пациенте и зафиксировать результат.",
-        "Параллельно наблюдать принятый кабинет владельца и каналы в ежедневной работе до статуса STABLE.",
-        "После фиксации модели версий начать основу «Документы 2.0»: неизменяемый снимок, PDF и архив.",
-        "Отдельно подготовить безопасные очереди нормализации каталога без изменения рабочих данных до подтверждения.",
+        "Закрыть мобильную приёмку P0.6 и наблюдать кабинет владельца до статуса STABLE.",
+        "После каталога перейти к визуальному редактору документов, затем к помощнику врача и ускорению frontend.",
     ]
     for index, step in enumerate(sequence, 1):
         p = doc.add_paragraph()

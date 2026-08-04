@@ -9,6 +9,14 @@ export function uploadVisitFile(visitId: string, file: File) {
   return apiUpload<FileAttachment>(`/v1/files/visits/${visitId}`, file);
 }
 
+export function listAnimalFiles(animalId: string) {
+  return apiRequest<FileAttachment[]>(`/v1/files/animals/${animalId}`);
+}
+
+export function uploadAnimalFile(animalId: string, file: File) {
+  return apiUpload<FileAttachment>(`/v1/files/animals/${animalId}`, file);
+}
+
 export function listLaboratoryFiles(orderId: string, itemId: string) {
   return apiRequest<FileAttachment[]>(`/v1/files/laboratory/orders/${orderId}/items/${itemId}`);
 }

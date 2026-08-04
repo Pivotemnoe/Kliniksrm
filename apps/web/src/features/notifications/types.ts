@@ -91,6 +91,7 @@ export type CreateNotificationInput = {
   ownerId?: string | null;
   animalId?: string | null;
   templateId?: string | null;
+  visitDocumentId?: string | null;
   scheduledAt?: string | null;
   messengerChannels?: Array<'MAX' | 'TELEGRAM'>;
 };

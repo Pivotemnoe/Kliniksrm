@@ -555,6 +555,13 @@ function DocumentTemplatesPanel({ canManage }: { canManage: boolean }) {
         render: (_, record) => (record.category?.title ? <Tag>{record.category.title}</Tag> : '—'),
       },
       {
+        title: 'Версия',
+        dataIndex: 'currentVersion',
+        key: 'currentVersion',
+        width: 100,
+        render: (value: number) => <Tag color="blue">v{value}</Tag>,
+      },
+      {
         title: 'Обновлён',
         dataIndex: 'updatedAt',
         key: 'updatedAt',
@@ -671,6 +678,15 @@ function DocumentTemplatesPanel({ canManage }: { canManage: boolean }) {
           </Space>
         }
       >
+        {editingTemplate ? (
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+            message={`Будет опубликована версия ${editingTemplate.currentVersion + 1}`}
+            description="Уже сформированные документы сохранят прежний текст и прежнюю версию шаблона."
+          />
+        ) : null}
         <Form layout="vertical">
           <div className="form-grid two-columns">
             <Controller

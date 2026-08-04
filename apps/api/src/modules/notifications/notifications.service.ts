@@ -1,5 +1,12 @@
 import { BadRequestException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
-import { ClientPortalStatus, NotificationChannel, NotificationStatus, Prisma } from '@prisma/client';
+import {
+  ClientPortalStatus,
+  DocumentEventType,
+  DocumentStatus,
+  NotificationChannel,
+  NotificationStatus,
+  Prisma,
+} from '@prisma/client';
 import { randomBytes, createHash, randomUUID } from 'node:crypto';
 import { parsePagination } from '../../common/pagination';
 import { AuditService } from '../audit/audit.service';
@@ -56,10 +63,40 @@ export class NotificationsService {
   }
 
   async createOutbox(dto: CreateNotificationDto, actorId: string) {
-    const ownerId = emptyToNull(dto.ownerId);
-    const animalId = emptyToNull(dto.animalId);
+    let ownerId = emptyToNull(dto.ownerId);
+    let animalId = emptyToNull(dto.animalId);
     const templateId = emptyToNull(dto.templateId);
+    const visitDocumentId = emptyToNull(dto.visitDocumentId);
     const directRecipient = emptyToNull(dto.recipient);
+
+    if (visitDocumentId) {
+      const document = await this.prisma.visitDocument.findUnique({
+        where: { id: visitDocumentId },
+        select: {
+          id: true,
+          status: true,
+          generatedDocument: { select: { id: true } },
+          visit: { select: { ownerId: true, animalId: true } },
+        },
+      });
+      if (!document) {
+        throw new NotFoundException('Документ приёма не найден');
+      }
+      if (
+        !document.generatedDocument ||
+        (document.status !== DocumentStatus.GENERATED && document.status !== DocumentStatus.SIGNED)
+      ) {
+        throw new BadRequestException('Отправить можно только сформированный или подписанный документ');
+      }
+      if (ownerId && ownerId !== document.visit.ownerId) {
+        throw new BadRequestException('Документ не принадлежит выбранному владельцу');
+      }
+      if (animalId && animalId !== document.visit.animalId) {
+        throw new BadRequestException('Документ не принадлежит выбранному пациенту');
+      }
+      ownerId = document.visit.ownerId;
+      animalId = document.visit.animalId;
+    }
 
     if (dto.channel === NotificationChannel.MESSENGER && !ownerId) {
       throw new BadRequestException('Для автоматической отправки выберите владельца');
@@ -89,30 +126,47 @@ export class NotificationsService {
 
     const templateContext = await this.buildTemplateContext(ownerId, animalId, scheduledAt);
 
-    const message = await this.prisma.notificationOutbox.create({
-      data: {
-        ownerId,
-        animalId,
-        templateId,
-        createdById: actorId,
-        channel: dto.channel,
-        recipient: directRecipient ?? `owner:${ownerId}`,
-        subject: renderNotificationTemplate(emptyToNull(dto.subject), templateContext),
-        body: renderNotificationTemplate(dto.body.trim(), templateContext) ?? '',
-        scheduledAt,
-        ...(dto.channel === NotificationChannel.MESSENGER && dto.messengerChannels !== undefined
-          ? {
-              metadata: {
-                delivery: {
-                  mode: 'EXPLICIT',
-                  messengerChannels: dto.messengerChannels,
-                  deliveredMessengerChannels: [],
+    const message = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.notificationOutbox.create({
+        data: {
+          ownerId,
+          animalId,
+          templateId,
+          visitDocumentId,
+          createdById: actorId,
+          channel: dto.channel,
+          recipient: directRecipient ?? `owner:${ownerId}`,
+          subject: renderNotificationTemplate(emptyToNull(dto.subject), templateContext),
+          body: renderNotificationTemplate(dto.body.trim(), templateContext) ?? '',
+          scheduledAt,
+          ...(dto.channel === NotificationChannel.MESSENGER && dto.messengerChannels !== undefined
+            ? {
+                metadata: {
+                  delivery: {
+                    mode: 'EXPLICIT',
+                    messengerChannels: dto.messengerChannels,
+                    deliveredMessengerChannels: [],
+                  },
                 },
-              },
-            }
-          : {}),
-      },
-      include: notificationInclude,
+              }
+            : {}),
+        },
+        include: notificationInclude,
+      });
+
+      if (visitDocumentId) {
+        await tx.documentEvent.create({
+          data: {
+            visitDocumentId,
+            type: DocumentEventType.DELIVERY_QUEUED,
+            actorId,
+            channel: dto.channel,
+            details: { notificationId: created.id, status: created.status },
+          },
+        });
+      }
+
+      return created;
     });
 
     await this.auditService.log({
@@ -124,6 +178,7 @@ export class NotificationsService {
         channel: message.channel,
         ownerId: message.ownerId,
         animalId: message.animalId,
+        visitDocumentId: message.visitDocumentId,
         status: message.status,
       },
     });

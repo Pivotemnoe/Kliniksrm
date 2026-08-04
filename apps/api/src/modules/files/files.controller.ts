@@ -33,6 +33,25 @@ export class FilesController {
     return this.filesService.uploadVisitFile(visitId, undefined, file, actor.id);
   }
 
+  @Get('animals/:animalId')
+  @RequirePermissions('documents.read')
+  listAnimalFiles(@Param('animalId') animalId: string) {
+    return this.filesService.listAnimalFiles(animalId);
+  }
+
+  @Post('animals/:animalId')
+  @RequirePermissions('documents.manage')
+  @UseInterceptors(uploadInterceptor)
+  @ApiConsumes('multipart/form-data')
+  @ApiCreatedResponse({ description: 'Patient archive attachment uploaded.' })
+  uploadAnimalFile(
+    @Param('animalId') animalId: string,
+    @UploadedFile() file: UploadedFilePayload | undefined,
+    @CurrentEmployee() actor: AuthEmployee,
+  ) {
+    return this.filesService.uploadAnimalFile(animalId, file, actor.id);
+  }
+
   @Get('laboratory/orders/:orderId/items/:itemId')
   @RequirePermissions('laboratory.read')
   listLaboratoryFiles(@Param('orderId') orderId: string, @Param('itemId') itemId: string) {

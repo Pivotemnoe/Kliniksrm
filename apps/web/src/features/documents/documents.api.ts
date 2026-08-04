@@ -1,4 +1,4 @@
-import { apiRequest } from '../../api/client';
+import { apiDownload, apiRequest } from '../../api/client';
 import {
   CreateDocumentTemplateInput,
   CreateVisitDocumentInput,
@@ -48,4 +48,8 @@ export function deleteVisitDocument(visitId: string, documentId: string) {
   return apiRequest<{ deleted: true }>(`/v1/visits/${visitId}/documents/${documentId}`, {
     method: 'DELETE',
   });
+}
+
+export function downloadVisitDocumentPdf(visitId: string, documentId: string) {
+  return apiDownload(`/v1/visits/${visitId}/documents/${documentId}/pdf`);
 }

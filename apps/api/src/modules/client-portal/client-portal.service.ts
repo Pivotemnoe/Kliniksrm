@@ -210,7 +210,14 @@ export class ClientPortalService {
           recommendation: { select: { treatmentPlan: true, careNotes: true } },
           documents: {
             where: { status: DocumentStatus.SIGNED },
-            select: { id: true, title: true, body: true, status: true, createdAt: true },
+            select: {
+              id: true,
+              title: true,
+              body: true,
+              status: true,
+              createdAt: true,
+              generatedDocument: { select: { snapshot: true } },
+            },
           },
         },
       }),
@@ -256,6 +263,17 @@ export class ClientPortalService {
     }
 
     const { animals, ...ownerProfile } = owner;
+    const portalVisits = visits.map((visit) => ({
+      ...visit,
+      documents: visit.documents.map(({ generatedDocument, ...document }) => {
+        const snapshot = getGeneratedDocumentText(generatedDocument?.snapshot);
+        return {
+          ...document,
+          title: snapshot?.title ?? document.title,
+          body: snapshot?.body ?? document.body,
+        };
+      }),
+    }));
     const visibleNotifications = notifications
       .filter((notification) => notification.status === 'SENT' || getPortalDeliveredAt(notification.metadata))
       .slice(0, 20)
@@ -273,7 +291,7 @@ export class ClientPortalService {
       owner: ownerProfile,
       animals,
       appointments,
-      visits,
+      visits: portalVisits,
       bills,
       notifications: visibleNotifications,
       syncedAt: new Date().toISOString(),
@@ -408,6 +426,13 @@ export class ClientPortalService {
 
     return access;
   }
+}
+
+function getGeneratedDocumentText(snapshot: Prisma.JsonValue | null | undefined) {
+  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return null;
+  const title = typeof snapshot.title === 'string' ? snapshot.title : null;
+  const body = typeof snapshot.body === 'string' ? snapshot.body : null;
+  return title || body ? { title, body } : null;
 }
 
 function getPortalDeliveredAt(metadata: Prisma.JsonValue | null) {

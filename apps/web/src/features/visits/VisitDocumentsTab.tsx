@@ -1,7 +1,7 @@
 import { DeleteOutlined, EditOutlined, PlusOutlined, PrinterOutlined, SendOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Card, Drawer, Form, Input, Select, Space, Table, Tag, Typography } from 'antd';
+import { Alert, App, Button, Card, Drawer, Form, Input, Select, Space, Table, Tag, Timeline, Typography } from 'antd';
 import { ColumnsType } from 'antd/es/table';
 import { useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
@@ -14,6 +14,7 @@ import { listVisitFiles, uploadVisitFile } from '../files/files.api';
 import {
   createVisitDocument,
   deleteVisitDocument,
+  downloadVisitDocumentPdf,
   listDocumentTemplates,
   listVisitDocuments,
   updateVisitDocument,
@@ -55,6 +56,7 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
   const canSend = hasPermission(auth?.employee, 'notifications.manage');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingDocument, setEditingDocument] = useState<VisitDocument | null>(null);
+  const [printingDocumentId, setPrintingDocumentId] = useState<string | null>(null);
   const notificationTarget = useMemo(() => resolveOwnerNotificationTarget(visit), [visit]);
   const templatesQuery = useQuery({ queryKey: ['document-templates'], queryFn: listDocumentTemplates });
   const documentsQuery = useQuery({
@@ -72,10 +74,17 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
   });
   const previewTitle = watch('title');
   const previewBody = watch('body');
+  const documentFrozen = Boolean(
+    editingDocument && (editingDocument.status !== 'DRAFT' || editingDocument.generatedDocument),
+  );
   const saveMutation = useMutation({
     mutationFn: (values: DocumentFormValues) =>
       editingDocument
-        ? updateVisitDocument(visit.id, editingDocument.id, values)
+        ? updateVisitDocument(
+            visit.id,
+            editingDocument.id,
+            documentFrozen ? { status: values.status } : values,
+          )
         : createVisitDocument(visit.id, values),
     onSuccess: async () => {
       await Promise.all([
@@ -97,7 +106,10 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
       return createNotification(buildDocumentNotification(visit, document, notificationTarget));
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+        queryClient.invalidateQueries({ queryKey: ['visits', visit.id, 'documents'] }),
+      ]);
       message.success('Документ поставлен в очередь отправки');
     },
     onError: (error) => message.error(getErrorMessage(error)),
@@ -128,7 +140,13 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
         render: (value: string, record) => (
           <Space direction="vertical" size={0}>
             <Typography.Text strong>{value}</Typography.Text>
-            <Typography.Text type="secondary">{record.template?.category?.title ?? record.template?.title ?? 'Без шаблона'}</Typography.Text>
+            <Typography.Text type="secondary">
+              {record.template?.category?.title ?? record.template?.title ?? 'Без шаблона'}
+              {record.templateVersion ? ` · версия ${record.templateVersion.version}` : ''}
+            </Typography.Text>
+            {record.deliveries.length ? (
+              <Typography.Text type="secondary">Отправок: {record.deliveries.length}</Typography.Text>
+            ) : null}
           </Space>
         ),
       },
@@ -154,7 +172,12 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
           (
             <Space wrap>
               {canPrint ? (
-                <Button size="small" icon={<PrinterOutlined />} onClick={() => printDocument(record, visit)}>
+                <Button
+                  size="small"
+                  icon={<PrinterOutlined />}
+                  loading={printingDocumentId === record.id}
+                  onClick={() => handlePrint(record)}
+                >
                   Печать
                 </Button>
               ) : null}
@@ -220,6 +243,32 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
     reset({ templateId: undefined, title: '', body: '', status: 'DRAFT' });
   }
 
+  async function handlePrint(document: VisitDocument) {
+    if (!document.generatedDocument) {
+      printDocument(document, visit);
+      return;
+    }
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      message.error('Браузер заблокировал окно печати');
+      return;
+    }
+    setPrintingDocumentId(document.id);
+    try {
+      const result = await downloadVisitDocumentPdf(visit.id, document.id);
+      const url = URL.createObjectURL(result.blob);
+      printWindow.location.href = url;
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      await queryClient.invalidateQueries({ queryKey: ['visits', visit.id, 'documents'] });
+    } catch (error) {
+      printWindow.close();
+      message.error(getErrorMessage(error));
+    } finally {
+      setPrintingDocumentId(null);
+    }
+  }
+
   function insertVariable(variable: string) {
     const body = getValues('body') ?? '';
     const separator = body && !body.endsWith(' ') && !body.endsWith('\n') ? ' ' : '';
@@ -273,7 +322,11 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
         extra={
           <Space>
             {editingDocument && canPrint ? (
-              <Button icon={<PrinterOutlined />} onClick={() => printDocument(editingDocument, visit)}>
+              <Button
+                icon={<PrinterOutlined />}
+                loading={printingDocumentId === editingDocument.id}
+                onClick={() => handlePrint(editingDocument)}
+              >
                 Печать
               </Button>
             ) : null}
@@ -301,6 +354,19 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
         }
       >
         <Form layout="vertical">
+          {documentFrozen ? (
+            <Alert
+              type="info"
+              showIcon
+              style={{ marginBottom: 16 }}
+              message="Сформированная версия защищена от изменений"
+              description={
+                editingDocument?.generatedDocument?.contentSha256
+                  ? `Версия шаблона: ${editingDocument.templateVersion?.version ?? 'без шаблона'} · контрольная сумма ${editingDocument.generatedDocument.contentSha256.slice(0, 12)}…`
+                  : 'Текст и шаблон больше не меняются. Можно только подписать или отменить документ.'
+              }
+            />
+          ) : null}
           <Controller
             control={control}
             name="templateId"
@@ -311,6 +377,7 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
                   allowClear
                   showSearch
                   loading={templatesQuery.isLoading}
+                  disabled={documentFrozen}
                   options={templateOptions}
                   placeholder="Выберите шаблон"
                   onChange={(value) => {
@@ -331,7 +398,7 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
               name="title"
               render={({ field, fieldState }) => (
                 <Form.Item label="Название" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
-                  <Input {...field} placeholder="Например, лист первичного приёма" />
+                  <Input {...field} disabled={documentFrozen} placeholder="Например, лист первичного приёма" />
                 </Form.Item>
               )}
             />
@@ -342,7 +409,10 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
                 <Form.Item label="Статус">
                   <Select
                     {...field}
-                    options={documentStatuses.map((status) => ({ value: status, label: documentStatusLabels[status] }))}
+                    options={getAvailableDocumentStatuses(editingDocument).map((status) => ({
+                      value: status,
+                      label: documentStatusLabels[status],
+                    }))}
                   />
                 </Form.Item>
               )}
@@ -353,7 +423,7 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
             name="body"
             render={({ field }) => (
               <Form.Item label="Текст документа">
-                <Input.TextArea {...field} rows={16} placeholder="Текст документа" />
+                <Input.TextArea {...field} disabled={documentFrozen} rows={16} placeholder="Текст документа" />
               </Form.Item>
             )}
           />
@@ -361,7 +431,9 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
             <Card size="small" title={editingDocument ? 'Печатный вид' : 'Переменные шаблона'}>
               {editingDocument ? (
                 <Typography.Text type="secondary">
-                  Документ уже сформирован. Новые переменные в существующем тексте не подставляются автоматически.
+                  {documentFrozen
+                    ? 'Это зафиксированный экземпляр документа. Изменения шаблона на него не повлияют.'
+                    : 'Переменные уже подставлены. До формирования текст можно проверить и исправить.'}
                 </Typography.Text>
               ) : (
                 <DocumentVariablePalette onInsert={insertVariable} />
@@ -374,6 +446,41 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
               </div>
             </Card>
           </div>
+          {editingDocument ? (
+            <Card size="small" title="История документа" style={{ marginTop: 16 }}>
+              <Timeline
+                items={[
+                  ...editingDocument.events.map((event) => ({
+                    color: getDocumentEventColor(event.type),
+                    children: (
+                      <Space direction="vertical" size={0}>
+                        <Typography.Text strong>{getDocumentEventLabel(event.type, event.channel)}</Typography.Text>
+                        <Typography.Text type="secondary">
+                          {new Date(event.createdAt).toLocaleString('ru-RU')}
+                          {event.actorName ? ` · ${event.actorName}` : ''}
+                        </Typography.Text>
+                      </Space>
+                    ),
+                  })),
+                  ...editingDocument.deliveries.map((delivery) => ({
+                    color: delivery.status === 'SENT' ? 'green' : delivery.status === 'FAILED' ? 'red' : 'blue',
+                    children: (
+                      <Space direction="vertical" size={0}>
+                        <Typography.Text strong>
+                          Доставка {delivery.channel} · {formatDeliveryStatus(delivery.status)}
+                        </Typography.Text>
+                        <Typography.Text type="secondary">
+                          {new Date(delivery.createdAt).toLocaleString('ru-RU')}
+                          {delivery.sentAt ? ` · отправлено ${new Date(delivery.sentAt).toLocaleString('ru-RU')}` : ''}
+                        </Typography.Text>
+                        {delivery.lastError ? <Typography.Text type="danger">{delivery.lastError}</Typography.Text> : null}
+                      </Space>
+                    ),
+                  })),
+                ]}
+              />
+            </Card>
+          ) : null}
         </Form>
       </Drawer>
     </div>
@@ -394,11 +501,13 @@ function printDocument(document: VisitDocument, visit: Visit) {
     visit.animal.sex === 'MALE' ? 'самец' : visit.animal.sex === 'FEMALE' ? 'самка' : null,
   ].filter(Boolean).join(', ');
 
+  const content = getFrozenDocumentContent(document);
+
   printWindow.document.write(`<!doctype html>
 <html lang="ru">
 <head>
   <meta charset="utf-8" />
-  <title>${escapeHtml(document.title)}</title>
+  <title>${escapeHtml(content.title)}</title>
   <style>
     * { box-sizing: border-box; }
     body { margin: 0; color: #111827; background: #ffffff; font: 15px/1.5 Arial, sans-serif; }
@@ -427,7 +536,7 @@ function printDocument(document: VisitDocument, visit: Visit) {
         <div class="muted">Документ ветеринарной клиники</div>
       </div>
     </section>
-    <h1>${escapeHtml(document.title)}</h1>
+    <h1>${escapeHtml(content.title)}</h1>
     <div class="status">Документ приёма · ${documentStatusLabels[document.status]}</div>
     <section class="meta-grid">
       <div class="meta-row"><span>Дата приёма</span><strong>${escapeHtml(visitDate)}</strong></div>
@@ -436,7 +545,7 @@ function printDocument(document: VisitDocument, visit: Visit) {
       <div class="meta-row"><span>Телефон</span><strong>${escapeHtml(ownerPhone || '—')}</strong></div>
       <div class="meta-row"><span>Пациент</span><strong>${escapeHtml(animalLine || '—')}</strong></div>
     </section>
-    <section class="body">${escapeHtml(document.body ?? '')}</section>
+    <section class="body">${escapeHtml(content.body)}</section>
     <section class="signatures">
       <div class="signature">Подпись владельца</div>
       <div class="signature">Подпись врача</div>
@@ -498,6 +607,57 @@ function canDeleteVisitDocument(document: VisitDocument) {
   return !document.generatedDocument && (document.status === 'DRAFT' || document.status === 'CANCELLED');
 }
 
+function getAvailableDocumentStatuses(document: VisitDocument | null) {
+  if (!document) return [...documentStatuses];
+  const transitions: Record<DocumentStatus, readonly DocumentStatus[]> = {
+    DRAFT: ['DRAFT', 'GENERATED', 'SIGNED', 'CANCELLED'],
+    GENERATED: ['GENERATED', 'SIGNED', 'CANCELLED'],
+    SIGNED: ['SIGNED', 'CANCELLED'],
+    CANCELLED: ['CANCELLED'],
+  };
+  return transitions[document.status];
+}
+
+function getFrozenDocumentContent(document: VisitDocument) {
+  const snapshot = document.generatedDocument?.snapshot;
+  return {
+    title: snapshot?.title ?? document.title,
+    body: snapshot?.body ?? document.body ?? '',
+  };
+}
+
+function getDocumentEventLabel(type: VisitDocument['events'][number]['type'], channel: string | null) {
+  if (type === 'DELIVERY_QUEUED' && channel === 'CLIENT_PORTAL') {
+    return 'Подготовлен для личного кабинета владельца';
+  }
+  const labels: Record<VisitDocument['events'][number]['type'], string> = {
+    CREATED: 'Создан черновик',
+    GENERATED: 'Документ сформирован и зафиксирован',
+    SIGNED: 'Подпись подтверждена',
+    CANCELLED: 'Документ отменён',
+    DELIVERY_QUEUED: `Поставлен в очередь отправки${channel ? ` · ${channel}` : ''}`,
+    PRINTED: 'PDF открыт для печати',
+  };
+  return labels[type];
+}
+
+function getDocumentEventColor(type: VisitDocument['events'][number]['type']) {
+  if (type === 'SIGNED') return 'green';
+  if (type === 'CANCELLED') return 'red';
+  return 'blue';
+}
+
+function formatDeliveryStatus(status: string) {
+  const labels: Record<string, string> = {
+    QUEUED: 'в очереди',
+    PROCESSING: 'отправляется',
+    SENT: 'доставлено',
+    FAILED: 'ошибка',
+    CANCELLED: 'отменено',
+  };
+  return labels[status] ?? status;
+}
+
 function resolveOwnerNotificationTarget(visit: Visit): NotificationTarget | null {
   const owner = visit.owner;
   const candidates: NotificationTarget[] = [
@@ -521,19 +681,21 @@ function resolveOwnerNotificationTarget(visit: Visit): NotificationTarget | null
 function buildDocumentNotification(visit: Visit, document: VisitDocument, target: NotificationTarget): CreateNotificationInput {
   const visitDate = new Date(visit.startedAt).toLocaleString('ru-RU');
   const channelLabel = notificationChannelLabels[target.channel];
+  const content = getFrozenDocumentContent(document);
 
   return {
     channel: target.channel,
     recipient: target.recipient,
     ownerId: visit.ownerId,
     animalId: visit.animalId,
-    subject: `Документ TemichevVet: ${document.title}`,
+    visitDocumentId: document.id,
+    subject: `Документ TemichevVet: ${content.title}`,
     body: [
-      `${visit.owner.fullName}, документ "${document.title}" по пациенту ${visit.animal.nickname} поставлен в отправку через ${channelLabel}.`,
+      `${visit.owner.fullName}, документ "${content.title}" по пациенту ${visit.animal.nickname} поставлен в отправку через ${channelLabel}.`,
       `Дата приёма: ${visitDate}.`,
       'Документ также доступен в личном кабинете владельца.',
       '',
-      document.body ?? '',
+      content.body,
     ].join('\n'),
   };
 }
