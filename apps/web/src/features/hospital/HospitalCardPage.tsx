@@ -39,7 +39,7 @@ import type { CreateHospitalAmendmentInput, CreateHospitalRecordInput, HospitalC
 const recordTypeOptions: Array<{ value: HospitalRecordType; label: string; defaultTitle: string }> = [
   { value: 'TEMPERATURE', label: 'Температура', defaultTitle: 'Измерение температуры' },
   { value: 'MEDICATION', label: 'Препарат / инъекция', defaultTitle: 'Введение препарата' },
-  { value: 'PROCEDURE', label: 'Процедура', defaultTitle: 'Выполненная процедура' },
+  { value: 'PROCEDURE', label: 'Процедура', defaultTitle: 'Процедура' },
   { value: 'OBSERVATION', label: 'Наблюдение', defaultTitle: 'Состояние пациента' },
   { value: 'FEEDING', label: 'Кормление', defaultTitle: 'Кормление' },
   { value: 'CARE', label: 'Уход', defaultTitle: 'Уход за пациентом' },
@@ -61,6 +61,7 @@ export function HospitalCardPage() {
   const [initialRecordStatus, setInitialRecordStatus] = useState<Extract<HospitalRecordStatus, 'PLANNED' | 'COMPLETED'>>('COMPLETED');
   const [amendmentRecord, setAmendmentRecord] = useState<HospitalRecord | null>(null);
   const [boxId, setBoxId] = useState<string>();
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const stayQuery = useQuery({
     queryKey: ['hospital', stayId],
     queryFn: () => getHospitalStay(stayId),
@@ -74,6 +75,13 @@ export function HospitalCardPage() {
   useEffect(() => {
     setBoxId(stay?.hospitalBoxId ?? undefined);
   }, [stay?.hospitalBoxId]);
+
+  useEffect(() => {
+    if (!active) return;
+    setNowMs(Date.now());
+    const timer = window.setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, [active]);
 
   async function refresh() {
     await Promise.all([
@@ -103,10 +111,14 @@ export function HospitalCardPage() {
     mutationFn: (input: CreateHospitalRecordInput | UpdateHospitalRecordInput) => editingRecord
       ? updateHospitalRecord(stayId, editingRecord.id, input as UpdateHospitalRecordInput)
       : createHospitalRecord(stayId, input as CreateHospitalRecordInput),
-    onSuccess: async () => {
+    onSuccess: async (_, input) => {
       await refresh();
       setRecordOpen(false);
-      message.success(editingRecord ? 'Запись стационара обновлена' : 'Запись добавлена в карту стационара');
+      message.success(editingRecord
+        ? 'Запись стационара обновлена'
+        : input.recordStatus === 'PLANNED'
+          ? 'План лечения назначен. Напоминание появится к указанному времени'
+          : 'Выполненное действие добавлено в лист стационара');
       setEditingRecord(null);
     },
     onError: (error) => message.error(getErrorMessage(error)),
@@ -115,7 +127,7 @@ export function HospitalCardPage() {
     mutationFn: ({ recordId, input }: { recordId: string; input: UpdateHospitalRecordInput }) => updateHospitalRecord(stayId, recordId, input),
     onSuccess: async (_, variables) => {
       await refresh();
-      message.success(variables.input.recordStatus === 'SKIPPED' ? 'План отмечен как пропущенный' : 'Выполнение зафиксировано');
+      message.success(variables.input.recordStatus === 'SKIPPED' ? 'Назначение отмечено как пропущенное' : 'Выполнение лечения отмечено');
     },
     onError: (error) => message.error(getErrorMessage(error)),
   });
@@ -147,6 +159,19 @@ export function HospitalCardPage() {
     setRecordOpen(true);
   }
 
+  function quickCompleteRecord(record: HospitalRecord) {
+    if (record.recordType === 'TEMPERATURE') {
+      openCompleteRecord(record);
+      return;
+    }
+    recordStatusMutation.mutate({
+      recordId: record.id,
+      input: { recordStatus: 'COMPLETED', completedAt: new Date().toISOString() },
+    });
+  }
+
+  const treatmentReminder = getTreatmentReminder(stay?.hospitalRecords ?? [], nowMs);
+
   if (stayQuery.isError) {
     return <div className="page"><PageHeader title="Карта стационара" /><Alert type="error" showIcon message="Не удалось открыть карту стационара" description={getErrorMessage(stayQuery.error)} /></div>;
   }
@@ -163,8 +188,8 @@ export function HospitalCardPage() {
             {stay && canPrint ? <Button icon={<PrinterOutlined />} onClick={() => {
               if (!printHospitalSheet(stay, organizationQuery.data)) message.warning('Браузер заблокировал окно печати');
             }}>Печать / PDF</Button> : null}
-            {canManage && active ? <Button icon={<PlusOutlined />} onClick={() => openNewRecord('PLANNED')}>Добавить план</Button> : null}
-            {canManage && active ? <Button type="primary" icon={<PlusOutlined />} onClick={() => openNewRecord('COMPLETED')}>Добавить факт</Button> : null}
+            {canManage && active ? <Button icon={<PlusOutlined />} onClick={() => openNewRecord('PLANNED')}>Назначить план лечения</Button> : null}
+            {canManage && active ? <Button type="primary" icon={<PlusOutlined />} onClick={() => openNewRecord('COMPLETED')}>Записать выполненное действие</Button> : null}
           </Space>
         }
       />
@@ -201,14 +226,46 @@ export function HospitalCardPage() {
             <div className="list-panel-header">
               <div>
                 <Typography.Title level={4} className="compact-title">Полный лист стационара</Typography.Title>
-                <Typography.Text type="secondary">Всё пребывание на одном экране: план и факт, температура, назначения, наблюдения и исправления.</Typography.Text>
+                <Typography.Text type="secondary">Всё пребывание на одном экране: назначения и их выполнение, температура, наблюдения и исправления.</Typography.Text>
               </div>
               <Space wrap>
-                {canManage && active ? <Button onClick={() => openNewRecord('PLANNED')}>План</Button> : null}
-                {canManage && active ? <Button type="primary" onClick={() => openNewRecord('COMPLETED')}>Факт</Button> : null}
+                {canManage && active ? <Button onClick={() => openNewRecord('PLANNED')}>Назначить лечение</Button> : null}
+                {canManage && active ? <Button type="primary" onClick={() => openNewRecord('COMPLETED')}>Записать выполнение</Button> : null}
               </Space>
             </div>
             <div className="list-panel-body">
+              {treatmentReminder.due.length ? (
+                <Alert
+                  type="warning"
+                  showIcon
+                  className="hospital-treatment-reminder"
+                  message={`Требуется выполнить лечение: ${treatmentReminder.due.length}`}
+                  description={(
+                    <Space direction="vertical" size={3}>
+                      {treatmentReminder.due.slice(0, 5).map((record) => (
+                        <Typography.Text key={record.id}>
+                          <strong>{formatTreatmentDateTime(record.recordedAt, stay.timezone)}</strong> — {record.title}
+                        </Typography.Text>
+                      ))}
+                      {treatmentReminder.due.length > 5 ? <Typography.Text type="secondary">И ещё {treatmentReminder.due.length - 5}</Typography.Text> : null}
+                      {treatmentReminder.due.some((record) => record.canEditDirectly) ? (
+                        <Typography.Text type="secondary">Отметьте выполнение галочкой в строке назначения.</Typography.Text>
+                      ) : null}
+                      {treatmentReminder.due.some((record) => !record.canEditDirectly) ? (
+                        <Typography.Text type="secondary">Для назначения прошлых суток добавьте исправление: исходная запись останется в истории.</Typography.Text>
+                      ) : null}
+                    </Space>
+                  )}
+                />
+              ) : treatmentReminder.next ? (
+                <Alert
+                  type="info"
+                  showIcon
+                  className="hospital-treatment-reminder"
+                  message={`Ближайшее назначение: ${formatTreatmentDateTime(treatmentReminder.next.recordedAt, stay.timezone)}`}
+                  description={treatmentReminder.next.title}
+                />
+              ) : null}
               <Alert
                 type="info"
                 showIcon
@@ -224,6 +281,7 @@ export function HospitalCardPage() {
                 onEdit={openEditRecord}
                 onAmend={setAmendmentRecord}
                 onComplete={openCompleteRecord}
+                onQuickComplete={quickCompleteRecord}
                 onSkip={(record) => modal.confirm({
                   title: `Отметить «${record.title}» как пропущенное?`,
                   content: 'Запись останется в листе как невыполненное плановое назначение.',
@@ -231,6 +289,7 @@ export function HospitalCardPage() {
                   cancelText: 'Отмена',
                   onOk: () => recordStatusMutation.mutateAsync({ recordId: record.id, input: { recordStatus: 'SKIPPED', completedAt: new Date().toISOString() } }),
                 })}
+                updatingRecordId={recordStatusMutation.isPending ? recordStatusMutation.variables?.recordId : undefined}
               />
             </div>
           </div>
@@ -374,22 +433,18 @@ function HospitalRecordModal({
     onSubmit(input);
   }
 
+  const completingPlannedRecord = record?.recordStatus === 'PLANNED' && initialStatus === 'COMPLETED';
+  const modalTitle = completingPlannedRecord
+    ? 'Отметить выполнение лечения'
+    : record
+      ? record.recordStatus === 'PLANNED' ? 'Изменить назначение лечения' : 'Изменить выполненное действие'
+      : initialStatus === 'PLANNED' ? 'Назначить план лечения' : 'Записать выполненное действие';
+
   return (
-    <Modal title={record ? 'Изменить запись стационара' : 'Новая запись стационара'} open={open} onCancel={onClose} onOk={() => form.submit()} okText={record ? 'Сохранить' : 'Добавить'} cancelText="Отмена" confirmLoading={loading} destroyOnHidden width={760}>
+    <Modal title={modalTitle} open={open} onCancel={onClose} onOk={() => form.submit()} okText={completingPlannedRecord ? 'Отметить выполнено' : record ? 'Сохранить' : initialStatus === 'PLANNED' ? 'Назначить' : 'Записать выполнение'} cancelText="Отмена" confirmLoading={loading} destroyOnHidden width={760}>
       <Form form={form} layout="vertical" onFinish={submit}>
-        <Form.Item name="recordStatus" label="План или факт" rules={[{ required: true, message: 'Выберите режим записи' }]}>
-          <Select
-            options={[
-              { value: 'PLANNED', label: 'План — назначено на указанное время' },
-              { value: 'COMPLETED', label: 'Факт — уже выполнено или измерено' },
-              ...(record ? [{ value: 'SKIPPED', label: 'Пропущено — не выполнено' }] : []),
-            ]}
-            onChange={(status) => {
-              if (status === 'PLANNED') form.setFieldsValue({ catalogKind: 'NONE', productId: undefined, serviceId: undefined, temperatureC: undefined });
-            }}
-          />
-        </Form.Item>
-        <Form.Item name="recordType" label="Тип записи" rules={[{ required: true, message: 'Выберите тип записи' }]}>
+        <Form.Item name="recordStatus" hidden><Input /></Form.Item>
+        <Form.Item name="recordType" label={recordStatus === 'PLANNED' ? 'Что назначить' : 'Что выполнено'} rules={[{ required: true, message: 'Выберите тип записи' }]}>
           <Select
             options={recordTypeOptions.map(({ value, label }) => ({ value, label }))}
             onChange={(value: HospitalRecordType) => {
@@ -398,7 +453,7 @@ function HospitalRecordModal({
             }}
           />
         </Form.Item>
-        <Form.Item name="recordedAt" label="Дата и время" rules={[{ required: true, message: 'Укажите время записи' }]}>
+        <Form.Item name="recordedAt" label={recordStatus === 'PLANNED' ? 'Когда выполнить' : 'Дата и время выполнения'} rules={[{ required: true, message: 'Укажите дату и время' }]}>
           <Input type="datetime-local" />
         </Form.Item>
         <Form.Item name="title" label={recordType === 'MEDICATION' ? 'Препарат или назначение' : 'Название'} rules={[{ required: true, message: 'Заполните название' }, { min: 2, message: 'Минимум 2 символа' }]}>
@@ -424,11 +479,11 @@ function HospitalRecordModal({
             <Input inputMode="decimal" placeholder="Например: 38,5" />
           </Form.Item>
         ) : (
-          <Form.Item name="value" label={recordType === 'MEDICATION' ? 'Доза и способ введения' : 'Результат / объём'}>
+          <Form.Item name="value" label={recordType === 'MEDICATION' ? 'Доза и способ введения' : recordStatus === 'PLANNED' ? 'Параметры назначения' : 'Результат / объём'}>
             <Input placeholder={recordType === 'MEDICATION' ? 'Например: 0,5 мл внутримышечно' : 'При необходимости'} />
           </Form.Item>
         )}
-        <Form.Item name="notes" label="Комментарий">
+        <Form.Item name="notes" label={recordStatus === 'PLANNED' ? 'Указания по выполнению' : 'Результат, реакция или комментарий'}>
           <Input.TextArea rows={4} placeholder="Состояние пациента, реакция или дополнительные сведения" />
         </Form.Item>
         {recordStatus === 'PLANNED' ? (
@@ -436,8 +491,8 @@ function HospitalRecordModal({
             type="info"
             showIcon
             className="form-alert"
-            message="План не создаёт начисление и не списывает товар"
-            description="Цена и склад фиксируются в момент фактического выполнения, чтобы план не искажал счёт и остатки."
+            message="Назначение не создаёт начисление и не списывает товар"
+            description="Цена и склад фиксируются при записи выполненного действия, чтобы план лечения не искажал счёт и остатки."
           />
         ) : null}
         {recordStatus !== 'PLANNED' ? (
@@ -640,6 +695,25 @@ function HospitalAmendmentModal({
 function toDatetimeInput(value: Date) {
   const offsetDate = new Date(value.getTime() - value.getTimezoneOffset() * 60_000);
   return offsetDate.toISOString().slice(0, 16);
+}
+
+export function getTreatmentReminder(records: HospitalRecord[], nowMs: number) {
+  const planned = records
+    .filter((record) => record.recordStatus === 'PLANNED')
+    .sort((left, right) => new Date(left.recordedAt).getTime() - new Date(right.recordedAt).getTime());
+  const due = planned.filter((record) => new Date(record.recordedAt).getTime() <= nowMs);
+  const next = planned.find((record) => new Date(record.recordedAt).getTime() > nowMs) ?? null;
+  return { due, next };
+}
+
+function formatTreatmentDateTime(value: string, timeZone: string) {
+  return new Intl.DateTimeFormat('ru-RU', {
+    timeZone,
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value));
 }
 
 const hospitalStatusLabels = {

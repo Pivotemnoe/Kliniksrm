@@ -1,9 +1,9 @@
 import { CheckOutlined, CloseOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Form, Input, Modal, Select, Space, Table, Tag, Typography } from 'antd';
+import { Alert, App, Button, Form, Input, Modal, Select, Space, Table, Tag, Typography } from 'antd';
 import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
@@ -38,9 +38,11 @@ export function HospitalPage() {
   const [status, setStatus] = useState<HospitalStayStatus | undefined>();
   const [offset, setOffset] = useState(0);
   const [admitOpen, setAdmitOpen] = useState(false);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const hospitalQuery = useQuery({
     queryKey: ['hospital', { search, boxId, status, limit: pageSize, offset }],
     queryFn: () => listHospital({ search, hospitalBoxId: boxId, status, limit: pageSize, offset }),
+    refetchInterval: 30_000,
   });
   const resourcesQuery = useQuery({ queryKey: ['hospital', 'resources'], queryFn: getHospitalResources });
   const actionMutation = useMutation({
@@ -52,6 +54,16 @@ export function HospitalPage() {
     },
     onError: (error) => message.error(getErrorMessage(error)),
   });
+  const treatmentAlerts = (hospitalQuery.data?.items ?? [])
+    .filter((stay) => stay.status === 'ACTIVE')
+    .map((stay) => ({ stay, treatment: getStayTreatmentStatus(stay, nowMs) }))
+    .filter(({ treatment }) => treatment.dueCount > 0);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   const columns = useMemo<ColumnsType<HospitalStay>>(
     () => [
       { title: 'Бокс', key: 'box', render: (_, record) => record.hospitalBox?.name ?? '—' },
@@ -70,6 +82,17 @@ export function HospitalPage() {
       { title: 'Поступил', dataIndex: 'startedAt', key: 'startedAt', render: formatDateTime },
       { title: 'В стационаре', key: 'duration', render: (_, record) => getStayDuration(record.startedAt, record.completedAt) },
       { title: 'Причина / назначения', key: 'purpose', ellipsis: true, render: (_, record) => record.exam?.purpose || record.recommendation?.careNotes || '—' },
+      {
+        title: 'Лечение сейчас',
+        key: 'treatment',
+        render: (_, record) => {
+          if (record.status !== 'ACTIVE') return '—';
+          const treatment = getStayTreatmentStatus(record, nowMs);
+          if (treatment.dueCount > 0) return <Tag color="red">Выполнить: {treatment.dueCount}</Tag>;
+          if (treatment.nextAt) return <Tag color="blue">Следующее {formatTreatmentTime(treatment.nextAt, record.timezone)}</Tag>;
+          return <Typography.Text type="secondary">Нет назначений</Typography.Text>;
+        },
+      },
       {
         title: 'Счёт',
         key: 'bill',
@@ -104,7 +127,7 @@ export function HospitalPage() {
         ),
       },
     ],
-    [actionMutation, canManage, navigate],
+    [actionMutation, canManage, navigate, nowMs],
   );
 
   function handleTableChange(pagination: TablePaginationConfig) {
@@ -126,6 +149,16 @@ export function HospitalPage() {
           ) : null
         }
       />
+      {treatmentAlerts.length ? (
+        <Alert
+          type="warning"
+          showIcon
+          className="hospital-treatment-overview-alert"
+          message={`Требуется выполнить лечение: ${treatmentAlerts.reduce((sum, item) => sum + item.treatment.dueCount, 0)}`}
+          description={treatmentAlerts.map(({ stay, treatment }) => `${stay.animal?.nickname ?? 'Пациент'} — ${treatment.dueCount}`).join(' · ')}
+          action={<Button size="small" onClick={() => navigate(`/hospital/${treatmentAlerts[0].stay.id}`)}>Открыть назначения</Button>}
+        />
+      ) : null}
       <div className="list-panel">
         <div className="list-panel-header">
           <Input.Search
@@ -323,6 +356,19 @@ function dedupeOwners(animals: Array<{ owner?: { id: string; fullName: string } 
 function toDatetimeInput(value: Date) {
   const offsetDate = new Date(value.getTime() - value.getTimezoneOffset() * 60_000);
   return offsetDate.toISOString().slice(0, 16);
+}
+
+function getStayTreatmentStatus(stay: HospitalStay, nowMs: number) {
+  const planned = (stay.hospitalRecords ?? [])
+    .filter((record) => record.recordStatus === 'PLANNED')
+    .sort((left, right) => new Date(left.recordedAt).getTime() - new Date(right.recordedAt).getTime());
+  const dueCount = planned.filter((record) => new Date(record.recordedAt).getTime() <= nowMs).length;
+  const nextAt = planned.find((record) => new Date(record.recordedAt).getTime() > nowMs)?.recordedAt ?? null;
+  return { dueCount, nextAt };
+}
+
+function formatTreatmentTime(value: string, timeZone: string) {
+  return new Intl.DateTimeFormat('ru-RU', { timeZone, hour: '2-digit', minute: '2-digit' }).format(new Date(value));
 }
 
 const hospitalStatusLabels: Record<HospitalStayStatus, string> = {

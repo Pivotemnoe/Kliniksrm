@@ -23,7 +23,7 @@ export function printHospitalSheet(stay: HospitalStay, organization?: Organizati
       <section class="day">
         <h2>${escapeHtml(group.label)}</h2>
         <table>
-          <thead><tr><th class="time">Время</th><th class="status">План / факт</th><th>Назначение и результат</th><th class="employee">Исполнитель</th></tr></thead>
+          <thead><tr><th class="time">Время</th><th class="status">Назначение / выполнение</th><th>Лечение и результат</th><th class="employee">Исполнитель</th></tr></thead>
           <tbody>${group.records.map((record) => renderRecord(record, timeZone)).join('')}</tbody>
         </table>
       </section>`).join('')
@@ -105,8 +105,8 @@ export function printHospitalSheet(stay: HospitalStay, organization?: Organizati
 
 function renderRecord(record: HospitalRecord, timeZone: string) {
   const status = record.createdAsPlan && record.recordStatus === 'COMPLETED'
-    ? 'План выполнен'
-    : ({ PLANNED: 'План', COMPLETED: 'Факт', SKIPPED: 'Пропущено', AMENDMENT: 'Исправление' } as const)[record.recordStatus];
+    ? 'Назначение выполнено'
+    : ({ PLANNED: 'Назначено', COMPLETED: 'Выполнено', SKIPPED: 'Пропущено', AMENDMENT: 'Исправление' } as const)[record.recordStatus];
   const result = [
     record.temperatureC !== null ? `${record.temperatureC} °C` : null,
     record.value,
@@ -116,7 +116,7 @@ function renderRecord(record: HospitalRecord, timeZone: string) {
   const amendments = record.amendments?.map((amendment) => `
     <div class="amendment"><strong>Исправление ${escapeHtml(formatDateTime(amendment.recordedAt, timeZone))}</strong><br />Причина: ${escapeHtml(amendment.amendmentReason ?? '—')}<div class="result">${escapeHtml([amendment.temperatureC !== null ? `${amendment.temperatureC} °C` : null, amendment.value, amendment.notes].filter(Boolean).join('\n'))}</div></div>`).join('') ?? '';
   return `<tr>
-    <td><strong>${escapeHtml(formatTime(record.recordedAt, timeZone))}</strong>${record.completedAt && record.createdAsPlan ? `<div class="note">Факт: ${escapeHtml(formatTime(record.completedAt, timeZone))}</div>` : ''}</td>
+    <td><strong>${escapeHtml(formatTime(record.recordedAt, timeZone))}</strong>${record.completedAt && record.createdAsPlan ? `<div class="note">Выполнено: ${escapeHtml(formatTime(record.completedAt, timeZone))}</div>` : ''}</td>
     <td><span class="tag">${escapeHtml(status)}</span><div class="note">${escapeHtml(recordTypeLabels[record.recordType])}</div></td>
     <td><strong>${escapeHtml(record.title)}</strong><div class="result">${escapeHtml(result || (record.recordStatus === 'PLANNED' ? 'Ожидает выполнения' : '—'))}</div>${amendments}</td>
     <td>${escapeHtml(record.recordedBy?.fullName ?? 'Сотрудник не указан')}</td>

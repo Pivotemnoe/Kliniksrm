@@ -1,5 +1,5 @@
-import { CheckOutlined, EditOutlined, FileAddOutlined, StopOutlined } from '@ant-design/icons';
-import { Button, Empty, Space, Tag, Tooltip, Typography } from 'antd';
+import { EditOutlined, FileAddOutlined, StopOutlined } from '@ant-design/icons';
+import { Button, Checkbox, Empty, Space, Tag, Tooltip, Typography } from 'antd';
 import type { HospitalRecord } from './types';
 
 export function HospitalSheet({
@@ -10,7 +10,9 @@ export function HospitalSheet({
   onEdit,
   onAmend,
   onComplete,
+  onQuickComplete,
   onSkip,
+  updatingRecordId,
 }: {
   records: HospitalRecord[];
   timeZone: string;
@@ -19,7 +21,9 @@ export function HospitalSheet({
   onEdit: (record: HospitalRecord) => void;
   onAmend: (record: HospitalRecord) => void;
   onComplete: (record: HospitalRecord) => void;
+  onQuickComplete: (record: HospitalRecord) => void;
   onSkip: (record: HospitalRecord) => void;
+  updatingRecordId?: string;
 }) {
   const groups = groupHospitalRecords(records, timeZone);
   const temperatures = records
@@ -44,14 +48,14 @@ export function HospitalSheet({
                 <Typography.Text type="secondary">{group.records.length} записей</Typography.Text>
               </div>
               <Space wrap size={6}>
-                <Tag color="gold">План {group.records.filter((record) => record.recordStatus === 'PLANNED').length}</Tag>
-                <Tag color="green">Факт {group.records.filter((record) => record.recordStatus === 'COMPLETED').length}</Tag>
+                <Tag color="gold">Назначено {group.records.filter((record) => record.recordStatus === 'PLANNED').length}</Tag>
+                <Tag color="green">Выполнено {group.records.filter((record) => record.recordStatus === 'COMPLETED').length}</Tag>
               </Space>
             </header>
             <div className="hospital-sheet-grid hospital-sheet-grid-head" aria-hidden="true">
               <div>Время</div>
-              <div>План / запись</div>
-              <div>Факт / результат</div>
+              <div>Назначение / запись</div>
+              <div>Выполнение / результат</div>
               <div>Исполнитель и действия</div>
             </div>
             {group.records.map((record) => (
@@ -59,7 +63,7 @@ export function HospitalSheet({
                 <div className="hospital-sheet-time">
                   <strong>{formatTime(record.recordedAt, timeZone)}</strong>
                   {record.completedAt && record.createdAsPlan ? (
-                    <Typography.Text type="secondary">факт {formatTime(record.completedAt, timeZone)}</Typography.Text>
+                    <Typography.Text type="secondary">выполнено {formatTime(record.completedAt, timeZone)}</Typography.Text>
                   ) : null}
                 </div>
                 <div>
@@ -97,7 +101,17 @@ export function HospitalSheet({
                     <Space wrap size={4}>
                       {active && record.recordStatus === 'PLANNED' && record.canEditDirectly ? (
                         <>
-                          <Button size="small" type="primary" icon={<CheckOutlined />} onClick={() => onComplete(record)}>Выполнено</Button>
+                          <Checkbox
+                            className="hospital-complete-checkbox"
+                            checked={updatingRecordId === record.id}
+                            disabled={updatingRecordId === record.id}
+                            onChange={(event) => {
+                              if (event.target.checked) onQuickComplete(record);
+                            }}
+                          >
+                            Выполнено
+                          </Checkbox>
+                          <Button size="small" type="link" onClick={() => onComplete(record)}>Указать результат</Button>
                           <Button size="small" icon={<StopOutlined />} onClick={() => onSkip(record)}>Пропущено</Button>
                         </>
                       ) : null}
@@ -122,7 +136,7 @@ export function HospitalSheet({
 
 function RecordStatusTag({ record }: { record: HospitalRecord }) {
   const status = statusView[record.recordStatus];
-  return <Tag color={status.color}>{record.createdAsPlan && record.recordStatus === 'COMPLETED' ? 'План выполнен' : status.label}</Tag>;
+  return <Tag color={status.color}>{record.createdAsPlan && record.recordStatus === 'COMPLETED' ? 'Назначение выполнено' : status.label}</Tag>;
 }
 
 function RecordResult({ record }: { record: HospitalRecord }) {
@@ -242,8 +256,8 @@ const recordTypeColor = {
 } as const;
 
 const statusView = {
-  PLANNED: { label: 'План', color: 'gold' },
-  COMPLETED: { label: 'Факт', color: 'green' },
+  PLANNED: { label: 'Назначено', color: 'gold' },
+  COMPLETED: { label: 'Выполнено', color: 'green' },
   SKIPPED: { label: 'Пропущено', color: 'default' },
   AMENDMENT: { label: 'Исправление', color: 'purple' },
 } as const;

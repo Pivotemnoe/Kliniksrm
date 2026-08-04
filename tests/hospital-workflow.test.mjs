@@ -127,7 +127,7 @@ test('прошлые сутки стационара исправляются д
   assert.match(dto, /reason!:/);
 });
 
-test('врач видит полный лист, график, план и факт и может печатать A4/PDF', async () => {
+test('врач видит полный лист, назначения и выполнение и может печатать A4/PDF', async () => {
   const [service, card, sheet, print, help, styles] = await Promise.all([
     read('apps/api/src/modules/hospital/hospital.service.ts'),
     read('apps/web/src/features/hospital/HospitalCardPage.tsx'),
@@ -138,15 +138,22 @@ test('врач видит полный лист, график, план и фа�
   ]);
 
   assert.match(card, /Полный лист стационара/);
-  assert.match(card, /Добавить план/);
+  assert.match(card, /Назначить план лечения/);
+  assert.match(card, /Записать выполненное действие/);
+  assert.match(card, /Требуется выполнить лечение/);
+  assert.match(card, /Напоминание появится к указанному времени/);
   assert.match(card, /Печать \/ PDF/);
   assert.match(card, /Итоговый лист в истории пациента/);
   assert.match(service, /dto\.completedAt \? new Date\(dto\.completedAt\) : recordedAt/);
   assert.match(sheet, /Температура за всё пребывание/);
-  assert.match(sheet, /План выполнен/);
+  assert.match(sheet, /Назначение выполнено/);
+  assert.match(sheet, /hospital-complete-checkbox/);
+  assert.match(sheet, /Указать результат/);
   assert.match(sheet, /Исправление/);
   assert.match(print, /@page \{ size: A4 portrait/);
   assert.match(print, /Температура за всё пребывание/);
+  assert.match(print, /Назначение \/ выполнение/);
+  assert.doesNotMatch(`${card}\n${sheet}\n${print}`, /Добавить факт|План \/ факт|Факт \/ результат|План выполнен/);
   assert.match(help, /Запись текущих суток можно изменить напрямую/);
   assert.match(styles, /\.hospital-sheet-day \{\s+min-width: 0;/);
   assert.match(styles, /\.hospital-full-sheet-panel \.list-panel-body \{[\s\S]*grid-template-columns: minmax\(0, 1fr\);/);

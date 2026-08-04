@@ -1998,6 +1998,29 @@ body {
   margin-top: 16px;
 }
 
+.hospital-treatment-overview-alert {
+  margin-bottom: 16px;
+}
+
+.hospital-treatment-reminder .ant-alert-description {
+  width: 100%;
+}
+
+.hospital-complete-checkbox {
+  min-height: 24px;
+  padding: 1px 8px;
+  border: 1px solid #91caff;
+  border-radius: 6px;
+  background: #e6f4ff;
+  color: #0958d9;
+  font-weight: 600;
+}
+
+.hospital-complete-checkbox:hover {
+  border-color: #4096ff;
+  background: #bae0ff;
+}
+
 .hospital-full-sheet-panel .list-panel-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
