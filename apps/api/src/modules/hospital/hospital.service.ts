@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import {
   AppointmentStatus,
   BillSource,
@@ -19,6 +20,7 @@ import { AdmitHospitalPatientDto } from './dto/admit-hospital-patient.dto';
 import { AdmitExistingHospitalStayDto } from './dto/admit-existing-hospital-stay.dto';
 import { CreateHospitalAmendmentDto } from './dto/create-hospital-amendment.dto';
 import { CreateHospitalRecordDto } from './dto/create-hospital-record.dto';
+import { CreateHospitalTreatmentPlanDto } from './dto/create-hospital-treatment-plan.dto';
 import { ListHospitalQueryDto } from './dto/list-hospital-query.dto';
 import { UpdateHospitalStayDto } from './dto/update-hospital-stay.dto';
 import { UpdateHospitalRecordDto } from './dto/update-hospital-record.dto';
@@ -235,6 +237,78 @@ export class HospitalService {
     });
 
     return record;
+  }
+
+  async createTreatmentPlan(stayId: string, dto: CreateHospitalTreatmentPlanDto, actorId: string) {
+    const stay = await this.getExistingHospitalStay(stayId);
+
+    if (stay.status !== HospitalStayStatus.ACTIVE) {
+      throw new BadRequestException('План лечения можно назначить только во время активного стационара');
+    }
+
+    const recordCount = dto.items.reduce((sum, item) => sum + item.scheduledAt.length, 0);
+    if (recordCount > 200) {
+      throw new BadRequestException('В одном плане лечения может быть не более 200 отдельных выполнений');
+    }
+
+    const records = dto.items.flatMap((item) => {
+      const uniqueDates = new Set(item.scheduledAt);
+      if (uniqueDates.size !== item.scheduledAt.length) {
+        throw new BadRequestException(`В назначении «${item.title.trim()}» повторяется одна и та же дата`);
+      }
+
+      const treatmentPlanItemId = randomUUID();
+      return [...uniqueDates]
+        .map((value) => new Date(value))
+        .sort((left, right) => left.getTime() - right.getTime())
+        .map((recordedAt) => {
+          this.ensureRecordWithinStay(recordedAt, stay.startedAt, stay.completedAt);
+          return {
+            visitId: stay.sourceVisitId,
+            recordedById: actorId,
+            treatmentPlanItemId,
+            recordType: item.recordType,
+            recordStatus: HospitalRecordStatus.PLANNED,
+            createdAsPlan: true,
+            title: item.title.trim(),
+            recordedAt,
+            completedAt: null,
+            temperatureC: null,
+            value: cleanOrNull(item.value ?? ''),
+            notes: cleanOrNull(item.notes ?? ''),
+          };
+        });
+    });
+
+    const plan = await this.prisma.hospitalTreatmentPlan.create({
+      data: {
+        visitId: stay.sourceVisitId,
+        createdById: actorId,
+        title: cleanOrNull(dto.title ?? ''),
+        records: { create: records },
+      },
+      include: {
+        records: {
+          orderBy: { recordedAt: 'asc' },
+          include: hospitalRecordBaseInclude,
+        },
+      },
+    });
+
+    await this.auditService.log({
+      actorId,
+      action: 'hospital.treatment_plan.create',
+      entityType: 'HospitalTreatmentPlan',
+      entityId: plan.id,
+      metadata: {
+        stayId: stay.id,
+        sourceVisitId: stay.sourceVisitId,
+        itemCount: dto.items.length,
+        recordCount,
+      },
+    });
+
+    return plan;
   }
 
   async updateRecord(stayId: string, recordId: string, dto: UpdateHospitalRecordDto, actorId: string) {
@@ -958,6 +1032,7 @@ export class HospitalService {
 
 const hospitalRecordBaseInclude = {
   recordedBy: { select: { id: true, fullName: true, position: true } },
+  treatmentPlan: { select: { id: true, title: true } },
   billItem: {
     select: {
       id: true,

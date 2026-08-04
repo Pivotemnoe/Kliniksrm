@@ -2021,6 +2021,59 @@ body {
   background: #bae0ff;
 }
 
+.hospital-treatment-plan-item {
+  padding: 16px;
+  border: 1px solid #d9e3e8;
+  border-radius: 10px;
+  background: #f8fbfc;
+}
+
+.hospital-treatment-plan-item-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.hospital-treatment-dates {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(245px, 1fr));
+  gap: 8px 12px;
+  align-items: end;
+  margin-top: 8px;
+}
+
+.hospital-treatment-date-row {
+  width: 100%;
+}
+
+.hospital-treatment-date-row .ant-form-item {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.hospital-treatment-repeat {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #eef4f7;
+}
+
+.hospital-treatment-repeat .compact-form-item {
+  margin-bottom: 0;
+}
+
+.hospital-repeat-unit {
+  width: 120px;
+}
+
+.hospital-treatment-plan-summary {
+  margin-top: 16px;
+}
+
 .hospital-full-sheet-panel .list-panel-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -3117,6 +3170,25 @@ body {
   .hospital-card-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .hospital-treatment-plan-item {
+    padding: 12px;
+  }
+
+  .hospital-treatment-dates {
+    grid-template-columns: 1fr;
+  }
+
+  .hospital-treatment-repeat .ant-space {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .hospital-treatment-repeat .ant-input-number,
+  .hospital-repeat-unit,
+  .hospital-treatment-repeat .ant-btn {
+    width: 100%;
   }
 
   .hospital-temperature-empty,

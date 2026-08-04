@@ -25,6 +25,7 @@ import {
   cancelHospitalStay,
   createHospitalAmendment,
   createHospitalRecord,
+  createHospitalTreatmentPlan,
   dischargeHospitalStay,
   getHospitalResources,
   getHospitalCatalog,
@@ -33,6 +34,7 @@ import {
   updateHospitalStay,
 } from './hospital.api';
 import { HospitalSheet } from './HospitalSheet';
+import { HospitalTreatmentPlanModal } from './HospitalTreatmentPlanModal';
 import { printHospitalSheet } from './hospitalPrint';
 import type { CreateHospitalAmendmentInput, CreateHospitalRecordInput, HospitalCatalog, HospitalRecord, HospitalRecordStatus, HospitalRecordType, UpdateHospitalRecordInput } from './types';
 
@@ -57,6 +59,7 @@ export function HospitalCardPage() {
   const canManageDocuments = hasPermission(auth?.employee, 'documents.manage');
   const canPrint = hasPermission(auth?.employee, 'documents.print');
   const [recordOpen, setRecordOpen] = useState(false);
+  const [treatmentPlanOpen, setTreatmentPlanOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<HospitalRecord | null>(null);
   const [initialRecordStatus, setInitialRecordStatus] = useState<Extract<HospitalRecordStatus, 'PLANNED' | 'COMPLETED'>>('COMPLETED');
   const [amendmentRecord, setAmendmentRecord] = useState<HospitalRecord | null>(null);
@@ -131,6 +134,15 @@ export function HospitalCardPage() {
     },
     onError: (error) => message.error(getErrorMessage(error)),
   });
+  const treatmentPlanMutation = useMutation({
+    mutationFn: (input: Parameters<typeof createHospitalTreatmentPlan>[1]) => createHospitalTreatmentPlan(stayId, input),
+    onSuccess: async (plan) => {
+      await refresh();
+      setTreatmentPlanOpen(false);
+      message.success(`План лечения назначен: ${plan.records.length} выполнений`);
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
   const amendmentMutation = useMutation({
     mutationFn: ({ recordId, input }: { recordId: string; input: CreateHospitalAmendmentInput }) => createHospitalAmendment(stayId, recordId, input),
     onSuccess: async () => {
@@ -188,7 +200,7 @@ export function HospitalCardPage() {
             {stay && canPrint ? <Button icon={<PrinterOutlined />} onClick={() => {
               if (!printHospitalSheet(stay, organizationQuery.data)) message.warning('Браузер заблокировал окно печати');
             }}>Печать / PDF</Button> : null}
-            {canManage && active ? <Button icon={<PlusOutlined />} onClick={() => openNewRecord('PLANNED')}>Назначить план лечения</Button> : null}
+            {canManage && active ? <Button icon={<PlusOutlined />} onClick={() => setTreatmentPlanOpen(true)}>Назначить план лечения</Button> : null}
             {canManage && active ? <Button type="primary" icon={<PlusOutlined />} onClick={() => openNewRecord('COMPLETED')}>Записать выполненное действие</Button> : null}
           </Space>
         }
@@ -229,7 +241,7 @@ export function HospitalCardPage() {
                 <Typography.Text type="secondary">Всё пребывание на одном экране: назначения и их выполнение, температура, наблюдения и исправления.</Typography.Text>
               </div>
               <Space wrap>
-                {canManage && active ? <Button onClick={() => openNewRecord('PLANNED')}>Назначить лечение</Button> : null}
+                {canManage && active ? <Button onClick={() => setTreatmentPlanOpen(true)}>Назначить лечение</Button> : null}
                 {canManage && active ? <Button type="primary" onClick={() => openNewRecord('COMPLETED')}>Записать выполнение</Button> : null}
               </Space>
             </div>
@@ -309,6 +321,12 @@ export function HospitalCardPage() {
           ) : null}
         </>
       ) : null}
+      <HospitalTreatmentPlanModal
+        open={treatmentPlanOpen}
+        loading={treatmentPlanMutation.isPending}
+        onClose={() => setTreatmentPlanOpen(false)}
+        onSubmit={(input) => treatmentPlanMutation.mutate(input)}
+      />
       <HospitalRecordModal
         open={recordOpen}
         record={editingRecord}

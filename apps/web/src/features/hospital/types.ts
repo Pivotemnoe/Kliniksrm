@@ -98,6 +98,12 @@ export type HospitalRecord = {
   canEditDirectly?: boolean;
   editRule?: 'DIRECT' | 'AMENDMENT_REQUIRED';
   billItemId: string | null;
+  treatmentPlanId: string | null;
+  treatmentPlanItemId: string | null;
+  treatmentPlan?: {
+    id: string;
+    title: string | null;
+  } | null;
   billItem?: {
     id: string;
     productId: string | null;
@@ -127,6 +133,27 @@ export type HospitalRecord = {
     fullName: string;
     position: string | null;
   } | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateHospitalTreatmentPlanInput = {
+  title?: string;
+  items: Array<{
+    recordType: HospitalRecordType;
+    title: string;
+    value?: string;
+    notes?: string;
+    scheduledAt: string[];
+  }>;
+};
+
+export type HospitalTreatmentPlan = {
+  id: string;
+  visitId: string;
+  createdById: string | null;
+  title: string | null;
+  records: HospitalRecord[];
   createdAt: string;
   updatedAt: string;
 };

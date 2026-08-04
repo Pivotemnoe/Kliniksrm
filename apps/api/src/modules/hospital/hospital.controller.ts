@@ -7,6 +7,7 @@ import { AdmitHospitalPatientDto } from './dto/admit-hospital-patient.dto';
 import { AdmitExistingHospitalStayDto } from './dto/admit-existing-hospital-stay.dto';
 import { CreateHospitalAmendmentDto } from './dto/create-hospital-amendment.dto';
 import { CreateHospitalRecordDto } from './dto/create-hospital-record.dto';
+import { CreateHospitalTreatmentPlanDto } from './dto/create-hospital-treatment-plan.dto';
 import { ListHospitalQueryDto } from './dto/list-hospital-query.dto';
 import { UpdateHospitalStayDto } from './dto/update-hospital-stay.dto';
 import { UpdateHospitalRecordDto } from './dto/update-hospital-record.dto';
@@ -72,6 +73,17 @@ export class HospitalController {
     @CurrentEmployee() actor: AuthEmployee,
   ) {
     return this.hospitalService.createRecord(stayId, dto, actor.id);
+  }
+
+  @Post(':stayId/treatment-plans')
+  @RequirePermissions('hospital.manage')
+  @ApiCreatedResponse({ description: 'A multi-item treatment plan expanded into dated hospital records.' })
+  createTreatmentPlan(
+    @Param('stayId') stayId: string,
+    @Body() dto: CreateHospitalTreatmentPlanDto,
+    @CurrentEmployee() actor: AuthEmployee,
+  ) {
+    return this.hospitalService.createTreatmentPlan(stayId, dto, actor.id);
   }
 
   @Patch(':stayId/records/:recordId')

@@ -159,3 +159,35 @@ test('врач видит полный лист, назначения и вып�
   assert.match(styles, /\.hospital-full-sheet-panel \.list-panel-body \{[\s\S]*grid-template-columns: minmax\(0, 1fr\);/);
   assert.match(styles, /@media \(max-width: 760px\)[\s\S]*\.hospital-sheet-grid \{\s+grid-template-columns: 1fr;/);
 });
+
+test('план лечения создаёт несколько действий и повторов без перезаписи старых записей', async () => {
+  const [schema, migration, controller, service, dto, modal, sheet, api, types] = await Promise.all([
+    read('prisma/schema.prisma'),
+    read('prisma/migrations/20260804000100_hospital_treatment_plans/migration.sql'),
+    read('apps/api/src/modules/hospital/hospital.controller.ts'),
+    read('apps/api/src/modules/hospital/hospital.service.ts'),
+    read('apps/api/src/modules/hospital/dto/create-hospital-treatment-plan.dto.ts'),
+    read('apps/web/src/features/hospital/HospitalTreatmentPlanModal.tsx'),
+    read('apps/web/src/features/hospital/HospitalSheet.tsx'),
+    read('apps/web/src/features/hospital/hospital.api.ts'),
+    read('apps/web/src/features/hospital/types.ts'),
+  ]);
+
+  assert.match(schema, /model HospitalTreatmentPlan/);
+  assert.match(schema, /treatmentPlanItemId\s+String\?/);
+  assert.match(migration, /ADD COLUMN "treatmentPlanId" TEXT/);
+  assert.doesNotMatch(migration, /\b(?:DROP|DELETE\s+FROM|TRUNCATE|UPDATE\s+"HospitalRecord")\b/i);
+  assert.match(controller, /:stayId\/treatment-plans/);
+  assert.match(dto, /scheduledAt!:\s*string\[\]/);
+  assert.match(dto, /ArrayMaxSize\(60\)/);
+  assert.match(service, /hospitalTreatmentPlan\.create/);
+  assert.match(service, /hospital\.treatment_plan\.create/);
+  assert.match(service, /recordCount > 200/);
+  assert.match(modal, /Добавить препарат, процедуру или другое действие/);
+  assert.match(modal, /Добавить точную дату/);
+  assert.match(modal, /Сформировать даты/);
+  assert.match(modal, /Каждое появится в листе стационара в своё время/);
+  assert.match(sheet, /План: \{record\.treatmentPlan\.title\}/);
+  assert.match(api, /createHospitalTreatmentPlan/);
+  assert.match(types, /CreateHospitalTreatmentPlanInput/);
+});

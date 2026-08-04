@@ -72,6 +72,7 @@ export function HospitalSheet({
                     <RecordStatusTag record={record} />
                   </Space>
                   <Typography.Paragraph strong className="hospital-sheet-title">{record.title}</Typography.Paragraph>
+                  {record.treatmentPlan?.title ? <Typography.Text type="secondary">План: {record.treatmentPlan.title}</Typography.Text> : null}
                   {record.createdAsPlan ? <Typography.Text type="secondary">Назначено на {formatDateTime(record.recordedAt, timeZone)}</Typography.Text> : null}
                 </div>
                 <div>
