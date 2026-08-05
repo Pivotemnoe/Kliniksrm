@@ -112,7 +112,7 @@ export function StockOperationsPage() {
     { title: 'Операция', dataIndex: 'type', key: 'type', render: (value) => movementTitles[value] ?? value },
     { title: 'Товар', key: 'product', render: (_, row) => row.product.title },
     { title: 'Количество', key: 'quantity', render: (_, row) => `${Number(row.quantity) > 0 ? '+' : ''}${row.quantity} ${row.product.stockUnit ?? ''}` },
-    { title: 'Себестоимость', key: 'unitCost', render: (_, row) => row.unitCost === null ? (row.stockBatch ? formatMoney(row.stockBatch.purchasePrice) : '—') : formatMoney(row.unitCost) },
+    { title: 'Приходная цена', key: 'unitCost', render: (_, row) => row.unitCost === null ? (row.stockBatch ? formatMoney(row.stockBatch.purchasePrice) : '—') : formatMoney(row.unitCost) },
     { title: 'Склад', key: 'warehouse', render: (_, row) => row.toWarehouse ? `${row.warehouse?.name ?? '—'} → ${row.toWarehouse.name}` : row.warehouse?.name ?? '—' },
     { title: 'Основание', key: 'document', render: (_, row) => row.stockDocument ? `${documentTitles[row.stockDocument.type]} ${row.stockDocument.number ?? ''}`.trim() : row.comment ?? '—' },
   ];
@@ -150,7 +150,7 @@ type DocumentFormValues = {
   supplierId?: string;
   occurredAt: Dayjs;
   comment?: string;
-  items: Array<{ sourceBatchId: string; productId?: string; quantity?: number; actualQuantity?: number; unitCost?: number; targetProductId?: string; comment?: string }>;
+  items: Array<{ sourceBatchId: string; productId?: string; quantity?: number; actualQuantity?: number; unitCost?: number; retailPrice?: number; targetProductId?: string; comment?: string }>;
 };
 
 function StockDocumentModal({ open, document, correctionSource, initialProductId, resources, onClose, onSaved }: { open: boolean; document?: StockDocument | null; correctionSource?: StockDocument | null; initialProductId?: string; resources?: Awaited<ReturnType<typeof getStockResources>>; onClose: () => void; onSaved: () => Promise<void> }) {
@@ -180,10 +180,10 @@ function StockDocumentModal({ open, document, correctionSource, initialProductId
   );
   const knownItems = document?.items ?? correctionSource?.items ?? [];
   const rawBatchOptions = [
-    ...visibleBatches.map((batch) => ({ value: batch.id, productId: batch.productId, label: `${batch.product?.title ?? batch.productId} · остаток ${batch.rest}${batch.series ? ` · серия ${batch.series}` : ''}` })),
-    ...knownItems.filter((item) => item.sourceBatchId && !visibleBatches.some((batch) => batch.id === item.sourceBatchId)).map((item) => ({ value: item.sourceBatchId!, productId: item.productId, label: `${item.product?.title ?? item.productId} · остаток ${item.sourceBatch?.rest ?? '—'}${item.sourceBatch?.series ? ` · серия ${item.sourceBatch.series}` : ''}` })),
-    ...knownItems.filter((item) => !item.sourceBatchId).map((item) => ({ value: `NEW:${item.productId}`, productId: item.productId, label: `${item.product?.title ?? item.productId} · новая учётная партия без накладной` })),
-    ...(needsActual ? (productsQuery.data?.items ?? []).map((product) => ({ value: `NEW:${product.id}`, productId: product.id, label: `${product.title} · новая учётная партия без накладной` })) : []),
+    ...visibleBatches.map((batch) => ({ value: batch.id, productId: batch.productId, unitCost: Number(batch.purchasePrice), retailPrice: Number(batch.product?.retailPrice ?? 0), label: `${batch.product?.title ?? batch.productId} · остаток ${batch.rest}${batch.series ? ` · серия ${batch.series}` : ''}` })),
+    ...knownItems.filter((item) => item.sourceBatchId && !visibleBatches.some((batch) => batch.id === item.sourceBatchId)).map((item) => ({ value: item.sourceBatchId!, productId: item.productId, unitCost: Number(item.sourceBatch?.purchasePrice ?? item.unitCost ?? 0), retailPrice: Number(item.retailPrice ?? item.product?.retailPrice ?? 0), label: `${item.product?.title ?? item.productId} · остаток ${item.sourceBatch?.rest ?? '—'}${item.sourceBatch?.series ? ` · серия ${item.sourceBatch.series}` : ''}` })),
+    ...knownItems.filter((item) => !item.sourceBatchId).map((item) => ({ value: `NEW:${item.productId}`, productId: item.productId, unitCost: Number(item.unitCost ?? 0), retailPrice: Number(item.retailPrice ?? item.product?.retailPrice ?? 0), label: `${item.product?.title ?? item.productId} · новая учётная партия без накладной` })),
+    ...(needsActual ? (productsQuery.data?.items ?? []).map((product) => ({ value: `NEW:${product.id}`, productId: product.id, unitCost: 0, retailPrice: Number(product.retailPrice), label: `${product.title} · новая учётная партия без накладной` })) : []),
   ];
   const batchOptions = Array.from(new Map(rawBatchOptions.map((option) => [option.value, option])).values());
   const mutation = useMutation({
@@ -207,7 +207,7 @@ function StockDocumentModal({ open, document, correctionSource, initialProductId
       comment: values.comment,
       items: values.items.map((item) => {
         if (!item.productId) throw new Error('У выбранной партии не определён товар');
-        return { productId: item.productId, sourceBatchId: item.sourceBatchId.startsWith('NEW:') ? undefined : item.sourceBatchId, quantity: item.quantity, actualQuantity: item.actualQuantity, unitCost: item.unitCost, targetProductId: item.targetProductId, comment: item.comment };
+        return { productId: item.productId, sourceBatchId: item.sourceBatchId.startsWith('NEW:') ? undefined : item.sourceBatchId, quantity: item.quantity, actualQuantity: item.actualQuantity, unitCost: item.unitCost, retailPrice: item.retailPrice, targetProductId: item.targetProductId, comment: item.comment };
       }),
     };
     mutation.mutate(input);
@@ -234,6 +234,8 @@ function StockDocumentModal({ open, document, correctionSource, initialProductId
                   onChange={(value) => {
                     const batch = batchOptions.find((candidate) => candidate.value === value);
                     form.setFieldValue(['items', field.name, 'productId'], batch?.productId);
+                    form.setFieldValue(['items', field.name, 'unitCost'], batch?.unitCost);
+                    form.setFieldValue(['items', field.name, 'retailPrice'], batch?.retailPrice);
                   }}
                   loading={batchesQuery.isFetching || productsQuery.isFetching}
                   placeholder="Выберите партию или новую учётную партию"
@@ -251,8 +253,13 @@ function StockDocumentModal({ open, document, correctionSource, initialProductId
                 </Form.Item>
               )}
               {needsActual ? (
-                <Form.Item name={[field.name, 'unitCost']} label={index === 0 ? 'Себестоимость новой партии' : undefined}>
-                  <InputNumber min={0} precision={2} addonAfter="₽" />
+                <Form.Item name={[field.name, 'unitCost']} label={index === 0 ? 'Приходная цена' : undefined} rules={[{ required: true, message: 'Укажите приходную цену' }]}>
+                  <InputNumber min={0.01} precision={2} addonAfter="₽" />
+                </Form.Item>
+              ) : null}
+              {needsActual ? (
+                <Form.Item name={[field.name, 'retailPrice']} label={index === 0 ? 'Цена продажи' : undefined} rules={[{ required: true, message: 'Укажите цену продажи' }]}>
+                  <InputNumber min={0.01} precision={2} addonAfter="₽" />
                 </Form.Item>
               ) : null}
               {type === 'RESORTING' ? (
@@ -269,7 +276,7 @@ function StockDocumentModal({ open, document, correctionSource, initialProductId
         <Form.Item name="comment" label="Комментарий" style={{ marginTop: 16 }}><Input.TextArea rows={2} /></Form.Item>
       <Space direction="vertical" size={4}>
         <Typography.Text type="secondary">Черновик не меняет остатки. Изменение произойдёт только после отдельного подтверждения «Провести».</Typography.Text>
-        {needsActual ? <Typography.Text type="secondary">Если товар поступил без накладной, выберите вариант «новая учётная партия без накладной», укажите фактическое количество и, если известна, себестоимость. Для существующей партии поле себестоимости не меняет её закупочную цену.</Typography.Text> : null}
+        {needsActual ? <Typography.Text type="secondary">Для каждой позиции проверьте фактический остаток, приходную цену партии и цену продажи клиенту. При проведении инвентаризации эти две цены обновятся вместе с остатком.</Typography.Text> : null}
       </Space>
     </Form>
   </Modal>;
@@ -291,6 +298,7 @@ function getDocumentFormValues(document?: StockDocument | null, correctionSource
         quantity: item.quantity === null ? undefined : Number(item.quantity),
         actualQuantity: item.actualQuantity === null ? undefined : Number(item.actualQuantity),
         unitCost: item.unitCost === null ? undefined : Number(item.unitCost),
+        retailPrice: item.retailPrice === null ? Number(item.product?.retailPrice ?? 0) : Number(item.retailPrice),
         targetProductId: item.targetProductId ?? undefined,
         comment: item.comment ?? undefined,
       })),
@@ -307,6 +315,8 @@ function getDocumentFormValues(document?: StockDocument | null, correctionSource
         sourceBatchId: item.sourceBatchId!,
         productId: item.productId,
         actualQuantity: Number(item.sourceBatch?.rest ?? 0),
+        unitCost: Number(item.sourceBatch?.purchasePrice ?? item.unitCost ?? 0),
+        retailPrice: Number(item.retailPrice ?? item.product?.retailPrice ?? 0),
       })),
     };
   }

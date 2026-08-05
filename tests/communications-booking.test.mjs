@@ -39,6 +39,12 @@ test('сотрудник видит действия заявки и может 
   assert.match(requestsPage, /compose: '1'/);
   assert.match(messagesPage, /searchParams\.get\('compose'\) !== '1'/);
   assert.match(messagesPage, /reset\(getNotificationDefaults\(initialValues\)\)/);
+  assert.match(requestsPage, /Заявки клиентов на приём/);
+  assert.match(requestsPage, /Обычную запись по звонку создавайте в разделе «Расписание»/);
+  assert.doesNotMatch(requestsPage, /Новая онлайн-заявка/);
+  assert.match(messagesPage, /1\. Кому отправить/);
+  assert.match(messagesPage, /Владелец — получатель/);
+  assert.match(messagesPage, /4\. Когда отправить/);
 });
 
 test('Telegram-рассылка требует предпросмотр и явное подтверждение', async () => {

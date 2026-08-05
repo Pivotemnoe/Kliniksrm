@@ -15,7 +15,7 @@ export const defaultRouteOptions = [
   { value: '/hospital', label: 'Стационар' },
   { value: '/stock', label: 'Склад' },
   { value: '/messages', label: 'Сообщения' },
-  { value: '/online-requests', label: 'Онлайн-запись' },
+  { value: '/online-requests', label: 'Заявки на приём' },
   { value: '/settings', label: 'Настройки' },
 ];
 

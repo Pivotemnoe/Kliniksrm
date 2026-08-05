@@ -1884,6 +1884,7 @@ model StockDocumentItem {
   actualQuantity   Decimal?        @db.Decimal(12, 3)
   quantity         Decimal?        @db.Decimal(12, 3)
   unitCost         Decimal?        @db.Decimal(12, 2)
+  retailPrice      Decimal?        @db.Decimal(12, 2)
   comment          String?
   movements        StockMovement[]
   createdAt        DateTime        @default(now())

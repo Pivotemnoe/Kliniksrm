@@ -530,6 +530,7 @@ export class StockService {
     const supplierId = await this.resolveSupplierId(dto);
     const defaultWarehouseId = await this.getDefaultWarehouseId(warehouseScope);
     const productIds = [...new Set(dto.items.map((item) => item.productId))];
+    ensureConsistentRetailPrices(dto.items);
     const productsCount = await this.prisma.product.count({ where: { id: { in: productIds } } });
 
     if (productsCount !== productIds.length) {
@@ -560,6 +561,13 @@ export class StockService {
         const purchasePrice = decimal(item.purchasePrice);
         const discountAmount = decimal(item.discountAmount ?? 0);
         totalAmount = totalAmount.plus(quantity.mul(purchasePrice).minus(discountAmount));
+
+        if (item.retailPrice !== undefined) {
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { retailPrice: item.retailPrice },
+          });
+        }
 
         const invoiceItem = await tx.supplyInvoiceItem.create({
           data: {
@@ -624,7 +632,13 @@ export class StockService {
       action: 'stock.supply_invoice.create',
       entityType: 'SupplyInvoice',
       entityId: invoice.id,
-      metadata: { number: invoice.number, supplierId, totalAmount: invoice.totalAmount, items: invoice.items.length },
+      metadata: {
+        number: invoice.number,
+        supplierId,
+        totalAmount: invoice.totalAmount,
+        items: invoice.items.length,
+        retailPricesUpdated: dto.items.filter((item) => item.retailPrice !== undefined).length,
+      },
     });
 
     return invoice;
@@ -650,6 +664,7 @@ export class StockService {
     }
 
     const productIds = [...new Set(dto.items.map((item) => item.productId))];
+    ensureConsistentRetailPrices(dto.items);
     const productsCount = await this.prisma.product.count({ where: { id: { in: productIds } } });
     if (productsCount !== productIds.length) throw new BadRequestException('В накладной указан неизвестный товар');
     for (const item of dto.items) {
@@ -664,6 +679,13 @@ export class StockService {
       const existingById = new Map(invoice.items.map((item) => [item.id, item]));
 
       for (const nextItem of dto.items) {
+        if (nextItem.retailPrice !== undefined) {
+          await tx.product.update({
+            where: { id: nextItem.productId },
+            data: { retailPrice: nextItem.retailPrice },
+          });
+        }
+
         if (!nextItem.id) {
           await this.createSupplyInvoiceLine(tx, invoice.id, dto.supplierId ?? invoice.supplierId, invoice.number, nextItem);
           continue;
@@ -792,6 +814,7 @@ export class StockService {
         totalAmount: updated.totalAmount,
         previousItems: invoice.items.length,
         items: updated.items.length,
+        retailPricesUpdated: dto.items.filter((item) => item.retailPrice !== undefined).length,
       },
     });
     return updated;
@@ -1233,6 +1256,18 @@ function dateKey(value: Date | null) {
 function clean(value: string | undefined) {
   const trimmed = value?.trim();
   return trimmed || undefined;
+}
+
+function ensureConsistentRetailPrices(items: Array<{ productId: string; retailPrice?: number }>) {
+  const prices = new Map<string, number>();
+  for (const item of items) {
+    if (item.retailPrice === undefined) continue;
+    const previous = prices.get(item.productId);
+    if (previous !== undefined && previous !== item.retailPrice) {
+      throw new BadRequestException('Для одного товара в накладной указаны разные цены продажи');
+    }
+    prices.set(item.productId, item.retailPrice);
+  }
 }
 
 function decimalToOptionalNumber(value: Prisma.Decimal | null) {

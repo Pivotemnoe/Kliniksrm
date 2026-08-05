@@ -195,7 +195,7 @@ export function CrmLayout() {
               </Tooltip>
             ) : null}
             {canReadOnlineRequests ? (
-              <Tooltip title="Онлайн-запись">
+              <Tooltip title="Заявки клиентов на приём">
                 <Button
                   type="text"
                   shape="circle"

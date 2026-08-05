@@ -9,7 +9,6 @@ import {
   LinkOutlined,
   MessageOutlined,
   PhoneOutlined,
-  PlusOutlined,
   UserOutlined,
 } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -33,13 +32,11 @@ import {
   acceptOnlineRequest,
   archiveOnlineRequest,
   cancelOnlineRequest,
-  createOnlineRequest,
   listOnlineRequests,
   updateOnlineRequest,
 } from './onlineRequests.api';
 import {
   AcceptOnlineRequestInput,
-  CreateOnlineRequestInput,
   OnlineAppointmentRequest,
   OnlineRequestStatus,
   onlineRequestStatusColors,
@@ -87,7 +84,6 @@ export function OnlineRequestsPage() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<OnlineRequestStatus | undefined>();
   const [offset, setOffset] = useState(0);
-  const [createOpen, setCreateOpen] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<OnlineAppointmentRequest | null>(null);
   const [drawerIntent, setDrawerIntent] = useState<RequestDrawerIntent>('confirm');
   const publicRequestUrl = useMemo(() => getPublicOnlineRequestUrl(), []);
@@ -95,15 +91,6 @@ export function OnlineRequestsPage() {
   const requestsQuery = useQuery({
     queryKey: ['online-requests', { search, status, limit: pageSize, offset }],
     queryFn: () => listOnlineRequests({ search, status, limit: pageSize, offset }),
-  });
-  const createMutation = useMutation({
-    mutationFn: (values: CreateOnlineRequestInput) => createOnlineRequest(values),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['online-requests'] });
-      message.success('Заявка создана');
-      setCreateOpen(false);
-    },
-    onError: (error) => message.error(getErrorMessage(error)),
   });
   const actionMutation = useMutation({
     mutationFn: ({ request, action }: { request: OnlineAppointmentRequest; action: 'cancel' | 'archive' }) =>
@@ -252,21 +239,21 @@ export function OnlineRequestsPage() {
   return (
     <div className="page">
       <PageHeader
-        title="Онлайн-запись"
-        description="Заявки клиентов из публичной формы или личного кабинета владельца."
-        extra={
-          canManage ? (
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-              Новая заявка
-            </Button>
-          ) : null
-        }
+        title="Заявки клиентов на приём"
+        description="Входящие просьбы владельцев о записи из личного кабинета и публичной формы."
+      />
+      <Alert
+        type="info"
+        showIcon
+        className="form-alert"
+        message="Это входящие заявки владельцев, а не создание записи сотрудником"
+        description="Подтвердите подходящее время, при необходимости отредактируйте заявку или свяжитесь с клиентом. Обычную запись по звонку создавайте в разделе «Расписание»."
       />
       <div className="public-link-panel">
         <div className="public-link-copy">
           <Space direction="vertical" size={2}>
-            <Typography.Text strong>Публичная форма записи</Typography.Text>
-            <Typography.Text type="secondary">Ссылка для сайта клиники, QR-кода на стойке и сообщений клиентам.</Typography.Text>
+            <Typography.Text strong>Ссылка для владельцев</Typography.Text>
+            <Typography.Text type="secondary">Её можно разместить на сайте, стойке клиники или отправить клиенту.</Typography.Text>
           </Space>
           <Typography.Text className="portal-invite-link">{publicRequestUrl}</Typography.Text>
           <Space wrap>
@@ -333,12 +320,6 @@ export function OnlineRequestsPage() {
           />
         </div>
       </div>
-      <CreateRequestDrawer
-        open={createOpen}
-        loading={createMutation.isPending}
-        onClose={() => setCreateOpen(false)}
-        onSubmit={(values) => createMutation.mutate(values)}
-      />
       <RequestDrawer
         request={selectedRequest}
         intent={drawerIntent}
@@ -348,58 +329,6 @@ export function OnlineRequestsPage() {
         onAction={(request, action) => actionMutation.mutate({ request, action })}
       />
     </div>
-  );
-}
-
-function CreateRequestDrawer({
-  open,
-  loading,
-  onClose,
-  onSubmit,
-}: {
-  open: boolean;
-  loading: boolean;
-  onClose: () => void;
-  onSubmit: (values: CreateOnlineRequestInput) => void;
-}) {
-  const { control, handleSubmit, reset } = useForm<RequestFormValues>({
-    resolver: zodResolver(requestSchema),
-    defaultValues: getRequestDefaults(null),
-  });
-
-  useEffect(() => {
-    if (open) {
-      reset(getRequestDefaults(null));
-    }
-  }, [open, reset]);
-
-  function submit(values: RequestFormValues) {
-    onSubmit({
-      ...values,
-      email: values.email || null,
-      preferredAt: values.preferredAt ? fromDatetimeLocal(values.preferredAt) : null,
-      source: 'STAFF',
-    });
-  }
-
-  return (
-    <Drawer
-      title="Новая онлайн-заявка"
-      width={620}
-      open={open}
-      onClose={onClose}
-      destroyOnHidden
-      extra={
-        <Space>
-          <Button onClick={onClose}>Отмена</Button>
-          <Button type="primary" loading={loading} onClick={handleSubmit(submit)}>
-            Создать
-          </Button>
-        </Space>
-      }
-    >
-      <RequestFields control={control} />
-    </Drawer>
   );
 }
 

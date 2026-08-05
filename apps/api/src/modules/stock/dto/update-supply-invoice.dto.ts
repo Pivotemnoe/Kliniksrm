@@ -37,6 +37,12 @@ export class UpdateSupplyInvoiceItemDto {
   @Min(0)
   purchasePrice!: number;
 
+  @ApiPropertyOptional({ description: 'Цена продажи, которая будет установлена в карточке товара.' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  retailPrice?: number;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()

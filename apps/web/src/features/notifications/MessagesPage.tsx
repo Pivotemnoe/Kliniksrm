@@ -255,17 +255,11 @@ export function MessagesPage() {
   return (
     <div className="page">
       <PageHeader
-        title="Сообщения"
-        description="Сообщения владельцам сейчас или в указанную дату, очередь отправки и шаблоны."
+        title="Сообщения владельцам"
+        description="Выберите конкретного владельца, при необходимости пациента, затем текст и способ доставки."
         extra={
           canManage ? (
             <Space wrap>
-              <Button icon={<PlusOutlined />} onClick={() => setTemplateOpen(true)}>
-                Новый шаблон
-              </Button>
-              <Button onClick={() => setBroadcastOpen(true)}>
-                Рассылка Telegram
-              </Button>
               <Button
                 type="primary"
                 icon={<PlusOutlined />}
@@ -276,6 +270,12 @@ export function MessagesPage() {
               >
                 Написать владельцу
               </Button>
+              <Button icon={<PlusOutlined />} onClick={() => setTemplateOpen(true)}>
+                Новый шаблон
+              </Button>
+              <Button onClick={() => setBroadcastOpen(true)}>
+                Массовая Telegram-рассылка
+              </Button>
             </Space>
           ) : null
         }
@@ -284,7 +284,7 @@ export function MessagesPage() {
         items={[
           {
             key: 'outbox',
-            label: 'Очередь отправки',
+            label: 'История и очередь',
             children: (
               <div className="list-panel">
                 <div className="list-panel-header">
@@ -702,12 +702,18 @@ function NotificationFormDrawer({
     >
       <Form layout="vertical">
         {submitError ? <Alert type="error" showIcon message={getErrorMessage(submitError)} className="form-alert" /> : null}
+        <Typography.Title level={5}>1. Кому отправить</Typography.Title>
         <div className="form-grid two-columns">
           <Controller
             control={control}
             name="ownerId"
-            render={({ field }) => (
-              <Form.Item label="Владелец">
+            render={({ field, fieldState }) => (
+              <Form.Item
+                label="Владелец — получатель"
+                required
+                validateStatus={fieldState.error ? 'error' : undefined}
+                help={fieldState.error?.message ?? 'Начните вводить фамилию, имя или телефон.'}
+              >
                 <Select
                   {...field}
                   allowClear
@@ -715,7 +721,7 @@ function NotificationFormDrawer({
                   filterOption={false}
                   onSearch={setOwnerSearch}
                   loading={ownersQuery.isLoading}
-                  placeholder="Найти владельца"
+                  placeholder="Найти владельца по имени или телефону"
                   options={ownerOptions}
                   onChange={(value) => {
                     field.onChange(value ?? '');
@@ -730,7 +736,7 @@ function NotificationFormDrawer({
             control={control}
             name="animalId"
             render={({ field }) => (
-              <Form.Item label="Пациент">
+              <Form.Item label="Пациент — необязательно">
                 <Select
                   {...field}
                   allowClear
@@ -743,28 +749,22 @@ function NotificationFormDrawer({
               </Form.Item>
             )}
           />
-          <Controller
-            control={control}
-            name="scheduledAt"
-            render={({ field }) => (
-              <Form.Item label="Отправить после">
-                <Input type="datetime-local" {...field} value={field.value ?? ''} />
-              </Form.Item>
-            )}
-          />
         </div>
         <Alert
-          type="info"
+          type={ownerId ? 'success' : 'warning'}
           showIcon
           className="form-alert"
-          message="Личный кабинет включён всегда"
-          description="Владелец увидит сообщение в личном кабинете. Ниже можно дополнительно выбрать подключённые мессенджеры."
+          message={ownerId ? `Получатель: ${selectedOwner?.fullName ?? 'загружается…'}` : 'Сначала выберите владельца'}
+          description={ownerId
+            ? 'Основная копия сохраняется в личном кабинете владельца. Если у него подключены MAX или Telegram, их можно отметить ниже.'
+            : 'Без выбранного владельца сообщение отправить нельзя.'}
         />
+        <Typography.Title level={5}>2. Куда доставить</Typography.Title>
         <Controller
           control={control}
           name="messengerChannels"
           render={({ field }) => (
-            <Form.Item label="Дополнительно отправить">
+            <Form.Item label="Дополнительные каналы">
               <Checkbox.Group value={field.value} onChange={field.onChange}>
                 <Space direction="vertical">
                   <Checkbox value="MAX" disabled={!maxConnected}>
@@ -778,6 +778,7 @@ function NotificationFormDrawer({
             </Form.Item>
           )}
         />
+        <Typography.Title level={5}>3. Что написать</Typography.Title>
         <Controller
           control={control}
           name="templateId"
@@ -786,10 +787,10 @@ function NotificationFormDrawer({
               <Select
                 {...field}
                 allowClear
-                placeholder="Без шаблона"
-                options={templates.map((template) => ({
+                placeholder="Выбрать готовый текст или написать вручную"
+                options={templates.filter((template) => template.isActive).map((template) => ({
                   value: template.id,
-                  label: `${template.channel}: ${template.title}`,
+                  label: template.title,
                 }))}
                 onChange={(value) => {
                   field.onChange(value ?? '');
@@ -818,7 +819,17 @@ function NotificationFormDrawer({
           name="body"
           render={({ field, fieldState }) => (
             <Form.Item label="Текст" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
-              <Input.TextArea rows={6} {...field} />
+              <Input.TextArea rows={6} placeholder="Напишите, что нужно сообщить владельцу" {...field} />
+            </Form.Item>
+          )}
+        />
+        <Typography.Title level={5}>4. Когда отправить</Typography.Title>
+        <Controller
+          control={control}
+          name="scheduledAt"
+          render={({ field }) => (
+            <Form.Item label="Дата и время" help="Оставьте поле пустым, чтобы отправить сразу.">
+              <Input type="datetime-local" {...field} value={field.value ?? ''} />
             </Form.Item>
           )}
         />

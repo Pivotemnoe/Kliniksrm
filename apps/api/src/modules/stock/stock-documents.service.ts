@@ -25,7 +25,7 @@ const documentInclude = {
   items: {
     orderBy: { createdAt: 'asc' },
     include: {
-      product: { select: { id: true, title: true, stockUnit: true, barcode: true } },
+      product: { select: { id: true, title: true, stockUnit: true, barcode: true, retailPrice: true } },
       targetProduct: { select: { id: true, title: true, stockUnit: true, barcode: true } },
       sourceBatch: { select: { id: true, series: true, expiresAt: true, rest: true, purchasePrice: true } },
       targetBatch: { select: { id: true, series: true, expiresAt: true, rest: true, purchasePrice: true } },
@@ -212,7 +212,8 @@ export class StockDocumentsService {
         expectedQuantity: batch?.rest ?? 0,
         actualQuantity: item.actualQuantity,
         quantity: item.quantity,
-        unitCost: batch?.purchasePrice ?? item.unitCost ?? 0,
+        unitCost: item.unitCost ?? batch?.purchasePrice ?? 0,
+        retailPrice: item.retailPrice,
         comment: clean(item.comment),
       };
     });
@@ -246,7 +247,11 @@ export class StockDocumentsService {
       action: 'stock.document.post',
       entityType: 'StockDocument',
       entityId: documentId,
-      metadata: { type: posted.type, items: posted.items.length },
+      metadata: {
+        type: posted.type,
+        items: posted.items.length,
+        retailPricesUpdated: posted.items.filter((item) => item.retailPrice !== null).length,
+      },
     });
     return posted;
   }
@@ -394,8 +399,19 @@ export class StockDocumentsService {
       actualQuantity: Prisma.Decimal | null;
       quantity: Prisma.Decimal | null;
       unitCost: Prisma.Decimal | null;
+      retailPrice: Prisma.Decimal | null;
     },
   ) {
+    if (
+      (document.type === StockDocumentType.INVENTORY || document.type === StockDocumentType.CORRECTION)
+      && item.retailPrice !== null
+    ) {
+      await tx.product.update({
+        where: { id: item.productId },
+        data: { retailPrice: item.retailPrice },
+      });
+    }
+
     if (!item.sourceBatchId) {
       if (document.type !== StockDocumentType.INVENTORY && document.type !== StockDocumentType.CORRECTION) {
         throw new BadRequestException('В позиции не указана партия');
@@ -438,6 +454,7 @@ export class StockDocumentsService {
         where: { id: batch.id },
         data: {
           rest: actual,
+          purchasePrice: item.unitCost ?? batch.purchasePrice,
           ...(difference.greaterThan(0) ? { quantity: { increment: difference } } : {}),
         },
       });

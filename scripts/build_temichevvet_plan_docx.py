@@ -125,14 +125,33 @@ def add_page_field(paragraph):
 
 def add_heading(doc, text: str, level=1):
     p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    # LibreOffice may carry a hanging indent across a page break when the
+    # paragraph has no explicit indentation.  Keep headings slightly inside
+    # the text area so the first character is never clipped in DOCX/PDF.
+    p.paragraph_format.left_indent = Cm(0.12)
+    p.paragraph_format.first_line_indent = Cm(0)
     p.paragraph_format.space_before = Pt(16 if level == 1 else 11)
     p.paragraph_format.space_after = Pt(7 if level == 1 else 5)
     p.paragraph_format.keep_with_next = True
-    sizes = {1: 16, 2: 13, 3: 11.5}
+    sizes = {1: 14, 2: 13, 3: 11.5}
     colors = {1: NAVY, 2: BLUE, 3: TEAL}
     set_run(p.add_run(text), size=sizes[level], color=colors[level], bold=True)
     set_repeat_heading(p)
     return p
+
+
+def compact_summary_action(text: str, limit: int = 150) -> str:
+    normalized = " ".join(text.split())
+    if len(normalized) <= limit:
+        return normalized
+    candidate = normalized[: limit + 1]
+    for marker in (". ", "; ", ": "):
+        split_at = candidate.rfind(marker)
+        if split_at >= 80:
+            return candidate[: split_at + 1].rstrip() + " …"
+    split_at = candidate.rfind(" ")
+    return candidate[:split_at].rstrip() + " …"
 
 
 def add_para(
@@ -342,6 +361,7 @@ def build():
     doc.add_page_break()
     add_heading(doc, "2. Сводная дорожная карта", 1)
     add_para(doc, "Порядок основан на пользовательской ценности для клиники. Техническая оптимизация и внешние интеграции не опережают стационар, документы, каталог и повторяемое подключение владельцев.")
+    add_para(doc, "В сводной таблице ближайшее действие показано сокращённо; полный текст сохранён в карточке каждого пункта.", size=9.3, color=MUTED, italic=True)
     overview = doc.add_table(rows=1, cols=4)
     overview.autofit = False
     for i, title in enumerate(("Пункт", "Инициатива", "Статус", "Ближайшее действие")):
@@ -356,7 +376,7 @@ def build():
         fill, color = STATUS_COLORS[item["status"]]
         shade(row.cells[2], fill)
         set_cell_text(row.cells[2], status_labels[item["status"]], size=8.0, color=color, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER)
-        set_cell_text(row.cells[3], item["next_action"], size=8.1)
+        set_cell_text(row.cells[3], compact_summary_action(item["next_action"]), size=8.1)
 
     add_item_detail(doc, items["P0.1"], status_labels, page_break=True)
     add_item_detail(doc, items["P0.2"], status_labels, page_break=True)
@@ -376,10 +396,9 @@ def build():
         for criterion in item["acceptance_criteria"]:
             add_bullet(doc, criterion)
 
-    add_heading(doc, "9. P2 — осознанно не сейчас", 1)
-    add_callout(doc, "Граница приоритета", "Внешние лаборатории, SMS, полный email, касса, телефония, мультиклиника, OCR, локальная языковая модель и оптимизация чанка сохраняются в плане, но не забирают время у клинических P0/P1.", fill="FFF5DA", accent=GOLD)
-    for item_id in ("P2.1", "P2.2", "P2.3"):
-        item = items[item_id]
+    add_heading(doc, "9. P2 — подключаемое расширение после клинической основы", 1)
+    add_callout(doc, "Граница приоритета", "Внешние лаборатории, коммуникации, платёжно-кассовый шлюз, сервисные модули, мультиклиника, OCR, локальная языковая модель и оптимизация чанка сохраняются в плане, но не забирают время у клинических P0/P1.", fill="FFF5DA", accent=GOLD)
+    for item in (entry for entry in plan["items"] if entry["priority"] == "P2"):
         add_heading(doc, f"{item['id']}. {item['title']}", 2)
         add_para(doc, item["current_state"], size=10)
         add_para(doc, "Условие возврата: " + item["next_action"], size=9.4, color=MUTED, italic=True)
@@ -393,6 +412,7 @@ def build():
         "Провести врачебную приёмку готового многосуточного листа на реальном пациенте и зафиксировать результат.",
         "Закрыть мобильную приёмку P0.6 и наблюдать кабинет владельца до статуса STABLE.",
         "После каталога перейти к визуальному редактору документов, затем к помощнику врача и ускорению frontend.",
+        "После стабилизации клинической основы провести обследование платёжно-кассового контура, груминга и зоогостиницы; подключать их адаптерами и модулями без дублирования CRM.",
     ]
     for index, step in enumerate(sequence, 1):
         p = doc.add_paragraph()

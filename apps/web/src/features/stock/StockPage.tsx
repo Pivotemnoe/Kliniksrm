@@ -1,10 +1,10 @@
-import { DeleteOutlined, EditOutlined, PaperClipOutlined, PlusOutlined, PrinterOutlined, SearchOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined, PaperClipOutlined, PlusOutlined, PrinterOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, App, AutoComplete, Button, Checkbox, Drawer, Form, Input, InputNumber, Modal, Radio, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
 import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import JsBarcode from 'jsbarcode';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { Controller, useFieldArray, useForm, useWatch } from 'react-hook-form';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
@@ -42,7 +42,9 @@ export function StockPage() {
   const { data: auth } = useCurrentEmployee();
   const canManage = hasPermission(auth?.employee, 'stock.manage');
   const [activeTab, setActiveTab] = useState(getStockTabFromPath(location.pathname));
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
+  const deferredSearchInput = useDeferredValue(searchInput);
   const [offset, setOffset] = useState(0);
   const [productOpen, setProductOpen] = useState(false);
   const [serviceOpen, setServiceOpen] = useState(false);
@@ -59,10 +61,12 @@ export function StockPage() {
     setActiveTab(getStockTabFromPath(location.pathname));
   }, [location.pathname]);
 
-  function handleSearch(value: string) {
-    setSearch(value.trim());
+  useEffect(() => {
+    const value = deferredSearchInput.trim();
+    if (value.length > 0 && value.length < 3) return;
+    setSearch(value);
     setOffset(0);
-  }
+  }, [deferredSearchInput]);
 
   function handleTableChange(pagination: TablePaginationConfig) {
     const current = pagination.current ?? 1;
@@ -111,12 +115,12 @@ export function StockPage() {
           }}
           tabBarExtraContent={
             <Space wrap>
-              <Input.Search
+              <Input
                 allowClear
-                enterButton={<SearchOutlined />}
-                placeholder="Название, SKU или номер штрих-кода"
+                value={searchInput}
+                placeholder="Введите минимум 3 буквы, SKU или штрих-код"
                 className="search-input"
-                onSearch={handleSearch}
+                onChange={(event) => setSearchInput(event.target.value)}
               />
             </Space>
           }
@@ -232,7 +236,8 @@ export function StockPage() {
               columns={[
                 { title: 'Товар', key: 'product', render: (_, item) => item.product?.title ?? '—' },
                 { title: 'Количество', dataIndex: 'quantity', key: 'quantity' },
-                { title: 'Цена закупки', dataIndex: 'purchasePrice', key: 'purchasePrice', render: formatMoney },
+                { title: 'Цена по накладной', dataIndex: 'purchasePrice', key: 'purchasePrice', render: formatMoney },
+                { title: 'Цена продажи', key: 'retailPrice', render: (_, item) => formatMoney(item.product?.retailPrice ?? 0) },
                 { title: 'Серия', dataIndex: 'series', key: 'series', render: (value) => value || '—' },
               ]}
             />
@@ -302,7 +307,7 @@ function ProductsTable({
       { title: 'Категория', key: 'category', render: (_, record) => record.category?.title ?? '—' },
       { title: 'SKU', dataIndex: 'sku', key: 'sku', render: (value: string | null) => value || '—' },
       {
-        title: 'Цена',
+        title: 'Цена продажи',
         dataIndex: 'retailPrice',
         key: 'retailPrice',
         render: (value, record) => `${formatMoney(value)} / ${record.billingUnit || record.writeOffUnit || record.stockUnit || 'шт'}`,
@@ -430,7 +435,7 @@ function BatchesTable({
       { title: 'Товар', key: 'product', render: (_, record) => record.product?.title ?? '—' },
       { title: 'Поставщик', key: 'supplier', render: (_, record) => record.supplier?.title ?? '—' },
       { title: 'Остаток', key: 'rest', render: (_, record) => `${record.rest} ${record.product?.stockUnit ?? ''}` },
-      { title: 'Закупка', dataIndex: 'purchasePrice', key: 'purchasePrice', render: formatMoney },
+      { title: 'Приходная цена', dataIndex: 'purchasePrice', key: 'purchasePrice', render: formatMoney },
       { title: 'Годен до', dataIndex: 'expiresAt', key: 'expiresAt', render: formatDate },
       { title: 'Серия', dataIndex: 'series', key: 'series', render: (value: string | null) => value || '—' },
       {
@@ -883,7 +888,8 @@ const supplyLineSchema = z.object({
   productId: z.string().min(1, 'Выберите товар'),
   warehouseId: z.string().min(1, 'Выберите склад'),
   quantity: z.number().min(0.001, 'Введите количество'),
-  purchasePrice: z.number().min(0, 'Введите закупочную цену'),
+  purchasePrice: z.number().min(0.01, 'Введите цену по накладной'),
+  retailPrice: z.number().min(0.01, 'Введите цену продажи'),
   discountAmount: z.number().min(0).optional(),
   expiresAt: z.string().optional(),
   series: z.string().trim().optional(),
@@ -905,10 +911,14 @@ function SupplyInvoiceModal({ open, invoice, resources, onClose }: { open: boole
   const queryClient = useQueryClient();
   const { message } = App.useApp();
   const [supplierOpen, setSupplierOpen] = useState(false);
+  const [productSearch, setProductSearch] = useState('');
+  const [knownProducts, setKnownProducts] = useState<Record<string, Product>>({});
+  const deferredProductSearch = useDeferredValue(productSearch);
+  const normalizedProductSearch = deferredProductSearch.trim();
   const productsQuery = useQuery({
-    queryKey: ['stock', 'products', 'supply-select'],
-    queryFn: () => listProducts({ limit: 100, offset: 0 }),
-    enabled: open,
+    queryKey: ['stock', 'products', 'supply-select', normalizedProductSearch],
+    queryFn: () => listProducts({ search: normalizedProductSearch, limit: 50, offset: 0 }),
+    enabled: open && normalizedProductSearch.length >= 3,
   });
   const defaultWarehouseId = resources?.warehouses[0]?.id ?? '';
   const { control, handleSubmit, reset, setValue } = useForm<SupplyFormValues>({
@@ -919,8 +929,28 @@ function SupplyInvoiceModal({ open, invoice, resources, onClose }: { open: boole
   const watchedItems = useWatch({ control, name: 'items' }) ?? [];
 
   useEffect(() => {
-    if (open) reset(getSupplyFormValues(invoice, defaultWarehouseId));
+    if (!open) return;
+    reset(getSupplyFormValues(invoice, defaultWarehouseId));
+    setProductSearch('');
+    setKnownProducts(Object.fromEntries(
+      (invoice?.items ?? []).flatMap((item) => item.product ? [[item.product.id, item.product] as const] : []),
+    ));
   }, [defaultWarehouseId, invoice, open, reset]);
+
+  useEffect(() => {
+    if (!productsQuery.data?.items.length) return;
+    setKnownProducts((current) => ({
+      ...current,
+      ...Object.fromEntries(productsQuery.data.items.map((product) => [product.id, product])),
+    }));
+  }, [productsQuery.data]);
+
+  const productOptions = useMemo(
+    () => Object.values(knownProducts)
+      .sort((left, right) => left.title.localeCompare(right.title, 'ru'))
+      .map((product) => ({ value: product.id, label: formatProductOption(product) })),
+    [knownProducts],
+  );
 
   const mutation = useMutation({
     mutationFn: (values: SupplyFormValues) => {
@@ -979,11 +1009,23 @@ function SupplyInvoiceModal({ open, invoice, resources, onClose }: { open: boole
               <div className="form-grid two-columns">
                 <Controller control={control} name={`items.${index}.productId`} render={({ field: productField, fieldState }) => (
                   <Form.Item label="Товар" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
-                    <Select {...productField} showSearch optionFilterProp="label" loading={productsQuery.isLoading} onChange={(value) => {
-                      productField.onChange(value);
-                      const product = productsQuery.data?.items.find((item) => item.id === value);
-                      setValue(`items.${index}.expiresAt`, product?.defaultExpiresAt?.slice(0, 10) ?? '');
-                    }} options={productsQuery.data?.items.map((product) => ({ value: product.id, label: product.title })) ?? []} placeholder="Выберите товар" />
+                    <Select
+                      {...productField}
+                      allowClear
+                      showSearch
+                      filterOption={false}
+                      loading={productsQuery.isFetching}
+                      onSearch={setProductSearch}
+                      notFoundContent={normalizedProductSearch.length < 3 ? 'Введите минимум 3 символа' : 'Товар не найден'}
+                      onChange={(value) => {
+                        productField.onChange(value);
+                        const product = value ? knownProducts[value] ?? productsQuery.data?.items.find((item) => item.id === value) : undefined;
+                        setValue(`items.${index}.expiresAt`, product?.defaultExpiresAt?.slice(0, 10) ?? '');
+                        setValue(`items.${index}.retailPrice`, Number(product?.retailPrice ?? 0), { shouldValidate: true });
+                      }}
+                      options={productOptions}
+                      placeholder="Введите название, SKU или штрих-код"
+                    />
                   </Form.Item>
                 )} />
                 <Controller control={control} name={`items.${index}.warehouseId`} render={({ field: warehouseField, fieldState }) => (
@@ -992,7 +1034,8 @@ function SupplyInvoiceModal({ open, invoice, resources, onClose }: { open: boole
                   </Form.Item>
                 )} />
                 <FormNumber control={control} name={`items.${index}.quantity`} label="Количество" step={0.001} />
-                <FormNumber control={control} name={`items.${index}.purchasePrice`} label="Закупочная цена" />
+                <FormNumber control={control} name={`items.${index}.purchasePrice`} label="Цена по накладной" />
+                <FormNumber control={control} name={`items.${index}.retailPrice`} label="Цена продажи" />
                 <FormNumber control={control} name={`items.${index}.discountAmount`} label="Скидка по позиции" />
                 <FormText control={control} name={`items.${index}.expiresAt`} label="Годен до" type="date" />
                 <FormText control={control} name={`items.${index}.series`} label="Серия" />
@@ -1013,7 +1056,7 @@ function SupplyInvoiceModal({ open, invoice, resources, onClose }: { open: boole
 }
 
 function emptySupplyLine(warehouseId: string): SupplyFormValues['items'][number] {
-  return { productId: '', warehouseId, quantity: 1, purchasePrice: 0, discountAmount: 0, expiresAt: '', series: '', rack: '', rackNumber: '', shelfNumber: '' };
+  return { productId: '', warehouseId, quantity: 1, purchasePrice: 0, retailPrice: 0, discountAmount: 0, expiresAt: '', series: '', rack: '', rackNumber: '', shelfNumber: '' };
 }
 
 function getSupplyFormValues(invoice: SupplyInvoice | null | undefined, warehouseId: string): SupplyFormValues {
@@ -1030,6 +1073,7 @@ function getSupplyFormValues(invoice: SupplyInvoice | null | undefined, warehous
       warehouseId: item.warehouseId,
       quantity: Number(item.quantity),
       purchasePrice: Number(item.purchasePrice),
+      retailPrice: Number(item.product?.retailPrice ?? 0),
       discountAmount: Number(item.discountAmount),
       expiresAt: item.expiresAt?.slice(0, 10) ?? '',
       series: item.series ?? '',
@@ -1038,6 +1082,11 @@ function getSupplyFormValues(invoice: SupplyInvoice | null | undefined, warehous
       shelfNumber: item.stockBatch?.shelfNumber ?? '',
     })),
   };
+}
+
+function formatProductOption(product: Product) {
+  const code = product.sku || product.barcode || product.gtin;
+  return code ? `${product.title} · ${code}` : product.title;
 }
 
 function FormText({

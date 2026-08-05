@@ -20,6 +20,28 @@ test('manual supply invoice supports supplier directory and multiple lines', asy
   assert.match(controller, /@Post\('suppliers'\)/);
   assert.match(service, /stock\.supplier\.create/);
   assert.match(supplierModal, /Название поставщика/);
+  assert.match(page, /normalizedProductSearch\.length >= 3/);
+  assert.match(page, /listProducts\(\{ search: normalizedProductSearch/);
+  assert.match(page, /Цена по накладной/);
+  assert.match(page, /Цена продажи/);
+  assert.match(service, /retailPricesUpdated/);
+});
+
+test('inventory edits incoming and sale prices before posting', async () => {
+  const [schema, migration, dto, service, page] = await Promise.all([
+    read('prisma/schema.prisma'),
+    read('prisma/migrations/20260805000100_stock_retail_price_at_inventory/migration.sql'),
+    read('apps/api/src/modules/stock/dto/create-stock-document.dto.ts'),
+    read('apps/api/src/modules/stock/stock-documents.service.ts'),
+    read('apps/web/src/features/stock/StockOperationsPage.tsx'),
+  ]);
+  assert.match(schema, /retailPrice\s+Decimal\?/);
+  assert.match(migration, /ADD COLUMN "retailPrice" DECIMAL\(12,2\)/);
+  assert.match(dto, /retailPrice\?: number/);
+  assert.match(page, /Приходная цена/);
+  assert.match(page, /Цена продажи/);
+  assert.match(service, /data: \{ retailPrice: item\.retailPrice \}/);
+  assert.match(service, /purchasePrice: item\.unitCost \?\? batch\.purchasePrice/);
 });
 
 test('invoice correction keeps an explicit batch link and audited stock movement', async () => {

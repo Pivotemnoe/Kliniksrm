@@ -189,7 +189,7 @@ export function SupplyInvoiceImporter({ resources }: { resources?: StockResource
                   { title: 'Штрих-код', dataIndex: 'sourceBarcode', width: 140, render: (value) => value || '—' },
                   { title: 'Товар CRM', key: 'product', width: 220, render: (_, row) => row.product?.title ?? '—' },
                   { title: 'Кол-во', dataIndex: 'quantity', width: 90 },
-                  { title: 'Закупка', dataIndex: 'purchasePrice', width: 100 },
+                  { title: 'Цена по накладной', dataIndex: 'purchasePrice', width: 130 },
                   { title: 'Проверка', key: 'status', render: (_, row) => <Tag color={row.status === 'MATCHED' ? 'green' : 'red'}>{row.message}</Tag> },
                 ]}
               />

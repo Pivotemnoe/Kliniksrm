@@ -186,6 +186,7 @@ export type SupplyInvoiceMutationInput = {
     warehouseId?: string;
     quantity: number;
     purchasePrice: number;
+    retailPrice?: number;
     discountAmount?: number;
     expiresAt?: string;
     series?: string;
@@ -215,8 +216,9 @@ export type StockDocumentItem = {
   actualQuantity: DecimalValue | null;
   quantity: DecimalValue | null;
   unitCost: DecimalValue | null;
+  retailPrice: DecimalValue | null;
   comment: string | null;
-  product?: Pick<Product, 'id' | 'title' | 'stockUnit' | 'barcode'>;
+  product?: Pick<Product, 'id' | 'title' | 'stockUnit' | 'barcode' | 'retailPrice'>;
   targetProduct?: Pick<Product, 'id' | 'title' | 'stockUnit' | 'barcode'> | null;
   sourceBatch?: Pick<StockBatch, 'id' | 'series' | 'expiresAt' | 'rest' | 'purchasePrice'> | null;
   targetBatch?: Pick<StockBatch, 'id' | 'series' | 'expiresAt' | 'rest' | 'purchasePrice'> | null;
@@ -256,6 +258,7 @@ export type StockDocumentMutationInput = {
     actualQuantity?: number;
     quantity?: number;
     unitCost?: number;
+    retailPrice?: number;
     comment?: string;
   }>;
 };
