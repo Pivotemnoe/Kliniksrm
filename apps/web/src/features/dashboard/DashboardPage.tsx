@@ -8,11 +8,12 @@ import {
   OrderedListOutlined,
   PlusOutlined,
   ShopOutlined,
+  UserOutlined,
   WalletOutlined,
 } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Button, List, Space, Tag, Typography } from 'antd';
-import { type ReactNode, useMemo } from 'react';
+import { Alert, Button, Descriptions, Drawer, List, Space, Table, Tag, Typography } from 'antd';
+import { type ReactNode, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
@@ -24,14 +25,23 @@ import { appointmentStatusColors, appointmentStatusLabels } from '../appointment
 import { queueStatusColors, queueStatusLabels, queueUrgencyColors, queueUrgencyLabels } from '../queue/types';
 import { getTaskTypeLabel } from '../tasks/types';
 import { visitStatusColors, visitStatusLabels } from '../visits/types';
-import { getDashboardToday } from './dashboard.api';
-import { DashboardQueueItem, DashboardSummary } from './types';
+import { getDashboardToday, getDirectorPortalStatistics } from './dashboard.api';
+import { DashboardQueueItem, DashboardSummary, DirectorPortalOwnerItem, DirectorPortalStatistics } from './types';
 
 const hospitalStatusLabels = { ACTIVE: 'В стационаре', DISCHARGED: 'Выписан', CANCELLED: 'Отменён' } as const;
 const hospitalStatusColors = { ACTIVE: 'blue', DISCHARGED: 'green', CANCELLED: 'default' } as const;
+const portalStatusLabels = {
+  ACTIVATED: 'Активирован',
+  INVITED: 'Ожидает входа',
+  ENABLED: 'Доступ включён',
+  BLOCKED: 'Заблокирован',
+  DISABLED: 'Доступ выключен',
+} as const;
+const portalStatusColors = { ACTIVATED: 'green', INVITED: 'gold', ENABLED: 'blue', BLOCKED: 'red', DISABLED: 'default' } as const;
 
 export function DashboardPage() {
   const navigate = useNavigate();
+  const [portalStatisticsOpen, setPortalStatisticsOpen] = useState(false);
   const { data: auth } = useCurrentEmployee();
   const employee = auth?.employee;
   const today = useMemo(() => toDateInput(new Date()), []);
@@ -41,6 +51,12 @@ export function DashboardPage() {
     refetchInterval: 10_000,
   });
   const summary = dashboardQuery.data;
+  const portalStatisticsQuery = useQuery({
+    queryKey: ['dashboard', 'portal-statistics'],
+    queryFn: getDirectorPortalStatistics,
+    enabled: summary?.workspace.mode === 'director',
+    refetchInterval: 60_000,
+  });
   const todayVisits = summary?.visits.todayItems ?? summary?.visits.items ?? [];
   const stockAlerts = (summary?.stock.lowStockProducts ?? 0) + (summary?.stock.expiringBatches ?? 0);
   const requestAlerts = (summary?.onlineRequests.newRequests ?? 0) + (summary?.onlineRequests.inReview ?? 0);
@@ -161,6 +177,20 @@ export function DashboardPage() {
           variant="lab"
           onClick={() => navigate('/laboratory?status=active')}
         />
+        {summary?.workspace.mode === 'director' ? (
+          <DashboardActionTile
+            title="Личные кабинеты"
+            value={portalStatisticsQuery.isError ? '—' : formatGatewayMetric(portalStatisticsQuery.data, 'registered')}
+            hint={getPortalStatisticsHint(portalStatisticsQuery.data, portalStatisticsQuery.isError)}
+            icon={<UserOutlined />}
+            loading={portalStatisticsQuery.isLoading}
+            variant="portal"
+            onClick={() => {
+              setPortalStatisticsOpen(true);
+              void portalStatisticsQuery.refetch();
+            }}
+          />
+        ) : null}
       </div>
       <div className="dashboard-grid dashboard-grid-expanded">
         <section className="list-panel">
@@ -373,7 +403,129 @@ export function DashboardPage() {
           />
         </section>
       </div>
+      <PortalStatisticsDrawer
+        open={portalStatisticsOpen}
+        loading={portalStatisticsQuery.isLoading}
+        error={portalStatisticsQuery.error}
+        statistics={portalStatisticsQuery.data}
+        onClose={() => setPortalStatisticsOpen(false)}
+        onOpenOwner={(ownerId) => {
+          setPortalStatisticsOpen(false);
+          navigate(`/owners/${ownerId}`);
+        }}
+      />
     </div>
+  );
+}
+
+function PortalStatisticsDrawer({
+  open,
+  loading,
+  error,
+  statistics,
+  onClose,
+  onOpenOwner,
+}: {
+  open: boolean;
+  loading: boolean;
+  error: unknown;
+  statistics: DirectorPortalStatistics | undefined;
+  onClose: () => void;
+  onOpenOwner: (ownerId: string) => void;
+}) {
+  return (
+    <Drawer
+      title="Личные кабинеты владельцев"
+      open={open}
+      onClose={onClose}
+      width={920}
+      className="portal-statistics-drawer"
+      destroyOnHidden
+    >
+      {error ? <Alert type="error" showIcon message={getErrorMessage(error)} className="form-alert" /> : null}
+      {statistics && !statistics.gatewayAvailable ? (
+        <Alert
+          type="warning"
+          showIcon
+          className="form-alert"
+          message="Публичный шлюз сейчас недоступен"
+          description="Показаны локальные данные CRM. Последние входы и подключения Telegram/MAX могут быть неполными; нулевые значения не означают, что подключений нет."
+        />
+      ) : null}
+      <Descriptions bordered size="small" column={{ xs: 1, sm: 2 }} className="portal-statistics-summary">
+        <Descriptions.Item label="Владельцев в CRM">{statistics?.totals.owners ?? '—'}</Descriptions.Item>
+        <Descriptions.Item label="Активировали кабинет">{formatGatewayMetric(statistics, 'registered')}</Descriptions.Item>
+        <Descriptions.Item label="Приглашены, но не вошли">{statistics?.totals.invited ?? '—'}</Descriptions.Item>
+        <Descriptions.Item label="Заходили за 30 дней">{formatGatewayMetric(statistics, 'active30Days')}</Descriptions.Item>
+        <Descriptions.Item label="Подключили Telegram">{formatGatewayMetric(statistics, 'telegramLinked')}</Descriptions.Item>
+        <Descriptions.Item label="Подключили MAX">{formatGatewayMetric(statistics, 'maxLinked')}</Descriptions.Item>
+        <Descriptions.Item label="Заблокированы">{statistics?.totals.blocked ?? '—'}</Descriptions.Item>
+        <Descriptions.Item label="Данные шлюза">
+          {statistics?.gatewayAvailable ? `Обновлены ${formatDateTime(statistics.gatewayUpdatedAt)}` : 'Нет связи'}
+        </Descriptions.Item>
+      </Descriptions>
+      <Typography.Paragraph type="secondary" className="portal-statistics-note">
+        Активированным считается кабинет, в который владелец хотя бы один раз успешно вошёл. Одного созданного приглашения или QR-кода недостаточно.
+      </Typography.Paragraph>
+      <Table<DirectorPortalOwnerItem>
+        rowKey="ownerId"
+        loading={loading}
+        dataSource={statistics?.items ?? []}
+        pagination={{ pageSize: 10, showSizeChanger: false }}
+        scroll={{ x: 760 }}
+        locale={{ emptyText: 'Активаций и приглашений пока нет' }}
+        columns={[
+          {
+            title: 'Владелец',
+            dataIndex: 'fullName',
+            width: 230,
+            render: (fullName: string, owner) => (
+              <div>
+                <Button type="link" className="portal-statistics-owner-link" onClick={() => onOpenOwner(owner.ownerId)}>
+                  {fullName}
+                </Button>
+                <Typography.Text type="secondary" className="portal-statistics-owner-phone">{owner.phone || 'Телефон не указан'}</Typography.Text>
+              </div>
+            ),
+          },
+          {
+            title: 'Состояние',
+            dataIndex: 'status',
+            width: 145,
+            render: (status: DirectorPortalOwnerItem['status']) => <Tag color={portalStatusColors[status]}>{portalStatusLabels[status]}</Tag>,
+          },
+          {
+            title: 'Последний вход',
+            dataIndex: 'lastSeenAt',
+            width: 155,
+            render: (value: string | null) => formatDateTime(value),
+          },
+          {
+            title: 'Приглашён',
+            dataIndex: 'invitedAt',
+            width: 155,
+            render: (value: string | null) => formatDateTime(value),
+          },
+          {
+            title: 'Каналы',
+            key: 'channels',
+            width: 150,
+            render: (_, owner) => (
+              <Space wrap size={4}>
+                {owner.telegramLinked ? <Tag color="blue">Telegram</Tag> : null}
+                {owner.maxLinked ? <Tag color="purple">MAX</Tag> : null}
+                {!owner.telegramLinked && !owner.maxLinked ? '—' : null}
+              </Space>
+            ),
+          },
+        ]}
+      />
+      {statistics && statistics.listedOwners > statistics.items.length ? (
+        <Typography.Text type="secondary">
+          Показаны последние {statistics.items.length} из {statistics.listedOwners} владельцев с личным кабинетом.
+        </Typography.Text>
+      ) : null}
+    </Drawer>
   );
 }
 
@@ -738,6 +890,33 @@ function DashboardActionTile({
       </span>
     </button>
   );
+}
+
+function getPortalStatisticsHint(statistics: DirectorPortalStatistics | undefined, isError: boolean) {
+  if (isError) {
+    return 'Не удалось получить статистику';
+  }
+  if (!statistics) {
+    return 'Загрузка данных';
+  }
+  if (!statistics.gatewayAvailable) {
+    return 'Только локальные данные · шлюз недоступен';
+  }
+  return `Приглашены ${statistics.totals.invited} · активны 30 дней ${statistics.totals.active30Days}`;
+}
+
+function formatGatewayMetric(
+  statistics: DirectorPortalStatistics | undefined,
+  metric: 'registered' | 'active30Days' | 'telegramLinked' | 'maxLinked',
+) {
+  if (!statistics) {
+    return '—';
+  }
+  const value = statistics.totals[metric];
+  if (statistics.gatewayAvailable) {
+    return value;
+  }
+  return value > 0 ? `${value}+` : '—';
 }
 
 function toDateInput(value: Date) {

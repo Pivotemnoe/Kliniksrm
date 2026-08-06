@@ -28,6 +28,7 @@ jobs:
           repo="${repo,,}"
           echo "api=ghcr.io/${owner}/${repo}-api" >> "$GITHUB_OUTPUT"
           echo "web=ghcr.io/${owner}/${repo}-web" >> "$GITHUB_OUTPUT"
+          echo "gateway=ghcr.io/${owner}/${repo}-owner-gateway" >> "$GITHUB_OUTPUT"
 
       - name: Set build metadata
         id: metadata
@@ -82,6 +83,24 @@ jobs:
             ${{ steps.images.outputs.web }}:stable
             ${{ steps.images.outputs.web }}:${{ github.sha }}
 
+      - name: Build and publish owner gateway image
+        id: build-gateway
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/owner-gateway/Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: true
+          sbom: true
+          build-args: |
+            TEMICHEVVET_GIT_COMMIT=${{ github.sha }}
+            TEMICHEVVET_BUILD_DATE=${{ steps.metadata.outputs.date }}
+            TEMICHEVVET_IMAGE_SOURCE=${{ steps.metadata.outputs.source }}
+          tags: |
+            ${{ steps.images.outputs.gateway }}:stable
+            ${{ steps.images.outputs.gateway }}:${{ github.sha }}
+
       - name: Attest API image provenance
         uses: actions/attest@v4
         with:
@@ -94,4 +113,11 @@ jobs:
         with:
           subject-name: ${{ steps.images.outputs.web }}
           subject-digest: ${{ steps.build-web.outputs.digest }}
+          push-to-registry: true
+
+      - name: Attest owner gateway image provenance
+        uses: actions/attest@v4
+        with:
+          subject-name: ${{ steps.images.outputs.gateway }}
+          subject-digest: ${{ steps.build-gateway.outputs.digest }}
           push-to-registry: true

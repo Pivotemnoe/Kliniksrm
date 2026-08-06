@@ -20,6 +20,17 @@ export type OwnerGatewayStatus = {
   syncedAt: string | null;
 };
 
+export type OwnerGatewayPortalStatistics = {
+  generatedAt: string;
+  owners: Array<{
+    ownerId: string;
+    activatedAt: string | null;
+    lastSeenAt: string | null;
+    maxLinked: boolean;
+    telegramLinked: boolean;
+  }>;
+};
+
 export type OwnerMessengerChannel = 'MAX' | 'TELEGRAM';
 export type OwnerGatewayMessageStatus = 'sent' | 'not_linked' | 'failed' | 'skipped_not_configured';
 
@@ -232,6 +243,31 @@ export class OwnerGatewayClient {
         syncSecret,
         { method: 'GET' },
       );
+    } catch {
+      return null;
+    }
+  }
+
+  async getPortalStatistics(): Promise<OwnerGatewayPortalStatistics | null> {
+    const baseUrl = normalizeBaseUrl(process.env.OWNER_GATEWAY_URL);
+    const syncSecret = process.env.OWNER_GATEWAY_SYNC_SECRET?.trim();
+
+    if (!baseUrl || !syncSecret) {
+      return null;
+    }
+
+    try {
+      const result = await requestGatewayWithRetry<OwnerGatewayPortalStatistics>(
+        `${baseUrl}/internal/v1/owners/portal-statistics`,
+        syncSecret,
+        { method: 'GET' },
+      );
+      return {
+        generatedAt: result.generatedAt,
+        owners: Array.isArray(result.owners)
+          ? result.owners.filter((owner) => typeof owner?.ownerId === 'string')
+          : [],
+      };
     } catch {
       return null;
     }

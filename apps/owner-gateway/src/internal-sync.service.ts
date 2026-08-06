@@ -77,6 +77,59 @@ export class InternalSyncService {
     };
   }
 
+  async getPortalStatistics() {
+    const [sessionActivity, bindings] = await Promise.all([
+      this.prisma.portalSession.groupBy({
+        by: ['ownerId'],
+        _min: { createdAt: true },
+        _max: { lastSeenAt: true },
+      }),
+      this.prisma.messengerBinding.findMany({
+        select: { ownerId: true, channel: true },
+      }),
+    ]);
+
+    const owners = new Map<string, {
+      ownerId: string;
+      activatedAt: Date | null;
+      lastSeenAt: Date | null;
+      telegramLinked: boolean;
+      maxLinked: boolean;
+    }>();
+
+    for (const activity of sessionActivity) {
+      owners.set(activity.ownerId, {
+        ownerId: activity.ownerId,
+        activatedAt: activity._min.createdAt,
+        lastSeenAt: activity._max.lastSeenAt,
+        telegramLinked: false,
+        maxLinked: false,
+      });
+    }
+
+    for (const binding of bindings) {
+      const owner = owners.get(binding.ownerId) ?? {
+        ownerId: binding.ownerId,
+        activatedAt: null,
+        lastSeenAt: null,
+        telegramLinked: false,
+        maxLinked: false,
+      };
+      if (binding.channel === MessengerChannel.TELEGRAM) {
+        owner.telegramLinked = true;
+      }
+      if (binding.channel === MessengerChannel.MAX) {
+        owner.maxLinked = true;
+      }
+      owners.set(binding.ownerId, owner);
+    }
+
+    return {
+      generatedAt: new Date(),
+      owners: Array.from(owners.values()),
+    };
+  }
+
   async createInvitation(ownerId: string, dto: CreateInvitationDto) {
     const owner = await this.prisma.ownerSnapshot.findUnique({ where: { ownerId }, select: { ownerId: true } });
 

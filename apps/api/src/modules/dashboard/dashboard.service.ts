@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import {
   AppointmentStatus,
   HospitalStayStatus,
@@ -12,11 +12,16 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthEmployee } from '../auth/auth.types';
+import { OwnerGatewayClient } from '../notifications/providers/owner-gateway.client';
 import { DashboardQueryDto } from './dto/dashboard-query.dto';
+import { buildDirectorPortalStatistics, LocalPortalOwner } from './portal-statistics';
 
 @Injectable()
 export class DashboardService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly ownerGatewayClient: OwnerGatewayClient,
+  ) {}
 
   async getToday(query: DashboardQueryDto, actor: AuthEmployee) {
     const { date, start, end } = resolveDayBounds(query.date);
@@ -291,6 +296,79 @@ export class DashboardService {
         items: labItems,
       } : { orderedToday: 0, completedToday: 0, pending: 0, items: [] },
     };
+  }
+
+  async getPortalStatistics(actor: AuthEmployee) {
+    if (!actor.roles.includes('director')) {
+      throw new ForbiddenException('Статистика личных кабинетов доступна только директору');
+    }
+
+    const [totalOwners, portalAccesses, gateway] = await Promise.all([
+      this.prisma.owner.count(),
+      this.prisma.clientPortalAccess.findMany({
+        select: {
+          ownerId: true,
+          status: true,
+          invitedAt: true,
+          lastLoginAt: true,
+          owner: {
+            select: {
+              fullName: true,
+              phone: true,
+              telegramChatId: true,
+              maxUserId: true,
+            },
+          },
+        },
+      }),
+      this.ownerGatewayClient.getPortalStatistics(),
+    ]);
+
+    const accessOwnerIds = new Set(portalAccesses.map((access) => access.ownerId));
+    const gatewayOnlyOwnerIds = (gateway?.owners ?? [])
+      .map((owner) => owner.ownerId)
+      .filter((ownerId) => !accessOwnerIds.has(ownerId));
+    const gatewayOnlyOwners = gatewayOnlyOwnerIds.length
+      ? await this.prisma.owner.findMany({
+          where: { id: { in: gatewayOnlyOwnerIds } },
+          select: {
+            id: true,
+            fullName: true,
+            phone: true,
+            telegramChatId: true,
+            maxUserId: true,
+          },
+        })
+      : [];
+
+    const localOwners: LocalPortalOwner[] = [
+      ...portalAccesses.map((access) => ({
+        ownerId: access.ownerId,
+        fullName: access.owner.fullName,
+        phone: access.owner.phone,
+        status: access.status,
+        invitedAt: access.invitedAt?.toISOString() ?? null,
+        lastLoginAt: access.lastLoginAt?.toISOString() ?? null,
+        telegramLinked: Boolean(access.owner.telegramChatId),
+        maxLinked: Boolean(access.owner.maxUserId),
+      })),
+      ...gatewayOnlyOwners.map((owner) => ({
+        ownerId: owner.id,
+        fullName: owner.fullName,
+        phone: owner.phone,
+        status: 'DISABLED' as const,
+        invitedAt: null,
+        lastLoginAt: null,
+        telegramLinked: Boolean(owner.telegramChatId),
+        maxLinked: Boolean(owner.maxUserId),
+      })),
+    ];
+
+    return buildDirectorPortalStatistics({
+      totalOwners,
+      localOwners,
+      gateway,
+    });
   }
 }
 

@@ -10,6 +10,14 @@ import { MarkBookingRequestImportedDto } from './dto/mark-booking-request-import
 export class InternalSyncController {
   constructor(private readonly internalSyncService: InternalSyncService) {}
 
+  @Get('portal-statistics')
+  getPortalStatistics(
+    @Headers('x-owner-gateway-secret') secret: string | undefined,
+  ) {
+    this.assertSyncSecret(secret);
+    return this.internalSyncService.getPortalStatistics();
+  }
+
   @Put(':ownerId/snapshot')
   upsertSnapshot(
     @Param('ownerId') ownerId: string,

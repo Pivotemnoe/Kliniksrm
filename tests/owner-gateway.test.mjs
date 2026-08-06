@@ -89,3 +89,29 @@ test('привязанный Telegram может запросить новый �
     null,
   );
 });
+
+test('шлюз агрегирует первую активацию, последний вход и подключённые каналы по владельцу', async () => {
+  const { InternalSyncService } = require('../apps/owner-gateway/dist/internal-sync.service.js');
+  const service = new InternalSyncService({
+    portalSession: {
+      groupBy: async () => [{
+        ownerId: 'owner-1',
+        _min: { createdAt: new Date('2026-08-01T10:00:00.000Z') },
+        _max: { lastSeenAt: new Date('2026-08-05T12:00:00.000Z') },
+      }],
+    },
+    messengerBinding: {
+      findMany: async () => [
+        { ownerId: 'owner-1', channel: 'TELEGRAM' },
+        { ownerId: 'owner-2', channel: 'MAX' },
+      ],
+    },
+  }, null, null, null);
+
+  const result = await service.getPortalStatistics();
+  assert.equal(result.owners.length, 2);
+  assert.equal(result.owners.find((owner) => owner.ownerId === 'owner-1')?.telegramLinked, true);
+  assert.equal(result.owners.find((owner) => owner.ownerId === 'owner-1')?.lastSeenAt.toISOString(), '2026-08-05T12:00:00.000Z');
+  assert.equal(result.owners.find((owner) => owner.ownerId === 'owner-2')?.maxLinked, true);
+  assert.equal(result.owners.find((owner) => owner.ownerId === 'owner-2')?.activatedAt, null);
+});

@@ -17,4 +17,11 @@ export class DashboardController {
   getToday(@Query() query: DashboardQueryDto, @CurrentEmployee() actor: AuthEmployee) {
     return this.dashboardService.getToday(query, actor);
   }
+
+  @Get('portal-statistics')
+  @RequirePermissions('dashboard.read', 'owners.read')
+  @ApiOkResponse({ description: 'Статистика использования личных кабинетов для директора.' })
+  getPortalStatistics(@CurrentEmployee() actor: AuthEmployee) {
+    return this.dashboardService.getPortalStatistics(actor);
+  }
 }

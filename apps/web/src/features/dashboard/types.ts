@@ -82,6 +82,36 @@ export type DashboardSummary = {
   };
 };
 
+export type DirectorPortalStatistics = {
+  calculatedAt: string;
+  gatewayAvailable: boolean;
+  gatewayUpdatedAt: string | null;
+  totals: {
+    owners: number;
+    registered: number;
+    invited: number;
+    active30Days: number;
+    telegramLinked: number;
+    maxLinked: number;
+    blocked: number;
+  };
+  listedOwners: number;
+  items: DirectorPortalOwnerItem[];
+};
+
+export type DirectorPortalOwnerItem = {
+  ownerId: string;
+  fullName: string;
+  phone: string | null;
+  status: 'ACTIVATED' | 'INVITED' | 'ENABLED' | 'BLOCKED' | 'DISABLED';
+  registered: boolean;
+  invitedAt: string | null;
+  activatedAt: string | null;
+  lastSeenAt: string | null;
+  telegramLinked: boolean;
+  maxLinked: boolean;
+};
+
 export type DashboardQueueItem = {
   id: string;
   ownerName: string | null;

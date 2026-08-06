@@ -961,6 +961,35 @@ body {
   --tile-color: #6d5d9d;
 }
 
+.dashboard-action-portal {
+  --tile-color: #0f766e;
+}
+
+.portal-statistics-drawer .ant-drawer-content-wrapper {
+  max-width: 100vw;
+}
+
+.portal-statistics-summary {
+  margin-bottom: 12px;
+}
+
+.portal-statistics-note {
+  margin: 0 0 14px;
+}
+
+.portal-statistics-owner-link {
+  display: block;
+  height: auto;
+  padding: 0;
+  text-align: left;
+  white-space: normal;
+}
+
+.portal-statistics-owner-phone {
+  display: block;
+  margin-top: 2px;
+}
+
 .metric-tile {
   min-height: 104px;
   padding: 16px;
