@@ -15,6 +15,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { appConfig, isDemoAuthMode } from '../app/config';
 import { hasPermission } from '../auth/permissions';
 import { useCurrentEmployee, useLogoutMutation } from '../auth/useAuth';
+import { RouteLoadBoundary } from '../app/RouteLoadBoundary';
 import { listBillAlerts } from '../features/billing/billing.api';
 import { listNewsPosts } from '../features/news/news.api';
 import { listNotificationOutbox } from '../features/notifications/notifications.api';
@@ -245,7 +246,9 @@ export function CrmLayout() {
           </Space>
         </Header>
         <Content className="crm-content">
-          <Outlet />
+          <RouteLoadBoundary resetKey={location.pathname}>
+            <Outlet />
+          </RouteLoadBoundary>
         </Content>
       </Layout>
     </Layout>
