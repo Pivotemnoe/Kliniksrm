@@ -33,7 +33,7 @@ export class DocumentsService {
         versions: {
           orderBy: { version: 'desc' },
           take: 1,
-          select: { id: true, version: true, publishedAt: true, createdByName: true },
+          select: { id: true, version: true, publishedAt: true, createdByName: true, requiresSignature: true },
         },
       },
     });
@@ -58,6 +58,7 @@ export class DocumentsService {
           ...(category ? { category: { connect: { id: category.id } } } : {}),
           title: dto.title.trim(),
           body: emptyToNull(dto.body),
+          requiresSignature: dto.requiresSignature ?? false,
           ...(variables !== undefined ? { variables } : {}),
         },
       });
@@ -69,6 +70,7 @@ export class DocumentsService {
           categoryTitle,
           title: created.title,
           body: created.body,
+          requiresSignature: created.requiresSignature,
           ...(created.variables !== null ? { variables: created.variables as Prisma.InputJsonValue } : {}),
           createdById: actor.id,
           createdByName: actor.name,
@@ -123,6 +125,7 @@ export class DocumentsService {
         data: {
           ...(dto.title !== undefined ? { title: dto.title.trim() } : {}),
           ...(dto.body !== undefined ? { body: emptyToNull(dto.body) } : {}),
+          ...(dto.requiresSignature !== undefined ? { requiresSignature: dto.requiresSignature } : {}),
           ...(category !== undefined ? { categoryId: category?.id ?? null } : {}),
           ...(variables !== undefined ? { variables } : {}),
           currentVersion: { increment: 1 },
@@ -137,6 +140,7 @@ export class DocumentsService {
           categoryTitle: updated.category?.title ?? null,
           title: updated.title,
           body: updated.body,
+          requiresSignature: updated.requiresSignature,
           ...(updated.variables !== null ? { variables: updated.variables as Prisma.InputJsonValue } : {}),
           createdById: actor.id,
           createdByName: actor.name,
@@ -706,6 +710,7 @@ const visitDocumentInclude = {
       version: true,
       categoryTitle: true,
       title: true,
+      requiresSignature: true,
       publishedAt: true,
       createdByName: true,
     },
@@ -751,7 +756,7 @@ const templateInclude = {
   versions: {
     orderBy: { version: 'desc' },
     take: 1,
-    select: { id: true, version: true, publishedAt: true, createdByName: true },
+    select: { id: true, version: true, publishedAt: true, createdByName: true, requiresSignature: true },
   },
 } satisfies Prisma.DocumentTemplateInclude;
 

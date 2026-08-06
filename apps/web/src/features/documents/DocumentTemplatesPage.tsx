@@ -41,6 +41,7 @@ const documentTemplateSchema = z.object({
   title: z.string().trim().min(2, 'Укажите название').max(200),
   categoryTitle: z.string().trim().max(120).optional(),
   body: z.string().trim().max(20000).optional(),
+  requiresSignature: z.boolean(),
 });
 
 const textTemplateFieldOptions = [
@@ -521,7 +522,7 @@ function DocumentTemplatesPanel({ canManage }: { canManage: boolean }) {
   const bodySelectionRef = useRef({ start: 0, end: 0 });
   const { control, getValues, handleSubmit, reset, setValue, watch } = useForm<DocumentTemplateFormValues>({
     resolver: zodResolver(documentTemplateSchema),
-    defaultValues: { title: '', categoryTitle: '', body: '' },
+    defaultValues: { title: '', categoryTitle: '', body: '', requiresSignature: false },
   });
   const previewTitle = watch('title');
   const previewBody = watch('body');
@@ -591,14 +592,19 @@ function DocumentTemplatesPanel({ canManage }: { canManage: boolean }) {
 
   function openCreate() {
     setEditingTemplate(null);
-    reset({ title: '', categoryTitle: '', body: '' });
+    reset({ title: '', categoryTitle: '', body: '', requiresSignature: false });
     bodySelectionRef.current = { start: 0, end: 0 };
     setModalOpen(true);
   }
 
   function openEdit(template: DocumentTemplate) {
     setEditingTemplate(template);
-    reset({ title: template.title, categoryTitle: template.category?.title ?? '', body: template.body ?? '' });
+    reset({
+      title: template.title,
+      categoryTitle: template.category?.title ?? '',
+      body: template.body ?? '',
+      requiresSignature: template.requiresSignature,
+    });
     const bodyLength = template.body?.length ?? 0;
     bodySelectionRef.current = { start: bodyLength, end: bodyLength };
     setModalOpen(true);
@@ -607,7 +613,7 @@ function DocumentTemplatesPanel({ canManage }: { canManage: boolean }) {
   function closeModal() {
     setModalOpen(false);
     setEditingTemplate(null);
-    reset({ title: '', categoryTitle: '', body: '' });
+    reset({ title: '', categoryTitle: '', body: '', requiresSignature: false });
     bodySelectionRef.current = { start: 0, end: 0 };
   }
 
@@ -708,6 +714,20 @@ function DocumentTemplatesPanel({ canManage }: { canManage: boolean }) {
               )}
             />
           </div>
+          <Controller
+            control={control}
+            name="requiresSignature"
+            render={({ field }) => (
+              <Form.Item>
+                <Checkbox checked={field.value} onChange={(event) => field.onChange(event.target.checked)}>
+                  Требуется подтверждение подписи
+                </Checkbox>
+                <Typography.Paragraph type="secondary" style={{ margin: '4px 0 0 24px' }}>
+                  Включайте только для согласий и других официальных документов. Для обычных рекомендаций и выписок врач сразу перейдёт к печати.
+                </Typography.Paragraph>
+              </Form.Item>
+            )}
+          />
           <Controller
             control={control}
             name="body"

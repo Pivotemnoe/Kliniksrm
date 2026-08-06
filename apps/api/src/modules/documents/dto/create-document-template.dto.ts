@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsObject, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsBoolean, IsObject, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 export class CreateDocumentTemplateDto {
   @ApiProperty()
@@ -24,4 +24,12 @@ export class CreateDocumentTemplateDto {
   @IsOptional()
   @IsObject()
   variables?: Record<string, unknown> | null;
+
+  @ApiPropertyOptional({
+    description: 'Показывать подтверждение подписи для согласий и других официальных документов.',
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  requiresSignature?: boolean;
 }

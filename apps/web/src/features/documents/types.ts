@@ -14,12 +14,14 @@ export type DocumentTemplate = {
   title: string;
   body: string | null;
   variables: Record<string, unknown> | null;
+  requiresSignature: boolean;
   currentVersion: number;
   versions?: Array<{
     id: string;
     version: number;
     publishedAt: string;
     createdByName: string | null;
+    requiresSignature: boolean;
   }>;
   createdAt: string;
   updatedAt: string;
@@ -38,6 +40,7 @@ export type VisitDocument = {
     title: string;
     publishedAt: string;
     createdByName: string | null;
+    requiresSignature: boolean;
   } | null;
   title: string;
   body: string | null;
@@ -109,6 +112,7 @@ export type CreateDocumentTemplateInput = {
   categoryTitle?: string;
   body?: string;
   variables?: Record<string, unknown>;
+  requiresSignature?: boolean;
 };
 
 export type UpdateDocumentTemplateInput = Partial<CreateDocumentTemplateInput>;

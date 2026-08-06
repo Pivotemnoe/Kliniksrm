@@ -2108,6 +2108,7 @@ model DocumentTemplate {
   title              String
   body               String?
   variables          Json?
+  requiresSignature  Boolean                   @default(false)
   currentVersion     Int                       @default(1)
   versions           DocumentTemplateVersion[]
   visitDocuments     VisitDocument[]
@@ -2127,6 +2128,7 @@ model DocumentTemplateVersion {
   title              String
   body               String?
   variables          Json?
+  requiresSignature  Boolean             @default(false)
   createdById        String?
   createdByName      String?
   publishedAt        DateTime            @default(now())

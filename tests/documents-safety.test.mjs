@@ -37,7 +37,7 @@ test('предпросмотр документов подставляет да�
   assert.match(templates, /Предпросмотр на примере/);
   assert.match(visitDocuments, /renderVisitDocumentPreview\(previewBody/);
   assert.match(visitDocuments, /'owner\.fullName': visit\.owner\.fullName/);
-  assert.match(visitDocuments, /Предпросмотр с данными приёма/);
+  assert.match(visitDocuments, /title="Предпросмотр"/);
 });
 
 test('редактор шаблона вставляет поля в позицию курсора и предлагает готовые разделы', async () => {
@@ -103,17 +103,30 @@ test('сформированный PDF сохраняется с SHA-256, отк
   assert.match(portal, /getGeneratedDocumentText\(generatedDocument\?\.snapshot\)/);
 });
 
-test('врач видит прямой путь от черновика к сформированному и подписанному документу', async () => {
-  const ui = await read('apps/web/src/features/visits/VisitDocumentsTab.tsx');
+test('врач завершает обычный документ одной понятной командой без технических статусов', async () => {
+  const [ui, templates, dto, schema, migration] = await Promise.all([
+    read('apps/web/src/features/visits/VisitDocumentsTab.tsx'),
+    read('apps/web/src/features/documents/DocumentTemplatesPage.tsx'),
+    read('apps/api/src/modules/documents/dto/create-document-template.dto.ts'),
+    read('prisma/schema.prisma'),
+    read('prisma/migrations/20260806000200_document_template_signature_rule/migration.sql'),
+  ]);
 
-  assert.match(ui, /Сохранить черновик/);
-  assert.match(ui, /Сформировать/);
-  assert.match(ui, /Подписать/);
-  assert.match(ui, /Печать PDF/);
-  assert.match(ui, /Сначала сформируйте документ/);
+  assert.match(ui, /Сохранить и закрыть/);
+  assert.match(ui, /Готово и печать/);
+  assert.match(ui, /Точная версия сохранена, PDF открыт для печати/);
+  assert.match(ui, /documentRequiresSignature/);
+  assert.match(ui, /Подтвердить подпись/);
   assert.match(ui, /record\.generatedDocument && record\.status !== 'CANCELLED'/);
+  assert.doesNotMatch(ui, /title: 'Статус'/);
+  assert.doesNotMatch(ui, /Сохранить черновик/);
+  assert.doesNotMatch(ui, />\s*Сформировать\s*</);
   assert.doesNotMatch(ui, /name="status"/);
   assert.doesNotMatch(ui, /temichevvet-logo\.jpg/);
+  assert.match(templates, /Требуется подтверждение подписи/);
+  assert.match(dto, /requiresSignature\?: boolean/);
+  assert.match(schema, /requiresSignature\s+Boolean\s+@default\(false\)/);
+  assert.doesNotMatch(migration, /^\s*(?:DROP|TRUNCATE|DELETE\s+FROM)\b/im);
 });
 
 test('печатная форма документа не выводит телефон владельца, а русские имена файлов восстанавливаются', async () => {
@@ -143,7 +156,7 @@ test('отправка сформированного документа свя�
   assert.match(notifications, /Отправить можно только сформированный или подписанный документ/);
   assert.match(ui, /visitDocumentId: document\.id/);
   assert.match(ui, /История документа/);
-  assert.match(ui, /Сформированная версия защищена от изменений/);
+  assert.match(ui, /Документ готов и сохранён в истории/);
 });
 
 test('файл загружается прямо в общий архив пациента без фиктивного приёма', async () => {
