@@ -39,4 +39,28 @@ export class CreateHospitalAmendmentDto {
   @IsString()
   @MaxLength(2000)
   notes?: string;
+
+  @ApiPropertyOptional({ description: 'Corrected quantity charged to the client for a planned catalog item.' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.001)
+  @Max(999999)
+  quantity?: number;
+
+  @ApiPropertyOptional({ description: 'Corrected quantity to deduct from stock when a planned product is completed.' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.001)
+  @Max(999999)
+  stockQuantity?: number;
+
+  @ApiPropertyOptional({ description: 'Corrected unit price for a planned catalog item.' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(999999999)
+  unitPrice?: number;
 }

@@ -338,7 +338,15 @@ export class HospitalService {
     const stay = await this.getExistingHospitalStay(stayId);
     const existing = await this.prisma.hospitalRecord.findFirst({
       where: { id: recordId, visitId: stay.sourceVisitId },
-      include: { billItem: true },
+      include: {
+        billItem: true,
+        amendments: {
+          where: plannedCatalogAmendmentWhere,
+          orderBy: { recordedAt: 'desc' },
+          take: 1,
+          select: plannedCatalogSnapshotSelect,
+        },
+      },
     });
 
     if (!existing) {
@@ -364,18 +372,19 @@ export class HospitalService {
     const billingChanged = dto.quantity !== undefined || dto.stockQuantity !== undefined || dto.unitPrice !== undefined;
     const completingPlannedRecord = existing.recordStatus === HospitalRecordStatus.PLANNED
       && nextRecordStatus === HospitalRecordStatus.COMPLETED;
-    const plannedProductId = dto.productId ?? existing.plannedProductId ?? undefined;
-    const plannedServiceId = dto.serviceId ?? existing.plannedServiceId ?? undefined;
+    const effectivePlannedCatalog = getEffectivePlannedCatalog(existing);
+    const plannedProductId = dto.productId ?? effectivePlannedCatalog.productId ?? undefined;
+    const plannedServiceId = dto.serviceId ?? effectivePlannedCatalog.serviceId ?? undefined;
     const hasCatalogItemForCompletion = Boolean(plannedProductId || plannedServiceId);
     const shouldPostPlannedCatalog = completingPlannedRecord && !existing.billItem && hasCatalogItemForCompletion;
 
     if (dto.productId && dto.serviceId) {
       throw new BadRequestException('В одной записи можно выбрать товар или услугу, но не оба варианта одновременно');
     }
-    if (existing.plannedProductId && (dto.serviceId || (dto.productId && dto.productId !== existing.plannedProductId))) {
+    if (effectivePlannedCatalog.productId && (dto.serviceId || (dto.productId && dto.productId !== effectivePlannedCatalog.productId))) {
       throw new BadRequestException('Товар уже зафиксирован в плане лечения. Для другого товара создайте новое назначение');
     }
-    if (existing.plannedServiceId && (dto.productId || (dto.serviceId && dto.serviceId !== existing.plannedServiceId))) {
+    if (effectivePlannedCatalog.serviceId && (dto.productId || (dto.serviceId && dto.serviceId !== effectivePlannedCatalog.serviceId))) {
       throw new BadRequestException('Услуга уже зафиксирована в плане лечения. Для другой услуги создайте новое назначение');
     }
     if ((dto.productId || dto.serviceId) && !completingPlannedRecord) {
@@ -409,18 +418,25 @@ export class HospitalService {
             plannedQuantity: true,
             plannedStockQuantity: true,
             plannedUnitPrice: true,
+            amendments: {
+              where: plannedCatalogAmendmentWhere,
+              orderBy: { recordedAt: 'desc' },
+              take: 1,
+              select: plannedCatalogSnapshotSelect,
+            },
           },
         });
 
         if (lockedRecord.recordStatus === HospitalRecordStatus.PLANNED && !lockedRecord.billItemId) {
+          const lockedPlannedCatalog = getEffectivePlannedCatalog(lockedRecord);
           postedLine = await this.resolveCatalogLine(tx, {
             recordType: nextRecordType as CreateHospitalRecordDto['recordType'],
             title: dto.title ?? existing.title,
-            productId: dto.productId ?? lockedRecord.plannedProductId ?? undefined,
-            serviceId: dto.serviceId ?? lockedRecord.plannedServiceId ?? undefined,
-            quantity: dto.quantity ?? decimalToOptionalNumber(lockedRecord.plannedQuantity),
-            stockQuantity: dto.stockQuantity ?? decimalToOptionalNumber(lockedRecord.plannedStockQuantity),
-            unitPrice: dto.unitPrice ?? decimalToOptionalNumber(lockedRecord.plannedUnitPrice),
+            productId: dto.productId ?? lockedPlannedCatalog.productId ?? undefined,
+            serviceId: dto.serviceId ?? lockedPlannedCatalog.serviceId ?? undefined,
+            quantity: dto.quantity ?? decimalToOptionalNumber(lockedPlannedCatalog.quantity),
+            stockQuantity: dto.stockQuantity ?? decimalToOptionalNumber(lockedPlannedCatalog.stockQuantity),
+            unitPrice: dto.unitPrice ?? decimalToOptionalNumber(lockedPlannedCatalog.unitPrice),
           });
           const bill = await this.getEditableHospitalBill(tx, stay.sourceVisitId, dueAt);
           const billItem = await tx.billItem.create({
@@ -546,53 +562,124 @@ export class HospitalService {
 
   async createAmendment(stayId: string, recordId: string, dto: CreateHospitalAmendmentDto, actorId: string) {
     const stay = await this.getExistingHospitalStay(stayId);
-    const existing = await this.prisma.hospitalRecord.findFirst({
-      where: { id: recordId, visitId: stay.sourceVisitId },
-      select: { id: true, recordStatus: true, recordedAt: true },
-    });
+    const result = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "HospitalRecord" WHERE "id" = ${recordId} FOR UPDATE`;
+      const existing = await tx.hospitalRecord.findFirst({
+        where: { id: recordId, visitId: stay.sourceVisitId },
+        select: {
+          id: true,
+          recordType: true,
+          recordStatus: true,
+          title: true,
+          recordedAt: true,
+          plannedProductId: true,
+          plannedServiceId: true,
+          plannedQuantity: true,
+          plannedStockQuantity: true,
+          plannedUnitPrice: true,
+          amendments: {
+            where: plannedCatalogAmendmentWhere,
+            orderBy: { recordedAt: 'desc' },
+            take: 1,
+            select: plannedCatalogSnapshotSelect,
+          },
+        },
+      });
 
-    if (!existing) {
-      throw new NotFoundException('Исходная запись журнала стационара не найдена');
-    }
-    if (existing.recordStatus === HospitalRecordStatus.AMENDMENT) {
-      throw new BadRequestException('Исправление добавляется к исходной записи, а не к другому исправлению');
-    }
+      if (!existing) {
+        throw new NotFoundException('Исходная запись журнала стационара не найдена');
+      }
+      if (existing.recordStatus === HospitalRecordStatus.AMENDMENT) {
+        throw new BadRequestException('Исправление добавляется к исходной записи, а не к другому исправлению');
+      }
 
-    this.ensureTemperatureRecord(dto.recordType, dto.temperatureC);
-    const amendment = await this.prisma.hospitalRecord.create({
-      data: {
-        visitId: stay.sourceVisitId,
-        recordedById: actorId,
-        recordType: dto.recordType,
-        recordStatus: HospitalRecordStatus.AMENDMENT,
-        createdAsPlan: false,
-        title: dto.title.trim(),
-        recordedAt: new Date(),
-        completedAt: new Date(),
-        temperatureC: dto.recordType === 'TEMPERATURE' ? dto.temperatureC : null,
-        value: dto.recordType === 'TEMPERATURE' ? null : (dto.value === undefined ? null : cleanOrNull(dto.value)),
-        notes: dto.notes === undefined ? null : cleanOrNull(dto.notes),
-        parentRecordId: existing.id,
-        amendmentReason: dto.reason.trim(),
-      },
-      include: hospitalRecordBaseInclude,
+      this.ensureTemperatureRecord(dto.recordType, dto.temperatureC);
+      const planCorrectionRequested = dto.quantity !== undefined
+        || dto.stockQuantity !== undefined
+        || dto.unitPrice !== undefined;
+      const currentPlan = getEffectivePlannedCatalog(existing);
+      let correctedPlan: HospitalCatalogLine | null = null;
+
+      if (planCorrectionRequested) {
+        if (existing.recordStatus !== HospitalRecordStatus.PLANNED) {
+          throw new BadRequestException('Проведённое списание нельзя переписать исправлением. Создайте отдельное складское корректирующее движение');
+        }
+        if (!currentPlan.productId && !currentPlan.serviceId) {
+          throw new BadRequestException('У исходного назначения нет связанного товара или услуги');
+        }
+        if (dto.stockQuantity !== undefined && !currentPlan.productId) {
+          throw new BadRequestException('Количество списания применяется только к товару');
+        }
+
+        correctedPlan = await this.resolveCatalogLine(tx, {
+          recordType: existing.recordType as CreateHospitalRecordDto['recordType'],
+          title: existing.title,
+          productId: currentPlan.productId ?? undefined,
+          serviceId: currentPlan.serviceId ?? undefined,
+          quantity: dto.quantity ?? decimalToOptionalNumber(currentPlan.quantity),
+          stockQuantity: dto.stockQuantity ?? decimalToOptionalNumber(currentPlan.stockQuantity),
+          unitPrice: dto.unitPrice ?? decimalToOptionalNumber(currentPlan.unitPrice),
+        });
+      }
+
+      const amendment = await tx.hospitalRecord.create({
+        data: {
+          visitId: stay.sourceVisitId,
+          recordedById: actorId,
+          recordType: dto.recordType,
+          recordStatus: HospitalRecordStatus.AMENDMENT,
+          createdAsPlan: false,
+          title: dto.title.trim(),
+          recordedAt: new Date(),
+          completedAt: new Date(),
+          temperatureC: dto.recordType === 'TEMPERATURE' ? dto.temperatureC : null,
+          value: dto.recordType === 'TEMPERATURE' ? null : (dto.value === undefined ? null : cleanOrNull(dto.value)),
+          notes: dto.notes === undefined ? null : cleanOrNull(dto.notes),
+          parentRecordId: existing.id,
+          amendmentReason: dto.reason.trim(),
+          ...(correctedPlan ? {
+            plannedProductId: correctedPlan.productId,
+            plannedServiceId: correctedPlan.serviceId,
+            plannedQuantity: correctedPlan.quantity,
+            plannedStockQuantity: correctedPlan.stockQuantity,
+            plannedUnitPrice: correctedPlan.unitPrice,
+          } : {}),
+        },
+        include: hospitalRecordBaseInclude,
+      });
+
+      return {
+        amendment,
+        originalRecordedAt: existing.recordedAt,
+        planCorrection: correctedPlan ? {
+          productId: correctedPlan.productId,
+          serviceId: correctedPlan.serviceId,
+          previousQuantity: decimalToOptionalNumber(currentPlan.quantity),
+          previousStockQuantity: decimalToOptionalNumber(currentPlan.stockQuantity),
+          previousUnitPrice: decimalToOptionalNumber(currentPlan.unitPrice),
+          quantity: decimalToNumber(correctedPlan.quantity),
+          stockQuantity: correctedPlan.stockQuantity === null ? undefined : decimalToNumber(correctedPlan.stockQuantity),
+          unitPrice: decimalToNumber(correctedPlan.unitPrice),
+        } : null,
+      };
     });
 
     await this.auditService.log({
       actorId,
       action: 'hospital.record.amend',
       entityType: 'HospitalRecord',
-      entityId: amendment.id,
+      entityId: result.amendment.id,
       metadata: {
         stayId: stay.id,
         sourceVisitId: stay.sourceVisitId,
-        parentRecordId: existing.id,
-        originalRecordedAt: existing.recordedAt,
+        parentRecordId: recordId,
+        originalRecordedAt: result.originalRecordedAt,
         reason: dto.reason.trim(),
+        planCorrection: result.planCorrection,
       },
     });
 
-    return amendment;
+    return result.amendment;
   }
 
   async admitExisting(visitId: string, dto: AdmitExistingHospitalStayDto, actorId: string) {
@@ -1138,6 +1225,45 @@ export class HospitalService {
 
     return stay;
   }
+}
+
+const plannedCatalogSnapshotSelect = {
+  plannedProductId: true,
+  plannedServiceId: true,
+  plannedQuantity: true,
+  plannedStockQuantity: true,
+  plannedUnitPrice: true,
+} satisfies Prisma.HospitalRecordSelect;
+
+const plannedCatalogAmendmentWhere = {
+  OR: [
+    { plannedProductId: { not: null } },
+    { plannedServiceId: { not: null } },
+    { plannedQuantity: { not: null } },
+    { plannedStockQuantity: { not: null } },
+    { plannedUnitPrice: { not: null } },
+  ],
+} satisfies Prisma.HospitalRecordWhereInput;
+
+type PlannedCatalogSnapshot = {
+  plannedProductId: string | null;
+  plannedServiceId: string | null;
+  plannedQuantity: Prisma.Decimal | null;
+  plannedStockQuantity: Prisma.Decimal | null;
+  plannedUnitPrice: Prisma.Decimal | null;
+};
+
+function getEffectivePlannedCatalog(
+  record: PlannedCatalogSnapshot & { amendments?: PlannedCatalogSnapshot[] },
+) {
+  const correction = record.amendments?.[0];
+  return {
+    productId: correction?.plannedProductId ?? record.plannedProductId,
+    serviceId: correction?.plannedServiceId ?? record.plannedServiceId,
+    quantity: correction?.plannedQuantity ?? record.plannedQuantity,
+    stockQuantity: correction?.plannedStockQuantity ?? record.plannedStockQuantity,
+    unitPrice: correction?.plannedUnitPrice ?? record.plannedUnitPrice,
+  };
 }
 
 const hospitalRecordBaseInclude = {

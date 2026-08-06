@@ -127,6 +127,30 @@ test('прошлые сутки стационара исправляются д
   assert.match(dto, /reason!:/);
 });
 
+test('исправление планового препарата сохраняет новое списание и использует его при выполнении', async () => {
+  const [service, dto, card, sheet, types] = await Promise.all([
+    read('apps/api/src/modules/hospital/hospital.service.ts'),
+    read('apps/api/src/modules/hospital/dto/create-hospital-amendment.dto.ts'),
+    read('apps/web/src/features/hospital/HospitalCardPage.tsx'),
+    read('apps/web/src/features/hospital/HospitalSheet.tsx'),
+    read('apps/web/src/features/hospital/types.ts'),
+  ]);
+
+  assert.match(dto, /stockQuantity\?: number/);
+  assert.match(dto, /quantity\?: number/);
+  assert.match(dto, /unitPrice\?: number/);
+  assert.match(types, /CreateHospitalAmendmentInput[\s\S]*stockQuantity\?: number/);
+  assert.match(service, /plannedStockQuantity: correctedPlan\.stockQuantity/);
+  assert.match(service, /const lockedPlannedCatalog = getEffectivePlannedCatalog\(lockedRecord\)/);
+  assert.match(service, /stockQuantity: dto\.stockQuantity \?\? decimalToOptionalNumber\(lockedPlannedCatalog\.stockQuantity\)/);
+  assert.match(service, /Проведённое списание нельзя переписать исправлением/);
+  assert.match(card, /Исправить плановое списание и начисление/);
+  assert.match(card, /Списать при выполнении/);
+  assert.match(card, /Списание со склада и начисление произойдут только после отметки назначения «Выполнено»/);
+  assert.match(sheet, /Исправлено: \{describePlannedPosting\(record\)\}/);
+  assert.match(sheet, /getEffectivePlannedRecord/);
+});
+
 test('врач видит полный лист, назначения и выполнение и может печатать A4/PDF', async () => {
   const [service, card, sheet, print, help, styles] = await Promise.all([
     read('apps/api/src/modules/hospital/hospital.service.ts'),

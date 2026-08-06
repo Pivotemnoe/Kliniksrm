@@ -4,13 +4,18 @@ import test from 'node:test';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('manual supply invoice supports supplier directory and multiple lines', async () => {
-  const [page, api, controller, service, supplierModal] = await Promise.all([
+test('manual supply invoice supports supplier directory, compact lines and receipt-unit conversion', async () => {
+  const [page, styles, schema, migration, api, controller, service, supplierModal, createDto, updateDto] = await Promise.all([
     read('apps/web/src/features/stock/StockPage.tsx'),
+    read('apps/web/src/styles.css'),
+    read('prisma/schema.prisma'),
+    read('prisma/migrations/20260806000100_supply_invoice_receipt_units/migration.sql'),
     read('apps/web/src/features/stock/stock.api.ts'),
     read('apps/api/src/modules/stock/stock.controller.ts'),
     read('apps/api/src/modules/stock/stock.service.ts'),
     read('apps/web/src/features/stock/SupplierModal.tsx'),
+    read('apps/api/src/modules/stock/dto/create-supply-invoice.dto.ts'),
+    read('apps/api/src/modules/stock/dto/update-supply-invoice.dto.ts'),
   ]);
   assert.match(page, /useFieldArray\(\{ control, name: 'items' \}\)/);
   assert.match(page, /Добавить позицию/);
@@ -24,6 +29,22 @@ test('manual supply invoice supports supplier directory and multiple lines', asy
   assert.match(page, /listProducts\(\{ search: normalizedProductSearch/);
   assert.match(page, /Цена по накладной/);
   assert.match(page, /Цена продажи/);
+  assert.match(page, /Единица по накладной/);
+  assert.match(page, /Поступит на склад/);
+  assert.match(page, /suggestConversionFactor/);
+  assert.match(styles, /supply-line-values-grid/);
+  assert.match(schema, /receiptQuantity\s+Decimal/);
+  assert.match(schema, /receiptUnit\s+String/);
+  assert.match(schema, /conversionFactor\s+Decimal/);
+  assert.match(migration, /ALTER TABLE "SupplyInvoiceItem"/);
+  assert.match(page, /onFocus=\{\(event\) => event\.currentTarget\.select\(\)\}/);
+  assert.match(page, /Цена продажи после проведения станет новой ценой выбранного товара во всей CRM/);
+  assert.match(createDto, /retailPrice\?: number/);
+  assert.match(createDto, /conversionFactor\?: number/);
+  assert.match(updateDto, /retailPrice\?: number/);
+  assert.match(updateDto, /conversionFactor\?: number/);
+  assert.match(service, /data: \{ retailPrice: item\.retailPrice \}/);
+  assert.match(service, /stockUnitCost: decimal\(item\.purchasePrice\)\.dividedBy\(conversionFactor\)/);
   assert.match(service, /retailPricesUpdated/);
 });
 

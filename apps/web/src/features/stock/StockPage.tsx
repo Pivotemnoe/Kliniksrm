@@ -235,7 +235,7 @@ export function StockPage() {
               dataSource={selectedInvoice.items}
               columns={[
                 { title: 'Товар', key: 'product', render: (_, item) => item.product?.title ?? '—' },
-                { title: 'Количество', dataIndex: 'quantity', key: 'quantity' },
+                { title: 'Количество', key: 'quantity', render: (_, item) => formatSupplyInvoiceQuantity(item) },
                 { title: 'Цена по накладной', dataIndex: 'purchasePrice', key: 'purchasePrice', render: formatMoney },
                 { title: 'Цена продажи', key: 'retailPrice', render: (_, item) => formatMoney(item.product?.retailPrice ?? 0) },
                 { title: 'Серия', dataIndex: 'series', key: 'series', render: (value) => value || '—' },
@@ -888,6 +888,8 @@ const supplyLineSchema = z.object({
   productId: z.string().min(1, 'Выберите товар'),
   warehouseId: z.string().min(1, 'Выберите склад'),
   quantity: z.number().min(0.001, 'Введите количество'),
+  receiptUnit: z.string().trim().min(1, 'Укажите единицу по накладной'),
+  conversionFactor: z.number().min(0.001, 'Укажите пересчёт в складскую единицу'),
   purchasePrice: z.number().min(0.01, 'Введите цену по накладной'),
   retailPrice: z.number().min(0.01, 'Введите цену продажи'),
   discountAmount: z.number().min(0).optional(),
@@ -907,6 +909,11 @@ const supplySchema = z.object({
 
 type SupplyFormValues = z.infer<typeof supplySchema>;
 
+const receiptUnitOptions = [
+  'шт', 'упак.', 'коробка', 'ящик', 'набор', 'флакон', 'ампула', 'доза',
+  'бутылка', 'канистра', 'пакет', 'рулон', 'мл', 'л', 'г', 'кг', 'таблетка', 'капсула',
+].map((unit) => ({ value: unit, label: unit }));
+
 function SupplyInvoiceModal({ open, invoice, resources, onClose }: { open: boolean; invoice?: SupplyInvoice | null; resources?: StockResources; onClose: () => void }) {
   const queryClient = useQueryClient();
   const { message } = App.useApp();
@@ -924,6 +931,8 @@ function SupplyInvoiceModal({ open, invoice, resources, onClose }: { open: boole
   const { control, handleSubmit, reset, setValue } = useForm<SupplyFormValues>({
     resolver: zodResolver(supplySchema),
     defaultValues: getSupplyFormValues(invoice, defaultWarehouseId),
+    mode: 'onSubmit',
+    reValidateMode: 'onChange',
   });
   const { fields, append, remove } = useFieldArray({ control, name: 'items' });
   const watchedItems = useWatch({ control, name: 'items' }) ?? [];
@@ -976,8 +985,8 @@ function SupplyInvoiceModal({ open, invoice, resources, onClose }: { open: boole
 
   return (
     <>
-    <Modal title={invoice ? `Исправление накладной ${invoice.number || 'без номера'}` : 'Новая поставка товара'} open={open} onCancel={onClose} onOk={handleSubmit((values) => mutation.mutate(values))} okText={invoice ? 'Сохранить исправления' : 'Провести приёмку'} confirmLoading={mutation.isPending} destroyOnHidden width={980}>
-      <Form layout="vertical">
+    <Modal title={invoice ? `Исправление накладной ${invoice.number || 'без номера'}` : 'Новая поставка товара'} open={open} onCancel={onClose} onOk={handleSubmit((values) => mutation.mutate(values))} okText={invoice ? 'Сохранить исправления' : 'Провести приёмку'} confirmLoading={mutation.isPending} destroyOnHidden width={1120}>
+      <Form layout="vertical" className="supply-form-compact">
         {invoice ? <Alert type="info" showIcon message="Исправление сохраняет историю движений" description="Уже использованное количество не уменьшается. Проведённые строки не удаляются: для возврата используйте складской документ «Возврат поставщику»." className="form-alert" /> : null}
         <div className="form-grid two-columns">
           <Controller
@@ -996,17 +1005,23 @@ function SupplyInvoiceModal({ open, invoice, resources, onClose }: { open: boole
           <FormText control={control} name="suppliedAt" label="Дата поставки" type="date" />
         </div>
         <Typography.Title level={5}>Позиции накладной</Typography.Title>
-        <Space direction="vertical" size={12} className="full-width">
+        <Space direction="vertical" size={8} className="full-width">
           {fields.map((field, index) => {
             const existingLine = Boolean(watchedItems[index]?.id);
-            return <div key={field.id} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 14 }}>
+            const watchedLine = watchedItems[index];
+            const selectedProduct = knownProducts[watchedLine?.productId ?? ''];
+            const receiptUnit = watchedLine?.receiptUnit?.trim() || selectedProduct?.stockUnit?.trim() || '';
+            const stockUnit = selectedProduct?.stockUnit?.trim() || receiptUnit || 'ед.';
+            const conversionFactor = Number(watchedLine?.conversionFactor ?? 1);
+            const stockQuantity = Number(watchedLine?.quantity ?? 0) * conversionFactor;
+            return <div key={field.id} className="supply-line-card">
               <Space align="start" className="full-width" style={{ justifyContent: 'space-between' }}>
                 <Typography.Text strong>Позиция {index + 1}</Typography.Text>
                 <Button danger type="text" icon={<DeleteOutlined />} disabled={fields.length === 1 || existingLine} onClick={() => remove(index)}>
                   {existingLine ? 'Проведена' : 'Убрать'}
                 </Button>
               </Space>
-              <div className="form-grid two-columns">
+              <div className="supply-line-primary-grid">
                 <Controller control={control} name={`items.${index}.productId`} render={({ field: productField, fieldState }) => (
                   <Form.Item label="Товар" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
                     <Select
@@ -1021,7 +1036,9 @@ function SupplyInvoiceModal({ open, invoice, resources, onClose }: { open: boole
                         productField.onChange(value);
                         const product = value ? knownProducts[value] ?? productsQuery.data?.items.find((item) => item.id === value) : undefined;
                         setValue(`items.${index}.expiresAt`, product?.defaultExpiresAt?.slice(0, 10) ?? '');
-                        setValue(`items.${index}.retailPrice`, Number(product?.retailPrice ?? 0), { shouldValidate: true });
+                        setValue(`items.${index}.retailPrice`, Number(product?.retailPrice ?? 0), { shouldDirty: true, shouldValidate: false });
+                        setValue(`items.${index}.receiptUnit`, product?.stockUnit?.trim() || 'шт', { shouldDirty: true, shouldValidate: false });
+                        setValue(`items.${index}.conversionFactor`, 1, { shouldDirty: true, shouldValidate: false });
                       }}
                       options={productOptions}
                       placeholder="Введите название, SKU или штрих-код"
@@ -1033,16 +1050,70 @@ function SupplyInvoiceModal({ open, invoice, resources, onClose }: { open: boole
                     <Select {...warehouseField} options={resources?.warehouses.map((warehouse) => ({ value: warehouse.id, label: warehouse.name })) ?? []} />
                   </Form.Item>
                 )} />
-                <FormNumber control={control} name={`items.${index}.quantity`} label="Количество" step={0.001} />
-                <FormNumber control={control} name={`items.${index}.purchasePrice`} label="Цена по накладной" />
-                <FormNumber control={control} name={`items.${index}.retailPrice`} label="Цена продажи" />
+              </div>
+              <div className="supply-line-values-grid">
+                <FormNumber control={control} name={`items.${index}.quantity`} label={`Количество, ${receiptUnit || 'ед.'}`} step={1} required />
+                <Controller
+                  control={control}
+                  name={`items.${index}.receiptUnit`}
+                  render={({ field: unitField, fieldState }) => (
+                    <Form.Item label="Единица по накладной" required validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+                      <AutoComplete
+                        {...unitField}
+                        options={receiptUnitOptions}
+                        placeholder="шт, флакон, л..."
+                        filterOption={(input, option) => String(option?.value ?? '').toLowerCase().includes(input.toLowerCase())}
+                        onChange={(value) => {
+                          unitField.onChange(value);
+                          setValue(
+                            `items.${index}.conversionFactor`,
+                            suggestConversionFactor(value, selectedProduct?.stockUnit),
+                            { shouldDirty: true, shouldValidate: false },
+                          );
+                        }}
+                      />
+                    </Form.Item>
+                  )}
+                />
+                <FormNumber
+                  control={control}
+                  name={`items.${index}.conversionFactor`}
+                  label={`В 1 ${receiptUnit || 'ед.'}, ${stockUnit}`}
+                  step={1}
+                  required
+                  disabled={Boolean(receiptUnit) && receiptUnit === stockUnit}
+                />
+                <Form.Item
+                  label="Поступит на склад"
+                  validateStatus={selectedProduct && !selectedProduct.stockUnit ? 'warning' : undefined}
+                  help={selectedProduct && !selectedProduct.stockUnit
+                    ? `В карточке нет единицы — после приёмки будет установлено «${stockUnit}».`
+                    : undefined}
+                >
+                  <Input value={`${formatQuantity(stockQuantity)} ${stockUnit}`} disabled />
+                </Form.Item>
+              </div>
+              <div className="supply-line-values-grid">
+                <FormNumber control={control} name={`items.${index}.purchasePrice`} label={`Цена за 1 ${receiptUnit || 'ед.'} по накладной`} step={1} required />
+                <FormNumber
+                  control={control}
+                  name={`items.${index}.retailPrice`}
+                  label={`Цена продажи за 1 ${selectedProduct?.billingUnit || selectedProduct?.writeOffUnit || stockUnit}`}
+                  step={1}
+                  required
+                />
                 <FormNumber control={control} name={`items.${index}.discountAmount`} label="Скидка по позиции" />
                 <FormText control={control} name={`items.${index}.expiresAt`} label="Годен до" type="date" />
+              </div>
+              <div className="supply-line-values-grid supply-line-meta-grid">
                 <FormText control={control} name={`items.${index}.series`} label="Серия" />
                 <FormText control={control} name={`items.${index}.rack`} label="Стеллаж" />
                 <FormText control={control} name={`items.${index}.rackNumber`} label="Номер стеллажа" />
                 <FormText control={control} name={`items.${index}.shelfNumber`} label="Полка" />
               </div>
+              <Typography.Text type="secondary" className="supply-price-note">
+                Цена продажи после проведения станет новой ценой выбранного товара во всей CRM.
+              </Typography.Text>
             </div>;
           })}
           <Button icon={<PlusOutlined />} onClick={() => append(emptySupplyLine(defaultWarehouseId))}>Добавить позицию</Button>
@@ -1056,7 +1127,7 @@ function SupplyInvoiceModal({ open, invoice, resources, onClose }: { open: boole
 }
 
 function emptySupplyLine(warehouseId: string): SupplyFormValues['items'][number] {
-  return { productId: '', warehouseId, quantity: 1, purchasePrice: 0, retailPrice: 0, discountAmount: 0, expiresAt: '', series: '', rack: '', rackNumber: '', shelfNumber: '' };
+  return { productId: '', warehouseId, quantity: 1, receiptUnit: '', conversionFactor: 1, purchasePrice: 0, retailPrice: 0, discountAmount: 0, expiresAt: '', series: '', rack: '', rackNumber: '', shelfNumber: '' };
 }
 
 function getSupplyFormValues(invoice: SupplyInvoice | null | undefined, warehouseId: string): SupplyFormValues {
@@ -1071,7 +1142,9 @@ function getSupplyFormValues(invoice: SupplyInvoice | null | undefined, warehous
       id: item.id,
       productId: item.productId,
       warehouseId: item.warehouseId,
-      quantity: Number(item.quantity),
+      quantity: Number(item.receiptQuantity ?? item.quantity),
+      receiptUnit: item.receiptUnit || item.product?.stockUnit || 'шт',
+      conversionFactor: Number(item.conversionFactor ?? 1),
       purchasePrice: Number(item.purchasePrice),
       retailPrice: Number(item.product?.retailPrice ?? 0),
       discountAmount: Number(item.discountAmount),
@@ -1087,6 +1160,37 @@ function getSupplyFormValues(invoice: SupplyInvoice | null | undefined, warehous
 function formatProductOption(product: Product) {
   const code = product.sku || product.barcode || product.gtin;
   return code ? `${product.title} · ${code}` : product.title;
+}
+
+function suggestConversionFactor(receiptUnit: string, stockUnit?: string | null) {
+  const receipt = normalizeUnit(receiptUnit);
+  const stock = normalizeUnit(stockUnit ?? '');
+  if (!receipt || !stock || receipt === stock) return 1;
+  if ((receipt === 'л' || receipt === 'литр') && (stock === 'мл' || stock === 'миллилитр')) return 1000;
+  if ((receipt === 'кг' || receipt === 'килограмм') && (stock === 'г' || stock === 'грамм')) return 1000;
+  if ((receipt === 'мл' || receipt === 'миллилитр') && (stock === 'л' || stock === 'литр')) return 0.001;
+  if ((receipt === 'г' || receipt === 'грамм') && (stock === 'кг' || stock === 'килограмм')) return 0.001;
+  return 1;
+}
+
+function normalizeUnit(value: string) {
+  return value.trim().toLocaleLowerCase('ru-RU').replace(/\.$/, '');
+}
+
+function formatQuantity(value: number) {
+  if (!Number.isFinite(value)) return '0';
+  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 3 }).format(value);
+}
+
+function formatSupplyInvoiceQuantity(item: SupplyInvoice['items'][number]) {
+  const receiptQuantity = Number(item.receiptQuantity ?? item.quantity);
+  const receiptUnit = item.receiptUnit || item.product?.stockUnit || 'ед.';
+  const stockQuantity = Number(item.quantity);
+  const stockUnit = item.product?.stockUnit || receiptUnit;
+  const converted = receiptUnit !== stockUnit || Number(item.conversionFactor ?? 1) !== 1;
+  return converted
+    ? `${formatQuantity(receiptQuantity)} ${receiptUnit} → ${formatQuantity(stockQuantity)} ${stockUnit}`
+    : `${formatQuantity(receiptQuantity)} ${receiptUnit}`;
 }
 
 function FormText({
@@ -1123,22 +1227,35 @@ function FormNumber({
   control,
   name,
   label,
-  step = 0.01,
+  step = 1,
   help,
+  required = false,
+  disabled = false,
 }: {
   control: any;
   name: string;
   label: string;
   step?: number;
   help?: string;
+  required?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <Controller
       control={control}
       name={name}
       render={({ field, fieldState }) => (
-        <Form.Item label={label} validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message ?? help}>
-          <InputNumber className="full-width" min={0} step={step} value={field.value} onChange={(value) => field.onChange(value ?? 0)} />
+        <Form.Item label={label} required={required} validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message ?? help}>
+          <InputNumber
+            className="full-width"
+            min={0}
+            step={step}
+            disabled={disabled}
+            value={field.value}
+            onBlur={field.onBlur}
+            onFocus={(event) => event.currentTarget.select()}
+            onChange={(value) => field.onChange(value ?? undefined)}
+          />
         </Form.Item>
       )}
     />

@@ -149,6 +149,9 @@ function RecordResult({ record }: { record: HospitalRecord }) {
       {record.temperatureC !== null ? <Typography.Text strong>{record.temperatureC} °C</Typography.Text> : null}
       {record.value ? <Typography.Text>{record.value}</Typography.Text> : null}
       {record.notes ? <Typography.Text type="secondary">{record.notes}</Typography.Text> : null}
+      {record.recordStatus === 'AMENDMENT' && describePlannedPosting(record) ? (
+        <Typography.Text strong>Исправлено: {describePlannedPosting(record)}</Typography.Text>
+      ) : null}
       {record.billItem ? (
         <Typography.Text type="secondary">
           {describeCompletedPosting(record)}
@@ -159,14 +162,26 @@ function RecordResult({ record }: { record: HospitalRecord }) {
 }
 
 function describePlannedPosting(record: HospitalRecord) {
-  if (record.plannedProductId) {
-    const unit = record.plannedProduct?.writeOffUnit || record.plannedProduct?.stockUnit || 'ед.';
-    return `При выполнении списать ${record.plannedStockQuantity ?? record.plannedQuantity ?? 1} ${unit}`;
+  const effective = getEffectivePlannedRecord(record);
+  if (effective.plannedProductId) {
+    const unit = effective.plannedProduct?.writeOffUnit || effective.plannedProduct?.stockUnit || 'ед.';
+    return `При выполнении списать ${effective.plannedStockQuantity ?? effective.plannedQuantity ?? 1} ${unit}`;
   }
-  if (record.plannedServiceId) {
-    return `При выполнении начислить услугу: ${record.plannedQuantity ?? 1}`;
+  if (effective.plannedServiceId) {
+    return `При выполнении начислить услугу: ${effective.plannedQuantity ?? 1}`;
   }
   return '';
+}
+
+function getEffectivePlannedRecord(record: HospitalRecord) {
+  return [...(record.amendments ?? [])]
+    .reverse()
+    .find((amendment) => amendment.plannedProductId
+      || amendment.plannedServiceId
+      || amendment.plannedQuantity !== null
+      || amendment.plannedStockQuantity !== null
+      || amendment.plannedUnitPrice !== null)
+    ?? record;
 }
 
 function describeCompletedPosting(record: HospitalRecord) {

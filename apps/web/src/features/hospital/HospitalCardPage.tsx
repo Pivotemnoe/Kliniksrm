@@ -378,7 +378,8 @@ function HospitalRecordModal({
   const catalogKind = Form.useWatch('catalogKind', form) ?? 'NONE';
   const selectedProductId = Form.useWatch('productId', form);
   const completingPlannedRecord = record?.recordStatus === 'PLANNED' && initialStatus === 'COMPLETED';
-  const hasPlannedCatalog = Boolean(record?.plannedProductId || record?.plannedServiceId);
+  const effectivePlannedCatalog = getEffectivePlannedCatalog(record);
+  const hasPlannedCatalog = Boolean(effectivePlannedCatalog.productId || effectivePlannedCatalog.serviceId);
   const [catalogSearch, setCatalogSearch] = useState('');
   const deferredCatalogSearch = useDeferredValue(catalogSearch);
   const catalogQuery = useQuery({
@@ -411,8 +412,9 @@ function HospitalRecordModal({
       return;
     }
 
-    const productId = record.billItem?.productId ?? record.plannedProductId ?? undefined;
-    const serviceId = record.billItem?.serviceId ?? record.plannedServiceId ?? undefined;
+    const currentPlannedCatalog = getEffectivePlannedCatalog(record);
+    const productId = record.billItem?.productId ?? currentPlannedCatalog.productId ?? undefined;
+    const serviceId = record.billItem?.serviceId ?? currentPlannedCatalog.serviceId ?? undefined;
     form.setFieldsValue({
       recordType: record.recordType,
       recordStatus: record.recordStatus === 'PLANNED' && initialStatus === 'COMPLETED'
@@ -426,11 +428,11 @@ function HospitalRecordModal({
       catalogKind: productId ? 'PRODUCT' : serviceId ? 'SERVICE' : 'NONE',
       productId,
       serviceId,
-      quantity: Number(record.billItem?.quantity ?? record.plannedQuantity ?? 1),
+      quantity: Number(record.billItem?.quantity ?? currentPlannedCatalog.quantity ?? 1),
       stockQuantity: productId
-        ? Number(record.billItem?.stockQuantity ?? record.plannedStockQuantity ?? 1)
+        ? Number(record.billItem?.stockQuantity ?? currentPlannedCatalog.stockQuantity ?? 1)
         : undefined,
-      unitPrice: Number(record.billItem?.unitPrice ?? record.plannedUnitPrice ?? 0),
+      unitPrice: Number(record.billItem?.unitPrice ?? currentPlannedCatalog.unitPrice ?? 0),
     });
   }, [form, initialStatus, open, record]);
 
@@ -673,9 +675,14 @@ function HospitalAmendmentModal({
 }) {
   const [form] = Form.useForm<CreateHospitalAmendmentInput>();
   const recordType = Form.useWatch('recordType', form);
+  const plannedCatalog = getEffectivePlannedCatalog(record);
+  const plannedProduct = plannedCatalog.product;
+  const plannedService = plannedCatalog.service;
 
   useEffect(() => {
     if (!open || !record) return;
+    const currentPlannedCatalog = getEffectivePlannedCatalog(record);
+    form.resetFields();
     form.setFieldsValue({
       reason: '',
       recordType: record.recordType,
@@ -683,6 +690,15 @@ function HospitalAmendmentModal({
       temperatureC: record.temperatureC === null ? undefined : Number(record.temperatureC),
       value: record.value ?? '',
       notes: record.notes ?? '',
+      quantity: currentPlannedCatalog.productId || currentPlannedCatalog.serviceId
+        ? Number(currentPlannedCatalog.quantity ?? 1)
+        : undefined,
+      stockQuantity: currentPlannedCatalog.productId
+        ? Number(currentPlannedCatalog.stockQuantity ?? currentPlannedCatalog.quantity ?? 1)
+        : undefined,
+      unitPrice: currentPlannedCatalog.productId || currentPlannedCatalog.serviceId
+        ? Number(currentPlannedCatalog.unitPrice ?? 0)
+        : undefined,
     });
   }, [form, open, record]);
 
@@ -730,6 +746,61 @@ function HospitalAmendmentModal({
           <Form.Item name="value" label="Исправленное значение / результат"><Input /></Form.Item>
         )}
         <Form.Item name="notes" label="Исправленный комментарий"><Input.TextArea rows={4} /></Form.Item>
+        {record?.recordStatus === 'PLANNED' && plannedProduct ? (
+          <>
+            <Typography.Title level={5}>Исправить плановое списание и начисление</Typography.Title>
+            <Alert
+              type="info"
+              showIcon
+              className="form-alert"
+              message={`Товар: ${plannedProduct.title}`}
+              description="Новое количество сохранится в истории исправления. Списание со склада и начисление произойдут только после отметки назначения «Выполнено»."
+            />
+            <div className="form-grid two-columns">
+              <Form.Item
+                name="stockQuantity"
+                label={`Списать при выполнении, ${plannedProduct.writeOffUnit || plannedProduct.stockUnit || 'ед.'}`}
+                rules={[{ required: true, message: 'Укажите количество для списания' }]}
+              >
+                <InputNumber min={0.001} precision={3} className="full-width" />
+              </Form.Item>
+              <Form.Item
+                name="quantity"
+                label={`Начислить клиенту, ${plannedProduct.billingUnit || plannedProduct.writeOffUnit || plannedProduct.stockUnit || 'ед.'}`}
+                rules={[{ required: true, message: 'Укажите количество начислений' }]}
+              >
+                <InputNumber min={0.001} precision={3} className="full-width" />
+              </Form.Item>
+              <Form.Item
+                name="unitPrice"
+                label={`Цена за 1 ${plannedProduct.billingUnit || plannedProduct.writeOffUnit || plannedProduct.stockUnit || 'ед.'}, ₽`}
+                rules={[{ required: true, message: 'Укажите цену' }]}
+              >
+                <InputNumber min={0} precision={2} className="full-width" />
+              </Form.Item>
+            </div>
+          </>
+        ) : null}
+        {record?.recordStatus === 'PLANNED' && plannedService ? (
+          <>
+            <Typography.Title level={5}>Исправить плановое начисление</Typography.Title>
+            <Alert
+              type="info"
+              showIcon
+              className="form-alert"
+              message={`Услуга: ${plannedService.title}`}
+              description="Исправление сохранится отдельно. Начисление произойдёт только после отметки назначения «Выполнено»."
+            />
+            <div className="form-grid two-columns">
+              <Form.Item name="quantity" label="Количество услуг" rules={[{ required: true, message: 'Укажите количество' }]}>
+                <InputNumber min={0.001} precision={3} className="full-width" />
+              </Form.Item>
+              <Form.Item name="unitPrice" label="Цена за одну услугу, ₽" rules={[{ required: true, message: 'Укажите цену' }]}>
+                <InputNumber min={0} precision={2} className="full-width" />
+              </Form.Item>
+            </div>
+          </>
+        ) : null}
       </Form>
     </Modal>
   );
@@ -782,16 +853,37 @@ function normalizeHospitalRecord(values: CreateHospitalRecordInput): CreateHospi
   };
 }
 
+function getEffectivePlannedCatalog(record: HospitalRecord | null) {
+  const correction = [...(record?.amendments ?? [])]
+    .reverse()
+    .find((amendment) => amendment.plannedProductId
+      || amendment.plannedServiceId
+      || amendment.plannedQuantity !== null
+      || amendment.plannedStockQuantity !== null
+      || amendment.plannedUnitPrice !== null);
+
+  return {
+    productId: correction?.plannedProductId ?? record?.plannedProductId ?? null,
+    serviceId: correction?.plannedServiceId ?? record?.plannedServiceId ?? null,
+    quantity: correction?.plannedQuantity ?? record?.plannedQuantity ?? null,
+    stockQuantity: correction?.plannedStockQuantity ?? record?.plannedStockQuantity ?? null,
+    unitPrice: correction?.plannedUnitPrice ?? record?.plannedUnitPrice ?? null,
+    product: correction?.plannedProduct ?? record?.plannedProduct ?? null,
+    service: correction?.plannedService ?? record?.plannedService ?? null,
+  };
+}
+
 function mergeProductOptions(
   record: HospitalRecord | null,
   products: HospitalCatalog['products'] | undefined,
 ): HospitalCatalog['products'] {
   const items = [...(products ?? [])];
-  const linked = record?.billItem?.product ?? record?.plannedProduct;
+  const plannedCatalog = getEffectivePlannedCatalog(record);
+  const linked = record?.billItem?.product ?? plannedCatalog.product;
   if (linked && !items.some((item) => item.id === linked.id)) {
     items.unshift({
       ...linked,
-      retailPrice: record?.billItem?.unitPrice ?? record?.plannedUnitPrice ?? record?.plannedProduct?.retailPrice ?? 0,
+      retailPrice: record?.billItem?.unitPrice ?? plannedCatalog.unitPrice ?? plannedCatalog.product?.retailPrice ?? 0,
       stockRest: '—',
     });
   }
@@ -803,22 +895,24 @@ function mergeServiceOptions(
   services: HospitalCatalog['services'] | undefined,
 ): HospitalCatalog['services'] {
   const items = [...(services ?? [])];
-  const linked = record?.billItem?.service ?? record?.plannedService;
+  const plannedCatalog = getEffectivePlannedCatalog(record);
+  const linked = record?.billItem?.service ?? plannedCatalog.service;
   if (linked && !items.some((item) => item.id === linked.id)) {
-    items.unshift({ ...linked, price: record?.billItem?.unitPrice ?? record?.plannedUnitPrice ?? record?.plannedService?.price ?? 0 });
+    items.unshift({ ...linked, price: record?.billItem?.unitPrice ?? plannedCatalog.unitPrice ?? plannedCatalog.service?.price ?? 0 });
   }
   return items;
 }
 
 function describePlannedCatalogPosting(record: HospitalRecord | null) {
   if (!record) return '';
-  if (record.plannedProductId) {
-    const writeOffUnit = record.plannedProduct?.writeOffUnit || record.plannedProduct?.stockUnit || 'ед.';
-    const billingUnit = record.plannedProduct?.billingUnit || writeOffUnit;
-    return `Будет списано ${record.plannedStockQuantity ?? record.plannedQuantity ?? 1} ${writeOffUnit} и начислено ${record.plannedQuantity ?? 1} ${billingUnit} по ${record.plannedUnitPrice ?? 0} ₽.`;
+  const plannedCatalog = getEffectivePlannedCatalog(record);
+  if (plannedCatalog.productId) {
+    const writeOffUnit = plannedCatalog.product?.writeOffUnit || plannedCatalog.product?.stockUnit || 'ед.';
+    const billingUnit = plannedCatalog.product?.billingUnit || writeOffUnit;
+    return `Будет списано ${plannedCatalog.stockQuantity ?? plannedCatalog.quantity ?? 1} ${writeOffUnit} и начислено ${plannedCatalog.quantity ?? 1} ${billingUnit} по ${plannedCatalog.unitPrice ?? 0} ₽.`;
   }
-  if (record.plannedServiceId) {
-    return `В счёт будет добавлено ${record.plannedQuantity ?? 1} услуги по ${record.plannedUnitPrice ?? 0} ₽.`;
+  if (plannedCatalog.serviceId) {
+    return `В счёт будет добавлено ${plannedCatalog.quantity ?? 1} услуги по ${plannedCatalog.unitPrice ?? 0} ₽.`;
   }
   return '';
 }

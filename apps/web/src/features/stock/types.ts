@@ -106,6 +106,9 @@ export type SupplyInvoiceItem = {
   productId: string;
   warehouseId: string;
   quantity: DecimalValue;
+  receiptQuantity: DecimalValue;
+  receiptUnit: string;
+  conversionFactor: DecimalValue;
   purchasePrice: DecimalValue;
   discountAmount: DecimalValue;
   expiresAt: string | null;
@@ -185,6 +188,8 @@ export type SupplyInvoiceMutationInput = {
     productId: string;
     warehouseId?: string;
     quantity: number;
+    receiptUnit?: string;
+    conversionFactor?: number;
     purchasePrice: number;
     retailPrice?: number;
     discountAmount?: number;

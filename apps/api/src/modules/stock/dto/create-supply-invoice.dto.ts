@@ -28,6 +28,18 @@ export class CreateSupplyInvoiceItemDto {
   @Min(0.001)
   quantity!: number;
 
+  @ApiPropertyOptional({ description: 'Единица, указанная поставщиком в этой строке накладной.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  receiptUnit?: string;
+
+  @ApiPropertyOptional({ description: 'Сколько базовых складских единиц содержится в одной единице по накладной.' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0.001)
+  conversionFactor?: number;
+
   @ApiProperty()
   @IsNumber()
   @Min(0)

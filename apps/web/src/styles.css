@@ -2797,6 +2797,42 @@ body {
   grid-column: 1 / -1;
 }
 
+.supply-form-compact .ant-form-item {
+  margin-bottom: 8px;
+}
+
+.supply-form-compact .ant-form-item-label {
+  padding-bottom: 2px;
+}
+
+.supply-line-card {
+  padding: 8px 10px 9px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.supply-line-primary-grid,
+.supply-line-values-grid {
+  display: grid;
+  gap: 0 10px;
+  align-items: start;
+}
+
+.supply-line-primary-grid {
+  grid-template-columns: minmax(320px, 2fr) minmax(180px, 1fr);
+}
+
+.supply-line-values-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.supply-price-note {
+  display: block;
+  margin-top: -2px;
+  font-size: 12px;
+}
+
 .checkbox-row {
   margin-bottom: 20px;
 }
@@ -2973,6 +3009,10 @@ body {
 }
 
 @media (max-width: 900px) {
+  .supply-line-values-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .report-metrics-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -3063,6 +3103,11 @@ body {
 }
 
 @media (max-width: 760px) {
+  .supply-line-primary-grid,
+  .supply-line-values-grid {
+    grid-template-columns: 1fr;
+  }
+
   .report-metrics-grid {
     grid-template-columns: 1fr;
   }

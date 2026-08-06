@@ -219,4 +219,7 @@ export type CreateHospitalAmendmentInput = {
   temperatureC?: number;
   value?: string;
   notes?: string;
+  quantity?: number;
+  stockQuantity?: number;
+  unitPrice?: number;
 };

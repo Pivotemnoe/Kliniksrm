@@ -531,11 +531,15 @@ export class StockService {
     const defaultWarehouseId = await this.getDefaultWarehouseId(warehouseScope);
     const productIds = [...new Set(dto.items.map((item) => item.productId))];
     ensureConsistentRetailPrices(dto.items);
-    const productsCount = await this.prisma.product.count({ where: { id: { in: productIds } } });
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: productIds } },
+      select: { id: true, stockUnit: true, writeOffUnit: true, billingUnit: true },
+    });
 
-    if (productsCount !== productIds.length) {
+    if (products.length !== productIds.length) {
       throw new BadRequestException('Supply invoice contains unknown product');
     }
+    const effectiveStockUnits = prepareSupplyProductUnits(dto.items, products);
 
     for (const item of dto.items) {
       if (item.warehouseId) {
@@ -545,6 +549,7 @@ export class StockService {
     }
 
     const invoice = await this.prisma.$transaction(async (tx) => {
+      await initializeMissingProductUnits(tx, products, effectiveStockUnits);
       const createdInvoice = await tx.supplyInvoice.create({
         data: {
           supplierId,
@@ -556,11 +561,11 @@ export class StockService {
       let totalAmount = new Prisma.Decimal(0);
 
       for (const item of dto.items) {
+        const prepared = prepareSupplyLine(item, effectiveStockUnits.get(item.productId)!);
         const warehouseId = item.warehouseId ?? defaultWarehouseId;
-        const quantity = decimal(item.quantity);
         const purchasePrice = decimal(item.purchasePrice);
         const discountAmount = decimal(item.discountAmount ?? 0);
-        totalAmount = totalAmount.plus(quantity.mul(purchasePrice).minus(discountAmount));
+        totalAmount = totalAmount.plus(prepared.receiptQuantity.mul(purchasePrice).minus(discountAmount));
 
         if (item.retailPrice !== undefined) {
           await tx.product.update({
@@ -574,7 +579,10 @@ export class StockService {
             supplyInvoiceId: createdInvoice.id,
             productId: item.productId,
             warehouseId,
-            quantity,
+            quantity: prepared.stockQuantity,
+            receiptQuantity: prepared.receiptQuantity,
+            receiptUnit: prepared.receiptUnit,
+            conversionFactor: prepared.conversionFactor,
             purchasePrice,
             discountAmount,
             expiresAt: item.expiresAt ? new Date(item.expiresAt) : undefined,
@@ -587,9 +595,9 @@ export class StockService {
             productId: item.productId,
             warehouseId,
             supplierId,
-            quantity,
-            rest: quantity,
-            purchasePrice,
+            quantity: prepared.stockQuantity,
+            rest: prepared.stockQuantity,
+            purchasePrice: prepared.stockUnitCost,
             expiresAt: item.expiresAt ? new Date(item.expiresAt) : undefined,
             series: clean(item.series),
             rack: clean(item.rack),
@@ -609,8 +617,8 @@ export class StockService {
             stockBatchId: batch.id,
             warehouseId,
             type: StockMovementType.SUPPLY,
-            quantity,
-            unitCost: purchasePrice,
+            quantity: prepared.stockQuantity,
+            unitCost: prepared.stockUnitCost,
             comment: createdInvoice.number ? `Приёмка по накладной ${createdInvoice.number}` : 'Приёмка на склад',
           },
         });
@@ -665,8 +673,12 @@ export class StockService {
 
     const productIds = [...new Set(dto.items.map((item) => item.productId))];
     ensureConsistentRetailPrices(dto.items);
-    const productsCount = await this.prisma.product.count({ where: { id: { in: productIds } } });
-    if (productsCount !== productIds.length) throw new BadRequestException('В накладной указан неизвестный товар');
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: productIds } },
+      select: { id: true, stockUnit: true, writeOffUnit: true, billingUnit: true },
+    });
+    if (products.length !== productIds.length) throw new BadRequestException('В накладной указан неизвестный товар');
+    const effectiveStockUnits = prepareSupplyProductUnits(dto.items, products);
     for (const item of dto.items) {
       await this.ensureWarehouseExists(item.warehouseId);
       this.ensureWarehouseAllowed(item.warehouseId, warehouseScope);
@@ -676,9 +688,11 @@ export class StockService {
     }
 
     const updated = await this.prisma.$transaction(async (tx) => {
+      await initializeMissingProductUnits(tx, products, effectiveStockUnits);
       const existingById = new Map(invoice.items.map((item) => [item.id, item]));
 
       for (const nextItem of dto.items) {
+        const prepared = prepareSupplyLine(nextItem, effectiveStockUnits.get(nextItem.productId)!);
         if (nextItem.retailPrice !== undefined) {
           await tx.product.update({
             where: { id: nextItem.productId },
@@ -687,12 +701,12 @@ export class StockService {
         }
 
         if (!nextItem.id) {
-          await this.createSupplyInvoiceLine(tx, invoice.id, dto.supplierId ?? invoice.supplierId, invoice.number, nextItem);
+          await this.createSupplyInvoiceLine(tx, invoice.id, dto.supplierId ?? invoice.supplierId, invoice.number, nextItem, prepared);
           continue;
         }
 
         const currentItem = existingById.get(nextItem.id)!;
-        const stockChanged = supplyLineChanged(currentItem, nextItem);
+        const stockChanged = supplyLineChanged(currentItem, nextItem, prepared);
         const supplierChanged = dto.supplierId !== undefined && dto.supplierId !== invoice.supplierId;
         let batch = currentItem.stockBatch;
 
@@ -709,7 +723,7 @@ export class StockService {
           const oldQuantity = decimal(batch.quantity);
           const currentRest = decimal(batch.rest);
           const consumed = oldQuantity.minus(currentRest).greaterThan(0) ? oldQuantity.minus(currentRest) : decimal(0);
-          const nextQuantity = decimal(nextItem.quantity);
+          const nextQuantity = prepared.stockQuantity;
           if (nextQuantity.lessThan(consumed)) {
             throw new BadRequestException(
               `Количество «${currentItem.product.title}» нельзя уменьшить ниже уже использованного: ${consumed.toString()}`,
@@ -732,7 +746,7 @@ export class StockService {
               supplierId: dto.supplierId !== undefined ? dto.supplierId : invoice.supplierId,
               quantity: nextQuantity,
               rest: nextRest,
-              purchasePrice: nextItem.purchasePrice,
+              purchasePrice: prepared.stockUnitCost,
               expiresAt: nextItem.expiresAt ? new Date(nextItem.expiresAt) : null,
               series: clean(nextItem.series) ?? null,
               rack: clean(nextItem.rack) ?? null,
@@ -747,6 +761,9 @@ export class StockService {
               productId: nextItem.productId,
               warehouseId: nextItem.warehouseId,
               quantity: nextQuantity,
+              receiptQuantity: prepared.receiptQuantity,
+              receiptUnit: prepared.receiptUnit,
+              conversionFactor: prepared.conversionFactor,
               purchasePrice: nextItem.purchasePrice,
               discountAmount: nextItem.discountAmount ?? 0,
               expiresAt: nextItem.expiresAt ? new Date(nextItem.expiresAt) : null,
@@ -758,7 +775,7 @@ export class StockService {
             data: {
               productId: nextItem.productId,
               warehouseId: nextItem.warehouseId,
-              unitCost: nextItem.purchasePrice,
+              unitCost: prepared.stockUnitCost,
             },
           });
           if (!difference.equals(0)) {
@@ -769,7 +786,7 @@ export class StockService {
                 warehouseId: nextItem.warehouseId,
                 type: StockMovementType.CORRECTION,
                 quantity: difference,
-                unitCost: nextItem.purchasePrice,
+                unitCost: prepared.stockUnitCost,
                 comment: invoice.number
                   ? `Исправление накладной ${invoice.number}`
                   : `Исправление накладной ${invoice.id.slice(0, 8)}`,
@@ -826,13 +843,17 @@ export class StockService {
     supplierId: string | null | undefined,
     invoiceNumber: string | null,
     item: UpdateSupplyInvoiceItemDto,
+    prepared: PreparedSupplyLine,
   ) {
     const invoiceItem = await tx.supplyInvoiceItem.create({
       data: {
         supplyInvoiceId,
         productId: item.productId,
         warehouseId: item.warehouseId,
-        quantity: item.quantity,
+        quantity: prepared.stockQuantity,
+        receiptQuantity: prepared.receiptQuantity,
+        receiptUnit: prepared.receiptUnit,
+        conversionFactor: prepared.conversionFactor,
         purchasePrice: item.purchasePrice,
         discountAmount: item.discountAmount ?? 0,
         expiresAt: item.expiresAt ? new Date(item.expiresAt) : undefined,
@@ -844,9 +865,9 @@ export class StockService {
         productId: item.productId,
         warehouseId: item.warehouseId,
         supplierId,
-        quantity: item.quantity,
-        rest: item.quantity,
-        purchasePrice: item.purchasePrice,
+        quantity: prepared.stockQuantity,
+        rest: prepared.stockQuantity,
+        purchasePrice: prepared.stockUnitCost,
         expiresAt: item.expiresAt ? new Date(item.expiresAt) : undefined,
         series: clean(item.series),
         rack: clean(item.rack),
@@ -861,8 +882,8 @@ export class StockService {
         stockBatchId: batch.id,
         warehouseId: item.warehouseId,
         type: StockMovementType.SUPPLY,
-        quantity: item.quantity,
-        unitCost: item.purchasePrice,
+        quantity: prepared.stockQuantity,
+        unitCost: prepared.stockUnitCost,
         comment: invoiceNumber ? `Дополнение накладной ${invoiceNumber}` : 'Дополнение накладной',
       },
     });
@@ -1229,6 +1250,9 @@ function supplyLineChanged(
     productId: string;
     warehouseId: string;
     quantity: Prisma.Decimal;
+    receiptQuantity: Prisma.Decimal;
+    receiptUnit: string;
+    conversionFactor: Prisma.Decimal;
     purchasePrice: Prisma.Decimal;
     discountAmount: Prisma.Decimal;
     expiresAt: Date | null;
@@ -1236,10 +1260,14 @@ function supplyLineChanged(
     stockBatch: { rack: string | null; rackNumber: string | null; shelfNumber: string | null } | null;
   },
   next: UpdateSupplyInvoiceItemDto,
+  prepared: PreparedSupplyLine,
 ) {
   return current.productId !== next.productId
     || current.warehouseId !== next.warehouseId
-    || !current.quantity.equals(next.quantity)
+    || !current.quantity.equals(prepared.stockQuantity)
+    || !current.receiptQuantity.equals(prepared.receiptQuantity)
+    || current.receiptUnit !== prepared.receiptUnit
+    || !current.conversionFactor.equals(prepared.conversionFactor)
     || !current.purchasePrice.equals(next.purchasePrice)
     || !current.discountAmount.equals(next.discountAmount ?? 0)
     || dateKey(current.expiresAt) !== dateKey(next.expiresAt ? new Date(next.expiresAt) : null)
@@ -1247,6 +1275,83 @@ function supplyLineChanged(
     || (current.stockBatch?.rack ?? '') !== (clean(next.rack) ?? '')
     || (current.stockBatch?.rackNumber ?? '') !== (clean(next.rackNumber) ?? '')
     || (current.stockBatch?.shelfNumber ?? '') !== (clean(next.shelfNumber) ?? '');
+}
+
+type SupplyProductUnit = {
+  id: string;
+  stockUnit: string | null;
+  writeOffUnit: string | null;
+  billingUnit: string | null;
+};
+
+type SupplyLineUnitInput = {
+  productId: string;
+  quantity: number;
+  purchasePrice: number;
+  receiptUnit?: string;
+  conversionFactor?: number;
+};
+
+type PreparedSupplyLine = {
+  receiptQuantity: Prisma.Decimal;
+  receiptUnit: string;
+  conversionFactor: Prisma.Decimal;
+  stockQuantity: Prisma.Decimal;
+  stockUnitCost: Prisma.Decimal;
+};
+
+function prepareSupplyProductUnits(items: SupplyLineUnitInput[], products: SupplyProductUnit[]) {
+  const result = new Map(products.map((product) => [product.id, clean(product.stockUnit ?? undefined)]));
+  for (const product of products) {
+    if (result.get(product.id)) continue;
+    const productLines = items.filter((item) => item.productId === product.id);
+    const inferredUnit = clean(productLines[0]?.receiptUnit) ?? 'шт';
+    const hasAmbiguousUnits = productLines.some((item) => (clean(item.receiptUnit) ?? inferredUnit) !== inferredUnit || Number(item.conversionFactor ?? 1) !== 1);
+    if (hasAmbiguousUnits) {
+      throw new BadRequestException('Для товара без базовой единицы сначала укажите одну единицу приёмки без пересчёта');
+    }
+    result.set(product.id, inferredUnit);
+  }
+  return result as Map<string, string>;
+}
+
+async function initializeMissingProductUnits(
+  tx: Prisma.TransactionClient,
+  products: SupplyProductUnit[],
+  effectiveStockUnits: Map<string, string>,
+) {
+  for (const product of products) {
+    if (clean(product.stockUnit ?? undefined)) continue;
+    const stockUnit = effectiveStockUnits.get(product.id)!;
+    await tx.product.update({
+      where: { id: product.id },
+      data: {
+        stockUnit,
+        ...(!clean(product.writeOffUnit ?? undefined) ? { writeOffUnit: stockUnit } : {}),
+        ...(!clean(product.billingUnit ?? undefined) ? { billingUnit: stockUnit } : {}),
+      },
+    });
+  }
+}
+
+function prepareSupplyLine(item: SupplyLineUnitInput, stockUnit: string): PreparedSupplyLine {
+  const receiptUnit = clean(item.receiptUnit) ?? stockUnit;
+  const conversionFactor = decimal(item.conversionFactor ?? 1);
+  if (conversionFactor.lessThanOrEqualTo(0)) {
+    throw new BadRequestException('Коэффициент пересчёта единицы приёмки должен быть больше нуля');
+  }
+  if (receiptUnit === stockUnit && !conversionFactor.equals(1)) {
+    throw new BadRequestException(`Для одинаковой единицы «${stockUnit}» коэффициент пересчёта должен быть равен 1`);
+  }
+  const receiptQuantity = decimal(item.quantity);
+  const stockQuantity = receiptQuantity.times(conversionFactor);
+  return {
+    receiptQuantity,
+    receiptUnit,
+    conversionFactor,
+    stockQuantity,
+    stockUnitCost: decimal(item.purchasePrice).dividedBy(conversionFactor),
+  };
 }
 
 function dateKey(value: Date | null) {
