@@ -1,55 +1,85 @@
+import { lazy, type ComponentType } from 'react';
 import { Navigate, RouteObject } from 'react-router-dom';
-import { AppointmentCardPage } from '../features/appointments/AppointmentCardPage';
-import { AppointmentsPage } from '../features/appointments/AppointmentsPage';
-import { AuditLogsPage } from '../features/audit/AuditLogsPage';
-import { AnimalCardPage } from '../features/animals/AnimalCardPage';
-import { AnimalsPage } from '../features/animals/AnimalsPage';
-import { ClientPortalPage } from '../features/clientPortal/ClientPortalPage';
-import { DashboardPage } from '../features/dashboard/DashboardPage';
-import { DocumentTemplatesPage } from '../features/documents/DocumentTemplatesPage';
-import { EmployeesPage } from '../features/employees/EmployeesPage';
-import { FinanceSettingsPage } from '../features/finance/FinanceSettingsPage';
-import { HospitalPage } from '../features/hospital/HospitalPage';
-import { HospitalCardPage } from '../features/hospital/HospitalCardPage';
-import { HelpPage } from '../features/help/HelpPage';
-import { BillCardPage } from '../features/billing/BillCardPage';
-import { BillsPage } from '../features/billing/BillsPage';
-import { VetafImportPage } from '../features/imports/VetafImportPage';
-import { LaboratoryPage } from '../features/laboratory/LaboratoryPage';
-import { NewsPage } from '../features/news/NewsPage';
-import { MessagesPage } from '../features/notifications/MessagesPage';
-import { MedicalPhrasesSettingsPage } from '../features/medicalPhrases/MedicalPhrasesSettingsPage';
-import { OrganizationSettingsPage } from '../features/organization/OrganizationSettingsPage';
-import { OnlineRequestsPage } from '../features/onlineRequests/OnlineRequestsPage';
-import { PublicOnlineRequestPage } from '../features/onlineRequests/PublicOnlineRequestPage';
-import { OwnerCardPage } from '../features/owners/OwnerCardPage';
-import { OwnersPage } from '../features/owners/OwnersPage';
-import { QueueCardPage } from '../features/queue/QueueCardPage';
-import { QueuePage } from '../features/queue/QueuePage';
-import { QueueTvPage } from '../features/queue/QueueTvPage';
-import { ReportsPage } from '../features/reports/ReportsPage';
-import { RemoteAccessEnrollmentPage } from '../features/remoteAccess/RemoteAccessEnrollmentPage';
-import { RemoteAccessSettingsPage } from '../features/remoteAccess/RemoteAccessSettingsPage';
-import { PayrollPage } from '../features/payroll/PayrollPage';
-import { BusinessPage } from '../features/business/BusinessPage';
-import { DailyFinancePage } from '../features/business/DailyFinancePage';
-import { SaleCardPage } from '../features/sales/SaleCardPage';
-import { SalesPage } from '../features/sales/SalesPage';
-import { ClinicResourcesPage } from '../features/scheduling/ClinicResourcesPage';
-import { SettingsOverviewPage } from '../features/settings/SettingsOverviewPage';
-import { StockPage } from '../features/stock/StockPage';
-import { StockOperationsPage } from '../features/stock/StockOperationsPage';
-import { SupportPage } from '../features/support/SupportPage';
-import { SystemSettingsPage } from '../features/system/SystemSettingsPage';
-import { TaskCardPage } from '../features/tasks/TaskCardPage';
-import { TasksPage } from '../features/tasks/TasksPage';
-import { VisitCardPage } from '../features/visits/VisitCardPage';
-import { VisitsPage } from '../features/visits/VisitsPage';
 import { CrmLayout } from '../layouts/CrmLayout';
-import { LoginPage } from '../pages/LoginPage';
-import { ProfilePage } from '../pages/ProfilePage';
 import { DefaultRouteRedirect } from './DefaultRouteRedirect';
 import { ProtectedRoute } from './ProtectedRoute';
+
+function lazyPage(loader: () => Promise<unknown>, exportName: string) {
+  return lazy(async () => {
+    const pageModule = (await loader()) as Record<string, ComponentType>;
+    const Page = pageModule[exportName];
+
+    if (!Page) {
+      throw new Error(`Раздел ${exportName} не найден в загруженном модуле`);
+    }
+
+    return { default: Page };
+  });
+}
+
+const AppointmentCardPage = lazyPage(() => import('../features/appointments/AppointmentCardPage'), 'AppointmentCardPage');
+const AppointmentsPage = lazyPage(() => import('../features/appointments/AppointmentsPage'), 'AppointmentsPage');
+const AuditLogsPage = lazyPage(() => import('../features/audit/AuditLogsPage'), 'AuditLogsPage');
+const AnimalCardPage = lazyPage(() => import('../features/animals/AnimalCardPage'), 'AnimalCardPage');
+const AnimalsPage = lazyPage(() => import('../features/animals/AnimalsPage'), 'AnimalsPage');
+const ClientPortalPage = lazyPage(() => import('../features/clientPortal/ClientPortalPage'), 'ClientPortalPage');
+const DashboardPage = lazyPage(() => import('../features/dashboard/DashboardPage'), 'DashboardPage');
+const DocumentTemplatesPage = lazyPage(() => import('../features/documents/DocumentTemplatesPage'), 'DocumentTemplatesPage');
+const EmployeesPage = lazyPage(() => import('../features/employees/EmployeesPage'), 'EmployeesPage');
+const FinanceSettingsPage = lazyPage(() => import('../features/finance/FinanceSettingsPage'), 'FinanceSettingsPage');
+const HospitalPage = lazyPage(() => import('../features/hospital/HospitalPage'), 'HospitalPage');
+const HospitalCardPage = lazyPage(() => import('../features/hospital/HospitalCardPage'), 'HospitalCardPage');
+const HelpPage = lazyPage(() => import('../features/help/HelpPage'), 'HelpPage');
+const BillCardPage = lazyPage(() => import('../features/billing/BillCardPage'), 'BillCardPage');
+const BillsPage = lazyPage(() => import('../features/billing/BillsPage'), 'BillsPage');
+const VetafImportPage = lazyPage(() => import('../features/imports/VetafImportPage'), 'VetafImportPage');
+const LaboratoryPage = lazyPage(() => import('../features/laboratory/LaboratoryPage'), 'LaboratoryPage');
+const NewsPage = lazyPage(() => import('../features/news/NewsPage'), 'NewsPage');
+const MessagesPage = lazyPage(() => import('../features/notifications/MessagesPage'), 'MessagesPage');
+const MedicalPhrasesSettingsPage = lazyPage(
+  () => import('../features/medicalPhrases/MedicalPhrasesSettingsPage'),
+  'MedicalPhrasesSettingsPage',
+);
+const OrganizationSettingsPage = lazyPage(
+  () => import('../features/organization/OrganizationSettingsPage'),
+  'OrganizationSettingsPage',
+);
+const OnlineRequestsPage = lazyPage(() => import('../features/onlineRequests/OnlineRequestsPage'), 'OnlineRequestsPage');
+const PublicOnlineRequestPage = lazyPage(
+  () => import('../features/onlineRequests/PublicOnlineRequestPage'),
+  'PublicOnlineRequestPage',
+);
+const OwnerCardPage = lazyPage(() => import('../features/owners/OwnerCardPage'), 'OwnerCardPage');
+const OwnersPage = lazyPage(() => import('../features/owners/OwnersPage'), 'OwnersPage');
+const QueueCardPage = lazyPage(() => import('../features/queue/QueueCardPage'), 'QueueCardPage');
+const QueuePage = lazyPage(() => import('../features/queue/QueuePage'), 'QueuePage');
+const QueueTvPage = lazyPage(() => import('../features/queue/QueueTvPage'), 'QueueTvPage');
+const ReportsPage = lazyPage(() => import('../features/reports/ReportsPage'), 'ReportsPage');
+const RemoteAccessEnrollmentPage = lazyPage(
+  () => import('../features/remoteAccess/RemoteAccessEnrollmentPage'),
+  'RemoteAccessEnrollmentPage',
+);
+const RemoteAccessSettingsPage = lazyPage(
+  () => import('../features/remoteAccess/RemoteAccessSettingsPage'),
+  'RemoteAccessSettingsPage',
+);
+const PayrollPage = lazyPage(() => import('../features/payroll/PayrollPage'), 'PayrollPage');
+const BusinessPage = lazyPage(() => import('../features/business/BusinessPage'), 'BusinessPage');
+const DailyFinancePage = lazyPage(() => import('../features/business/DailyFinancePage'), 'DailyFinancePage');
+const SaleCardPage = lazyPage(() => import('../features/sales/SaleCardPage'), 'SaleCardPage');
+const SalesPage = lazyPage(() => import('../features/sales/SalesPage'), 'SalesPage');
+const ClinicResourcesPage = lazyPage(() => import('../features/scheduling/ClinicResourcesPage'), 'ClinicResourcesPage');
+const SettingsOverviewPage = lazyPage(() => import('../features/settings/SettingsOverviewPage'), 'SettingsOverviewPage');
+const StockPage = lazyPage(() => import('../features/stock/StockPage'), 'StockPage');
+const StockOperationsPage = lazyPage(() => import('../features/stock/StockOperationsPage'), 'StockOperationsPage');
+const SupportPage = lazyPage(() => import('../features/support/SupportPage'), 'SupportPage');
+const SystemSettingsPage = lazyPage(() => import('../features/system/SystemSettingsPage'), 'SystemSettingsPage');
+const TaskCardPage = lazyPage(() => import('../features/tasks/TaskCardPage'), 'TaskCardPage');
+const TasksPage = lazyPage(() => import('../features/tasks/TasksPage'), 'TasksPage');
+const VisitCardPage = lazyPage(() => import('../features/visits/VisitCardPage'), 'VisitCardPage');
+const VisitsPage = lazyPage(() => import('../features/visits/VisitsPage'), 'VisitsPage');
+const LoginPage = lazyPage(() => import('../pages/LoginPage'), 'LoginPage');
+const ProfilePage = lazyPage(() => import('../pages/ProfilePage'), 'ProfilePage');
 
 export const routes: RouteObject[] = [
   {

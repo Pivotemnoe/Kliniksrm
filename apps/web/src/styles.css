@@ -7,6 +7,26 @@ body,
   margin: 0;
 }
 
+.route-load-state {
+  display: flex;
+  min-height: 240px;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  color: #526273;
+}
+
+.route-load-state-fullscreen {
+  min-height: 100vh;
+  box-sizing: border-box;
+  background: #f3f5f8;
+}
+
+.route-load-state > .ant-alert {
+  width: min(620px, 100%);
+}
+
 .help-page {
   scroll-behavior: smooth;
 }

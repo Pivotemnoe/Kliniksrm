@@ -3,6 +3,7 @@ import { App as AntApp, ConfigProvider } from 'antd';
 import ruRU from 'antd/locale/ru_RU';
 import { RouterProvider, createBrowserRouter } from 'react-router-dom';
 import { queryClient } from './queryClient';
+import { RouteLoadBoundary } from './RouteLoadBoundary';
 import { routes } from './routes';
 
 const router = createBrowserRouter(routes);
@@ -29,7 +30,9 @@ export function App() {
     >
       <AntApp>
         <QueryClientProvider client={queryClient}>
-          <RouterProvider router={router} />
+          <RouteLoadBoundary fullScreen>
+            <RouterProvider router={router} />
+          </RouteLoadBoundary>
         </QueryClientProvider>
       </AntApp>
     </ConfigProvider>
