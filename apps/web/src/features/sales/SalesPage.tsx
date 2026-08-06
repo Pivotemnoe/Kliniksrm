@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
+import { LiveSearchInput } from '../../shared/ui/LiveSearchInput';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDateTime } from '../../shared/utils/date';
 import { formatMoney, toMoneyNumber } from '../../shared/utils/money';
@@ -124,7 +125,7 @@ export function SalesPage() {
       />
       <div className="list-panel">
         <div className="list-panel-header">
-          <Input.Search
+          <LiveSearchInput
             allowClear
             enterButton={<SearchOutlined />}
             placeholder="Поиск по покупателю, телефону, пациенту или позиции"

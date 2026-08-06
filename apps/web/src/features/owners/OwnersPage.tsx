@@ -1,10 +1,11 @@
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Input, Space, Table, Typography } from 'antd';
+import { App, Button, Space, Table, Typography } from 'antd';
 import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';
+import { LiveSearchInput } from '../../shared/ui/LiveSearchInput';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { createOwner, listOwners } from './owners.api';
 import { OwnerFormDrawer } from './OwnerFormDrawer';
@@ -42,18 +43,6 @@ export function OwnersPage() {
     setSearchInput(nextSearch);
     setOffset(0);
   }, [searchParams]);
-
-  useEffect(() => {
-    const trimmedSearch = searchInput.trim();
-    const timeoutId = window.setTimeout(() => {
-      if (trimmedSearch !== search) {
-        setSearch(trimmedSearch);
-        setOffset(0);
-      }
-    }, 250);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [search, searchInput]);
 
   const columns = useMemo<ColumnsType<Owner>>(
     () => [
@@ -112,7 +101,7 @@ export function OwnersPage() {
       />
       <div className="list-panel">
         <div className="list-panel-header">
-          <Input.Search
+          <LiveSearchInput
             allowClear
             enterButton={<SearchOutlined />}
             placeholder="Поиск по ФИО, телефону, email, пациенту или микрочипу"

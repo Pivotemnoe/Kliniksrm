@@ -1,6 +1,6 @@
 import { CheckOutlined, ExportOutlined, FileTextOutlined, PhoneOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Input, Segmented, Select, Space, Table, Tag, Typography } from 'antd';
+import { App, Button, Segmented, Select, Space, Table, Tag, Typography } from 'antd';
 import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -8,6 +8,7 @@ import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
+import { LiveSearchInput } from '../../shared/ui/LiveSearchInput';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDateTime } from '../../shared/utils/date';
 import { createVisit } from '../visits/visits.api';
@@ -278,7 +279,7 @@ export function QueuePage() {
         <div className="list-panel-body">
         <Space direction="vertical" size={16} className="full-width">
           <div className="toolbar-row">
-            <Input.Search
+            <LiveSearchInput
               allowClear
               enterButton={<SearchOutlined />}
               placeholder="Поиск по клиенту, телефону или пациенту"

@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
+import { LiveSearchInput } from '../../shared/ui/LiveSearchInput';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatMoney, toMoneyNumber } from '../../shared/utils/money';
 import { listAppointments } from '../appointments/appointments.api';
@@ -323,7 +324,7 @@ function MergeOwnerModal({
           Текущая карточка останется основной. Выбранный дубль будет перенесён сюда вместе с пациентами, записями,
           приёмами, счетами, балансом, уведомлениями и личным кабинетом.
         </Typography.Paragraph>
-        <Input.Search
+        <LiveSearchInput
           allowClear
           defaultValue={owner.phone ?? owner.fullName}
           placeholder="Телефон, ФИО или пациент"

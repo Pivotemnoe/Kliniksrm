@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
+import { LiveSearchInput } from '../../shared/ui/LiveSearchInput';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { AttachmentsPanel } from '../files/AttachmentsPanel';
 import { listLaboratoryFiles, listLaboratoryOrderFiles, uploadLaboratoryFile, uploadLaboratoryOrderFile } from '../files/files.api';
@@ -216,7 +217,7 @@ export function LaboratoryPage() {
                   options={resourcesQuery.data?.species.map((item) => ({ value: item.title, label: item.title })) ?? []}
                 />
               )}
-              <Input.Search allowClear enterButton={<SearchOutlined />} placeholder="Поиск" className="search-input" onSearch={handleSearch} />
+              <LiveSearchInput allowClear enterButton={<SearchOutlined />} placeholder="Поиск" className="search-input" onSearch={handleSearch} />
             </Space>
           }
           items={[

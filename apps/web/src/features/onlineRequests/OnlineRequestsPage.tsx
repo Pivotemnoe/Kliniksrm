@@ -23,6 +23,7 @@ import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
+import { LiveSearchInput } from '../../shared/ui/LiveSearchInput';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { RussianPhoneInput } from '../../shared/ui/RussianPhoneInput';
 import { formatDateTime, fromDatetimeLocal, toDatetimeLocal } from '../../shared/utils/date';
@@ -270,7 +271,7 @@ export function OnlineRequestsPage() {
       <div className="list-panel">
         <div className="list-panel-header">
           <Space wrap>
-            <Input.Search
+            <LiveSearchInput
               allowClear
               className="search-input"
               placeholder="Поиск по клиенту, телефону или пациенту"

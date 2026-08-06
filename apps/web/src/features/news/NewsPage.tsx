@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
+import { LiveSearchInput } from '../../shared/ui/LiveSearchInput';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDateTime } from '../../shared/utils/date';
 import { listRoles } from '../employees/employees.api';
@@ -174,7 +175,7 @@ export function NewsPage() {
       <div className="list-panel">
         <div className="list-panel-header">
           <Space wrap>
-            <Input.Search
+            <LiveSearchInput
               allowClear
               className="search-input"
               placeholder="Поиск по новостям"

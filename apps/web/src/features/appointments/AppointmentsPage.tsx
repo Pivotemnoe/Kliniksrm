@@ -8,6 +8,7 @@ import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
+import { LiveSearchInput } from '../../shared/ui/LiveSearchInput';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDateTime, getDayBounds } from '../../shared/utils/date';
 import { createOwner, createOwnerAnimal } from '../owners/owners.api';
@@ -189,7 +190,7 @@ export function AppointmentsPage() {
               children: (
                 <>
                   <div className="list-panel-header">
-                    <Input.Search
+                    <LiveSearchInput
                       allowClear
                       enterButton={<SearchOutlined />}
                       placeholder="Поиск по клиенту, пациенту или комментарию"

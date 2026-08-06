@@ -16,9 +16,14 @@ export type DocumentPdfSnapshot = {
   animalDescription: string;
 };
 
+export type DocumentPdfLogo = {
+  data: Buffer;
+  mimeType: 'image/jpeg' | 'image/png';
+};
+
 @Injectable()
 export class DocumentPdfService {
-  render(snapshot: DocumentPdfSnapshot) {
+  render(snapshot: DocumentPdfSnapshot, clinicLogo?: DocumentPdfLogo) {
     return new Promise<Buffer>((resolve, reject) => {
       const chunks: Buffer[] = [];
       const document = new PDFDocument({
@@ -39,14 +44,7 @@ export class DocumentPdfService {
       document.registerFont('Roboto', robotoRegular);
       document.registerFont('Roboto-Bold', robotoBold);
 
-      document.font('Roboto-Bold').fontSize(18).fillColor('#17324d').text(snapshot.clinicName || 'TemichevVet');
-      document
-        .font('Roboto')
-        .fontSize(9)
-        .fillColor('#66788a')
-        .text('Документ ветеринарной клиники');
-      document.moveDown(0.8).strokeColor('#1f7880').lineWidth(1.2).moveTo(52, document.y).lineTo(543, document.y).stroke();
-      document.moveDown(1.2);
+      drawHeader(document, snapshot, clinicLogo);
       document.font('Roboto-Bold').fontSize(18).fillColor('#17324d').text(snapshot.title);
       document.moveDown(0.8);
 
@@ -83,6 +81,42 @@ export class DocumentPdfService {
       document.end();
     });
   }
+}
+
+function drawHeader(document: PDFKit.PDFDocument, snapshot: DocumentPdfSnapshot, clinicLogo?: DocumentPdfLogo) {
+  let logoRendered = false;
+  if (clinicLogo && hasExpectedLogoSignature(clinicLogo)) {
+    try {
+      document.image(clinicLogo.data, 52, 38, { fit: [54, 54], align: 'center', valign: 'center' });
+      logoRendered = true;
+    } catch {
+      // Keep a clean text header if a previously uploaded image can no longer be decoded.
+    }
+  }
+
+  const textX = logoRendered ? 120 : 52;
+  document
+    .font('Roboto-Bold')
+    .fontSize(18)
+    .fillColor('#17324d')
+    .text(snapshot.clinicName || 'TemichevVet', textX, 47, { width: 543 - textX, lineBreak: false, ellipsis: true });
+  document
+    .font('Roboto')
+    .fontSize(9)
+    .fillColor('#66788a')
+    .text('Документ ветеринарной клиники', textX, 72, { width: 543 - textX, lineBreak: false });
+  document.strokeColor('#1f7880').lineWidth(1.2).moveTo(52, 104).lineTo(543, 104).stroke();
+  document.y = 119;
+}
+
+function hasExpectedLogoSignature(logo: DocumentPdfLogo) {
+  if (logo.mimeType === 'image/jpeg') {
+    return logo.data.length >= 3 && logo.data[0] === 0xff && logo.data[1] === 0xd8 && logo.data[2] === 0xff;
+  }
+  return (
+    logo.data.length >= 8 &&
+    logo.data.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+  );
 }
 
 function drawMeta(document: PDFKit.PDFDocument, x: number, y: number, label: string, value: string, width = 230) {

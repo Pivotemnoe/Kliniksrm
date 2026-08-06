@@ -10,7 +10,7 @@ import { createHash } from 'node:crypto';
 import { AuditService } from '../audit/audit.service';
 import { ObjectStorageService } from '../files/object-storage.service';
 import { PrismaService } from '../../prisma/prisma.service';
-import { DocumentPdfService, DocumentPdfSnapshot } from './document-pdf.service';
+import { DocumentPdfLogo, DocumentPdfService, DocumentPdfSnapshot } from './document-pdf.service';
 import { CreateDocumentTemplateDto } from './dto/create-document-template.dto';
 import { CreateVisitDocumentDto } from './dto/create-visit-document.dto';
 import { UpdateDocumentTemplateDto } from './dto/update-document-template.dto';
@@ -609,7 +609,9 @@ export class DocumentsService {
                 fullName: true,
                 office: {
                   select: {
-                    organization: { select: { displayName: true } },
+                    organization: {
+                      select: { displayName: true, logoStorageKey: true, logoMimeType: true },
+                    },
                   },
                 },
               },
@@ -640,16 +642,20 @@ export class DocumentsService {
         .filter(Boolean)
         .join(', '),
     };
+    const organization = document.visit.owner.office?.organization;
+    const clinicLogo = await this.loadPdfLogo(organization?.logoStorageKey, organization?.logoMimeType);
+    const clinicLogoSha256 = clinicLogo ? createHash('sha256').update(clinicLogo.data).digest('hex') : null;
     const snapshot = {
       schemaVersion: 2,
       visitDocumentId: document.id,
       visitId: document.visitId,
       templateId: document.templateId,
       templateVersionId: document.templateVersionId,
+      clinicLogoSha256,
       ...pdfSnapshot,
     } satisfies Prisma.InputJsonObject;
     const contentSha256 = createHash('sha256').update(JSON.stringify(snapshot)).digest('hex');
-    const pdf = await this.pdfService.render(pdfSnapshot);
+    const pdf = await this.pdfService.render(pdfSnapshot, clinicLogo);
     const pdfSha256 = createHash('sha256').update(pdf).digest('hex');
     const storageKey = `medical_document/${new Date().getUTCFullYear()}/generated/${document.id}-${contentSha256.slice(0, 16)}.pdf`;
     await this.storage.putObject(storageKey, pdf, 'application/pdf');
@@ -696,6 +702,24 @@ export class DocumentsService {
       await this.storage.removeObject(storageKey).catch(() => undefined);
       throw error;
     }
+  }
+
+  private async loadPdfLogo(storageKey: string | null | undefined, mimeType: string | null | undefined) {
+    if (!storageKey || (mimeType !== 'image/jpeg' && mimeType !== 'image/png')) {
+      return undefined;
+    }
+
+    const stream = await this.storage.getObject(storageKey);
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    const data = Buffer.concat(chunks);
+    if (!data.length) {
+      return undefined;
+    }
+
+    return { data, mimeType } satisfies DocumentPdfLogo;
   }
 
 }

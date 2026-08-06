@@ -1,12 +1,13 @@
 import { FolderOpenOutlined, OrderedListOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Input, Select, Space, Table, Tag, Typography } from 'antd';
+import { App, Button, Select, Space, Table, Tag, Typography } from 'antd';
 import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
+import { LiveSearchInput } from '../../shared/ui/LiveSearchInput';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDateTime } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
@@ -176,7 +177,7 @@ export function VisitsPage() {
       />
       <div className="list-panel">
         <div className="list-panel-header">
-          <Input.Search
+          <LiveSearchInput
             allowClear
             enterButton={<SearchOutlined />}
             placeholder="Поиск по клиенту, пациенту, врачу или диагнозу"

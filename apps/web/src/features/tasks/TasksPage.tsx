@@ -8,6 +8,7 @@ import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
+import { LiveSearchInput } from '../../shared/ui/LiveSearchInput';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDateTime, getDayBounds } from '../../shared/utils/date';
 import { getSchedulingResources } from '../scheduling/scheduling.api';
@@ -224,7 +225,7 @@ export function TasksPage() {
       />
       <div className="list-panel">
         <div className="list-panel-header">
-          <Input.Search
+          <LiveSearchInput
             allowClear
             enterButton={<SearchOutlined />}
             placeholder="Поиск по задаче, клиенту, пациенту или комментарию"

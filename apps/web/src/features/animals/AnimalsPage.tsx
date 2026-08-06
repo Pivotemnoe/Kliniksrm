@@ -1,11 +1,12 @@
 import { SearchOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { Button, Input, Table, Typography } from 'antd';
+import { Button, Table, Typography } from 'antd';
 import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';
 import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
+import { LiveSearchInput } from '../../shared/ui/LiveSearchInput';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { AnimalStatusTag } from './animalStatus';
 import { listAnimals } from './animals.api';
@@ -77,7 +78,7 @@ export function AnimalsPage() {
       <PageHeader title="Пациенты" extra={<Button>Избранные</Button>} />
       <div className="list-panel">
         <div className="list-panel-header">
-          <Input.Search
+          <LiveSearchInput
             allowClear
             enterButton={<SearchOutlined />}
             placeholder="Поиск по кличке, владельцу, породе или микрочипу"
