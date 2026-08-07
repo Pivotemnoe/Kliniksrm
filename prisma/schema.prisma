@@ -363,6 +363,9 @@ model Employee {
   createdNotifications      NotificationOutbox[]         @relation("NotificationCreator")
   createdNewsPosts          NewsPost[]                   @relation("NewsPostCreator")
   newsReads                 NewsPostRead[]
+  staffAlertReads           StaffAlertRead[]
+  sentInternalMessages      InternalMessage[]            @relation("InternalMessageSender")
+  receivedInternalMessages  InternalMessage[]            @relation("InternalMessageRecipient")
   auditLogs                 AuditLog[]                   @relation("AuditActor")
   payments                  Payment[]
   createdSales              Sale[]                       @relation("SaleEmployee")
@@ -1280,6 +1283,31 @@ model NewsPostRead {
 
   @@id([newsPostId, employeeId])
   @@index([employeeId, readAt])
+}
+
+model StaffAlertRead {
+  employeeId String
+  alertKey   String
+  version    String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  readAt     DateTime @default(now())
+
+  @@id([employeeId, alertKey])
+  @@index([employeeId, readAt])
+}
+
+model InternalMessage {
+  id          String    @id @default(uuid())
+  senderId    String
+  sender      Employee  @relation("InternalMessageSender", fields: [senderId], references: [id], onDelete: Restrict)
+  recipientId String
+  recipient   Employee  @relation("InternalMessageRecipient", fields: [recipientId], references: [id], onDelete: Restrict)
+  body        String
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([senderId, recipientId, createdAt])
+  @@index([recipientId, readAt, createdAt])
 }
 
 model Task {

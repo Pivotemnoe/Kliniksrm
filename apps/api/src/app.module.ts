@@ -14,6 +14,7 @@ import { FilesModule } from './modules/files/files.module';
 import { HealthModule } from './modules/health/health.module';
 import { HospitalModule } from './modules/hospital/hospital.module';
 import { ImportsModule } from './modules/imports/imports.module';
+import { InternalMessagesModule } from './modules/internal-messages/internal-messages.module';
 import { LaboratoryModule } from './modules/laboratory/laboratory.module';
 import { MedicalPhrasesModule } from './modules/medical-phrases/medical-phrases.module';
 import { MetaModule } from './modules/meta/meta.module';
@@ -29,6 +30,7 @@ import { PayrollModule } from './modules/payroll/payroll.module';
 import { SalesModule } from './modules/sales/sales.module';
 import { SchedulingModule } from './modules/scheduling/scheduling.module';
 import { StockModule } from './modules/stock/stock.module';
+import { StaffAlertsModule } from './modules/staff-alerts/staff-alerts.module';
 import { SupportModule } from './modules/support/support.module';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { VisitsModule } from './modules/visits/visits.module';
@@ -65,10 +67,12 @@ import { PrismaModule } from './prisma/prisma.module';
     PayrollModule,
     SalesModule,
     StockModule,
+    StaffAlertsModule,
     SupportModule,
     HospitalModule,
     LaboratoryModule,
     ImportsModule,
+    InternalMessagesModule,
     MedicalPhrasesModule,
   ],
 })

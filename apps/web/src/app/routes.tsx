@@ -70,6 +70,7 @@ const SaleCardPage = lazyPage(() => import('../features/sales/SaleCardPage'), 'S
 const SalesPage = lazyPage(() => import('../features/sales/SalesPage'), 'SalesPage');
 const ClinicResourcesPage = lazyPage(() => import('../features/scheduling/ClinicResourcesPage'), 'ClinicResourcesPage');
 const SettingsOverviewPage = lazyPage(() => import('../features/settings/SettingsOverviewPage'), 'SettingsOverviewPage');
+const StaffMessagesPage = lazyPage(() => import('../features/internalMessages/StaffMessagesPage'), 'StaffMessagesPage');
 const StockPage = lazyPage(() => import('../features/stock/StockPage'), 'StockPage');
 const StockOperationsPage = lazyPage(() => import('../features/stock/StockOperationsPage'), 'StockOperationsPage');
 const SupportPage = lazyPage(() => import('../features/support/SupportPage'), 'SupportPage');
@@ -171,6 +172,7 @@ export const routes: RouteObject[] = [
           { path: '/settings/support', element: <SupportPage /> },
           { path: '/settings/import', element: <VetafImportPage /> },
           { path: '/messages', element: <MessagesPage /> },
+          { path: '/staff-messages', element: <StaffMessagesPage /> },
           { path: '/online-requests', element: <OnlineRequestsPage /> },
         ],
       },

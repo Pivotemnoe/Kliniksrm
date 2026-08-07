@@ -83,6 +83,7 @@ const fallbackRouteCandidates = [
   '/bills',
   '/stock',
   '/news',
+  '/staff-messages',
   '/profile',
 ];
 

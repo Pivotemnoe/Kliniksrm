@@ -119,6 +119,7 @@ export const pageTitles: Record<string, string> = {
   phrases: 'Быстрые фразы',
   onlineRequests: 'Заявки на приём',
   messages: 'Сообщения',
+  'staff-messages': 'Сообщения сотрудникам',
   organization: 'Организация',
   office: 'Филиал',
   laboratories: 'Лаборатории',

@@ -21,6 +21,7 @@ const allowedDefaultRoutes = new Set([
   '/hospital',
   '/stock',
   '/messages',
+  '/staff-messages',
   '/online-requests',
   '/settings',
 ]);

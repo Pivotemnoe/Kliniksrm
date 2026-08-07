@@ -126,7 +126,7 @@ export function DashboardPage() {
         <DashboardActionTile
           title="Приёмы"
           value={summary?.visits.totalToday ?? 0}
-          hint={`Активных ${summary?.visits.active ?? 0}`}
+          hint={`Незавершённых ${summary?.visits.active ?? 0}`}
           icon={<FileDoneOutlined />}
           loading={dashboardQuery.isLoading}
           variant="visits"
@@ -241,6 +241,32 @@ export function DashboardPage() {
                     <Space wrap size={6}>
                       <Tag color={appointmentStatusColors[item.status]}>{appointmentStatusLabels[item.status]}</Tag>
                       <span>{item.owner?.fullName ?? 'Владелец не указан'}</span>
+                    </Space>
+                  }
+                />
+              </List.Item>
+            )}
+          />
+        </section>
+        <section className="list-panel">
+          <div className="list-panel-header">
+            <Typography.Title level={4}>Незавершённые приёмы</Typography.Title>
+            <Tag color={summary?.visits.active ? 'orange' : 'default'}>{summary?.visits.active ?? 0}</Tag>
+          </div>
+          <List
+            className="compact-list"
+            loading={dashboardQuery.isLoading}
+            dataSource={summary?.visits.items ?? []}
+            locale={{ emptyText: 'Незавершённых приёмов нет' }}
+            renderItem={(item) => (
+              <List.Item onClick={() => navigate(`/visits/${item.id}`)}>
+                <List.Item.Meta
+                  title={`${item.animal?.nickname ?? 'Пациент'} · ${item.owner?.fullName ?? 'Владелец не указан'}`}
+                  description={
+                    <Space wrap size={6}>
+                      <Tag color={visitStatusColors[item.status]}>{visitStatusLabels[item.status]}</Tag>
+                      <span>{item.employee?.fullName ?? 'Врач не назначен'}</span>
+                      <span>Начат {formatDateTime(item.startedAt)}</span>
                     </Space>
                   }
                 />
@@ -705,7 +731,7 @@ function DoctorDashboard({
         <DashboardActionTile
           title="Мои приёмы"
           value={summary.visits.totalToday}
-          hint={`Активных ${summary.visits.active}`}
+          hint={`Незавершённых ${summary.visits.active}`}
           icon={<FileDoneOutlined />}
           loading={loading}
           variant="visits"
@@ -818,6 +844,31 @@ function DoctorDashboard({
                     <Space wrap size={6}>
                       <Tag color={queueStatusColors[item.status]}>{queueStatusLabels[item.status]}</Tag>
                       <Tag color={queueUrgencyColors[item.urgency]}>{queueUrgencyLabels[item.urgency]}</Tag>
+                    </Space>
+                  }
+                />
+              </List.Item>
+            )}
+          />
+        </section>
+        <section className="list-panel">
+          <div className="list-panel-header">
+            <Typography.Title level={4}>Мои незавершённые приёмы</Typography.Title>
+            <Tag color={summary.visits.active ? 'orange' : 'default'}>{summary.visits.active}</Tag>
+          </div>
+          <List
+            className="compact-list"
+            loading={loading}
+            dataSource={summary.visits.items}
+            locale={{ emptyText: 'Все приёмы завершены' }}
+            renderItem={(item) => (
+              <List.Item onClick={() => navigate(`/visits/${item.id}`)}>
+                <List.Item.Meta
+                  title={`${item.animal?.nickname ?? 'Пациент'} · ${item.owner?.fullName ?? 'Владелец не указан'}`}
+                  description={
+                    <Space wrap size={6}>
+                      <Tag color={visitStatusColors[item.status]}>{visitStatusLabels[item.status]}</Tag>
+                      <span>Начат {formatDateTime(item.startedAt)}</span>
                     </Space>
                   }
                 />
