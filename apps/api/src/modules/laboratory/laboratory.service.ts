@@ -21,6 +21,7 @@ export class LaboratoryService {
   async getResources() {
     const [services, species] = await this.prisma.$transaction([
       this.prisma.service.findMany({
+        where: { isActive: true },
         orderBy: { title: 'asc' },
         select: { id: true, title: true, price: true, category: { select: { id: true, title: true } } },
         take: 300,
@@ -465,7 +466,7 @@ export class LaboratoryService {
       return;
     }
 
-    const service = await this.prisma.service.findUnique({ where: { id: serviceId }, select: { id: true } });
+    const service = await this.prisma.service.findFirst({ where: { id: serviceId, isActive: true }, select: { id: true } });
     if (!service) {
       throw new NotFoundException('Связанная услуга не найдена');
     }

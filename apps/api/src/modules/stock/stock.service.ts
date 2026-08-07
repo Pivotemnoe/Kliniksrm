@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomInt } from 'node:crypto';
-import { Prisma, ProductBarcodeType, StockMovementType } from '@prisma/client';
+import { HospitalRecordStatus, Prisma, ProductBarcodeType, StockDocumentStatus, StockMovementType } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -103,6 +103,7 @@ export class StockService {
     const { limit, offset } = parsePagination(query);
     const search = query.search?.trim();
     const where: Prisma.ProductWhereInput = {
+      isActive: true,
       ...(query.productId ? { id: query.productId } : {}),
       ...(query.categoryId ? { categoryId: query.categoryId } : {}),
       ...(query.warehouseId ? { batches: { some: batchWarehouseWhere } } : {}),
@@ -140,6 +141,7 @@ export class StockService {
     const { limit, offset } = parsePagination(query);
     const search = query.search?.trim();
     const where: Prisma.ProductWhereInput = {
+      isActive: true,
       minStock: { not: null },
       ...(query.categoryId ? { categoryId: query.categoryId } : {}),
       ...(search
@@ -170,6 +172,7 @@ export class StockService {
 
   async getCatalogQuality() {
     const products = await this.prisma.product.findMany({
+      where: { isActive: true },
       orderBy: { title: 'asc' },
       select: {
         id: true,
@@ -350,10 +353,56 @@ export class StockService {
     return serializeProduct(product);
   }
 
+  async deleteProduct(productId: string, actorId: string) {
+    const product = await this.prisma.product.findFirst({
+      where: { id: productId, isActive: true },
+      select: { id: true, title: true },
+    });
+    if (!product) {
+      throw new NotFoundException('Товар не найден или уже удалён');
+    }
+
+    const [stock, draftDocumentItems, plannedHospitalRecords] = await this.prisma.$transaction([
+      this.prisma.stockBatch.aggregate({ where: { productId }, _sum: { rest: true } }),
+      this.prisma.stockDocumentItem.count({
+        where: {
+          document: { status: StockDocumentStatus.DRAFT },
+          OR: [{ productId }, { targetProductId: productId }],
+        },
+      }),
+      this.prisma.hospitalRecord.count({
+        where: { plannedProductId: productId, recordStatus: HospitalRecordStatus.PLANNED },
+      }),
+    ]);
+
+    const stockRest = stock._sum.rest ?? new Prisma.Decimal(0);
+    if (!stockRest.equals(0)) {
+      throw new BadRequestException(`Нельзя удалить товар, пока остаток не равен нулю. Текущий остаток: ${stockRest.toString()}`);
+    }
+    if (draftDocumentItems > 0) {
+      throw new BadRequestException('Нельзя удалить товар: он используется в черновике складского документа');
+    }
+    if (plannedHospitalRecords > 0) {
+      throw new BadRequestException('Нельзя удалить товар: он указан в невыполненном назначении стационара');
+    }
+
+    await this.prisma.product.update({ where: { id: productId }, data: { isActive: false } });
+    await this.auditService.log({
+      actorId,
+      action: 'stock.product.archive',
+      entityType: 'Product',
+      entityId: product.id,
+      metadata: { title: product.title, historyPreserved: true },
+    });
+
+    return { id: product.id, title: product.title, deleted: true };
+  }
+
   async listServices(query: ListStockQueryDto) {
     const { limit, offset } = parsePagination(query);
     const search = query.search?.trim();
     const where: Prisma.ServiceWhereInput = {
+      isActive: true,
       ...(query.categoryId ? { categoryId: query.categoryId } : {}),
       ...(search
         ? {
@@ -441,6 +490,34 @@ export class StockService {
     });
 
     return service;
+  }
+
+  async deleteService(serviceId: string, actorId: string) {
+    const service = await this.prisma.service.findFirst({
+      where: { id: serviceId, isActive: true },
+      select: { id: true, title: true },
+    });
+    if (!service) {
+      throw new NotFoundException('Услуга не найдена или уже удалена');
+    }
+
+    const plannedHospitalRecords = await this.prisma.hospitalRecord.count({
+      where: { plannedServiceId: serviceId, recordStatus: HospitalRecordStatus.PLANNED },
+    });
+    if (plannedHospitalRecords > 0) {
+      throw new BadRequestException('Нельзя удалить услугу: она указана в невыполненном назначении стационара');
+    }
+
+    await this.prisma.service.update({ where: { id: serviceId }, data: { isActive: false } });
+    await this.auditService.log({
+      actorId,
+      action: 'stock.service.archive',
+      entityType: 'Service',
+      entityId: service.id,
+      metadata: { title: service.title, historyPreserved: true },
+    });
+
+    return { id: service.id, title: service.title, deleted: true };
   }
 
   async listStockBatches(query: ListStockQueryDto, actorId: string) {
@@ -532,7 +609,7 @@ export class StockService {
     const productIds = [...new Set(dto.items.map((item) => item.productId))];
     ensureConsistentRetailPrices(dto.items);
     const products = await this.prisma.product.findMany({
-      where: { id: { in: productIds } },
+      where: { id: { in: productIds }, isActive: true },
       select: { id: true, stockUnit: true, writeOffUnit: true, billingUnit: true },
     });
 
@@ -674,7 +751,7 @@ export class StockService {
     const productIds = [...new Set(dto.items.map((item) => item.productId))];
     ensureConsistentRetailPrices(dto.items);
     const products = await this.prisma.product.findMany({
-      where: { id: { in: productIds } },
+      where: { id: { in: productIds }, isActive: true },
       select: { id: true, stockUnit: true, writeOffUnit: true, billingUnit: true },
     });
     if (products.length !== productIds.length) throw new BadRequestException('В накладной указан неизвестный товар');
@@ -1060,8 +1137,8 @@ export class StockService {
   }
 
   private async ensureProductExists(productId: string) {
-    const product = await this.prisma.product.findUnique({
-      where: { id: productId },
+    const product = await this.prisma.product.findFirst({
+      where: { id: productId, isActive: true },
       select: {
         id: true,
         barcode: true,
@@ -1100,6 +1177,7 @@ export class StockService {
       if (explicit !== currentBarcode) {
         const duplicate = await this.prisma.product.findFirst({
           where: {
+            isActive: true,
             ...(productId ? { id: { not: productId } } : {}),
             OR: [{ barcode: explicit }, { barcodes: { some: { value: explicit } } }],
           },
@@ -1121,7 +1199,7 @@ export class StockService {
       const body = `20${String(randomInt(0, 10_000_000_000)).padStart(10, '0')}`;
       const candidate = `${body}${ean13CheckDigit(body)}`;
       const exists = await this.prisma.product.findFirst({
-        where: { OR: [{ barcode: candidate }, { barcodes: { some: { value: candidate } } }] },
+        where: { isActive: true, OR: [{ barcode: candidate }, { barcodes: { some: { value: candidate } } }] },
         select: { id: true },
       });
       if (!exists) {
@@ -1135,14 +1213,18 @@ export class StockService {
   private async ensureBarcodesAvailable(values: string[], productId?: string) {
     if (!values.length) return;
     const duplicate = await this.prisma.productBarcode.findFirst({
-      where: { value: { in: values }, ...(productId ? { productId: { not: productId } } : {}) },
+      where: {
+        value: { in: values },
+        product: { isActive: true },
+        ...(productId ? { productId: { not: productId } } : {}),
+      },
       select: { value: true },
     });
     if (duplicate) throw new BadRequestException(`Штрих-код ${duplicate.value} уже назначен другому товару`);
   }
 
   private async ensureServiceExists(serviceId: string) {
-    const service = await this.prisma.service.findUnique({ where: { id: serviceId }, select: { id: true } });
+    const service = await this.prisma.service.findFirst({ where: { id: serviceId, isActive: true }, select: { id: true } });
     if (!service) {
       throw new NotFoundException('Service not found');
     }

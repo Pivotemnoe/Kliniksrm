@@ -157,7 +157,7 @@ export class DashboardService {
         select: laboratoryOrderSelect,
       }),
       this.prisma.product.findMany({
-        where: { minStock: { not: null } },
+        where: { isActive: true, minStock: { not: null } },
         orderBy: { title: 'asc' },
         take: 200,
         select: {

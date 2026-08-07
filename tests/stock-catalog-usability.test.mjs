@@ -18,6 +18,37 @@ test('товары и услуги можно редактировать из с
   assert.match(api, /method: 'PATCH'/);
 });
 
+test('товары и услуги удаляются из каталога без разрушения медицинской и складской истории', async () => {
+  const [schema, migration, controller, service, page, api] = await Promise.all([
+    read('prisma/schema.prisma'),
+    read('prisma/migrations/20260807000200_catalog_item_archiving/migration.sql'),
+    read('apps/api/src/modules/stock/stock.controller.ts'),
+    read('apps/api/src/modules/stock/stock.service.ts'),
+    read('apps/web/src/features/stock/StockPage.tsx'),
+    read('apps/web/src/features/stock/stock.api.ts'),
+  ]);
+
+  assert.match(schema, /model Product \{[\s\S]*?isActive\s+Boolean\s+@default\(true\)/);
+  assert.match(schema, /model Service \{[\s\S]*?isActive\s+Boolean\s+@default\(true\)/);
+  assert.match(migration, /ALTER TABLE "Product" ADD COLUMN "isActive"/);
+  assert.match(migration, /ALTER TABLE "Service" ADD COLUMN "isActive"/);
+  assert.doesNotMatch(migration, /DROP|TRUNCATE|DELETE\s+FROM/i);
+  assert.match(controller, /@Delete\('products\/:productId'\)/);
+  assert.match(controller, /@Delete\('services\/:serviceId'\)/);
+  assert.match(service, /action: 'stock\.product\.archive'/);
+  assert.match(service, /action: 'stock\.service\.archive'/);
+  assert.match(service, /Текущий остаток/);
+  assert.match(service, /recordStatus: HospitalRecordStatus\.PLANNED/);
+  assert.doesNotMatch(service, /prisma\.(?:product|service)\.delete\(/);
+  assert.match(page, /Действия <DownOutlined/);
+  assert.match(page, /label: 'Открыть'/);
+  assert.match(page, /label: 'Изменить'/);
+  assert.match(page, /label: 'Удалить'/);
+  assert.match(page, /останется в старых счетах/);
+  assert.match(api, /\/v1\/stock\/products\/\$\{productId\}[\s\S]*?method: 'DELETE'/);
+  assert.match(api, /\/v1\/stock\/services\/\$\{serviceId\}[\s\S]*?method: 'DELETE'/);
+});
+
 test('единицы выбираются из справочника и пересчитываются при списании', async () => {
   const page = await read('apps/web/src/features/stock/StockPage.tsx');
   const units = await read('apps/api/src/modules/stock/stock-units.ts');

@@ -48,8 +48,8 @@ export class PayrollService {
           },
         },
       }),
-      this.prisma.service.findMany({ orderBy: { title: 'asc' }, select: { id: true, title: true }, take: 500 }),
-      this.prisma.product.findMany({ orderBy: { title: 'asc' }, select: { id: true, title: true }, take: 1000 }),
+      this.prisma.service.findMany({ where: { isActive: true }, orderBy: { title: 'asc' }, select: { id: true, title: true }, take: 500 }),
+      this.prisma.product.findMany({ where: { isActive: true }, orderBy: { title: 'asc' }, select: { id: true, title: true }, take: 1000 }),
     ]);
 
     return { employees, services, products };

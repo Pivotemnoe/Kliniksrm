@@ -87,6 +87,7 @@ export class HospitalService {
     const warehouseScope = await this.getWarehouseScope(actorId);
     const productWhere: Prisma.ProductWhereInput = search
       ? {
+          isActive: true,
           OR: [
             { title: { contains: search, mode: 'insensitive' } },
             { sku: { contains: search, mode: 'insensitive' } },
@@ -94,10 +95,10 @@ export class HospitalService {
             { barcodes: { some: { value: { contains: search, mode: 'insensitive' } } } },
           ],
         }
-      : {};
+      : { isActive: true };
     const serviceWhere: Prisma.ServiceWhereInput = search
-      ? { title: { contains: search, mode: 'insensitive' } }
-      : {};
+      ? { isActive: true, title: { contains: search, mode: 'insensitive' } }
+      : { isActive: true };
 
     const [products, services] = await this.prisma.$transaction([
       this.prisma.product.findMany({
@@ -948,8 +949,8 @@ export class HospitalService {
     }
 
     const service = dto.serviceId
-      ? await tx.service.findUnique({
-          where: { id: dto.serviceId },
+      ? await tx.service.findFirst({
+          where: { id: dto.serviceId, isActive: true },
           select: { id: true, title: true, price: true },
         })
       : null;
@@ -958,8 +959,8 @@ export class HospitalService {
     }
 
     const product = dto.productId
-      ? await tx.product.findUnique({
-          where: { id: dto.productId },
+      ? await tx.product.findFirst({
+          where: { id: dto.productId, isActive: true },
           select: { id: true, title: true, retailPrice: true },
         })
       : null;

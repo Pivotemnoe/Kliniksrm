@@ -1,7 +1,7 @@
-import { DeleteOutlined, EditOutlined, PaperClipOutlined, PlusOutlined, PrinterOutlined } from '@ant-design/icons';
+import { DeleteOutlined, DownOutlined, EditOutlined, EyeOutlined, PaperClipOutlined, PlusOutlined, PrinterOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, AutoComplete, Button, Checkbox, Drawer, Form, Input, InputNumber, Modal, Radio, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
+import { Alert, App, AutoComplete, Button, Checkbox, Descriptions, Drawer, Dropdown, Form, Input, InputNumber, Modal, Radio, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
 import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import JsBarcode from 'jsbarcode';
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
@@ -20,6 +20,8 @@ import {
   createProduct,
   createService,
   createSupplyInvoice,
+  deleteProduct,
+  deleteService,
   getStockResources,
   getCatalogQuality,
   listProducts,
@@ -39,6 +41,8 @@ const pageSize = 10;
 export function StockPage() {
   const location = useLocation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { message, modal } = App.useApp();
   const { data: auth } = useCurrentEmployee();
   const canManage = hasPermission(auth?.employee, 'stock.manage');
   const [activeTab, setActiveTab] = useState(getStockTabFromPath(location.pathname));
@@ -50,12 +54,32 @@ export function StockPage() {
   const [serviceOpen, setServiceOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [editingService, setEditingService] = useState<ServiceItem | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [selectedService, setSelectedService] = useState<ServiceItem | null>(null);
   const [printingProduct, setPrintingProduct] = useState<Product | null>(null);
   const [supplyOpen, setSupplyOpen] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<SupplyInvoice | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<SupplyInvoice | null>(null);
   const resourcesQuery = useQuery({ queryKey: ['stock', 'resources'], queryFn: getStockResources });
   const catalogQualityQuery = useQuery({ queryKey: ['stock', 'catalog-quality'], queryFn: getCatalogQuality });
+  const deleteProductMutation = useMutation({
+    mutationFn: deleteProduct,
+    onSuccess: async (deleted) => {
+      setSelectedProduct((current) => current?.id === deleted.id ? null : current);
+      await queryClient.invalidateQueries({ queryKey: ['stock'] });
+      message.success(`Товар «${deleted.title}» удалён из каталога`);
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
+  const deleteServiceMutation = useMutation({
+    mutationFn: deleteService,
+    onSuccess: async (deleted) => {
+      setSelectedService((current) => current?.id === deleted.id ? null : current);
+      await queryClient.invalidateQueries({ queryKey: ['stock'] });
+      message.success(`Услуга «${deleted.title}» удалена из каталога`);
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
 
   useEffect(() => {
     setActiveTab(getStockTabFromPath(location.pathname));
@@ -72,6 +96,28 @@ export function StockPage() {
     const current = pagination.current ?? 1;
     const size = pagination.pageSize ?? pageSize;
     setOffset((current - 1) * size);
+  }
+
+  function confirmProductDeletion(product: Product) {
+    modal.confirm({
+      title: `Удалить товар «${product.title}»?`,
+      content: 'Товар исчезнет из каталога и новых документов, но останется в старых счетах, приёмах и складской истории. При ненулевом остатке, черновике складского документа или невыполненном назначении удаление будет запрещено.',
+      okText: 'Удалить',
+      okButtonProps: { danger: true },
+      cancelText: 'Отмена',
+      onOk: () => deleteProductMutation.mutateAsync(product.id),
+    });
+  }
+
+  function confirmServiceDeletion(service: ServiceItem) {
+    modal.confirm({
+      title: `Удалить услугу «${service.title}»?`,
+      content: 'Услуга исчезнет из каталога и новых документов, но останется в старых счетах и приёмах. Если услуга указана в невыполненном назначении стационара, удаление будет запрещено.',
+      okText: 'Удалить',
+      okButtonProps: { danger: true },
+      cancelText: 'Отмена',
+      onOk: () => deleteServiceMutation.mutateAsync(service.id),
+    });
   }
 
   return (
@@ -133,10 +179,12 @@ export function StockPage() {
                   search={search}
                   offset={offset}
                   canManage={canManage}
+                  onOpen={setSelectedProduct}
                   onEdit={(product) => {
                     setEditingProduct(product);
                     setProductOpen(true);
                   }}
+                  onDelete={confirmProductDeletion}
                   onPrint={setPrintingProduct}
                   onAdjustStock={(product) => navigate(`/stock/operations?inventoryProductId=${encodeURIComponent(product.id)}`)}
                   onTableChange={handleTableChange}
@@ -151,10 +199,12 @@ export function StockPage() {
                   search={search}
                   offset={offset}
                   canManage={canManage}
+                  onOpen={setSelectedService}
                   onEdit={(service) => {
                     setEditingService(service);
                     setServiceOpen(true);
                   }}
+                  onDelete={confirmServiceDeletion}
                   onTableChange={handleTableChange}
                 />
               ),
@@ -198,6 +248,65 @@ export function StockPage() {
           setEditingService(null);
         }}
       />
+      <Drawer
+        title={selectedProduct ? `Товар: ${selectedProduct.title}` : 'Товар'}
+        open={Boolean(selectedProduct)}
+        onClose={() => setSelectedProduct(null)}
+        width={560}
+        destroyOnHidden
+        extra={selectedProduct && canManage ? (
+          <Button icon={<EditOutlined />} onClick={() => {
+            setEditingProduct(selectedProduct);
+            setSelectedProduct(null);
+            setProductOpen(true);
+          }}>
+            Изменить
+          </Button>
+        ) : null}
+      >
+        {selectedProduct ? (
+          <Descriptions bordered column={1} size="small">
+            <Descriptions.Item label="Название">{selectedProduct.title}</Descriptions.Item>
+            <Descriptions.Item label="Категория">{selectedProduct.category?.title ?? '—'}</Descriptions.Item>
+            <Descriptions.Item label="Цена продажи">{formatMoney(selectedProduct.retailPrice)} / {selectedProduct.billingUnit || selectedProduct.writeOffUnit || selectedProduct.stockUnit || 'шт'}</Descriptions.Item>
+            <Descriptions.Item label="Остаток">{selectedProduct.stockRest ?? 0} {selectedProduct.stockUnit ?? ''}</Descriptions.Item>
+            <Descriptions.Item label="Артикул / SKU">{selectedProduct.sku || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Штрих-код">{selectedProduct.barcode || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Учёт и списание">{formatProductUnits(selectedProduct)}</Descriptions.Item>
+            <Descriptions.Item label="Минимальный остаток">{selectedProduct.minStock ?? '—'} {selectedProduct.minStock === null ? '' : selectedProduct.stockUnit ?? ''}</Descriptions.Item>
+            <Descriptions.Item label="Годен до">{formatDate(selectedProduct.defaultExpiresAt)}</Descriptions.Item>
+            <Descriptions.Item label="НДС">{selectedProduct.vatRate === null ? 'Без НДС' : `${selectedProduct.vatRate}%`}</Descriptions.Item>
+            <Descriptions.Item label="Дополнительная информация">{selectedProduct.description || '—'}</Descriptions.Item>
+          </Descriptions>
+        ) : null}
+      </Drawer>
+      <Drawer
+        title={selectedService ? `Услуга: ${selectedService.title}` : 'Услуга'}
+        open={Boolean(selectedService)}
+        onClose={() => setSelectedService(null)}
+        width={520}
+        destroyOnHidden
+        extra={selectedService && canManage ? (
+          <Button icon={<EditOutlined />} onClick={() => {
+            setEditingService(selectedService);
+            setSelectedService(null);
+            setServiceOpen(true);
+          }}>
+            Изменить
+          </Button>
+        ) : null}
+      >
+        {selectedService ? (
+          <Descriptions bordered column={1} size="small">
+            <Descriptions.Item label="Название">{selectedService.title}</Descriptions.Item>
+            <Descriptions.Item label="Категория">{selectedService.category?.title ?? '—'}</Descriptions.Item>
+            <Descriptions.Item label="Цена">{formatMoney(selectedService.price)}</Descriptions.Item>
+            <Descriptions.Item label="Тип цены">{selectedService.priceType === 'FLOATING' ? 'Плавающая' : 'Фиксированная'}</Descriptions.Item>
+            <Descriptions.Item label="НДС">{selectedService.vatRate === null ? 'Без НДС' : `${selectedService.vatRate}%`}</Descriptions.Item>
+            <Descriptions.Item label="Описание">{selectedService.description || '—'}</Descriptions.Item>
+          </Descriptions>
+        ) : null}
+      </Drawer>
       <SupplyInvoiceModal
         open={supplyOpen}
         invoice={editingInvoice}
@@ -284,7 +393,9 @@ function ProductsTable({
   search,
   offset,
   canManage,
+  onOpen,
   onEdit,
+  onDelete,
   onPrint,
   onAdjustStock,
   onTableChange,
@@ -292,7 +403,9 @@ function ProductsTable({
   search: string;
   offset: number;
   canManage: boolean;
+  onOpen: (product: Product) => void;
   onEdit: (product: Product) => void;
+  onDelete: (product: Product) => void;
   onPrint: (product: Product) => void;
   onAdjustStock: (product: Product) => void;
   onTableChange: (pagination: TablePaginationConfig) => void;
@@ -345,28 +458,39 @@ function ProductsTable({
       {
         title: '',
         key: 'actions',
-        width: 220,
+        width: 130,
         fixed: 'right',
         render: (_, record) => (
-          <Space size={6} wrap>
-            {canManage ? (
-              <>
-                <Button size="small" icon={<EditOutlined />} onClick={() => onEdit(record)}>
-                  Изменить
-                </Button>
-                <Button size="small" icon={<PlusOutlined />} onClick={() => onAdjustStock(record)}>
-                  Остаток
-                </Button>
-              </>
-            ) : null}
-            <Button size="small" icon={<PrinterOutlined />} onClick={() => onPrint(record)}>
-              Ценник
-            </Button>
-          </Space>
+          <Dropdown
+            trigger={['click']}
+            menu={{
+              items: [
+                { key: 'open', icon: <EyeOutlined />, label: 'Открыть' },
+                ...(canManage ? [
+                  { key: 'edit', icon: <EditOutlined />, label: 'Изменить' },
+                  { key: 'stock', icon: <PlusOutlined />, label: 'Изменить остаток' },
+                ] : []),
+                { key: 'print', icon: <PrinterOutlined />, label: 'Печать ценника' },
+                ...(canManage ? [
+                  { type: 'divider' as const },
+                  { key: 'delete', danger: true, icon: <DeleteOutlined />, label: 'Удалить' },
+                ] : []),
+              ],
+              onClick: ({ key }) => {
+                if (key === 'open') onOpen(record);
+                if (key === 'edit') onEdit(record);
+                if (key === 'stock') onAdjustStock(record);
+                if (key === 'print') onPrint(record);
+                if (key === 'delete') onDelete(record);
+              },
+            }}
+          >
+            <Button size="small">Действия <DownOutlined /></Button>
+          </Dropdown>
         ),
       },
     ],
-    [canManage, onAdjustStock, onEdit, onPrint],
+    [canManage, onAdjustStock, onDelete, onEdit, onOpen, onPrint],
   );
 
   return <StockTable query={productsQuery} columns={columns} offset={offset} onTableChange={onTableChange} />;
@@ -376,13 +500,17 @@ function ServicesTable({
   search,
   offset,
   canManage,
+  onOpen,
   onEdit,
+  onDelete,
   onTableChange,
 }: {
   search: string;
   offset: number;
   canManage: boolean;
+  onOpen: (service: ServiceItem) => void;
   onEdit: (service: ServiceItem) => void;
+  onDelete: (service: ServiceItem) => void;
   onTableChange: (pagination: TablePaginationConfig) => void;
 }) {
   const servicesQuery = useQuery({
@@ -396,21 +524,36 @@ function ServicesTable({
       { title: 'Цена', dataIndex: 'price', key: 'price', render: formatMoney },
       { title: 'Тип цены', dataIndex: 'priceType', key: 'priceType', render: (value: string) => (value === 'FLOATING' ? 'Плавающая' : 'Фиксированная') },
       { title: 'НДС', dataIndex: 'vatRate', key: 'vatRate', render: (value) => (value === null || value === undefined ? 'Без НДС' : `${value}%`) },
-      ...(canManage
-        ? [{
-            title: '',
-            key: 'actions',
-            width: 130,
-            fixed: 'right' as const,
-            render: (_: unknown, record: ServiceItem) => (
-              <Button size="small" icon={<EditOutlined />} onClick={() => onEdit(record)}>
-                Изменить
-              </Button>
-            ),
-          }]
-        : []),
+      {
+        title: '',
+        key: 'actions',
+        width: 130,
+        fixed: 'right' as const,
+        render: (_: unknown, record: ServiceItem) => (
+          <Dropdown
+            trigger={['click']}
+            menu={{
+              items: [
+                { key: 'open', icon: <EyeOutlined />, label: 'Открыть' },
+                ...(canManage ? [
+                  { key: 'edit', icon: <EditOutlined />, label: 'Изменить' },
+                  { type: 'divider' as const },
+                  { key: 'delete', danger: true, icon: <DeleteOutlined />, label: 'Удалить' },
+                ] : []),
+              ],
+              onClick: ({ key }) => {
+                if (key === 'open') onOpen(record);
+                if (key === 'edit') onEdit(record);
+                if (key === 'delete') onDelete(record);
+              },
+            }}
+          >
+            <Button size="small">Действия <DownOutlined /></Button>
+          </Dropdown>
+        ),
+      },
     ],
-    [canManage, onEdit],
+    [canManage, onDelete, onEdit, onOpen],
   );
 
   return <StockTable query={servicesQuery} columns={columns} offset={offset} onTableChange={onTableChange} />;
@@ -1289,6 +1432,15 @@ function isLowStock(product: Product) {
   }
 
   return Number(product.stockRest) <= Number(product.minStock);
+}
+
+function formatProductUnits(product: Product) {
+  const stockUnit = product.stockUnit || 'шт';
+  const writeOffUnit = product.writeOffUnit || stockUnit;
+  if (stockUnit === writeOffUnit) {
+    return `Склад и списание: ${stockUnit}`;
+  }
+  return `Склад: ${stockUnit}; списание: 1 ${stockUnit} = ${product.packageQuantity || '?'} ${writeOffUnit}`;
 }
 
 type PriceTagSettings = {

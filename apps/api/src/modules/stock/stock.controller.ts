@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { AuthEmployee } from '../auth/auth.types';
 import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
@@ -67,6 +67,13 @@ export class StockController {
     return this.stockService.updateProduct(productId, dto, actor.id);
   }
 
+  @Delete('products/:productId')
+  @RequirePermissions('stock.manage')
+  @ApiOkResponse({ description: 'Product removed from the active catalog; historical records are preserved.' })
+  deleteProduct(@Param('productId') productId: string, @CurrentEmployee() actor: AuthEmployee) {
+    return this.stockService.deleteProduct(productId, actor.id);
+  }
+
   @Get('services')
   @RequirePermissions('stock.read')
   @ApiOkResponse({ description: 'Service catalog.' })
@@ -93,6 +100,13 @@ export class StockController {
   @ApiOkResponse({ description: 'Service updated.' })
   updateService(@Param('serviceId') serviceId: string, @Body() dto: UpdateServiceDto, @CurrentEmployee() actor: AuthEmployee) {
     return this.stockService.updateService(serviceId, dto, actor.id);
+  }
+
+  @Delete('services/:serviceId')
+  @RequirePermissions('stock.manage')
+  @ApiOkResponse({ description: 'Service removed from the active catalog; historical records are preserved.' })
+  deleteService(@Param('serviceId') serviceId: string, @CurrentEmployee() actor: AuthEmployee) {
+    return this.stockService.deleteService(serviceId, actor.id);
   }
 
   @Get('batches')

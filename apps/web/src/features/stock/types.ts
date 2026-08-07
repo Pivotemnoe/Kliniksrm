@@ -39,6 +39,7 @@ export type SupplierMutationInput = {
 
 export type Product = {
   id: string;
+  isActive: boolean;
   categoryId: string | null;
   category?: ProductCategory | null;
   title: string;
@@ -62,6 +63,7 @@ export type Product = {
 
 export type ServiceItem = {
   id: string;
+  isActive: boolean;
   categoryId: string | null;
   category?: ServiceCategory | null;
   title: string;

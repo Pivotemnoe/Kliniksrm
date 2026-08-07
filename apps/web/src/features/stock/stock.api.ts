@@ -53,6 +53,10 @@ export function updateProduct(productId: string, input: ProductMutationInput) {
   return apiRequest<Product>(`/v1/stock/products/${productId}`, { method: 'PATCH', body: input });
 }
 
+export function deleteProduct(productId: string) {
+  return apiRequest<{ id: string; title: string; deleted: true }>(`/v1/stock/products/${productId}`, { method: 'DELETE' });
+}
+
 export function listServices(query: StockListQuery) {
   return apiRequest<PaginatedResponse<ServiceItem>>(`/v1/stock/services${buildQuery(query)}`);
 }
@@ -63,6 +67,10 @@ export function createService(input: ServiceMutationInput) {
 
 export function updateService(serviceId: string, input: ServiceMutationInput) {
   return apiRequest<ServiceItem>(`/v1/stock/services/${serviceId}`, { method: 'PATCH', body: input });
+}
+
+export function deleteService(serviceId: string) {
+  return apiRequest<{ id: string; title: string; deleted: true }>(`/v1/stock/services/${serviceId}`, { method: 'DELETE' });
 }
 
 export function listStockBatches(query: StockListQuery) {

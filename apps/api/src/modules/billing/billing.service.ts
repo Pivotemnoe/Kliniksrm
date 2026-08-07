@@ -502,8 +502,8 @@ export class BillingService {
     }
 
     const service = dto.serviceId
-      ? await this.prisma.service.findUnique({
-          where: { id: dto.serviceId },
+      ? await this.prisma.service.findFirst({
+          where: { id: dto.serviceId, isActive: true },
           select: { id: true, title: true, price: true },
         })
       : null;
@@ -513,8 +513,8 @@ export class BillingService {
     }
 
     const product = dto.productId
-      ? await this.prisma.product.findUnique({
-          where: { id: dto.productId },
+      ? await this.prisma.product.findFirst({
+          where: { id: dto.productId, isActive: true },
           select: { id: true, title: true, retailPrice: true },
         })
       : null;

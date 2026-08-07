@@ -658,7 +658,7 @@ export class DataTransferService {
       const serviceTitles = unique(serviceRows.map((row) => clean(row.normalizedData.title)).filter(isPresent));
       const services = serviceTitles.length
         ? await this.prisma.service.findMany({
-            where: { title: { in: serviceTitles, mode: Prisma.QueryMode.insensitive } },
+            where: { isActive: true, title: { in: serviceTitles, mode: Prisma.QueryMode.insensitive } },
             select: { id: true, title: true },
           })
         : [];
@@ -692,7 +692,7 @@ export class DataTransferService {
       if (productTitles.length) productConditions.push({ title: { in: productTitles, mode: Prisma.QueryMode.insensitive } });
       const products = productConditions.length
         ? await this.prisma.product.findMany({
-            where: { OR: productConditions },
+            where: { isActive: true, OR: productConditions },
             select: { id: true, title: true, sku: true, barcode: true, barcodes: { select: { value: true } } },
           })
         : [];
@@ -1058,7 +1058,7 @@ export class DataTransferService {
   private async importCatalogRow(tx: Tx, batchId: string, rowId: string, row: NormalizedRow) {
     const isService = isServiceItemType(row.item_type);
     if (isService) {
-      const serviceCandidates = await tx.service.findMany({ where: { title: { equals: clean(row.title)!, mode: 'insensitive' } }, take: 2 });
+      const serviceCandidates = await tx.service.findMany({ where: { isActive: true, title: { equals: clean(row.title)!, mode: 'insensitive' } }, take: 2 });
       if (serviceCandidates.length > 1) throw new Error('Найдено несколько услуг с одинаковым названием; автоматическое объединение остановлено');
       const existing = serviceCandidates[0] ?? null;
       if (existing) {
@@ -1087,10 +1087,10 @@ export class DataTransferService {
     // Prefer stable identifiers. A title match is used only when the source
     // has neither barcode nor article, avoiding accidental stock merging.
     const productCandidates = barcode
-      ? await tx.product.findMany({ where: { OR: [{ barcode }, { barcodes: { some: { value: barcode } } }] }, take: 2 })
+      ? await tx.product.findMany({ where: { isActive: true, OR: [{ barcode }, { barcodes: { some: { value: barcode } } }] }, take: 2 })
       : sku
-        ? await tx.product.findMany({ where: { sku }, take: 2 })
-        : await tx.product.findMany({ where: { title: { equals: clean(row.title)!, mode: Prisma.QueryMode.insensitive } }, take: 2 });
+        ? await tx.product.findMany({ where: { isActive: true, sku }, take: 2 })
+        : await tx.product.findMany({ where: { isActive: true, title: { equals: clean(row.title)!, mode: Prisma.QueryMode.insensitive } }, take: 2 });
     if (productCandidates.length > 1) throw new Error('Найдено несколько похожих товаров; автоматическое объединение остановлено');
     const existing = productCandidates[0] ?? null;
     if (existing) {

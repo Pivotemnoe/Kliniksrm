@@ -379,6 +379,7 @@ export class ImportsService {
   private async findProduct(row: StockRow) {
     return this.prisma.product.findFirst({
       where: {
+        isActive: true,
         OR: [
           ...(row.barcode ? [{ barcode: row.barcode }] : []),
           ...(row.sku ? [{ sku: row.sku }] : []),

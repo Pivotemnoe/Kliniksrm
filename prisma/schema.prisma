@@ -1381,6 +1381,7 @@ model ProductCategory {
 
 model Product {
   id                       String               @id @default(uuid())
+  isActive                 Boolean              @default(true)
   categoryId               String?
   category                 ProductCategory?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   title                    String
@@ -1411,6 +1412,7 @@ model Product {
   updatedAt                DateTime             @updatedAt
 
   @@index([title])
+  @@index([isActive, title])
   @@index([barcode])
   @@index([defaultExpiresAt])
 }
@@ -1440,6 +1442,7 @@ model ServiceCategory {
 
 model Service {
   id                     String               @id @default(uuid())
+  isActive               Boolean              @default(true)
   categoryId             String?
   category               ServiceCategory?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   title                  String
@@ -1457,6 +1460,7 @@ model Service {
   updatedAt              DateTime             @updatedAt
 
   @@index([title])
+  @@index([isActive, title])
 }
 
 model LaboratoryTest {

@@ -172,7 +172,7 @@ export class StaffAlertsService {
         : Promise.resolve([]),
       showStock
         ? this.prisma.product.findMany({
-            where: { minStock: { not: null } },
+            where: { isActive: true, minStock: { not: null } },
             orderBy: { title: 'asc' },
             take: 500,
             select: {
