@@ -98,6 +98,7 @@ function ReportContent({ report }: { report: ClinicReport }) {
         <ReportMetric title="Задолженность" value={formatMoney(report.finance.debtAmount)} hint={`${report.finance.debtorsCount} неоплаченных счетов`} tone="red" />
         <ReportMetric title="Валовая прибыль" value={formatMoney(report.profit.grossProfit)} hint={`Маржа ${formatPercent(report.profit.marginPercent)}`} tone="teal" />
         <ReportMetric title="Приёмы" value={report.traffic.visitsTotal} hint={`Завершено ${report.traffic.visitsCompleted}`} />
+        <ReportMetric title="Просрочено более часа" value={report.traffic.visitsOverdue} hint={`Оповещений ${report.traffic.overdueNotifications}`} tone="red" />
         <ReportMetric title="Клиенты" value={report.traffic.uniqueOwners} hint={`Новых ${report.traffic.newOwners}`} />
         <ReportMetric title="Вакцинации" value={report.vaccinations.administered} hint={`Предстоит ${report.vaccinations.upcoming}`} />
         <ReportMetric title="Склад по закупке" value={formatMoney(report.stock.purchaseValue)} hint={`${report.stock.products} товаров`} />
@@ -176,6 +177,8 @@ function TrafficReport({ report }: { report: ClinicReport }) {
         <div className="report-summary-list">
           <SummaryRow label="Всего приёмов" value={report.traffic.visitsTotal} />
           <SummaryRow label="Завершено приёмов" value={report.traffic.visitsCompleted} />
+          <SummaryRow label="Не завершено более часа" value={report.traffic.visitsOverdue} danger={report.traffic.visitsOverdue > 0} />
+          <SummaryRow label="Сформировано предупреждений" value={report.traffic.overdueNotifications} danger={report.traffic.overdueNotifications > 0} />
           <SummaryRow label="Отменено приёмов" value={report.traffic.visitsCancelled} />
           <SummaryRow label="Записей в расписании" value={report.traffic.appointmentsTotal} />
           <SummaryRow label="Завершено записей" value={report.traffic.appointmentsCompleted} />
@@ -198,7 +201,10 @@ function TrafficReport({ report }: { report: ClinicReport }) {
           locale={{ emptyText: 'Данных за период нет' }}
           columns={[
             { title: 'Дата', dataIndex: 'date', render: formatDate },
-            { title: 'Приёмы', dataIndex: 'visits', align: 'right' },
+            { title: 'Начато', dataIndex: 'visits', align: 'right' },
+            { title: 'Завершено', dataIndex: 'completedVisits', align: 'right' },
+            { title: 'Более часа', dataIndex: 'overdueVisits', align: 'right', render: (value) => value ? <Tag color="red">{value}</Tag> : 0 },
+            { title: 'Оповещений', dataIndex: 'overdueNotifications', align: 'right' },
             { title: 'Начислено', dataIndex: 'billedAmount', align: 'right', render: formatMoney },
             { title: 'Оплачено', dataIndex: 'paidAmount', align: 'right', render: formatMoney },
           ]}
@@ -252,6 +258,8 @@ function EmployeesReport({ report }: { report: ClinicReport }) {
           { title: 'Должность', dataIndex: 'position', render: textOrDash },
           { title: 'Приёмы', dataIndex: 'visits', align: 'right' },
           { title: 'Завершено', dataIndex: 'completedVisits', align: 'right' },
+          { title: 'Более часа', dataIndex: 'overdueVisits', align: 'right', render: (value) => value ? <Tag color="red">{value}</Tag> : 0 },
+          { title: 'Оповещений', dataIndex: 'overdueNotifications', align: 'right' },
           { title: 'Начислено', dataIndex: 'billedAmount', align: 'right', render: formatMoney },
         ]}
       />

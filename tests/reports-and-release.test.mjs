@@ -43,7 +43,10 @@ test('управленческий отчёт считает оплаты, до�
       { id: 'payment-2', paidAt: new Date('2026-07-10T10:15:00Z'), amount: -100, type: 'CARD', paymentMethod: { id: 'card', title: 'Карта' }, cashbox: null },
     ] },
     owner: { aggregate: async () => ({ _sum: { balance: 300 } }), count: async () => 1 },
-    visit: { findMany: async () => [{ id: 'visit-1', ownerId: 'owner-1', status: 'COMPLETED', startedAt: bill.createdAt, totalAmount: 1500, employee }] },
+    visit: { findMany: async ({ where }) => where.completedAt
+      ? [{ id: 'visit-1', completedAt: bill.createdAt, employee }]
+      : [{ id: 'visit-1', ownerId: 'owner-1', status: 'COMPLETED', startedAt: bill.createdAt, totalAmount: 1500, employee }] },
+    visitOverdueAlert: { findMany: async () => [] },
     appointment: { findMany: async () => [{ id: 'appointment-1', status: 'COMPLETED', startsAt: bill.createdAt }] },
     vaccination: { findMany: async ({ where }) => where.vaccinatedAt ? [{ id: 'vaccination-1', title: 'Бешенство', vaccinatedAt: bill.createdAt }] : [] },
     stockBatch: { findMany: async () => [{ id: 'batch-1', rest: 2, purchasePrice: 100, expiresAt: null, product: { id: 'product-1', title: 'Препарат', retailPrice: 160, minStock: 3, stockUnit: 'шт' }, warehouse: { id: 'warehouse-1', name: 'Основной склад' } }] },

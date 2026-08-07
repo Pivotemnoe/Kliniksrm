@@ -7,8 +7,8 @@ import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { PageHeader } from '../../shared/ui/PageHeader';
-import { formatDateTime } from '../../shared/utils/date';
-import { exportAuditReport, listAuditLogs } from './audit.api';
+import { formatDate, formatDateTime } from '../../shared/utils/date';
+import { exportAuditReport, getAuditVisitControl, listAuditLogs } from './audit.api';
 import { AuditLogItem } from './types';
 
 export function AuditLogsPage() {
@@ -18,12 +18,18 @@ export function AuditLogsPage() {
   const [search, setSearch] = useState('');
   const [action, setAction] = useState<string>();
   const [entityType, setEntityType] = useState<string>();
+  const visitControlRange = useMemo(lastFourteenDaysRange, []);
   const auditQuery = useQuery({
     queryKey: ['audit-logs'],
     queryFn: listAuditLogs,
     enabled: canReadAudit,
   });
   const items = auditQuery.data ?? [];
+  const visitControlQuery = useQuery({
+    queryKey: ['audit-logs', 'visit-control', visitControlRange],
+    queryFn: () => getAuditVisitControl(visitControlRange),
+    enabled: canReadAudit,
+  });
   const actionOptions = useMemo(() => buildOptions(items.map((item) => item.action)), [items]);
   const entityOptions = useMemo(() => buildOptions(items.map((item) => item.entityType)), [items]);
   const filteredItems = useMemo(
@@ -134,6 +140,38 @@ export function AuditLogsPage() {
         <Alert type="warning" showIcon message="У вашей роли нет права просмотра журнала аудита." className="form-alert" />
       ) : null}
       {auditQuery.isError ? <Alert type="error" showIcon message={getErrorMessage(auditQuery.error)} className="form-alert" /> : null}
+      {visitControlQuery.isError ? <Alert type="error" showIcon message="Не удалось загрузить ежедневный контроль приёмов" className="form-alert" /> : null}
+      <div className="list-panel audit-visit-control-panel">
+        <div className="list-panel-header">
+          <div>
+            <Typography.Title level={4}>Ежедневный контроль завершения приёмов</Typography.Title>
+            <Typography.Text type="secondary">
+              Просроченным считается приём, который остаётся в работе более {visitControlQuery.data?.thresholdMinutes ?? 60} минут.
+            </Typography.Text>
+          </div>
+          <Space wrap>
+            <Tag color="green">Завершено {visitControlQuery.data?.totals.completedVisits ?? 0}</Tag>
+            <Tag color="red">Более часа {visitControlQuery.data?.totals.overdueVisits ?? 0}</Tag>
+            <Tag>Оповещений {visitControlQuery.data?.totals.notificationsIssued ?? 0}</Tag>
+          </Space>
+        </div>
+        <div className="list-panel-body">
+          <Table
+            rowKey="date"
+            size="small"
+            loading={visitControlQuery.isLoading}
+            dataSource={visitControlQuery.data?.daily ?? []}
+            pagination={{ pageSize: 14, hideOnSinglePage: true }}
+            locale={{ emptyText: 'Данных пока нет' }}
+            columns={[
+              { title: 'Дата', dataIndex: 'date', render: formatDate },
+              { title: 'Завершено', dataIndex: 'completedVisits', align: 'right' as const },
+              { title: 'Не завершено более часа', dataIndex: 'overdueVisits', align: 'right' as const, render: (value: number) => value ? <Tag color="red">{value}</Tag> : 0 },
+              { title: 'Сформировано оповещений', dataIndex: 'notificationsIssued', align: 'right' as const },
+            ]}
+          />
+        </div>
+      </div>
       <div className="list-panel">
         <div className="list-panel-header">
           <Space wrap>
@@ -204,6 +242,7 @@ const actionLabels: Record<string, string> = {
   'appointment.update': 'Запись на приём изменена',
   'visit.create': 'Приём создан',
   'visit.update': 'Приём изменён',
+  'visit.overdue_alert': 'Приём не завершён более часа',
   'bill.create': 'Счёт создан',
   'bill.cancel': 'Счёт отменён',
   'payment.create': 'Оплата проведена',
@@ -223,6 +262,20 @@ const actionLabels: Record<string, string> = {
   'ui.heartbeat': 'Активность в интерфейсе',
   'ui.frontend_error': 'Ошибка интерфейса',
 };
+
+function lastFourteenDaysRange() {
+  const to = new Date();
+  const from = new Date(to);
+  from.setDate(from.getDate() - 13);
+  return { from: toDateInput(from), to: toDateInput(to) };
+}
+
+function toDateInput(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
 const entityLabels: Record<string, string> = {
   Auth: 'Авторизация',

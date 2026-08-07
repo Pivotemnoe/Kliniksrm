@@ -29,6 +29,9 @@ export class ReportsService {
       debtBills,
       positiveBalances,
       visits,
+      completedVisits,
+      overdueVisitAlerts,
+      issuedOverdueNotifications,
       appointments,
       newOwners,
       vaccinationsAdministered,
@@ -104,6 +107,45 @@ export class ReportsService {
           status: true,
           startedAt: true,
           totalAmount: true,
+          employee: { select: { id: true, fullName: true, position: true } },
+        },
+      }),
+      this.prisma.visit.findMany({
+        where: {
+          status: VisitStatus.COMPLETED,
+          completedAt: dateWhere,
+          hospitalBoxId: null,
+          ...employeeVisitWhere,
+        },
+        select: {
+          id: true,
+          completedAt: true,
+          employee: { select: { id: true, fullName: true, position: true } },
+        },
+      }),
+      this.prisma.visitOverdueAlert.findMany({
+        where: {
+          overdueAt: dateWhere,
+          ...(query.employeeId ? { employeeId: query.employeeId } : {}),
+        },
+        select: {
+          id: true,
+          visitId: true,
+          overdueAt: true,
+          createdAt: true,
+          employee: { select: { id: true, fullName: true, position: true } },
+        },
+      }),
+      this.prisma.visitOverdueAlert.findMany({
+        where: {
+          createdAt: dateWhere,
+          ...(query.employeeId ? { employeeId: query.employeeId } : {}),
+        },
+        select: {
+          id: true,
+          visitId: true,
+          overdueAt: true,
+          createdAt: true,
           employee: { select: { id: true, fullName: true, position: true } },
         },
       }),
@@ -186,7 +228,14 @@ export class ReportsService {
     const debtAmount = sum(debtors, (item) => item.debt);
 
     const itemRows = aggregateBillItems(bills);
-    const employeeRows = aggregateEmployees(employees, visits, bills);
+    const employeeRows = aggregateEmployees(
+      employees,
+      visits,
+      completedVisits,
+      overdueVisitAlerts,
+      issuedOverdueNotifications,
+      bills,
+    );
     const paymentMethods = aggregatePayments(payments);
     const stock = aggregateStock(stockBatches, now, expiresSoon);
     const dueVaccinations = resolveDueVaccinations(vaccinationDueCandidates, now, expiresSoon);
@@ -226,7 +275,9 @@ export class ReportsService {
       },
       traffic: {
         visitsTotal: visits.length,
-        visitsCompleted: visits.filter((item) => item.status === VisitStatus.COMPLETED).length,
+        visitsCompleted: completedVisits.length,
+        visitsOverdue: overdueVisitAlerts.length,
+        overdueNotifications: issuedOverdueNotifications.length,
         visitsCancelled: visits.filter((item) => item.status === VisitStatus.CANCELLED).length,
         appointmentsTotal: appointments.length,
         appointmentsCompleted: appointments.filter((item) => item.status === AppointmentStatus.COMPLETED).length,
@@ -234,7 +285,15 @@ export class ReportsService {
         appointmentsNoShow: appointments.filter((item) => item.status === AppointmentStatus.NO_SHOW).length,
         uniqueOwners: new Set(visits.map((item) => item.ownerId)).size,
         newOwners,
-        daily: aggregateDaily(bills, payments, visits, range.offsetMinutes),
+        daily: aggregateDaily(
+          bills,
+          payments,
+          visits,
+          completedVisits,
+          overdueVisitAlerts,
+          issuedOverdueNotifications,
+          range,
+        ),
       },
       sales: itemRows,
       employees: employeeRows,
@@ -289,13 +348,22 @@ function aggregateBillItems(bills: ReportBill[]) {
   };
 }
 
-function aggregateEmployees(employees: ReportEmployee[], visits: ReportVisit[], bills: ReportBill[]) {
+function aggregateEmployees(
+  employees: ReportEmployee[],
+  visits: ReportVisit[],
+  completedVisits: ReportCompletedVisit[],
+  overdueVisitAlerts: ReportOverdueVisitAlert[],
+  issuedOverdueNotifications: ReportOverdueVisitAlert[],
+  bills: ReportBill[],
+) {
   const rows = new Map(employees.map((employee) => [employee.id, {
     employeeId: employee.id,
     fullName: employee.fullName,
     position: employee.position,
     visits: 0,
     completedVisits: 0,
+    overdueVisits: 0,
+    overdueNotifications: 0,
     billedAmount: 0,
   }]));
 
@@ -307,11 +375,30 @@ function aggregateEmployees(employees: ReportEmployee[], visits: ReportVisit[], 
       position: visit.employee.position,
       visits: 0,
       completedVisits: 0,
+      overdueVisits: 0,
+      overdueNotifications: 0,
       billedAmount: 0,
     };
     row.visits += 1;
-    if (visit.status === VisitStatus.COMPLETED) row.completedVisits += 1;
     rows.set(row.employeeId, row);
+  }
+
+  for (const visit of completedVisits) {
+    if (!visit.employee) continue;
+    const row = rows.get(visit.employee.id);
+    if (row) row.completedVisits += 1;
+  }
+
+  for (const alert of overdueVisitAlerts) {
+    if (!alert.employee) continue;
+    const row = rows.get(alert.employee.id);
+    if (row) row.overdueVisits += 1;
+  }
+
+  for (const notification of issuedOverdueNotifications) {
+    if (!notification.employee) continue;
+    const row = rows.get(notification.employee.id);
+    if (row) row.overdueNotifications += 1;
   }
 
   for (const bill of bills) {
@@ -322,7 +409,7 @@ function aggregateEmployees(employees: ReportEmployee[], visits: ReportVisit[], 
   }
 
   return [...rows.values()]
-    .filter((item) => item.visits > 0 || item.billedAmount > 0)
+    .filter((item) => item.visits > 0 || item.completedVisits > 0 || item.overdueVisits > 0 || item.billedAmount > 0)
     .sort((left, right) => right.billedAmount - left.billedAmount || right.visits - left.visits);
 }
 
@@ -404,18 +491,60 @@ function aggregateStock(batches: ReportStockBatch[], now: Date, expiresSoon: Dat
   };
 }
 
-function aggregateDaily(bills: ReportBill[], payments: ReportPayment[], visits: ReportVisit[], offsetMinutes: number) {
-  const rows = new Map<string, { date: string; billedAmount: number; paidAmount: number; visits: number }>();
+function aggregateDaily(
+  bills: ReportBill[],
+  payments: ReportPayment[],
+  visits: ReportVisit[],
+  completedVisits: ReportCompletedVisit[],
+  overdueVisitAlerts: ReportOverdueVisitAlert[],
+  issuedOverdueNotifications: ReportOverdueVisitAlert[],
+  range: { from: string; to: string; offsetMinutes: number },
+) {
+  const rows = seedDailyRows(range.from, range.to);
   const getRow = (date: Date) => {
-    const key = clinicDateKey(date, offsetMinutes);
-    const row = rows.get(key) ?? { date: key, billedAmount: 0, paidAmount: 0, visits: 0 };
+    const key = clinicDateKey(date, range.offsetMinutes);
+    const row = rows.get(key) ?? emptyDailyRow(key);
     rows.set(key, row);
     return row;
   };
   bills.forEach((bill) => { getRow(bill.createdAt).billedAmount += number(bill.totalAmount); });
   payments.forEach((payment) => { getRow(payment.paidAt).paidAmount += number(payment.amount); });
   visits.forEach((visit) => { getRow(visit.startedAt).visits += 1; });
+  completedVisits.forEach((visit) => {
+    if (visit.completedAt) getRow(visit.completedAt).completedVisits += 1;
+  });
+  overdueVisitAlerts.forEach((alert) => {
+    const row = getRow(alert.overdueAt);
+    row.overdueVisits += 1;
+  });
+  issuedOverdueNotifications.forEach((notification) => {
+    getRow(notification.createdAt).overdueNotifications += 1;
+  });
   return [...rows.values()].sort((left, right) => left.date.localeCompare(right.date));
+}
+
+function seedDailyRows(from: string, to: string) {
+  const rows = new Map<string, ReturnType<typeof emptyDailyRow>>();
+  const cursor = new Date(`${from}T00:00:00.000Z`);
+  const end = new Date(`${to}T00:00:00.000Z`);
+  while (cursor <= end) {
+    const key = cursor.toISOString().slice(0, 10);
+    rows.set(key, emptyDailyRow(key));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return rows;
+}
+
+function emptyDailyRow(date: string) {
+  return {
+    date,
+    billedAmount: 0,
+    paidAmount: 0,
+    visits: 0,
+    completedVisits: 0,
+    overdueVisits: 0,
+    overdueNotifications: 0,
+  };
 }
 
 function aggregateTitles(items: Array<{ title: string }>) {
@@ -484,6 +613,18 @@ type ReportVisit = {
   status: VisitStatus;
   startedAt: Date;
   totalAmount: Prisma.Decimal;
+  employee: ReportEmployee | null;
+};
+type ReportCompletedVisit = {
+  id: string;
+  completedAt: Date | null;
+  employee: ReportEmployee | null;
+};
+type ReportOverdueVisitAlert = {
+  id: string;
+  visitId: string;
+  overdueAt: Date;
+  createdAt: Date;
   employee: ReportEmployee | null;
 };
 type ReportPayment = {

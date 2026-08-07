@@ -15,6 +15,9 @@ export function exportReportToExcel(report: ClinicReport) {
       ['Депозиты владельцев', report.finance.depositsAmount],
       ['Валовая прибыль', report.profit.grossProfit],
       ['Приёмы', report.traffic.visitsTotal],
+      ['Завершено приёмов', report.traffic.visitsCompleted],
+      ['Не завершено более часа', report.traffic.visitsOverdue],
+      ['Оповещений о просрочке', report.traffic.overdueNotifications],
       ['Новые владельцы', report.traffic.newOwners],
     ]),
     sheet('Оплаты', [
@@ -28,8 +31,12 @@ export function exportReportToExcel(report: ClinicReport) {
     sheet('Услуги', salesRows(report.sales.services)),
     sheet('Товары', salesRows(report.sales.products)),
     sheet('Сотрудники', [
-      ['Сотрудник', 'Должность', 'Приёмы', 'Завершено', 'Начислено'],
-      ...report.employees.map((item) => [item.fullName, item.position, item.visits, item.completedVisits, item.billedAmount]),
+      ['Сотрудник', 'Должность', 'Приёмы', 'Завершено', 'Более часа', 'Оповещений', 'Начислено'],
+      ...report.employees.map((item) => [item.fullName, item.position, item.visits, item.completedVisits, item.overdueVisits, item.overdueNotifications, item.billedAmount]),
+    ]),
+    sheet('Контроль приёмов', [
+      ['Дата', 'Начато', 'Завершено', 'Не завершено более часа', 'Оповещений'],
+      ...report.traffic.daily.map((item) => [item.date, item.visits, item.completedVisits, item.overdueVisits, item.overdueNotifications]),
     ]),
     sheet('Вакцинации', [
       ['Статус', 'Вакцина', 'Пациент', 'Владелец', 'Телефон', 'Дата'],
@@ -54,10 +61,11 @@ export function printReportAsPdf(report: ClinicReport) {
     body{font-family:Arial,sans-serif;color:#183750;margin:28px}h1{margin:0 0 6px}h2{margin-top:28px;font-size:18px}p{color:#657b8d}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.card{border:1px solid #dbe4ea;border-radius:8px;padding:12px}.card b{display:block;font-size:18px;margin-top:6px}table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:7px;border:1px solid #dbe4ea;text-align:left}th{background:#eef4f7}.num{text-align:right}@media print{body{margin:10mm}.no-print{display:none}}
   </style></head><body><h1>TemichevVet · Управленческий отчёт</h1><p>Период: ${escapeHtml(report.range.from)} — ${escapeHtml(report.range.to)}. Сформирован: ${escapeHtml(new Date(report.generatedAt).toLocaleString('ru-RU'))}</p>
   <div class="cards">${printCard('Начислено', formatMoney(report.finance.billedAmount))}${printCard('Оплачено', formatMoney(report.finance.paidAmount))}${printCard('Долг', formatMoney(report.finance.debtAmount))}${printCard('Валовая прибыль', formatMoney(report.profit.grossProfit))}</div>
-  ${printTable('Динамика по дням', ['Дата', 'Приёмы', 'Начислено', 'Оплачено'], report.traffic.daily.map((item) => [date(item.date), item.visits, formatMoney(item.billedAmount), formatMoney(item.paidAmount)]))}
+  ${printTable('Контроль приёмов по дням', ['Дата', 'Начато', 'Завершено', 'Более часа', 'Оповещений'], report.traffic.daily.map((item) => [date(item.date), item.visits, item.completedVisits, item.overdueVisits, item.overdueNotifications]))}
+  ${printTable('Финансы по дням', ['Дата', 'Начислено', 'Оплачено'], report.traffic.daily.map((item) => [date(item.date), formatMoney(item.billedAmount), formatMoney(item.paidAmount)]))}
   ${printTable('Услуги', ['Наименование', 'Количество', 'Выручка'], report.sales.services.map((item) => [item.title, item.quantity, formatMoney(item.revenue)]))}
   ${printTable('Товары', ['Наименование', 'Количество', 'Выручка'], report.sales.products.map((item) => [item.title, item.quantity, formatMoney(item.revenue)]))}
-  ${printTable('Сотрудники', ['Сотрудник', 'Приёмы', 'Завершено', 'Начислено'], report.employees.map((item) => [item.fullName, item.visits, item.completedVisits, formatMoney(item.billedAmount)]))}
+  ${printTable('Сотрудники', ['Сотрудник', 'Приёмы', 'Завершено', 'Более часа', 'Оповещений', 'Начислено'], report.employees.map((item) => [item.fullName, item.visits, item.completedVisits, item.overdueVisits, item.overdueNotifications, formatMoney(item.billedAmount)]))}
   ${printTable('Задолженность', ['Владелец', 'Телефон', 'Долг'], report.finance.debtors.map((item) => [item.ownerName, item.phone, formatMoney(item.debt)]))}
   <p>${escapeHtml(report.profit.note)}</p><script>window.onload=()=>window.print();<\/script></body></html>`);
   popup.document.close();

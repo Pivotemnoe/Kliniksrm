@@ -6,6 +6,7 @@ import test from 'node:test';
 const root = new URL('../', import.meta.url);
 const require = createRequire(import.meta.url);
 const { StaffAlertsService } = require('../apps/api/dist/modules/staff-alerts/staff-alerts.service.js');
+const { VisitOverdueAlertTrackerService } = require('../apps/api/dist/modules/staff-alerts/visit-overdue-alert-tracker.service.js');
 const { InternalMessagesService } = require('../apps/api/dist/modules/internal-messages/internal-messages.service.js');
 
 async function read(path) {
@@ -36,6 +37,10 @@ test('врач получает только свои незавершённые
       findMany: async ({ where }) => {
         assert.equal(where.employeeId, 'doctor-1');
         assert.equal(where.hospitalBoxId, null);
+        assert.equal(where.status, 'IN_PROGRESS');
+        assert.ok(where.startedAt.lt instanceof Date);
+        assert.equal(Object.hasOwn(where.startedAt, 'lte'), false);
+        assert.ok(Date.now() - where.startedAt.lt.getTime() >= 59 * 60_000);
         return [unfinishedVisit];
       },
     },
@@ -55,6 +60,68 @@ test('врач получает только свои незавершённые
   assert.equal(result.items[0].kind, 'UNFINISHED_VISIT');
   assert.equal(result.items[0].href, '/visits/visit-1');
   assert.match(result.items[0].title, /Незавершённый приём/);
+  assert.equal(result.items[0].severity, 'error');
+  assert.match(result.items[0].description, /В работе \d+ ч \d+ мин/);
+});
+
+test('приём в работе менее часа не попадает в колокольчик', async () => {
+  const recentlyStarted = new Date(Date.now() - 20 * 60_000);
+  const prisma = {
+    visit: {
+      findMany: async ({ where }) => recentlyStarted < where.startedAt.lt ? [unfinishedVisit] : [],
+    },
+    staffAlertRead: { findMany: async () => [] },
+  };
+  const service = new StaffAlertsService(prisma, { log: async () => undefined });
+
+  const result = await service.list(actor({
+    id: 'doctor-1',
+    roles: ['doctor'],
+    permissions: ['visits.read'],
+  }));
+
+  assert.equal(result.items.length, 0);
+  assert.equal(result.unreadTotal, 0);
+});
+
+test('переход порога часа один раз создаёт событие и системную запись аудита', async () => {
+  let alertData;
+  let auditData;
+  const prisma = {
+    visit: {
+      findMany: async ({ where }) => {
+        assert.equal(where.status, 'IN_PROGRESS');
+        assert.equal(where.overdueAlert, null);
+        return [unfinishedVisit];
+      },
+    },
+    $transaction: async (callback) => callback({
+      visitOverdueAlert: {
+        create: async ({ data }) => {
+          alertData = data;
+          return { id: 'overdue-alert-1', ...data };
+        },
+      },
+      auditLog: {
+        create: async ({ data }) => {
+          auditData = data;
+          return { id: 'audit-1', ...data };
+        },
+      },
+    }),
+  };
+  const service = new VisitOverdueAlertTrackerService(prisma);
+  const result = await service.syncNow(new Date('2026-08-07T06:00:00.000Z'));
+
+  assert.equal(result.status, 'synced');
+  assert.equal(result.created, 1);
+  assert.equal(alertData.visitId, 'visit-1');
+  assert.equal(alertData.thresholdMinutes, 60);
+  assert.equal(alertData.overdueAt.toISOString(), '2026-08-07T05:00:00.000Z');
+  assert.equal(auditData.action, 'visit.overdue_alert');
+  assert.equal(auditData.entityType, 'Visit');
+  assert.equal(auditData.entityId, 'visit-1');
+  assert.equal(auditData.metadata.thresholdMinutes, 60);
 });
 
 test('низкий остаток доступен сотруднику, который управляет складом', async () => {
@@ -132,7 +199,7 @@ test('текст личного сообщения не попадает в жу
   assert.equal(JSON.stringify(auditEntry).includes('Внутреннее сообщение'), false);
 });
 
-test('колокольчик показывает выбор непросмотренных событий, а сообщения открывают сотрудников', async () => {
+test('колокольчик, красная плашка, аудит и отчёты показывают просрочку более часа', async () => {
   const [layout, popover, dashboard, messages, routes] = await Promise.all([
     read('apps/web/src/layouts/CrmLayout.tsx'),
     read('apps/web/src/features/staffAlerts/StaffAlertsPopover.tsx'),
@@ -146,8 +213,9 @@ test('колокольчик показывает выбор непросмот�
   assert.match(popover, /Непросмотренные оповещения/);
   assert.match(popover, /unreadItems\.map/);
   assert.match(popover, /navigate\(item\.href\)/);
+  assert.match(dashboard, /dashboard-overdue-banner/);
   assert.match(dashboard, /Незавершённые приёмы/);
-  assert.match(dashboard, /Мои незавершённые приёмы/);
+  assert.match(dashboard, /Более часа:/);
   assert.match(messages, /Выберите сотрудника/);
   assert.match(messages, /Сообщения сотрудникам/);
   assert.match(routes, /path: '\/staff-messages'/);

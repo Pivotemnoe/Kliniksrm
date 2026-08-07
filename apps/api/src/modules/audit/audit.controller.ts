@@ -5,6 +5,7 @@ import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { AuditService } from './audit.service';
 import { AuditExportQueryDto } from './dto/audit-export-query.dto';
+import { AuditVisitControlQueryDto } from './dto/audit-visit-control-query.dto';
 import { CreateActivityLogDto } from './dto/create-activity-log.dto';
 
 @ApiTags('audit')
@@ -17,6 +18,13 @@ export class AuditController {
   @ApiOkResponse({ description: 'Recent audit events.' })
   listAuditLogs() {
     return this.auditService.listRecent();
+  }
+
+  @Get('visit-control')
+  @RequirePermissions('audit.read')
+  @ApiOkResponse({ description: 'Daily completed and overdue visit control with issued alert counts.' })
+  getVisitControl(@Query() query: AuditVisitControlQueryDto) {
+    return this.auditService.getVisitControl(query);
   }
 
   @Get('export')

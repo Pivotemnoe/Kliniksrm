@@ -2,6 +2,7 @@ import {
   BankOutlined,
   CalendarOutlined,
   ClockCircleOutlined,
+  ExclamationCircleOutlined,
   ExperimentOutlined,
   FileDoneOutlined,
   MedicineBoxOutlined,
@@ -104,6 +105,7 @@ export function DashboardPage() {
         }
       />
       {dashboardQuery.isError ? <Alert type="error" showIcon message={getErrorMessage(dashboardQuery.error)} className="form-alert" /> : null}
+      <OverdueVisitsBanner summary={summary} onOpen={(visitId) => navigate(`/visits/${visitId}`)} />
       <div className="dashboard-app-strip">
         <DashboardActionTile
           title="Очередь"
@@ -575,6 +577,7 @@ function EmployeeDashboard({
         description={`Доступные разделы на ${formatDate(summary.date)}. Набор данных и действий зависит от роли сотрудника.`}
       />
       {error ? <Alert type="error" showIcon message={getErrorMessage(error)} className="form-alert" /> : null}
+      <OverdueVisitsBanner summary={summary} onOpen={(visitId) => navigate(`/visits/${visitId}`)} />
       <div className="dashboard-app-strip">
         {hasPermission(employee, 'queue.read') ? (
           <DashboardActionTile
@@ -709,6 +712,7 @@ function DoctorDashboard({
         }
       />
       {error ? <Alert type="error" showIcon message={getErrorMessage(error)} className="form-alert" /> : null}
+      <OverdueVisitsBanner summary={summary} onOpen={(visitId) => navigate(`/visits/${visitId}`)} />
       <div className="dashboard-app-strip">
         <DashboardActionTile
           title="Моя очередь"
@@ -912,6 +916,34 @@ function getQueueTitle(item: DashboardQueueItem) {
   const animal = item.animal?.nickname ?? item.animalNickname ?? 'Пациент';
   const owner = item.owner?.fullName ?? item.ownerName ?? 'Клиент без карточки';
   return `${animal} · ${owner}`;
+}
+
+function OverdueVisitsBanner({
+  summary,
+  onOpen,
+}: {
+  summary: DashboardSummary | undefined;
+  onOpen: (visitId: string) => void;
+}) {
+  const overdue = summary?.visits.overdue ?? 0;
+  const oldestVisit = summary?.visits.overdueItems[0];
+  if (!overdue || !oldestVisit) return null;
+
+  return (
+    <button
+      type="button"
+      className="dashboard-overdue-banner"
+      onClick={() => onOpen(oldestVisit.id)}
+      aria-label={`Незавершённые приёмы более часа: ${overdue}. Открыть самый давний приём.`}
+    >
+      <span className="dashboard-overdue-banner-copy">
+        <ExclamationCircleOutlined />
+        <strong>Незавершённые приёмы</strong>
+        <span>Более часа: {overdue}</span>
+      </span>
+      <span className="dashboard-overdue-banner-action">Открыть самый давний</span>
+    </button>
+  );
 }
 
 function DashboardActionTile({
