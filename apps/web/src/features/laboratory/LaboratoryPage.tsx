@@ -16,6 +16,7 @@ import { AttachmentsPanel } from '../files/AttachmentsPanel';
 import { listLaboratoryFiles, listLaboratoryOrderFiles, uploadLaboratoryFile, uploadLaboratoryOrderFile } from '../files/files.api';
 import { formatDateTime } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
+import { formatServicePrice } from '../stock/service-pricing';
 import {
   laboratoryOrderItemStatusLabels,
   laboratoryOrderStatusColors,
@@ -718,7 +719,7 @@ function TestsTable({
       { title: 'Ед.', dataIndex: 'unit', key: 'unit', width: 90, render: fallback },
       { title: 'Референс', dataIndex: 'referenceRange', key: 'referenceRange', width: 150, render: fallback },
       { title: 'Виды', dataIndex: 'species', key: 'species', width: 180, render: renderSpecies },
-      { title: 'Услуга', key: 'service', render: (_, item) => item.service ? `${item.service.title} · ${formatMoney(item.service.price)}` : '—' },
+      { title: 'Услуга', key: 'service', render: (_, item) => item.service ? `${item.service.title} · ${formatServicePrice(item.service)}` : '—' },
       { title: 'Статус', dataIndex: 'isActive', key: 'isActive', width: 110, render: activeTag },
       {
         title: '',
@@ -785,7 +786,7 @@ function ProfilesTable({
           </Space>
         ),
       },
-      { title: 'Услуга', key: 'service', render: (_, item) => item.service ? `${item.service.title} · ${formatMoney(item.service.price)}` : '—' },
+      { title: 'Услуга', key: 'service', render: (_, item) => item.service ? `${item.service.title} · ${formatServicePrice(item.service)}` : '—' },
       { title: 'Статус', dataIndex: 'isActive', key: 'isActive', width: 110, render: activeTag },
       {
         title: '',
@@ -1008,7 +1009,7 @@ function ServiceSelect({ control, resources }: { control: any; resources?: Labor
             showSearch
             optionFilterProp="label"
             placeholder="Не связана"
-            options={resources?.services.map((item) => ({ value: item.id, label: `${item.title} · ${formatMoney(item.price)}` })) ?? []}
+            options={resources?.services.map((item) => ({ value: item.id, label: `${item.title} · ${formatServicePrice(item)}` })) ?? []}
           />
         </Form.Item>
       )}

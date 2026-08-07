@@ -33,6 +33,7 @@ import {
   updateService,
 } from './stock.api';
 import { Product, ServiceItem, StockBatch, StockResources, SupplyInvoice } from './types';
+import { formatServicePrice } from './service-pricing';
 import { SupplyInvoiceImporter } from './SupplyInvoiceImporter';
 import { SupplierModal } from './SupplierModal';
 
@@ -300,7 +301,7 @@ export function StockPage() {
           <Descriptions bordered column={1} size="small">
             <Descriptions.Item label="Название">{selectedService.title}</Descriptions.Item>
             <Descriptions.Item label="Категория">{selectedService.category?.title ?? '—'}</Descriptions.Item>
-            <Descriptions.Item label="Цена">{formatMoney(selectedService.price)}</Descriptions.Item>
+            <Descriptions.Item label="Цена">{formatServicePrice(selectedService)}</Descriptions.Item>
             <Descriptions.Item label="Тип цены">{selectedService.priceType === 'FLOATING' ? 'Плавающая' : 'Фиксированная'}</Descriptions.Item>
             <Descriptions.Item label="НДС">{selectedService.vatRate === null ? 'Без НДС' : `${selectedService.vatRate}%`}</Descriptions.Item>
             <Descriptions.Item label="Описание">{selectedService.description || '—'}</Descriptions.Item>
@@ -521,7 +522,7 @@ function ServicesTable({
     () => [
       { title: 'Название', dataIndex: 'title', key: 'title' },
       { title: 'Категория', key: 'category', render: (_, record) => record.category?.title ?? '—' },
-      { title: 'Цена', dataIndex: 'price', key: 'price', render: formatMoney },
+      { title: 'Цена', key: 'price', render: (_, record) => formatServicePrice(record) },
       { title: 'Тип цены', dataIndex: 'priceType', key: 'priceType', render: (value: string) => (value === 'FLOATING' ? 'Плавающая' : 'Фиксированная') },
       { title: 'НДС', dataIndex: 'vatRate', key: 'vatRate', render: (value) => (value === null || value === undefined ? 'Без НДС' : `${value}%`) },
       {
@@ -920,9 +921,26 @@ const serviceSchema = z.object({
   title: z.string().trim().min(2, 'Введите название'),
   categoryTitle: z.string().trim().optional(),
   price: z.number().min(0).optional(),
-  priceType: z.string().optional(),
+  priceType: z.enum(['FIXED', 'FLOATING']),
+  minimumPrice: z.number().min(0).optional(),
+  maximumPrice: z.number().min(0).optional(),
   vatRate: z.number().min(0).max(100).optional(),
   description: z.string().trim().optional(),
+}).superRefine((value, context) => {
+  if (value.priceType === 'FIXED' && value.price === undefined) {
+    context.addIssue({ code: 'custom', path: ['price'], message: 'Укажите фиксированную цену' });
+  }
+  if (value.priceType === 'FLOATING') {
+    if (value.minimumPrice === undefined) {
+      context.addIssue({ code: 'custom', path: ['minimumPrice'], message: 'Укажите цену от' });
+    }
+    if (value.maximumPrice === undefined) {
+      context.addIssue({ code: 'custom', path: ['maximumPrice'], message: 'Укажите цену до' });
+    }
+    if (value.minimumPrice !== undefined && value.maximumPrice !== undefined && value.maximumPrice < value.minimumPrice) {
+      context.addIssue({ code: 'custom', path: ['maximumPrice'], message: 'Цена до не может быть меньше цены от' });
+    }
+  }
 });
 
 type ServiceFormValues = z.infer<typeof serviceSchema>;
@@ -944,6 +962,7 @@ function ServiceModal({
     resolver: zodResolver(serviceSchema),
     defaultValues: { title: '', categoryTitle: '', price: 0, priceType: 'FIXED', description: '' },
   });
+  const priceType = useWatch({ control, name: 'priceType' });
   const categoryOptions = useMemo(
     () => buildCategoryOptions(defaultServiceCategories, resources?.serviceCategories.map((category) => category.title) ?? []),
     [resources?.serviceCategories],
@@ -957,13 +976,20 @@ function ServiceModal({
       title: service?.title ?? '',
       categoryTitle: service?.category?.title ?? '',
       price: Number(service?.price ?? 0),
-      priceType: service?.priceType ?? 'FIXED',
+      priceType: service?.priceType === 'FLOATING' ? 'FLOATING' : 'FIXED',
+      minimumPrice: service?.minimumPrice === null || service?.minimumPrice === undefined ? undefined : Number(service.minimumPrice),
+      maximumPrice: service?.maximumPrice === null || service?.maximumPrice === undefined ? undefined : Number(service.maximumPrice),
       vatRate: service?.vatRate === null || service?.vatRate === undefined ? undefined : Number(service.vatRate),
       description: service?.description ?? '',
     });
   }, [open, reset, service]);
   const mutation = useMutation({
-    mutationFn: (values: ServiceFormValues) => (service ? updateService(service.id, values) : createService(values)),
+    mutationFn: (values: ServiceFormValues) => {
+      const input = values.priceType === 'FLOATING'
+        ? { ...values, price: values.minimumPrice }
+        : { ...values, minimumPrice: undefined, maximumPrice: undefined };
+      return service ? updateService(service.id, input) : createService(input);
+    },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['stock'] });
       message.success(service ? 'Услуга обновлена' : 'Услуга создана');
@@ -1002,8 +1028,6 @@ function ServiceModal({
           )}
         />
         <div className="form-grid two-columns">
-          <FormNumber control={control} name="price" label="Цена" />
-          <FormNumber control={control} name="vatRate" label="НДС, %" />
           <Controller
             control={control}
             name="priceType"
@@ -1019,7 +1043,19 @@ function ServiceModal({
               </Form.Item>
             )}
           />
+          {priceType === 'FIXED' ? (
+            <FormNumber control={control} name="price" label="Цена, ₽" step={0.01} required />
+          ) : (
+            <>
+              <FormNumber control={control} name="minimumPrice" label="Цена от, ₽" step={0.01} required />
+              <FormNumber control={control} name="maximumPrice" label="Цена до, ₽" step={0.01} required />
+            </>
+          )}
+          <FormNumber control={control} name="vatRate" label="НДС, %" />
         </div>
+        {priceType === 'FLOATING' ? (
+          <Alert type="info" showIcon message="При добавлении услуги сотрудник выберет фактическую цену только внутри указанного диапазона." />
+        ) : null}
         <FormText control={control} name="description" label="Описание" textarea />
       </Form>
     </Modal>

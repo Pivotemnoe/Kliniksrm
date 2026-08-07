@@ -25,6 +25,7 @@ import { formatDate, formatDateTime, fromDatetimeLocal, toDatetimeLocal } from '
 import { formatMoney, toMoneyNumber } from '../../shared/utils/money';
 import { getFinanceSettings } from '../finance/finance.api';
 import { listProducts, listServices } from '../stock/stock.api';
+import { formatServicePrice, getServiceDefaultPrice, getServicePriceHelp, getServicePriceRange, validateServicePrice } from '../stock/service-pricing';
 import {
   addBillItem,
   cancelBill,
@@ -656,12 +657,13 @@ function BillItemModal({
   onClose: () => void;
   onSubmit: (values: BillItemMutationInput) => void;
 }) {
-  const { control, handleSubmit, reset, setValue } = useForm<ItemFormValues>({
+  const { control, handleSubmit, reset, setValue, setError } = useForm<ItemFormValues>({
     resolver: zodResolver(itemFormSchema),
     defaultValues: getItemDefaults(item),
   });
   const lineType = useWatch({ control, name: 'lineType' });
   const productId = useWatch({ control, name: 'productId' });
+  const serviceId = useWatch({ control, name: 'serviceId' });
   const productsQuery = useQuery({
     queryKey: ['stock', 'products', 'bill-select'],
     queryFn: () => listProducts({ limit: 100, offset: 0 }),
@@ -673,6 +675,8 @@ function BillItemModal({
     enabled: open,
   });
   const selectedProduct = productsQuery.data?.items.find((product) => product.id === productId);
+  const selectedService = servicesQuery.data?.items.find((service) => service.id === serviceId) ?? item?.service ?? null;
+  const selectedServiceRange = getServicePriceRange(selectedService);
 
   useEffect(() => {
     if (open) {
@@ -681,6 +685,13 @@ function BillItemModal({
   }, [item, open, reset]);
 
   function submit(values: ItemFormValues) {
+    if (values.lineType === 'SERVICE') {
+      const priceError = validateServicePrice(selectedService, values.unitPrice);
+      if (priceError) {
+        setError('unitPrice', { message: priceError });
+        return;
+      }
+    }
     if (item) {
       onSubmit({
         title: values.title,
@@ -745,12 +756,12 @@ function BillItemModal({
                   loading={servicesQuery.isLoading}
                   disabled={Boolean(item)}
                   placeholder="Выберите услугу"
-                  options={servicesQuery.data?.items.map((service) => ({ value: service.id, label: service.title })) ?? []}
+                  options={servicesQuery.data?.items.map((service) => ({ value: service.id, label: `${service.title} · ${formatServicePrice(service)}` })) ?? []}
                   onChange={(value) => {
                     field.onChange(value);
                     const service = servicesQuery.data?.items.find((item) => item.id === value);
                     setValue('title', service?.title ?? '');
-                    setValue('unitPrice', toMoneyNumber(service?.price));
+                    setValue('unitPrice', getServiceDefaultPrice(service));
                   }}
                 />
               </Form.Item>
@@ -823,7 +834,14 @@ function BillItemModal({
             min={0.001}
             step={0.01}
           />
-          <MoneyNumber control={control} name="unitPrice" label={lineType === 'PRODUCT' ? 'Цена за 1 начисление' : 'Цена'} />
+          <MoneyNumber
+            control={control}
+            name="unitPrice"
+            label={lineType === 'PRODUCT' ? 'Цена за 1 начисление' : 'Фактическая цена'}
+            min={lineType === 'SERVICE' ? selectedServiceRange?.minimum ?? 0 : 0}
+            max={lineType === 'SERVICE' ? selectedServiceRange?.maximum : undefined}
+            help={lineType === 'SERVICE' ? getServicePriceHelp(selectedService) : undefined}
+          />
           <MoneyNumber control={control} name="discount" label="Скидка" />
         </div>
       </Form>
@@ -1048,21 +1066,25 @@ function MoneyNumber({
   name,
   label,
   min = 0,
+  max,
   step = 0.01,
+  help,
 }: {
   control: any;
   name: string;
   label: string;
   min?: number;
+  max?: number;
   step?: number;
+  help?: string;
 }) {
   return (
     <Controller
       control={control}
       name={name}
       render={({ field, fieldState }) => (
-        <Form.Item label={label} validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
-          <InputNumber className="full-width" min={min} step={step} value={field.value} onChange={(value) => field.onChange(value ?? min)} />
+        <Form.Item label={label} validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message ?? help}>
+          <InputNumber className="full-width" min={min} max={max} step={step} value={field.value} onChange={(value) => field.onChange(value ?? min)} />
         </Form.Item>
       )}
     />

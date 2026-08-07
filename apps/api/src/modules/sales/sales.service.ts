@@ -5,6 +5,7 @@ import { AuditService } from '../audit/audit.service';
 import { FinanceService } from '../finance/finance.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { toStockQuantity } from '../stock/stock-units';
+import { resolveServiceUnitPrice, servicePricingSelect } from '../stock/service-pricing';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { CreateSaleDto, CreateSaleItemDto } from './dto/create-sale.dto';
 import { ListSalesQueryDto } from './dto/list-sales-query.dto';
@@ -167,7 +168,7 @@ export class SalesService {
     const service = dto.serviceId
       ? await this.prisma.service.findFirst({
           where: { id: dto.serviceId, isActive: true },
-          select: { id: true, title: true, price: true },
+          select: servicePricingSelect,
         })
       : null;
 
@@ -192,8 +193,7 @@ export class SalesService {
       title: dto.title ?? service?.title ?? product?.title,
       quantity: dto.quantity ?? 1,
       unitPrice:
-        dto.unitPrice ??
-        (service ? decimalToNumber(service.price) : undefined) ??
+        (service ? resolveServiceUnitPrice(service, dto.unitPrice) : dto.unitPrice) ??
         (product ? decimalToNumber(product.retailPrice) : 0),
       discount: dto.discount ?? 0,
     });
@@ -318,7 +318,7 @@ const saleInclude = {
     orderBy: { createdAt: 'asc' },
     include: {
       service: {
-        select: { id: true, title: true, price: true },
+        select: servicePricingSelect,
       },
       product: {
         select: { id: true, title: true, retailPrice: true },

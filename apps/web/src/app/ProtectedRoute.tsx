@@ -25,6 +25,10 @@ export function ProtectedRoute() {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
+  if (data.employee.mustChangePassword && location.pathname !== '/profile') {
+    return <Navigate to="/profile" replace state={{ temporaryPassword: true }} />;
+  }
+
   if (!canAccessPath(data.employee, location.pathname)) {
     return <Navigate to={getFirstAccessibleRoute(data.employee)} replace state={{ deniedPath: location.pathname }} />;
   }

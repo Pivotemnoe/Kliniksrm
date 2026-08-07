@@ -78,6 +78,14 @@ export function ProfilePage() {
         </Card>
         <Card title="Смена пароля">
           <Space direction="vertical" size={16} className="full-width">
+            {employee?.mustChangePassword ? (
+              <Alert
+                type="warning"
+                showIcon
+                message="Замените временный пароль"
+                description="Придумайте свой пароль. До его смены остальные разделы CRM будут закрыты."
+              />
+            ) : null}
             {isDemoAuthMode ? (
               <Alert type="info" showIcon message="В тестовом режиме пароль не меняется." />
             ) : (

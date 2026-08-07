@@ -35,6 +35,8 @@ export type HospitalCatalog = {
     title: string;
     price: DecimalValue;
     priceType: string;
+    minimumPrice: DecimalValue | null;
+    maximumPrice: DecimalValue | null;
   }>;
 };
 
@@ -119,6 +121,8 @@ export type HospitalRecord = {
     title: string;
     price: DecimalValue;
     priceType: string;
+    minimumPrice: DecimalValue | null;
+    maximumPrice: DecimalValue | null;
   } | null;
   treatmentPlan?: {
     id: string;
@@ -145,7 +149,10 @@ export type HospitalRecord = {
     service?: {
       id: string;
       title: string;
+      price: DecimalValue;
       priceType: string;
+      minimumPrice: DecimalValue | null;
+      maximumPrice: DecimalValue | null;
     } | null;
   } | null;
   recordedBy?: {

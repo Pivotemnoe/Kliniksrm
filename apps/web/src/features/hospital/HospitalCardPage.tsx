@@ -18,6 +18,7 @@ import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDateTime } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
+import { formatServicePrice, getServiceDefaultPrice, getServicePriceHelp, getServicePriceRange } from '../stock/service-pricing';
 import { AttachmentsPanel } from '../files/AttachmentsPanel';
 import { listVisitFiles, uploadVisitFile } from '../files/files.api';
 import { getOrganizationSettings } from '../organization/organization.api';
@@ -380,6 +381,7 @@ function HospitalRecordModal({
   const recordStatus = Form.useWatch('recordStatus', form) ?? initialStatus;
   const catalogKind = Form.useWatch('catalogKind', form) ?? 'NONE';
   const selectedProductId = Form.useWatch('productId', form);
+  const selectedServiceId = Form.useWatch('serviceId', form);
   const completingPlannedRecord = record?.recordStatus === 'PLANNED' && initialStatus === 'COMPLETED';
   const lateCompletion = completingPlannedRecord && record?.canEditDirectly === false;
   const effectivePlannedCatalog = getEffectivePlannedCatalog(record);
@@ -391,6 +393,8 @@ function HospitalRecordModal({
     queryFn: () => getHospitalCatalog(deferredCatalogSearch || undefined),
     enabled: open && catalogKind !== 'NONE',
   });
+  const selectedService = mergeServiceOptions(record, catalogQuery.data?.services).find((service) => service.id === selectedServiceId);
+  const selectedServiceRange = getServicePriceRange(selectedService);
   const catalogIdentityLocked = Boolean(record)
     && (!completingPlannedRecord || Boolean(record?.billItem || hasPlannedCatalog));
 
@@ -664,12 +668,12 @@ function HospitalRecordModal({
                 placeholder="Начните вводить название услуги"
                 options={mergeServiceOptions(record, catalogQuery.data?.services).map((service) => ({
                   value: service.id,
-                  label: `${service.title} · ${formatMoney(service.price)}`,
+                  label: `${service.title} · ${formatServicePrice(service)}`,
                 }))}
                 onChange={(serviceId) => {
                   const service = catalogQuery.data?.services.find((item) => item.id === serviceId);
                   if (!service) return;
-                  form.setFieldsValue({ title: service.title, quantity: 1, unitPrice: Number(service.price) });
+                  form.setFieldsValue({ title: service.title, quantity: 1, unitPrice: getServiceDefaultPrice(service) });
                 }}
               />
             </Form.Item>
@@ -677,8 +681,13 @@ function HospitalRecordModal({
               <Form.Item name="quantity" label="Количество услуг" rules={[{ required: true, message: 'Укажите количество' }]}>
                 <InputNumber min={0.001} precision={3} disabled={lateCompletion || billingLocked} className="full-width" />
               </Form.Item>
-              <Form.Item name="unitPrice" label="Цена за одну услугу, ₽" rules={[{ required: true, message: 'Укажите цену' }]}>
-                <InputNumber min={0} precision={2} disabled={lateCompletion || billingLocked} className="full-width" />
+              <Form.Item
+                name="unitPrice"
+                label="Фактическая цена за одну услугу, ₽"
+                help={getServicePriceHelp(selectedService)}
+                rules={hospitalServicePriceRules(selectedService)}
+              >
+                <InputNumber min={selectedServiceRange?.minimum ?? 0} max={selectedServiceRange?.maximum} precision={2} disabled={lateCompletion || billingLocked} className="full-width" />
               </Form.Item>
             </div>
           </>
@@ -817,14 +826,14 @@ function HospitalAmendmentModal({
               showIcon
               className="form-alert"
               message={`Услуга: ${plannedService.title}`}
-              description="Исправление сохранится отдельно. Начисление произойдёт только после отметки назначения «Выполнено»."
+              description={`Исправление сохранится отдельно. Начисление произойдёт только после отметки назначения «Выполнено». ${getServicePriceHelp(plannedService) ?? ''}`}
             />
             <div className="form-grid two-columns">
               <Form.Item name="quantity" label="Количество услуг" rules={[{ required: true, message: 'Укажите количество' }]}>
                 <InputNumber min={0.001} precision={3} className="full-width" />
               </Form.Item>
-              <Form.Item name="unitPrice" label="Цена за одну услугу, ₽" rules={[{ required: true, message: 'Укажите цену' }]}>
-                <InputNumber min={0} precision={2} className="full-width" />
+              <Form.Item name="unitPrice" label="Фактическая цена за одну услугу, ₽" rules={hospitalServicePriceRules(plannedService)}>
+                <InputNumber min={getServicePriceRange(plannedService)?.minimum ?? 0} max={getServicePriceRange(plannedService)?.maximum} precision={2} className="full-width" />
               </Form.Item>
             </div>
           </>
@@ -929,6 +938,14 @@ function mergeServiceOptions(
     items.unshift({ ...linked, price: record?.billItem?.unitPrice ?? plannedCatalog.unitPrice ?? plannedCatalog.service?.price ?? 0 });
   }
   return items;
+}
+
+function hospitalServicePriceRules(service: HospitalCatalog['services'][number] | HospitalRecord['plannedService'] | null | undefined) {
+  const range = getServicePriceRange(service);
+  return [
+    { required: true, message: 'Укажите цену' },
+    ...(range ? [{ type: 'number' as const, min: range.minimum, max: range.maximum, message: `Цена должна быть от ${range.minimum} до ${range.maximum} ₽` }] : []),
+  ];
 }
 
 function describePlannedCatalogPosting(record: HospitalRecord | null) {

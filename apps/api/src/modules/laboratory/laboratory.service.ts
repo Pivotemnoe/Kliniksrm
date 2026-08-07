@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { LaboratoryOrderItemStatus, LaboratoryOrderStatus, Prisma } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
 import { PrismaService } from '../../prisma/prisma.service';
+import { servicePricingSelect } from '../stock/service-pricing';
 import { AuditService } from '../audit/audit.service';
 import { ImportLaboratoryResultsDto, LaboratoryResultImportRowDto, LaboratoryResultsImportMode } from './dto/import-laboratory-results.dto';
 import { ListLaboratoryOrdersQueryDto } from './dto/list-laboratory-orders-query.dto';
@@ -23,7 +24,7 @@ export class LaboratoryService {
       this.prisma.service.findMany({
         where: { isActive: true },
         orderBy: { title: 'asc' },
-        select: { id: true, title: true, price: true, category: { select: { id: true, title: true } } },
+        select: { ...servicePricingSelect, category: { select: { id: true, title: true } } },
         take: 300,
       }),
       this.prisma.animalSpecies.findMany({ orderBy: [{ sortOrder: 'asc' }, { title: 'asc' }], select: { id: true, title: true } }),
@@ -504,12 +505,12 @@ export class LaboratoryService {
 }
 
 const laboratoryTestInclude = {
-  service: { select: { id: true, title: true, price: true, category: { select: { id: true, title: true } } } },
+  service: { select: { ...servicePricingSelect, category: { select: { id: true, title: true } } } },
   _count: { select: { profileLinks: true } },
 } satisfies Prisma.LaboratoryTestInclude;
 
 const laboratoryProfileInclude = {
-  service: { select: { id: true, title: true, price: true, category: { select: { id: true, title: true } } } },
+  service: { select: { ...servicePricingSelect, category: { select: { id: true, title: true } } } },
   tests: {
     orderBy: { sortOrder: 'asc' },
     include: {

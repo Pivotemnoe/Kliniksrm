@@ -19,6 +19,7 @@ import { listInternalMessageConversations } from '../features/internalMessages/i
 import { StaffAlertsPopover } from '../features/staffAlerts/StaffAlertsPopover';
 import { getEmployeeDefaultRoute } from '../shared/routes/defaultRoutes';
 import { GlobalSearch } from './GlobalSearch';
+import { GlobalOperationalAlerts } from './GlobalOperationalAlerts';
 import { getAccessibleMenuItems, getSelectedMenuKey } from './menu';
 import { useActivityTracking } from './useActivityTracking';
 
@@ -59,7 +60,7 @@ export function CrmLayout() {
     {
       key: 'profile',
       icon: <UserOutlined />,
-      label: 'Профиль сотрудника',
+      label: 'Профиль и смена пароля',
       onClick: () => navigate('/profile'),
     },
     ...(canOpenSeparateLocalLogin
@@ -168,6 +169,7 @@ export function CrmLayout() {
           </Space>
         </Header>
         <Content className="crm-content">
+          <GlobalOperationalAlerts />
           <RouteLoadBoundary resetKey={location.pathname}>
             <Outlet />
           </RouteLoadBoundary>

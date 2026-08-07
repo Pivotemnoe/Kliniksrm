@@ -30,6 +30,7 @@ import { UpdateVisitDto } from './dto/update-visit.dto';
 import { UpsertVisitExamDto } from './dto/upsert-visit-exam.dto';
 import { UpsertVisitRecommendationDto } from './dto/upsert-visit-recommendation.dto';
 import { toStockQuantity } from '../stock/stock-units';
+import { resolveServiceUnitPrice, servicePricingSelect } from '../stock/service-pricing';
 import { assertPrimaryVisitDiagnosesReady } from './visit-diagnosis-rules';
 
 type WarehouseScope = string[] | null;
@@ -440,6 +441,12 @@ export class VisitsService {
       const visit = await this.getVisitForBilling(tx, visitId);
       ensureVisitEditable(visit, actor);
       const existingBillItem = await this.getVisitBillItem(tx, visitId, billItemId);
+      const serviceUnitPrice = existingBillItem.serviceId && dto.unitPrice !== undefined
+        ? resolveServiceUnitPrice(
+            await tx.service.findUniqueOrThrow({ where: { id: existingBillItem.serviceId }, select: servicePricingSelect }),
+            dto.unitPrice,
+          )
+        : dto.unitPrice;
       const line = resolveBillItemLine({
         serviceId: existingBillItem.serviceId ?? undefined,
         productId: existingBillItem.productId ?? undefined,
@@ -448,7 +455,7 @@ export class VisitsService {
         stockQuantity:
           dto.stockQuantity ??
           (existingBillItem.stockQuantity === null ? decimalToNumber(existingBillItem.quantity) : decimalToNumber(existingBillItem.stockQuantity)),
-        unitPrice: dto.unitPrice ?? decimalToNumber(existingBillItem.unitPrice),
+        unitPrice: serviceUnitPrice ?? decimalToNumber(existingBillItem.unitPrice),
         discount: dto.discount ?? decimalToNumber(existingBillItem.discount),
       });
 
@@ -973,7 +980,7 @@ export class VisitsService {
     const service = dto.serviceId
       ? await this.prisma.service.findFirst({
           where: { id: dto.serviceId, isActive: true },
-          select: { id: true, title: true, price: true },
+          select: servicePricingSelect,
         })
       : null;
 
@@ -999,8 +1006,7 @@ export class VisitsService {
       quantity: dto.quantity ?? 1,
       stockQuantity: product ? dto.stockQuantity ?? dto.quantity ?? 1 : undefined,
       unitPrice:
-        dto.unitPrice ??
-        (service ? decimalToNumber(service.price) : undefined) ??
+        (service ? resolveServiceUnitPrice(service, dto.unitPrice) : dto.unitPrice) ??
         (product ? decimalToNumber(product.retailPrice) : 0),
       discount: dto.discount ?? 0,
     });
@@ -1230,7 +1236,7 @@ const visitListInclude = {
 } satisfies Prisma.VisitInclude;
 
 const laboratoryServiceSelect = {
-  select: { id: true, title: true, price: true },
+  select: servicePricingSelect,
 } satisfies Prisma.ServiceDefaultArgs;
 
 const laboratoryOrderInclude = {
@@ -1288,7 +1294,7 @@ const visitInclude = {
         orderBy: { createdAt: 'asc' },
         include: {
           service: {
-            select: { id: true, title: true, price: true },
+            select: servicePricingSelect,
           },
           product: {
             select: { id: true, title: true, retailPrice: true, stockUnit: true, writeOffUnit: true, billingUnit: true },
@@ -1349,6 +1355,9 @@ type LaboratoryServiceForBilling = {
   id: string;
   title: string;
   price: Prisma.Decimal;
+  priceType: string;
+  minimumPrice: Prisma.Decimal | null;
+  maximumPrice: Prisma.Decimal | null;
 } | null;
 
 type LaboratoryTestForOrder = {
@@ -1473,7 +1482,7 @@ async function createBillItemFromService(tx: Prisma.TransactionClient, billId: s
     serviceId: service.id,
     title: service.title,
     quantity: 1,
-    unitPrice: decimalToNumber(service.price),
+    unitPrice: resolveServiceUnitPrice(service),
     discount: 0,
   });
 

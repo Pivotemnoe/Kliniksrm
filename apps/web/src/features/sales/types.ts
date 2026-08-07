@@ -39,7 +39,7 @@ export type SaleItem = {
   productId: string | null;
   product?: Pick<Product, 'id' | 'title' | 'retailPrice'> | null;
   serviceId: string | null;
-  service?: Pick<ServiceItem, 'id' | 'title' | 'price'> | null;
+  service?: Pick<ServiceItem, 'id' | 'title' | 'price' | 'priceType' | 'minimumPrice' | 'maximumPrice'> | null;
   title: string;
   quantity: DecimalValue;
   unitPrice: DecimalValue;

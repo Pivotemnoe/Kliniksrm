@@ -430,13 +430,13 @@ export class StockService {
 
   async createService(dto: UpsertServiceDto, actorId: string) {
     const categoryId = await this.resolveServiceCategoryId(dto);
+    const pricing = resolveServiceCatalogPricing(dto);
 
     const service = await this.prisma.service.create({
       data: {
         categoryId,
         title: dto.title.trim(),
-        price: dto.price ?? 0,
-        priceType: dto.priceType ?? 'FIXED',
+        ...pricing,
         vatRate: dto.vatRate,
         description: clean(dto.description),
       },
@@ -465,16 +465,22 @@ export class StockService {
   }
 
   async updateService(serviceId: string, dto: UpdateServiceDto, actorId: string) {
-    await this.ensureServiceExists(serviceId);
+    const existing = await this.prisma.service.findFirst({
+      where: { id: serviceId, isActive: true },
+      select: { id: true, price: true, priceType: true, minimumPrice: true, maximumPrice: true },
+    });
+    if (!existing) {
+      throw new NotFoundException('Услуга не найдена');
+    }
     const categoryId = await this.resolveServiceCategoryId(dto);
+    const pricing = resolveServiceCatalogPricing(dto, existing);
 
     const service = await this.prisma.service.update({
       where: { id: serviceId },
       data: {
         ...(dto.title !== undefined ? { title: dto.title.trim() } : {}),
         ...(categoryId !== undefined ? { categoryId } : {}),
-        ...(dto.price !== undefined ? { price: dto.price } : {}),
-        ...(dto.priceType !== undefined ? { priceType: dto.priceType } : {}),
+        ...pricing,
         ...(dto.vatRate !== undefined ? { vatRate: dto.vatRate } : {}),
         ...(dto.description !== undefined ? { description: clean(dto.description) } : {}),
       },
@@ -1263,6 +1269,49 @@ function getProductInclude(batchWhere?: Prisma.StockBatchWhereInput) {
 const serviceInclude = {
   category: true,
 } satisfies Prisma.ServiceInclude;
+
+type ExistingServicePricing = Pick<Prisma.ServiceGetPayload<object>, 'price' | 'priceType' | 'minimumPrice' | 'maximumPrice'>;
+
+function resolveServiceCatalogPricing(dto: Partial<UpsertServiceDto>, existing?: ExistingServicePricing) {
+  const priceType = dto.priceType ?? existing?.priceType ?? 'FIXED';
+
+  if (priceType === 'FLOATING') {
+    const rangeWasSubmitted = dto.priceType !== undefined
+      || dto.minimumPrice !== undefined
+      || dto.maximumPrice !== undefined;
+    const minimumPrice = dto.minimumPrice ?? existing?.minimumPrice?.toNumber();
+    const maximumPrice = dto.maximumPrice ?? existing?.maximumPrice?.toNumber();
+
+    if (minimumPrice === undefined || maximumPrice === undefined) {
+      if (existing && !rangeWasSubmitted) {
+        return {
+          priceType,
+          price: existing.price,
+          minimumPrice: existing.minimumPrice,
+          maximumPrice: existing.maximumPrice,
+        };
+      }
+      throw new BadRequestException('Для плавающей цены укажите «Цена от» и «Цена до»');
+    }
+    if (maximumPrice < minimumPrice) {
+      throw new BadRequestException('Цена «до» не может быть меньше цены «от»');
+    }
+
+    return {
+      priceType,
+      price: minimumPrice,
+      minimumPrice,
+      maximumPrice,
+    };
+  }
+
+  return {
+    priceType: 'FIXED',
+    price: dto.price ?? existing?.price ?? 0,
+    minimumPrice: null,
+    maximumPrice: null,
+  };
+}
 
 const stockBatchInclude = {
   product: { include: { category: true } },

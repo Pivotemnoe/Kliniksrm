@@ -15,12 +15,13 @@ import {
   getVisitOverdueAt,
   VISIT_OVERDUE_THRESHOLD_MINUTES,
 } from '../visits/visit-overdue';
+import { resolveVaccinationDues } from '../animals/vaccination-due';
 
 type StaffAlertSeverity = 'info' | 'warning' | 'error';
 
 type StaffAlertCandidate = {
   key: string;
-  kind: 'UNFINISHED_VISIT' | 'FAILED_DELIVERY' | 'ONLINE_REQUEST' | 'UNPAID_BILL' | 'LOW_STOCK' | 'NEWS';
+  kind: 'UNFINISHED_VISIT' | 'TODAY_VACCINATION' | 'OVERDUE_VACCINATION' | 'FAILED_DELIVERY' | 'ONLINE_REQUEST' | 'UNPAID_BILL' | 'LOW_STOCK' | 'NEWS';
   title: string;
   description: string;
   href: string;
@@ -123,6 +124,7 @@ export class StaffAlertsService {
     const showBills = can('billing.manage') || can('payments.manage');
     const showStock = can('stock.manage');
     const showNews = can('news.read');
+    const showVaccinations = can('animals.read');
 
     const warehouseAccesses = showStock
       ? await this.prisma.employeeWarehouseAccess.findMany({
@@ -132,7 +134,7 @@ export class StaffAlertsService {
       : [];
     const warehouseIds = warehouseAccesses.map((access) => access.warehouseId);
 
-    const [visits, failedDeliveries, onlineRequests, unpaidBills, stockProducts, unreadNews] = await Promise.all([
+    const [visits, failedDeliveries, onlineRequests, unpaidBills, stockProducts, unreadNews, vaccinationCandidates] = await Promise.all([
       showVisits
         ? this.prisma.visit.findMany({
             where: {
@@ -207,6 +209,25 @@ export class StaffAlertsService {
             select: { id: true, publishedAt: true },
           })
         : Promise.resolve([]),
+      showVaccinations
+        ? this.prisma.vaccination.findMany({
+            where: { expiresAt: { not: null } },
+            orderBy: [{ expiresAt: 'desc' }, { createdAt: 'desc' }],
+            take: 2000,
+            select: {
+              id: true,
+              title: true,
+              expiresAt: true,
+              animal: {
+                select: {
+                  id: true,
+                  nickname: true,
+                  owner: { select: { fullName: true, phone: true } },
+                },
+              },
+            },
+          })
+        : Promise.resolve([]),
     ]);
 
     const items: StaffAlertCandidate[] = visits.map((visit) => {
@@ -223,6 +244,34 @@ export class StaffAlertsService {
         version: hashVersion([visit.id, VisitStatus.IN_PROGRESS, overdueAt.toISOString(), VISIT_OVERDUE_THRESHOLD_MINUTES]),
       };
     });
+
+    const vaccinationDues = resolveVaccinationDues(vaccinationCandidates, now);
+    for (const vaccination of vaccinationDues.today) {
+      items.push({
+        key: `vaccination:today:${vaccination.id}`,
+        kind: 'TODAY_VACCINATION',
+        title: `Сегодня вакцинация: ${vaccination.animal.nickname}`,
+        description: `${vaccination.title} · ${vaccination.animal.owner.fullName}${vaccination.animal.owner.phone ? ` · ${vaccination.animal.owner.phone}` : ''}`,
+        href: `/patients/${vaccination.animal.id}`,
+        count: 1,
+        severity: 'warning',
+        occurredAt: vaccinationDues.todayAvailableAt,
+        version: hashVersion([vaccination.id, vaccination.expiresAt?.toISOString(), 'today-08-msk']),
+      });
+    }
+    for (const vaccination of vaccinationDues.overdue) {
+      items.push({
+        key: `vaccination:overdue:${vaccination.id}`,
+        kind: 'OVERDUE_VACCINATION',
+        title: `Просрочена вакцинация: ${vaccination.animal.nickname}`,
+        description: `${vaccination.title} · ${vaccination.animal.owner.fullName}${vaccination.animal.owner.phone ? ` · ${vaccination.animal.owner.phone}` : ''}`,
+        href: `/patients/${vaccination.animal.id}`,
+        count: 1,
+        severity: 'error',
+        occurredAt: vaccination.expiresAt!,
+        version: hashVersion([vaccination.id, vaccination.expiresAt?.toISOString(), 'overdue']),
+      });
+    }
 
     if (failedDeliveries.length) {
       items.push(aggregateAlert({

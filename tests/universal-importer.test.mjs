@@ -60,7 +60,9 @@ test('диапазон цены создаёт услугу с плавающе�
   });
 
   assert.equal(createdData.priceType, 'FLOATING');
-  assert.equal(createdData.price.toString(), '0');
+  assert.equal(createdData.price.toString(), '575');
+  assert.equal(createdData.minimumPrice.toString(), '575');
+  assert.equal(createdData.maximumPrice.toString(), '1150');
   assert.match(createdData.description, /575–1150/);
 });
 

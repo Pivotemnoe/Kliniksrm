@@ -199,23 +199,24 @@ test('текст личного сообщения не попадает в жу
   assert.equal(JSON.stringify(auditEntry).includes('Внутреннее сообщение'), false);
 });
 
-test('колокольчик, красная плашка, аудит и отчёты показывают просрочку более часа', async () => {
-  const [layout, popover, dashboard, messages, routes] = await Promise.all([
+test('колокольчик, глобальная красная плашка, аудит и отчёты показывают просрочку более часа', async () => {
+  const [layout, popover, operationalAlerts, messages, routes] = await Promise.all([
     read('apps/web/src/layouts/CrmLayout.tsx'),
     read('apps/web/src/features/staffAlerts/StaffAlertsPopover.tsx'),
-    read('apps/web/src/features/dashboard/DashboardPage.tsx'),
+    read('apps/web/src/layouts/GlobalOperationalAlerts.tsx'),
     read('apps/web/src/features/internalMessages/StaffMessagesPage.tsx'),
     read('apps/web/src/app/routes.tsx'),
   ]);
 
   assert.match(layout, /<StaffAlertsPopover \/>/);
+  assert.match(layout, /<GlobalOperationalAlerts \/>/);
   assert.doesNotMatch(layout, /headerAlertTarget/);
   assert.match(popover, /Непросмотренные оповещения/);
   assert.match(popover, /unreadItems\.map/);
   assert.match(popover, /navigate\(item\.href\)/);
-  assert.match(dashboard, /dashboard-overdue-banner/);
-  assert.match(dashboard, /Незавершённые приёмы/);
-  assert.match(dashboard, /Более часа:/);
+  assert.match(operationalAlerts, /dashboard-overdue-banner/);
+  assert.match(operationalAlerts, /Незавершённые приёмы/);
+  assert.match(operationalAlerts, /Более часа:/);
   assert.match(messages, /Выберите сотрудника/);
   assert.match(messages, /Сообщения сотрудникам/);
   assert.match(routes, /path: '\/staff-messages'/);

@@ -158,7 +158,7 @@ export class AuthService {
       token,
       expiresAt,
       cookieExpiresAt,
-      employee: this.serializeEmployee(user.employee),
+      employee: this.serializeEmployee(user.employee, user.mustChangePassword),
     };
   }
 
@@ -248,7 +248,7 @@ export class AuthService {
     await this.prisma.$transaction([
       this.prisma.user.update({
         where: { id: userId },
-        data: { passwordHash },
+        data: { passwordHash, mustChangePassword: false },
       }),
       this.prisma.session.deleteMany({
         where: {
@@ -300,7 +300,7 @@ export class AuthService {
         code: string;
       };
     }>;
-  }) {
+  }, mustChangePassword = false) {
     const permissions = new Set<string>();
     const roles = employee.roles.map(({ role }) => {
       for (const { permission } of role.permissions) {
@@ -326,6 +326,7 @@ export class AuthService {
       position: employee.position,
       defaultRoute: employee.defaultRoute,
       restrictLoginToShifts: Boolean(employee.restrictLoginToShifts),
+      mustChangePassword,
       status: employee.status,
       roles,
       permissions: [...permissions].sort(),

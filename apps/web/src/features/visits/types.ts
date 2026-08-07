@@ -190,6 +190,9 @@ export type VisitBillItem = {
     id: string;
     title: string;
     price: DecimalValue;
+    priceType: string;
+    minimumPrice: DecimalValue | null;
+    maximumPrice: DecimalValue | null;
   } | null;
   product?: {
     id: string;
