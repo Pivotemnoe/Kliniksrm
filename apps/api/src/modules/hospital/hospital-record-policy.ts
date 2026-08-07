@@ -16,5 +16,8 @@ export function isPlannedDispositionTransition(
 }
 
 export function findUnsafeLateDispositionFields(input: object) {
-  return Object.keys(input).filter((field) => !lateDispositionAllowedFields.has(field));
+  return Object.entries(input)
+    .filter(([, value]) => value !== undefined)
+    .map(([field]) => field)
+    .filter((field) => !lateDispositionAllowedFields.has(field));
 }

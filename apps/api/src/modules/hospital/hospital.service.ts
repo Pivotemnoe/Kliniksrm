@@ -372,7 +372,7 @@ export class HospitalService {
       const unsafeFields = findUnsafeLateDispositionFields(dto);
       if (unsafeFields.length) {
         throw new BadRequestException(
-          'Назначение прошлых суток можно только отметить выполненным или пропущенным. Для изменения текста добавьте исправление с причиной',
+          'Назначение прошлых суток можно только отметить выполненным или отменённым. Для изменения текста добавьте исправление с причиной',
         );
       }
     }

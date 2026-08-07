@@ -130,7 +130,7 @@ export function HospitalCardPage() {
     mutationFn: ({ recordId, input }: { recordId: string; input: UpdateHospitalRecordInput }) => updateHospitalRecord(stayId, recordId, input),
     onSuccess: async (_, variables) => {
       await refresh();
-      message.success(variables.input.recordStatus === 'SKIPPED' ? 'Назначение отмечено как пропущенное' : 'Выполнение лечения отмечено');
+      message.success(variables.input.recordStatus === 'SKIPPED' ? 'Назначение отменено' : 'Выполнение лечения отмечено');
     },
     onError: (error) => message.error(getErrorMessage(error)),
   });
@@ -267,7 +267,7 @@ export function HospitalCardPage() {
                         <Typography.Text type="secondary">Отметьте выполнение галочкой в строке назначения.</Typography.Text>
                       ) : null}
                       {treatmentReminder.due.some((record) => !record.canEditDirectly) ? (
-                        <Typography.Text type="secondary">Назначение прошлых суток можно отметить выполненным или пропущенным; исходный план останется в истории.</Typography.Text>
+                        <Typography.Text type="secondary">Назначение прошлых суток можно отметить выполненным или отменённым; исходный план останется в истории.</Typography.Text>
                       ) : null}
                     </Space>
                   )}
@@ -286,7 +286,7 @@ export function HospitalCardPage() {
                 showIcon
                 className="form-alert"
                 message={`Правило правки: записи текущих суток (${stay.timezone}) редактируются напрямую`}
-                description="Прошлые сутки не переписываются: врач добавляет исправление с причиной, автором и временем. Невыполненное назначение при этом можно отдельно отметить выполненным или пропущенным."
+                description="Прошлые сутки не переписываются: врач добавляет исправление с причиной, автором и временем. Невыполненное назначение при этом можно отдельно отметить выполненным или отменённым."
               />
               <HospitalSheet
                 records={stay.hospitalRecords ?? []}
@@ -298,10 +298,10 @@ export function HospitalCardPage() {
                 onComplete={openCompleteRecord}
                 onQuickComplete={quickCompleteRecord}
                 onSkip={(record) => modal.confirm({
-                  title: `Отметить «${record.title}» как пропущенное?`,
-                  content: 'Запись останется в листе как невыполненное плановое назначение.',
-                  okText: 'Отметить пропущенным',
-                  cancelText: 'Отмена',
+                  title: `Отменить назначение «${record.title}»?`,
+                  content: 'Назначение останется в истории со статусом «Отменено». Склад и счёт не изменятся.',
+                  okText: 'Отменить назначение',
+                  cancelText: 'Назад',
                   onOk: () => recordStatusMutation.mutateAsync({ recordId: record.id, input: { recordStatus: 'SKIPPED', completedAt: new Date().toISOString() } }),
                 })}
                 updatingRecordId={recordStatusMutation.isPending ? recordStatusMutation.variables?.recordId : undefined}

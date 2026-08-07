@@ -127,9 +127,10 @@ test('прошлые сутки стационара исправляются д
   assert.match(dto, /reason!:/);
 });
 
-test('план прошлых суток можно завершить или пропустить без перезаписи исходного назначения', async () => {
-  const [policy, service, card, sheet] = await Promise.all([
+test('план прошлых суток можно завершить или отменить без перезаписи исходного назначения', async () => {
+  const [policy, dtoModule, service, card, sheet] = await Promise.all([
     import('../apps/api/dist/modules/hospital/hospital-record-policy.js'),
+    import('../apps/api/dist/modules/hospital/dto/update-hospital-record.dto.js'),
     read('apps/api/src/modules/hospital/hospital.service.ts'),
     read('apps/web/src/features/hospital/HospitalCardPage.tsx'),
     read('apps/web/src/features/hospital/HospitalSheet.tsx'),
@@ -151,15 +152,27 @@ test('план прошлых суток можно завершить или п
     recordStatus: 'COMPLETED',
     stockQuantity: 999,
   }), ['stockQuantity']);
+  const transformedDto = new dtoModule.UpdateHospitalRecordDto();
+  transformedDto.recordStatus = 'COMPLETED';
+  transformedDto.completedAt = '2026-08-07T10:00:00.000Z';
+  assert.deepEqual(
+    policy.findUnsafeLateDispositionFields(transformedDto),
+    [],
+    'непереданные optional-поля настоящего DTO не должны блокировать выполнение',
+  );
+  transformedDto.title = 'Переписанное назначение';
+  assert.deepEqual(policy.findUnsafeLateDispositionFields(transformedDto), ['title']);
   assert.match(service, /const lateDisposition = recordDayClosed/);
   assert.match(service, /findUnsafeLateDispositionFields\(dto\)/);
   assert.match(service, /lateDisposition,/);
   assert.match(sheet, /active && record\.recordStatus === 'PLANNED'/);
   assert.doesNotMatch(sheet, /recordStatus === 'PLANNED' && record\.canEditDirectly/);
-  assert.match(card, /Назначение прошлых суток можно отметить выполненным или пропущенным/);
+  assert.match(card, /Назначение прошлых суток можно отметить выполненным или отменённым/);
   assert.match(card, /Исходное назначение не переписывается/);
-  assert.match(card, /Невыполненное назначение при этом можно отдельно отметить выполненным или пропущенным/);
+  assert.match(card, /Невыполненное назначение при этом можно отдельно отметить выполненным или отменённым/);
   assert.match(card, /Чтобы провести склад и счёт, отметьте назначение «Выполнено»/);
+  assert.match(sheet, /Отменить назначение/);
+  assert.match(sheet, /SKIPPED: \{ label: 'Отменено'/);
 });
 
 test('исправление планового препарата сохраняет новое списание и использует его при выполнении', async () => {

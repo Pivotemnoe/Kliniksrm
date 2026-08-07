@@ -118,7 +118,7 @@ export function HospitalSheet({
                           {record.canEditDirectly ? (
                             <Button size="small" type="link" onClick={() => onComplete(record)}>Указать результат</Button>
                           ) : null}
-                          <Button size="small" icon={<StopOutlined />} onClick={() => onSkip(record)}>Пропущено</Button>
+                          <Button size="small" icon={<StopOutlined />} onClick={() => onSkip(record)}>Отменить назначение</Button>
                         </>
                       ) : null}
                       {active && record.canEditDirectly ? (
@@ -300,6 +300,6 @@ const recordTypeColor = {
 const statusView = {
   PLANNED: { label: 'Назначено', color: 'gold' },
   COMPLETED: { label: 'Выполнено', color: 'green' },
-  SKIPPED: { label: 'Пропущено', color: 'default' },
+  SKIPPED: { label: 'Отменено', color: 'default' },
   AMENDMENT: { label: 'Исправление', color: 'purple' },
 } as const;
