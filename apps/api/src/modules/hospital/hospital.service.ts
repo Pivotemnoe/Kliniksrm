@@ -24,6 +24,7 @@ import { CreateHospitalTreatmentPlanDto } from './dto/create-hospital-treatment-
 import { ListHospitalQueryDto } from './dto/list-hospital-query.dto';
 import { UpdateHospitalStayDto } from './dto/update-hospital-stay.dto';
 import { UpdateHospitalRecordDto } from './dto/update-hospital-record.dto';
+import { findUnsafeLateDispositionFields, isPlannedDispositionTransition } from './hospital-record-policy';
 import { toStockQuantity } from '../stock/stock-units';
 import { assertPrimaryVisitDiagnosesReady } from '../visits/visit-diagnosis-rules';
 
@@ -359,7 +360,22 @@ export class HospitalService {
     if (existing.recordStatus === HospitalRecordStatus.AMENDMENT) {
       throw new BadRequestException('Исправление является неизменяемым событием. Создайте новое исправление к исходной записи');
     }
-    this.ensureDirectRecordEditAllowed(existing.recordedAt, stay.hospitalBox.office.timezone);
+    const recordDayClosed = dateKeyInTimeZone(existing.recordedAt, stay.hospitalBox.office.timezone)
+      < dateKeyInTimeZone(new Date(), stay.hospitalBox.office.timezone);
+    const lateDisposition = recordDayClosed
+      && isPlannedDispositionTransition(existing.recordStatus, dto.recordStatus);
+
+    if (recordDayClosed && !lateDisposition) {
+      this.ensureDirectRecordEditAllowed(existing.recordedAt, stay.hospitalBox.office.timezone);
+    }
+    if (lateDisposition) {
+      const unsafeFields = findUnsafeLateDispositionFields(dto);
+      if (unsafeFields.length) {
+        throw new BadRequestException(
+          'Назначение прошлых суток можно только отметить выполненным или пропущенным. Для изменения текста добавьте исправление с причиной',
+        );
+      }
+    }
 
     const nextRecordType = dto.recordType ?? existing.recordType;
     const nextRecordStatus = dto.recordStatus ?? existing.recordStatus;
@@ -554,6 +570,7 @@ export class HospitalService {
         plannedServiceId: record.plannedServiceId,
         previousStatus: existing.recordStatus,
         nextStatus: record.recordStatus,
+        lateDisposition,
       },
     });
 

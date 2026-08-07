@@ -103,7 +103,7 @@ export function HospitalSheet({
                   <Typography.Text>{record.recordedBy?.fullName ?? 'Сотрудник не указан'}</Typography.Text>
                   {canManage ? (
                     <Space wrap size={4}>
-                      {active && record.recordStatus === 'PLANNED' && record.canEditDirectly ? (
+                      {active && record.recordStatus === 'PLANNED' ? (
                         <>
                           <Checkbox
                             className="hospital-complete-checkbox"
@@ -115,7 +115,9 @@ export function HospitalSheet({
                           >
                             Выполнено
                           </Checkbox>
-                          <Button size="small" type="link" onClick={() => onComplete(record)}>Указать результат</Button>
+                          {record.canEditDirectly ? (
+                            <Button size="small" type="link" onClick={() => onComplete(record)}>Указать результат</Button>
+                          ) : null}
                           <Button size="small" icon={<StopOutlined />} onClick={() => onSkip(record)}>Пропущено</Button>
                         </>
                       ) : null}

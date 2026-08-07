@@ -147,8 +147,11 @@ export function HospitalCardPage() {
     mutationFn: ({ recordId, input }: { recordId: string; input: CreateHospitalAmendmentInput }) => createHospitalAmendment(stayId, recordId, input),
     onSuccess: async () => {
       await refresh();
+      const amendedPlannedRecord = amendmentRecord?.recordStatus === 'PLANNED';
       setAmendmentRecord(null);
-      message.success('Исправление добавлено; исходная запись сохранена');
+      message.success(amendedPlannedRecord
+        ? 'Исправление сохранено. Чтобы провести склад и счёт, отметьте назначение «Выполнено»'
+        : 'Исправление добавлено; исходная запись сохранена');
     },
     onError: (error) => message.error(getErrorMessage(error)),
   });
@@ -264,7 +267,7 @@ export function HospitalCardPage() {
                         <Typography.Text type="secondary">Отметьте выполнение галочкой в строке назначения.</Typography.Text>
                       ) : null}
                       {treatmentReminder.due.some((record) => !record.canEditDirectly) ? (
-                        <Typography.Text type="secondary">Для назначения прошлых суток добавьте исправление: исходная запись останется в истории.</Typography.Text>
+                        <Typography.Text type="secondary">Назначение прошлых суток можно отметить выполненным или пропущенным; исходный план останется в истории.</Typography.Text>
                       ) : null}
                     </Space>
                   )}
@@ -283,7 +286,7 @@ export function HospitalCardPage() {
                 showIcon
                 className="form-alert"
                 message={`Правило правки: записи текущих суток (${stay.timezone}) редактируются напрямую`}
-                description="Прошлые сутки не переписываются: врач добавляет исправление с причиной, автором и временем. Исходная запись остаётся видна."
+                description="Прошлые сутки не переписываются: врач добавляет исправление с причиной, автором и временем. Невыполненное назначение при этом можно отдельно отметить выполненным или пропущенным."
               />
               <HospitalSheet
                 records={stay.hospitalRecords ?? []}
@@ -378,6 +381,7 @@ function HospitalRecordModal({
   const catalogKind = Form.useWatch('catalogKind', form) ?? 'NONE';
   const selectedProductId = Form.useWatch('productId', form);
   const completingPlannedRecord = record?.recordStatus === 'PLANNED' && initialStatus === 'COMPLETED';
+  const lateCompletion = completingPlannedRecord && record?.canEditDirectly === false;
   const effectivePlannedCatalog = getEffectivePlannedCatalog(record);
   const hasPlannedCatalog = Boolean(effectivePlannedCatalog.productId || effectivePlannedCatalog.serviceId);
   const [catalogSearch, setCatalogSearch] = useState('');
@@ -439,6 +443,16 @@ function HospitalRecordModal({
   function submit(values: HospitalRecordFormValues) {
     const { catalogKind: _catalogKind, ...rawInput } = values;
     const input = normalizeHospitalRecord(rawInput as CreateHospitalRecordInput);
+    if (lateCompletion) {
+      onSubmit({
+        recordStatus: 'COMPLETED',
+        completedAt: new Date().toISOString(),
+        ...(recordType === 'TEMPERATURE' && input.temperatureC !== undefined
+          ? { temperatureC: input.temperatureC }
+          : {}),
+      });
+      return;
+    }
     if (record && catalogIdentityLocked) {
       delete input.productId;
       delete input.serviceId;
@@ -471,8 +485,18 @@ function HospitalRecordModal({
     <Modal title={modalTitle} open={open} onCancel={onClose} onOk={() => form.submit()} okText={completingPlannedRecord ? 'Отметить выполнено' : record ? 'Сохранить' : initialStatus === 'PLANNED' ? 'Назначить' : 'Записать выполнение'} cancelText="Отмена" confirmLoading={loading} destroyOnHidden width={760}>
       <Form form={form} layout="vertical" onFinish={submit}>
         <Form.Item name="recordStatus" hidden><Input /></Form.Item>
+        {lateCompletion ? (
+          <Alert
+            type="warning"
+            showIcon
+            className="form-alert"
+            message="Отмечается выполнение назначения прошлых суток"
+            description="Исходное назначение не переписывается. Система зафиксирует фактическое время, сотрудника и один раз проведёт исправленное количество по складу и счёту."
+          />
+        ) : null}
         <Form.Item name="recordType" label={recordStatus === 'PLANNED' ? 'Что назначить' : 'Что выполнено'} rules={[{ required: true, message: 'Выберите тип записи' }]}>
           <Select
+            disabled={lateCompletion}
             options={recordTypeOptions.map(({ value, label }) => ({ value, label }))}
             onChange={(value: HospitalRecordType) => {
               const option = recordTypeOptions.find((item) => item.value === value);
@@ -480,11 +504,15 @@ function HospitalRecordModal({
             }}
           />
         </Form.Item>
-        <Form.Item name="recordedAt" label={recordStatus === 'PLANNED' ? 'Когда выполнить' : 'Дата и время выполнения'} rules={[{ required: true, message: 'Укажите дату и время' }]}>
-          <Input type="datetime-local" />
+        <Form.Item
+          name="recordedAt"
+          label={lateCompletion ? 'Когда было назначено' : recordStatus === 'PLANNED' ? 'Когда выполнить' : 'Дата и время выполнения'}
+          rules={[{ required: true, message: 'Укажите дату и время' }]}
+        >
+          <Input type="datetime-local" disabled={lateCompletion} />
         </Form.Item>
         <Form.Item name="title" label={recordType === 'MEDICATION' ? 'Препарат или назначение' : 'Название'} rules={[{ required: true, message: 'Заполните название' }, { min: 2, message: 'Минимум 2 символа' }]}>
-          <Input placeholder={recordType === 'MEDICATION' ? 'Например: Цефтриаксон' : 'Краткое название записи'} />
+          <Input disabled={lateCompletion} placeholder={recordType === 'MEDICATION' ? 'Например: Цефтриаксон' : 'Краткое название записи'} />
         </Form.Item>
         {recordType === 'TEMPERATURE' ? (
           <Form.Item
@@ -507,11 +535,11 @@ function HospitalRecordModal({
           </Form.Item>
         ) : (
           <Form.Item name="value" label={recordType === 'MEDICATION' ? 'Доза и способ введения' : recordStatus === 'PLANNED' ? 'Параметры назначения' : 'Результат / объём'}>
-            <Input placeholder={recordType === 'MEDICATION' ? 'Например: 0,5 мл внутримышечно' : 'При необходимости'} />
+            <Input disabled={lateCompletion} placeholder={recordType === 'MEDICATION' ? 'Например: 0,5 мл внутримышечно' : 'При необходимости'} />
           </Form.Item>
         )}
         <Form.Item name="notes" label={recordStatus === 'PLANNED' ? 'Указания по выполнению' : 'Результат, реакция или комментарий'}>
-          <Input.TextArea rows={4} placeholder="Состояние пациента, реакция или дополнительные сведения" />
+          <Input.TextArea disabled={lateCompletion} rows={4} placeholder="Состояние пациента, реакция или дополнительные сведения" />
         </Form.Item>
         {recordStatus === 'PLANNED' ? (
           <Alert
@@ -522,7 +550,7 @@ function HospitalRecordModal({
             description="Цена и склад фиксируются при записи выполненного действия, чтобы план лечения не искажал счёт и остатки."
           />
         ) : null}
-        {recordStatus !== 'PLANNED' ? (
+        {recordStatus !== 'PLANNED' && !lateCompletion ? (
           <>
             <Typography.Title level={5}>Учёт в счёте и на складе</Typography.Title>
             <Typography.Paragraph type="secondary">
@@ -539,7 +567,7 @@ function HospitalRecordModal({
             description={describePlannedCatalogPosting(record)}
           />
         ) : null}
-        {completingPlannedRecord && !hasPlannedCatalog ? (
+        {completingPlannedRecord && !hasPlannedCatalog && !lateCompletion ? (
           <Alert
             type="info"
             showIcon
@@ -566,9 +594,9 @@ function HospitalRecordModal({
             description="Текст записи можно исправить, но количество списания и цену оплаченного счёта менять нельзя."
           />
         ) : null}
-        <Form.Item name="catalogKind" label="Что учесть" hidden={recordStatus === 'PLANNED'}>
+        <Form.Item name="catalogKind" label="Что учесть" hidden={recordStatus === 'PLANNED' || lateCompletion}>
           <Select
-            disabled={catalogIdentityLocked}
+            disabled={lateCompletion || catalogIdentityLocked}
             options={[
               { value: 'NONE', label: 'Только запись в журнале, без начисления' },
               { value: 'PRODUCT', label: 'Товар — начислить и списать со склада' },
@@ -585,7 +613,7 @@ function HospitalRecordModal({
             }}
           />
         </Form.Item>
-        {recordStatus !== 'PLANNED' && catalogKind === 'PRODUCT' ? (
+        {recordStatus !== 'PLANNED' && !lateCompletion && catalogKind === 'PRODUCT' ? (
           <>
             <Form.Item name="productId" label="Товар из каталога" rules={[{ required: true, message: 'Выберите товар' }]}>
               <Select
@@ -593,7 +621,7 @@ function HospitalRecordModal({
                 filterOption={false}
                 onSearch={setCatalogSearch}
                 loading={catalogQuery.isFetching}
-                disabled={catalogIdentityLocked}
+                disabled={lateCompletion || catalogIdentityLocked}
                 placeholder="Начните вводить название, артикул или штрих-код"
                 options={mergeProductOptions(record, catalogQuery.data?.products).map((product) => ({
                   value: product.id,
@@ -613,18 +641,18 @@ function HospitalRecordModal({
             </Form.Item>
             <div className="form-grid two-columns">
               <Form.Item name="stockQuantity" label={`Списать со склада, ${selectedProductWriteOffUnit(selectedProductId, record, catalogQuery.data?.products)}`} rules={[{ required: true, message: 'Укажите количество для списания' }]}>
-                <InputNumber min={0.001} precision={3} disabled={billingLocked} className="full-width" />
+                <InputNumber min={0.001} precision={3} disabled={lateCompletion || billingLocked} className="full-width" />
               </Form.Item>
               <Form.Item name="quantity" label={`Начислить клиенту, ${selectedProductBillingUnit(selectedProductId, record, catalogQuery.data?.products)}`} rules={[{ required: true, message: 'Укажите количество начислений' }]}>
-                <InputNumber min={0.001} precision={3} disabled={billingLocked} className="full-width" />
+                <InputNumber min={0.001} precision={3} disabled={lateCompletion || billingLocked} className="full-width" />
               </Form.Item>
               <Form.Item name="unitPrice" label={`Цена за 1 ${selectedProductBillingUnit(selectedProductId, record, catalogQuery.data?.products)}, ₽`} rules={[{ required: true, message: 'Укажите цену' }]}>
-                <InputNumber min={0} precision={2} disabled={billingLocked} className="full-width" />
+                <InputNumber min={0} precision={2} disabled={lateCompletion || billingLocked} className="full-width" />
               </Form.Item>
             </div>
           </>
         ) : null}
-        {recordStatus !== 'PLANNED' && catalogKind === 'SERVICE' ? (
+        {recordStatus !== 'PLANNED' && !lateCompletion && catalogKind === 'SERVICE' ? (
           <>
             <Form.Item name="serviceId" label="Услуга из прайса" rules={[{ required: true, message: 'Выберите услугу' }]}>
               <Select
@@ -632,7 +660,7 @@ function HospitalRecordModal({
                 filterOption={false}
                 onSearch={setCatalogSearch}
                 loading={catalogQuery.isFetching}
-                disabled={catalogIdentityLocked}
+                disabled={lateCompletion || catalogIdentityLocked}
                 placeholder="Начните вводить название услуги"
                 options={mergeServiceOptions(record, catalogQuery.data?.services).map((service) => ({
                   value: service.id,
@@ -647,10 +675,10 @@ function HospitalRecordModal({
             </Form.Item>
             <div className="form-grid two-columns">
               <Form.Item name="quantity" label="Количество услуг" rules={[{ required: true, message: 'Укажите количество' }]}>
-                <InputNumber min={0.001} precision={3} disabled={billingLocked} className="full-width" />
+                <InputNumber min={0.001} precision={3} disabled={lateCompletion || billingLocked} className="full-width" />
               </Form.Item>
               <Form.Item name="unitPrice" label="Цена за одну услугу, ₽" rules={[{ required: true, message: 'Укажите цену' }]}>
-                <InputNumber min={0} precision={2} disabled={billingLocked} className="full-width" />
+                <InputNumber min={0} precision={2} disabled={lateCompletion || billingLocked} className="full-width" />
               </Form.Item>
             </div>
           </>

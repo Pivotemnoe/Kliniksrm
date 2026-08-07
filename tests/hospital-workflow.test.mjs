@@ -127,6 +127,41 @@ test('прошлые сутки стационара исправляются д
   assert.match(dto, /reason!:/);
 });
 
+test('план прошлых суток можно завершить или пропустить без перезаписи исходного назначения', async () => {
+  const [policy, service, card, sheet] = await Promise.all([
+    import('../apps/api/dist/modules/hospital/hospital-record-policy.js'),
+    read('apps/api/src/modules/hospital/hospital.service.ts'),
+    read('apps/web/src/features/hospital/HospitalCardPage.tsx'),
+    read('apps/web/src/features/hospital/HospitalSheet.tsx'),
+  ]);
+
+  assert.equal(policy.isPlannedDispositionTransition('PLANNED', 'COMPLETED'), true);
+  assert.equal(policy.isPlannedDispositionTransition('PLANNED', 'SKIPPED'), true);
+  assert.equal(policy.isPlannedDispositionTransition('COMPLETED', 'COMPLETED'), false);
+  assert.deepEqual(policy.findUnsafeLateDispositionFields({
+    recordStatus: 'COMPLETED',
+    completedAt: '2026-08-07T10:00:00.000Z',
+    temperatureC: 38.5,
+  }), []);
+  assert.deepEqual(policy.findUnsafeLateDispositionFields({
+    recordStatus: 'COMPLETED',
+    title: 'Переписанное назначение',
+  }), ['title']);
+  assert.deepEqual(policy.findUnsafeLateDispositionFields({
+    recordStatus: 'COMPLETED',
+    stockQuantity: 999,
+  }), ['stockQuantity']);
+  assert.match(service, /const lateDisposition = recordDayClosed/);
+  assert.match(service, /findUnsafeLateDispositionFields\(dto\)/);
+  assert.match(service, /lateDisposition,/);
+  assert.match(sheet, /active && record\.recordStatus === 'PLANNED'/);
+  assert.doesNotMatch(sheet, /recordStatus === 'PLANNED' && record\.canEditDirectly/);
+  assert.match(card, /Назначение прошлых суток можно отметить выполненным или пропущенным/);
+  assert.match(card, /Исходное назначение не переписывается/);
+  assert.match(card, /Невыполненное назначение при этом можно отдельно отметить выполненным или пропущенным/);
+  assert.match(card, /Чтобы провести склад и счёт, отметьте назначение «Выполнено»/);
+});
+
 test('исправление планового препарата сохраняет новое списание и использует его при выполнении', async () => {
   const [service, dto, card, sheet, types] = await Promise.all([
     read('apps/api/src/modules/hospital/hospital.service.ts'),
