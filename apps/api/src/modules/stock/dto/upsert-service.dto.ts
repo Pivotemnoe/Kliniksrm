@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
+import { IsIn, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
 
 export class UpsertServiceDto {
   @ApiProperty()
@@ -24,11 +24,23 @@ export class UpsertServiceDto {
   @Min(0)
   price?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ enum: ['FIXED', 'FLOATING'] })
   @IsOptional()
   @IsString()
-  @MaxLength(40)
+  @IsIn(['FIXED', 'FLOATING'])
   priceType?: string;
+
+  @ApiPropertyOptional({ description: 'Inclusive lower boundary for a floating price.' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  minimumPrice?: number;
+
+  @ApiPropertyOptional({ description: 'Inclusive upper boundary for a floating price.' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  maximumPrice?: number;
 
   @ApiPropertyOptional()
   @IsOptional()

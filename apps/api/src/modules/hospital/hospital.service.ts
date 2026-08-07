@@ -26,6 +26,7 @@ import { UpdateHospitalStayDto } from './dto/update-hospital-stay.dto';
 import { UpdateHospitalRecordDto } from './dto/update-hospital-record.dto';
 import { findUnsafeLateDispositionFields, isPlannedDispositionTransition } from './hospital-record-policy';
 import { toStockQuantity } from '../stock/stock-units';
+import { resolveServiceUnitPrice, servicePricingSelect } from '../stock/service-pricing';
 import { assertPrimaryVisitDiagnosesReady } from '../visits/visit-diagnosis-rules';
 
 type WarehouseScope = string[] | null;
@@ -126,7 +127,7 @@ export class HospitalService {
         where: serviceWhere,
         orderBy: { title: 'asc' },
         take: 100,
-        select: { id: true, title: true, price: true, priceType: true },
+        select: servicePricingSelect,
       }),
     ]);
 
@@ -446,6 +447,7 @@ export class HospitalService {
 
         if (lockedRecord.recordStatus === HospitalRecordStatus.PLANNED && !lockedRecord.billItemId) {
           const lockedPlannedCatalog = getEffectivePlannedCatalog(lockedRecord);
+          const usesStoredPlannedPrice = dto.unitPrice === undefined && lockedPlannedCatalog.unitPrice !== null;
           postedLine = await this.resolveCatalogLine(tx, {
             recordType: nextRecordType as CreateHospitalRecordDto['recordType'],
             title: dto.title ?? existing.title,
@@ -454,7 +456,7 @@ export class HospitalService {
             quantity: dto.quantity ?? decimalToOptionalNumber(lockedPlannedCatalog.quantity),
             stockQuantity: dto.stockQuantity ?? decimalToOptionalNumber(lockedPlannedCatalog.stockQuantity),
             unitPrice: dto.unitPrice ?? decimalToOptionalNumber(lockedPlannedCatalog.unitPrice),
-          });
+          }, { preserveStoredServicePrice: usesStoredPlannedPrice });
           const bill = await this.getEditableHospitalBill(tx, stay.sourceVisitId, dueAt);
           const billItem = await tx.billItem.create({
             data: {
@@ -491,6 +493,12 @@ export class HospitalService {
           select: { id: true, status: true, paidAmount: true },
         });
         this.ensureBillEditable(bill);
+        const serviceUnitPrice = existing.billItem.serviceId && dto.unitPrice !== undefined
+          ? resolveServiceUnitPrice(
+              await tx.service.findUniqueOrThrow({ where: { id: existing.billItem.serviceId }, select: servicePricingSelect }),
+              dto.unitPrice,
+            )
+          : dto.unitPrice;
         const line = calculateCatalogLine({
           serviceId: existing.billItem.serviceId ?? undefined,
           productId: existing.billItem.productId ?? undefined,
@@ -500,7 +508,7 @@ export class HospitalService {
             ?? (existing.billItem.stockQuantity === null
               ? decimalToNumber(existing.billItem.quantity)
               : decimalToNumber(existing.billItem.stockQuantity)),
-          unitPrice: dto.unitPrice ?? decimalToNumber(existing.billItem.unitPrice),
+          unitPrice: serviceUnitPrice ?? decimalToNumber(existing.billItem.unitPrice),
         });
 
         await tx.billItem.update({
@@ -943,7 +951,11 @@ export class HospitalService {
     }
   }
 
-  private async resolveCatalogLine(tx: Prisma.TransactionClient, dto: CreateHospitalRecordDto) {
+  private async resolveCatalogLine(
+    tx: Prisma.TransactionClient,
+    dto: CreateHospitalRecordDto,
+    options: { preserveStoredServicePrice?: boolean } = {},
+  ) {
     if (dto.serviceId && dto.productId) {
       throw new BadRequestException('В одной записи можно выбрать товар или услугу, но не оба варианта одновременно');
     }
@@ -951,7 +963,7 @@ export class HospitalService {
     const service = dto.serviceId
       ? await tx.service.findFirst({
           where: { id: dto.serviceId, isActive: true },
-          select: { id: true, title: true, price: true },
+          select: servicePricingSelect,
         })
       : null;
     if (dto.serviceId && !service) {
@@ -974,8 +986,11 @@ export class HospitalService {
       title: service?.title ?? product?.title,
       quantity: dto.quantity ?? 1,
       stockQuantity: product ? dto.stockQuantity ?? dto.quantity ?? 1 : undefined,
-      unitPrice: dto.unitPrice
-        ?? (service ? decimalToNumber(service.price) : undefined)
+      unitPrice: (service
+        ? options.preserveStoredServicePrice && dto.unitPrice !== undefined
+          ? dto.unitPrice
+          : resolveServiceUnitPrice(service, dto.unitPrice)
+        : dto.unitPrice)
         ?? (product ? decimalToNumber(product.retailPrice) : 0),
     });
   }
@@ -1298,7 +1313,7 @@ const hospitalRecordBaseInclude = {
       packageQuantity: true,
     },
   },
-  plannedService: { select: { id: true, title: true, price: true, priceType: true } },
+  plannedService: { select: servicePricingSelect },
   billItem: {
     select: {
       id: true,
@@ -1320,7 +1335,7 @@ const hospitalRecordBaseInclude = {
           packageQuantity: true,
         },
       },
-      service: { select: { id: true, title: true, priceType: true } },
+      service: { select: servicePricingSelect },
     },
   },
 } satisfies Prisma.HospitalRecordInclude;

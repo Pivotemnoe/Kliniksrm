@@ -317,6 +317,7 @@ body,
 @media print {
   .crm-sider,
   .crm-header,
+  .global-operational-alerts,
   .help-intro-alert,
   .help-toolbar,
   .help-contents,
@@ -883,6 +884,58 @@ body {
   color: #a8071a;
   cursor: pointer;
   text-align: left;
+}
+
+.global-operational-alerts {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  padding: 10px 28px 0;
+  background: #f2f4f6;
+}
+
+.dashboard-vaccination-banner {
+  border-color: #ffc53d;
+  border-left-color: #d48806;
+  background: #fffbe6;
+  color: #874d00;
+}
+
+.dashboard-vaccination-banner .dashboard-overdue-banner-copy strong {
+  color: #874d00;
+}
+
+.dashboard-vaccination-banner:hover,
+.dashboard-vaccination-banner:focus-visible {
+  border-color: #d48806;
+  background: #fff7cc;
+}
+
+.dashboard-vaccination-banner-danger {
+  border-color: #ff7875;
+  border-left-color: #cf1322;
+  background: #fff1f0;
+  color: #a8071a;
+}
+
+.dashboard-vaccination-banner-danger .dashboard-overdue-banner-copy strong {
+  color: #a8071a;
+}
+
+.global-vaccination-list {
+  margin-bottom: 24px;
+}
+
+.global-vaccination-list h5.ant-typography {
+  margin: 0;
+}
+
+.global-vaccination-item {
+  cursor: pointer;
+}
+
+.global-vaccination-item:hover {
+  background: #f6f8fa;
 }
 
 .dashboard-overdue-banner:hover,

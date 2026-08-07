@@ -14,6 +14,7 @@ import { formatDateTime } from '../../shared/utils/date';
 import { formatMoney, toMoneyNumber } from '../../shared/utils/money';
 import { listOwnerAnimals, listOwners } from '../owners/owners.api';
 import { listProducts, listServices } from '../stock/stock.api';
+import { formatServicePrice, getServiceDefaultPrice, getServicePriceHelp, getServicePriceRange, validateServicePrice } from '../stock/service-pricing';
 import { paymentStatusColors, paymentStatusLabels } from '../billing/types';
 import { createSale, listSales } from './sales.api';
 import { CreateSaleInput, SaleListItem } from './types';
@@ -294,6 +295,15 @@ function SaleCreateModal({ open, onClose }: { open: boolean; onClose: () => void
   }
 
   function submit() {
+    for (const line of lines) {
+      if (line.lineType !== 'SERVICE') continue;
+      const service = servicesQuery.data?.items.find((item) => item.id === line.serviceId);
+      const priceError = validateServicePrice(service, line.unitPrice);
+      if (priceError) {
+        message.error(`${line.title || 'Услуга'}: ${priceError}`);
+        return;
+      }
+    }
     const parsedLines = z.array(saleLineSchema).safeParse(lines.map(({ id, ...line }) => line));
 
     if (!parsedLines.success) {
@@ -399,10 +409,10 @@ function SaleCreateModal({ open, onClose }: { open: boolean; onClose: () => void
                   loading={servicesQuery.isLoading}
                   value={line.serviceId}
                   placeholder="Услуга"
-                  options={servicesQuery.data?.items.map((service) => ({ value: service.id, label: service.title })) ?? []}
+                  options={servicesQuery.data?.items.map((service) => ({ value: service.id, label: `${service.title} · ${formatServicePrice(service)}` })) ?? []}
                   onChange={(value) => {
                     const service = servicesQuery.data?.items.find((item) => item.id === value);
-                    updateLine(line.id, { serviceId: value, title: service?.title ?? '', unitPrice: toMoneyNumber(service?.price) });
+                    updateLine(line.id, { serviceId: value, title: service?.title ?? '', unitPrice: getServiceDefaultPrice(service) });
                   }}
                 />
               ) : null}
@@ -420,7 +430,19 @@ function SaleCreateModal({ open, onClose }: { open: boolean; onClose: () => void
                   : undefined}
                 onChange={(value) => updateLine(line.id, { quantity: value ?? 1 })}
               />
-              <InputNumber min={0} value={line.unitPrice} onChange={(value) => updateLine(line.id, { unitPrice: value ?? 0 })} />
+              <InputNumber
+                min={line.lineType === 'SERVICE'
+                  ? getServicePriceRange(servicesQuery.data?.items.find((service) => service.id === line.serviceId))?.minimum ?? 0
+                  : 0}
+                max={line.lineType === 'SERVICE'
+                  ? getServicePriceRange(servicesQuery.data?.items.find((service) => service.id === line.serviceId))?.maximum
+                  : undefined}
+                title={line.lineType === 'SERVICE'
+                  ? getServicePriceHelp(servicesQuery.data?.items.find((service) => service.id === line.serviceId))
+                  : undefined}
+                value={line.unitPrice}
+                onChange={(value) => updateLine(line.id, { unitPrice: value ?? 0 })}
+              />
               <InputNumber min={0} value={line.discount} onChange={(value) => updateLine(line.id, { discount: value ?? 0 })} />
               <Typography.Text strong>{formatMoney(Math.max(line.quantity * line.unitPrice - line.discount, 0))}</Typography.Text>
               <Popconfirm

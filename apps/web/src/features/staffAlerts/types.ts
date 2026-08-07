@@ -1,5 +1,7 @@
 export type StaffAlertKind =
   | 'UNFINISHED_VISIT'
+  | 'TODAY_VACCINATION'
+  | 'OVERDUE_VACCINATION'
   | 'FAILED_DELIVERY'
   | 'ONLINE_REQUEST'
   | 'UNPAID_BILL'

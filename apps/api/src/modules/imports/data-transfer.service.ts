@@ -1066,12 +1066,16 @@ export class DataTransferService {
         return { created: 0, matched: 1 };
       }
       const categoryResult = await this.resolveServiceCategory(tx, batchId, rowId, row);
+      const priceType = parseServicePriceType(row);
+      const priceRange = priceType === 'FLOATING' ? catalogServicePriceRange(row) : null;
       const service = await tx.service.create({
         data: {
           title: clean(row.title)!,
           categoryId: categoryResult.categoryId,
-          price: catalogPrice(row),
-          priceType: parseServicePriceType(row),
+          price: priceRange?.minimum ?? catalogPrice(row),
+          priceType,
+          minimumPrice: priceRange?.minimum,
+          maximumPrice: priceRange?.maximum,
           description: catalogDescription(row),
         },
       });
@@ -1528,6 +1532,44 @@ function parseServicePriceType(row: NormalizedRow) {
 
 function catalogPrice(row: NormalizedRow) {
   return parseDecimal(row.price || row.minimum_price, 0);
+}
+
+function catalogServicePriceRange(row: NormalizedRow) {
+  const minimum = parseOptionalDecimal(row.minimum_price);
+  const regular = parseOptionalDecimal(row.price);
+  if (minimum && regular) {
+    return regular.greaterThanOrEqualTo(minimum)
+      ? { minimum, maximum: regular }
+      : { minimum: regular, maximum: minimum };
+  }
+
+  const note = clean(row.price_note);
+  const match = note?.match(/(?:от\s*)?([\d\s.,]+)\s*(?:–|—|−|-|до)\s*([\d\s.,]+)/iu);
+  if (match) {
+    const first = parsePriceToken(match[1]);
+    const second = parsePriceToken(match[2]);
+    if (first && second) {
+      return first.lessThanOrEqualTo(second)
+        ? { minimum: first, maximum: second }
+        : { minimum: second, maximum: first };
+    }
+  }
+
+  const single = minimum ?? regular;
+  return single ? { minimum: single, maximum: single } : null;
+}
+
+function parsePriceToken(value: string) {
+  let normalized = value.trim().replace(/\s/g, '');
+  if (/^\d{1,3}(?:\.\d{3})+$/.test(normalized)) {
+    normalized = normalized.replace(/\./g, '');
+  } else if (/^\d{1,3}(?:,\d{3})+$/.test(normalized)) {
+    normalized = normalized.replace(/,/g, '');
+  } else {
+    normalized = normalized.replace(',', '.');
+  }
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) && parsed >= 0 ? new Prisma.Decimal(parsed) : null;
 }
 
 function catalogDescription(row: NormalizedRow) {

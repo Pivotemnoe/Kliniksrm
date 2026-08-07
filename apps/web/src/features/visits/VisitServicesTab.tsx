@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
 import { formatMoney, toMoneyNumber } from '../../shared/utils/money';
 import { listProducts, listServices } from '../stock/stock.api';
+import { formatServicePrice, getServiceDefaultPrice, getServicePriceHelp, validateServicePrice } from '../stock/service-pricing';
 import { Visit, VisitBillItem, VisitServiceLineInput } from './types';
 import { addVisitService, deleteVisitService, updateVisitService } from './visits.api';
 
@@ -186,13 +187,14 @@ function ServiceLineDrawer({
   onClose: () => void;
   onSubmit: (values: VisitServiceLineInput) => void;
 }) {
-  const { control, handleSubmit, reset } = useForm<ServiceLineFormInput, unknown, ServiceLineValues>({
+  const { control, handleSubmit, reset, setError } = useForm<ServiceLineFormInput, unknown, ServiceLineValues>({
     resolver: zodResolver(serviceLineSchema),
     defaultValues: getDefaultValues(line),
   });
   const isEdit = Boolean(line);
   const lineType = useWatch({ control, name: 'lineType' });
   const productId = useWatch({ control, name: 'productId' });
+  const serviceId = useWatch({ control, name: 'serviceId' });
   const quantity = useWatch({ control, name: 'quantity' });
   const stockQuantity = useWatch({ control, name: 'stockQuantity' });
   const unitPrice = useWatch({ control, name: 'unitPrice' });
@@ -210,6 +212,8 @@ function ServiceLineDrawer({
   });
   const selectedProduct = productsQuery.data?.items.find((product) => product.id === productId);
   const activeProduct = selectedProduct ?? line?.product ?? null;
+  const selectedService = servicesQuery.data?.items.find((service) => service.id === serviceId);
+  const activeService = selectedService ?? line?.service ?? null;
 
   function handleOpenChange(nextOpen: boolean) {
     if (nextOpen) {
@@ -218,6 +222,13 @@ function ServiceLineDrawer({
   }
 
   function submit(values: ServiceLineValues) {
+    if (values.lineType === 'SERVICE') {
+      const priceError = validateServicePrice(activeService, values.unitPrice);
+      if (priceError) {
+        setError('unitPrice', { message: priceError });
+        return;
+      }
+    }
     onSubmit({
       ...(!line && values.lineType === 'PRODUCT' ? { productId: values.productId } : {}),
       ...(!line && values.lineType === 'SERVICE' ? { serviceId: values.serviceId } : {}),
@@ -315,7 +326,7 @@ function ServiceLineDrawer({
                   showSearch
                   disabled={isEdit}
                   loading={servicesQuery.isLoading}
-                  options={servicesQuery.data?.items.map((service) => ({ value: service.id, label: service.title })) ?? []}
+                  options={servicesQuery.data?.items.map((service) => ({ value: service.id, label: `${service.title} · ${formatServicePrice(service)}` })) ?? []}
                   placeholder="Выберите услугу"
                   onChange={(value) => {
                     field.onChange(value);
@@ -326,7 +337,7 @@ function ServiceLineDrawer({
                         lineType: 'SERVICE',
                         serviceId: service.id,
                         title: service.title,
-                        unitPrice: String(service.price),
+                        unitPrice: String(getServiceDefaultPrice(service)),
                         quantity: quantity || '1',
                         discount: discount || '0',
                       });
@@ -390,7 +401,11 @@ function ServiceLineDrawer({
           control={control}
           name="unitPrice"
           render={({ field, fieldState }) => (
-              <Form.Item label={lineType === 'PRODUCT' ? `Цена за 1 ${activeProduct?.billingUnit || 'начисление'}` : 'Цена'} validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+              <Form.Item
+                label={lineType === 'PRODUCT' ? `Цена за 1 ${activeProduct?.billingUnit || 'начисление'}` : 'Фактическая цена'}
+                validateStatus={fieldState.error ? 'error' : undefined}
+                help={fieldState.error?.message ?? (lineType === 'SERVICE' ? getServicePriceHelp(activeService) : undefined)}
+              >
                 <Input inputMode="decimal" {...field} />
               </Form.Item>
             )}

@@ -4,6 +4,9 @@ export type LaboratoryServiceItem = {
   id: string;
   title: string;
   price: DecimalValue;
+  priceType: string;
+  minimumPrice: DecimalValue | null;
+  maximumPrice: DecimalValue | null;
   category?: { id: string; title: string } | null;
 };
 

@@ -6,6 +6,7 @@ export type AuthEmployee = {
   position: string | null;
   defaultRoute: string | null;
   restrictLoginToShifts: boolean;
+  mustChangePassword: boolean;
   status: string;
   roles: string[];
   permissions: string[];

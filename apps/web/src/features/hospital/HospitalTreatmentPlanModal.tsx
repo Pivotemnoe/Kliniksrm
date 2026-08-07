@@ -4,6 +4,7 @@ import { Alert, App, AutoComplete, Button, Form, Input, InputNumber, Modal, Sele
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { getHospitalCatalog } from './hospital.api';
 import type { CreateHospitalTreatmentPlanInput, HospitalCatalog, HospitalRecordType } from './types';
+import { formatServicePrice, getServiceDefaultPrice, getServicePriceHelp, getServicePriceRange } from '../stock/service-pricing';
 
 type CatalogPlanOption = {
   key: string;
@@ -81,7 +82,7 @@ export function HospitalTreatmentPlanModal({
       values.push({
         key: `SERVICE:${service.id}`,
         value: service.title,
-        label: `${service.title} · услуга`,
+        label: `${service.title} · услуга · ${formatServicePrice(service)}`,
         catalogKind: 'SERVICE',
         service,
       });
@@ -208,7 +209,7 @@ export function HospitalTreatmentPlanModal({
                               serviceId: service?.id,
                               quantity: 1,
                               stockQuantity: product ? 1 : undefined,
-                              unitPrice: Number(product?.retailPrice ?? service?.price ?? 0),
+                              unitPrice: product ? Number(product.retailPrice) : getServiceDefaultPrice(service),
                               writeOffUnit: product?.writeOffUnit ?? undefined,
                               billingUnit: product?.billingUnit ?? undefined,
                               stockUnit: product?.stockUnit ?? undefined,
@@ -260,14 +261,23 @@ export function HospitalTreatmentPlanModal({
                         showIcon
                         className="form-alert"
                         message="Услуга связана со счётом"
-                        description="Начисление произойдёт только после отметки «Выполнено»."
+                        description={`Начисление произойдёт только после отметки «Выполнено». ${getServicePriceHelp(findPlanService(items[field.name]?.serviceId, catalogQuery.data?.services)) ?? ''}`}
                       />
                       <div className="form-grid two-columns">
                         <Form.Item name={[field.name, 'quantity']} label="Количество услуг при выполнении" rules={[{ required: true, message: 'Укажите количество' }]}>
                           <InputNumber min={0.001} precision={3} className="full-width" />
                         </Form.Item>
-                        <Form.Item name={[field.name, 'unitPrice']} label="Цена за одну услугу, ₽" rules={[{ required: true, message: 'Укажите цену' }]}>
-                          <InputNumber min={0} precision={2} className="full-width" />
+                        <Form.Item
+                          name={[field.name, 'unitPrice']}
+                          label="Фактическая цена за одну услугу, ₽"
+                          rules={servicePriceRules(findPlanService(items[field.name]?.serviceId, catalogQuery.data?.services))}
+                        >
+                          <InputNumber
+                            min={getServicePriceRange(findPlanService(items[field.name]?.serviceId, catalogQuery.data?.services))?.minimum ?? 0}
+                            max={getServicePriceRange(findPlanService(items[field.name]?.serviceId, catalogQuery.data?.services))?.maximum}
+                            precision={2}
+                            className="full-width"
+                          />
                         </Form.Item>
                       </div>
                     </>
@@ -342,6 +352,18 @@ export function HospitalTreatmentPlanModal({
       </Form>
     </Modal>
   );
+}
+
+function findPlanService(serviceId: string | undefined, services: HospitalCatalog['services'] | undefined) {
+  return services?.find((service) => service.id === serviceId);
+}
+
+function servicePriceRules(service: HospitalCatalog['services'][number] | undefined) {
+  const range = getServicePriceRange(service);
+  return [
+    { required: true, message: 'Укажите цену' },
+    ...(range ? [{ type: 'number' as const, min: range.minimum, max: range.maximum, message: `Цена должна быть от ${range.minimum} до ${range.maximum} ₽` }] : []),
+  ];
 }
 
 function newTreatmentPlanItem(): TreatmentPlanFormValues['items'][number] {

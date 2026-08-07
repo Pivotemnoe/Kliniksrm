@@ -69,6 +69,8 @@ export type ServiceItem = {
   title: string;
   price: DecimalValue;
   priceType: string;
+  minimumPrice: DecimalValue | null;
+  maximumPrice: DecimalValue | null;
   vatRate: DecimalValue | null;
   description: string | null;
 };
@@ -177,6 +179,8 @@ export type ServiceMutationInput = {
   categoryTitle?: string;
   price?: number;
   priceType?: string;
+  minimumPrice?: number;
+  maximumPrice?: number;
   vatRate?: number;
   description?: string;
 };

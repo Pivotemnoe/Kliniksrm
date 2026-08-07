@@ -5,6 +5,7 @@ import { AuditService } from '../audit/audit.service';
 import { FinanceService } from '../finance/finance.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { toStockQuantity } from '../stock/stock-units';
+import { resolveServiceUnitPrice, servicePricingSelect } from '../stock/service-pricing';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { AddBillItemDto } from './dto/add-bill-item.dto';
 import { CreateBillDto } from './dto/create-bill.dto';
@@ -283,6 +284,12 @@ export class BillingService {
     const billItem = await this.prisma.$transaction(async (tx) => {
       const bill = await this.ensureBillCanBeEdited(tx, billId);
       const existingBillItem = await this.getBillItem(tx, billId, billItemId);
+      const serviceUnitPrice = existingBillItem.serviceId && dto.unitPrice !== undefined
+        ? resolveServiceUnitPrice(
+            await tx.service.findUniqueOrThrow({ where: { id: existingBillItem.serviceId }, select: servicePricingSelect }),
+            dto.unitPrice,
+          )
+        : dto.unitPrice;
       const line = calculateBillItemLine({
         serviceId: existingBillItem.serviceId ?? undefined,
         productId: existingBillItem.productId ?? undefined,
@@ -291,7 +298,7 @@ export class BillingService {
         stockQuantity:
           dto.stockQuantity ??
           (existingBillItem.stockQuantity === null ? decimalToNumber(existingBillItem.quantity) : decimalToNumber(existingBillItem.stockQuantity)),
-        unitPrice: dto.unitPrice ?? decimalToNumber(existingBillItem.unitPrice),
+        unitPrice: serviceUnitPrice ?? decimalToNumber(existingBillItem.unitPrice),
         discount: dto.discount ?? decimalToNumber(existingBillItem.discount),
       });
 
@@ -504,7 +511,7 @@ export class BillingService {
     const service = dto.serviceId
       ? await this.prisma.service.findFirst({
           where: { id: dto.serviceId, isActive: true },
-          select: { id: true, title: true, price: true },
+          select: servicePricingSelect,
         })
       : null;
 
@@ -530,8 +537,7 @@ export class BillingService {
       quantity: dto.quantity ?? 1,
       stockQuantity: product ? dto.stockQuantity ?? dto.quantity ?? 1 : undefined,
       unitPrice:
-        dto.unitPrice ??
-        (service ? decimalToNumber(service.price) : undefined) ??
+        (service ? resolveServiceUnitPrice(service, dto.unitPrice) : dto.unitPrice) ??
         (product ? decimalToNumber(product.retailPrice) : 0),
       discount: dto.discount ?? 0,
     });
@@ -994,7 +1000,7 @@ const billInclude = {
     orderBy: { createdAt: 'asc' },
     include: {
       service: {
-        select: { id: true, title: true, price: true },
+        select: servicePricingSelect,
       },
       product: {
         select: { id: true, title: true, retailPrice: true, stockUnit: true, writeOffUnit: true, billingUnit: true },

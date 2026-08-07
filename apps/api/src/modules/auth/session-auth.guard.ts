@@ -98,7 +98,7 @@ export class SessionAuthGuard implements CanActivate {
       userId: session.userId,
       accessType: session.accessType,
       remoteDeviceId: session.remoteDeviceId,
-      employee: this.authService.serializeEmployee(session.user.employee),
+      employee: this.authService.serializeEmployee(session.user.employee, session.user.mustChangePassword),
     };
 
     const idleTimeoutMinutes = session.accessType === 'REMOTE'

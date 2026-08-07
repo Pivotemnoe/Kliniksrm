@@ -60,6 +60,7 @@ const demoEmployee: AuthResponse['employee'] = {
   position: 'Директор',
   defaultRoute: '/dashboard',
   restrictLoginToShifts: false,
+  mustChangePassword: false,
   status: 'ACTIVE',
   roles: ['director'],
   permissions: ['*'],

@@ -102,6 +102,7 @@ export class EmployeesService {
             phone,
             phoneNormalized,
             passwordHash,
+            mustChangePassword: true,
           },
         });
 
@@ -218,7 +219,7 @@ export class EmployeesService {
           data: {
             ...(email !== undefined ? { email } : {}),
             ...(phoneNormalized !== undefined ? { phone, phoneNormalized } : {}),
-            ...(passwordHash ? { passwordHash } : {}),
+            ...(passwordHash ? { passwordHash, mustChangePassword: true } : {}),
           },
         });
 

@@ -42,8 +42,12 @@ export function useLogoutMutation() {
 }
 
 export function useChangePasswordMutation() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: ChangePasswordInput) => changePassword(input),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: authQueryKey });
+    },
   });
 }
 
