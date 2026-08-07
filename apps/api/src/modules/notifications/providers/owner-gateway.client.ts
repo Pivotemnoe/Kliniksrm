@@ -24,6 +24,10 @@ export type OwnerGatewayStatus = {
 
 export type OwnerGatewayPortalStatistics = {
   generatedAt: string;
+  invitations: Array<{
+    ownerId: string;
+    createdAt: string;
+  }> | null;
   owners: Array<{
     ownerId: string;
     activatedAt: string | null;
@@ -266,6 +270,12 @@ export class OwnerGatewayClient {
       );
       return {
         generatedAt: result.generatedAt,
+        invitations: Array.isArray(result.invitations)
+          ? result.invitations.filter((invitation) => (
+            typeof invitation?.ownerId === 'string'
+            && typeof invitation?.createdAt === 'string'
+          ))
+          : null,
         owners: Array.isArray(result.owners)
           ? result.owners.filter((owner) => typeof owner?.ownerId === 'string')
           : [],

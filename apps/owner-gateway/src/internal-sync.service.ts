@@ -87,7 +87,7 @@ export class InternalSyncService {
   }
 
   async getPortalStatistics() {
-    const [sessionActivity, bindings] = await Promise.all([
+    const [sessionActivity, bindings, invitations] = await Promise.all([
       this.prisma.portalSession.groupBy({
         by: ['ownerId'],
         _min: { createdAt: true },
@@ -95,6 +95,10 @@ export class InternalSyncService {
       }),
       this.prisma.messengerBinding.findMany({
         select: { ownerId: true, channel: true },
+      }),
+      this.prisma.portalInvitation.findMany({
+        select: { ownerId: true, createdAt: true },
+        orderBy: { createdAt: 'desc' },
       }),
     ]);
 
@@ -135,6 +139,7 @@ export class InternalSyncService {
 
     return {
       generatedAt: new Date(),
+      invitations,
       owners: Array.from(owners.values()),
     };
   }

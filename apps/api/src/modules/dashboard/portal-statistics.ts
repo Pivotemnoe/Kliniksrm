@@ -102,6 +102,11 @@ export function buildDirectorPortalStatistics(input: {
   });
   const limit = Math.max(1, Math.min(input.listLimit ?? 100, 500));
   const today = input.today;
+  const gatewayInvitationsCreated = today && Array.isArray(input.gateway?.invitations)
+    ? input.gateway.invitations.filter((invitation) => (
+      isWithin(invitation.createdAt, today.start, today.end)
+    )).length
+    : null;
 
   return {
     calculatedAt: now.toISOString(),
@@ -109,7 +114,7 @@ export function buildDirectorPortalStatistics(input: {
     gatewayUpdatedAt: toIsoDate(input.gateway?.generatedAt ?? null),
     today: {
       date: today?.date ?? now.toISOString().slice(0, 10),
-      invitationsCreated: today?.invitationsCreated ?? 0,
+      invitationsCreated: gatewayInvitationsCreated ?? today?.invitationsCreated ?? 0,
       activated: today
         ? items.filter((item) => isWithin(item.activatedAt, today.start, today.end)).length
         : 0,

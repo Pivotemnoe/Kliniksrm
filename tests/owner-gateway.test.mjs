@@ -106,6 +106,11 @@ test('шлюз агрегирует первую активацию, после�
         { ownerId: 'owner-2', channel: 'MAX' },
       ],
     },
+    portalInvitation: {
+      findMany: async () => [
+        { ownerId: 'owner-2', createdAt: new Date('2026-08-05T14:00:00.000Z') },
+      ],
+    },
   }, null, null, null);
 
   const result = await service.getPortalStatistics();
@@ -114,6 +119,8 @@ test('шлюз агрегирует первую активацию, после�
   assert.equal(result.owners.find((owner) => owner.ownerId === 'owner-1')?.lastSeenAt.toISOString(), '2026-08-05T12:00:00.000Z');
   assert.equal(result.owners.find((owner) => owner.ownerId === 'owner-2')?.maxLinked, true);
   assert.equal(result.owners.find((owner) => owner.ownerId === 'owner-2')?.activatedAt, null);
+  assert.equal(result.invitations.length, 1);
+  assert.equal(result.invitations[0].ownerId, 'owner-2');
 });
 
 test('статус одного владельца возвращает не только мессенджеры, но и фактический вход', async () => {
