@@ -364,6 +364,7 @@ model Employee {
   createdNewsPosts          NewsPost[]                   @relation("NewsPostCreator")
   newsReads                 NewsPostRead[]
   staffAlertReads           StaffAlertRead[]
+  visitOverdueAlerts        VisitOverdueAlert[]          @relation("VisitOverdueAlertEmployee")
   sentInternalMessages      InternalMessage[]            @relation("InternalMessageSender")
   receivedInternalMessages  InternalMessage[]            @relation("InternalMessageRecipient")
   auditLogs                 AuditLog[]                   @relation("AuditActor")
@@ -1072,6 +1073,7 @@ model Visit {
   hospitalRecords  HospitalRecord[]
   hospitalPlans    HospitalTreatmentPlan[]
   hospitalStay     HospitalStay?
+  overdueAlert     VisitOverdueAlert?
   createdAt        DateTime                @default(now())
   updatedAt        DateTime                @updatedAt
 
@@ -1294,6 +1296,21 @@ model StaffAlertRead {
 
   @@id([employeeId, alertKey])
   @@index([employeeId, readAt])
+}
+
+model VisitOverdueAlert {
+  id               String      @id @default(uuid())
+  visitId          String      @unique
+  visit            Visit       @relation(fields: [visitId], references: [id], onDelete: Restrict)
+  employeeId       String?
+  employee         Employee?   @relation("VisitOverdueAlertEmployee", fields: [employeeId], references: [id], onDelete: SetNull)
+  startedAt        DateTime
+  overdueAt        DateTime
+  thresholdMinutes Int         @default(60)
+  createdAt        DateTime    @default(now())
+
+  @@index([overdueAt])
+  @@index([employeeId, overdueAt])
 }
 
 model InternalMessage {

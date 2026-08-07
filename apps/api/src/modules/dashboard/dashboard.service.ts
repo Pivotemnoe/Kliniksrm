@@ -13,6 +13,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthEmployee } from '../auth/auth.types';
 import { OwnerGatewayClient } from '../notifications/providers/owner-gateway.client';
+import { buildOverdueVisitWhere } from '../visits/visit-overdue';
 import { DashboardQueryDto } from './dto/dashboard-query.dto';
 import { buildDirectorPortalStatistics, LocalPortalOwner } from './portal-statistics';
 
@@ -24,6 +25,7 @@ export class DashboardService {
   ) {}
 
   async getToday(query: DashboardQueryDto, actor: AuthEmployee) {
+    const now = new Date();
     const { date, start, end } = resolveDayBounds(query.date);
     const workspaceMode = resolveWorkspaceMode(actor.roles);
     const personalEmployeeId = workspaceMode === 'doctor' ? actor.id : null;
@@ -45,9 +47,11 @@ export class DashboardService {
       cancelledAppointments,
       appointmentItems,
       activeVisits,
+      overdueVisits,
       completedVisitsToday,
       visitsToday,
       visitItems,
+      overdueVisitItems,
       visitItemsToday,
       activeHospital,
       admittedHospitalToday,
@@ -93,6 +97,7 @@ export class DashboardService {
         select: appointmentSelect,
       }),
       this.prisma.visit.count({ where: { status: { in: [VisitStatus.DRAFT, VisitStatus.IN_PROGRESS] }, hospitalBoxId: null, ...employeeWhere } }),
+      this.prisma.visit.count({ where: buildOverdueVisitWhere(now, personalEmployeeId) }),
       this.prisma.visit.count({ where: { status: VisitStatus.COMPLETED, completedAt: { gte: start, lte: end }, hospitalBoxId: null, ...employeeWhere } }),
       this.prisma.visit.count({
         where: {
@@ -105,6 +110,12 @@ export class DashboardService {
       this.prisma.visit.findMany({
         where: { status: { in: [VisitStatus.DRAFT, VisitStatus.IN_PROGRESS] }, hospitalBoxId: null, ...employeeWhere },
         orderBy: { startedAt: 'desc' },
+        take: 8,
+        select: visitSelect,
+      }),
+      this.prisma.visit.findMany({
+        where: buildOverdueVisitWhere(now, personalEmployeeId),
+        orderBy: { startedAt: 'asc' },
         take: 8,
         select: visitSelect,
       }),
@@ -260,11 +271,13 @@ export class DashboardService {
       } : { today: 0, planned: 0, arrived: 0, inProgress: 0, completed: 0, cancelled: 0, items: [] },
       visits: canRead('visits.read') ? {
         active: activeVisits,
+        overdue: overdueVisits,
         completedToday: completedVisitsToday,
         totalToday: visitsToday,
         items: visitItems,
+        overdueItems: overdueVisitItems,
         todayItems: visitItemsToday,
-      } : { active: 0, completedToday: 0, totalToday: 0, items: [], todayItems: [] },
+      } : { active: 0, overdue: 0, completedToday: 0, totalToday: 0, items: [], overdueItems: [], todayItems: [] },
       finance: canRead('billing.read') ? {
         billsToday,
         unpaidBills,

@@ -1,9 +1,13 @@
 import { apiRequest } from '../../api/client';
 import { buildQuery } from '../../shared/utils/query';
-import { AuditLogItem } from './types';
+import { AuditLogItem, AuditVisitControlResponse } from './types';
 
 export function listAuditLogs() {
   return apiRequest<AuditLogItem[]>('/v1/audit-logs');
+}
+
+export function getAuditVisitControl(query: { from: string; to: string }) {
+  return apiRequest<AuditVisitControlResponse>(`/v1/audit-logs/visit-control${buildQuery(query)}`);
 }
 
 export type ActivityLogInput = {

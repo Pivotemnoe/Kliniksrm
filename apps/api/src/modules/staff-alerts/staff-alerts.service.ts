@@ -9,6 +9,12 @@ import { createHash } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { AuthEmployee } from '../auth/auth.types';
+import {
+  buildOverdueVisitWhere,
+  formatVisitOverdueDuration,
+  getVisitOverdueAt,
+  VISIT_OVERDUE_THRESHOLD_MINUTES,
+} from '../visits/visit-overdue';
 
 type StaffAlertSeverity = 'info' | 'warning' | 'error';
 
@@ -107,6 +113,7 @@ export class StaffAlertsService {
   }
 
   private async buildCandidates(actor: AuthEmployee): Promise<StaffAlertCandidate[]> {
+    const now = new Date();
     const can = (permission: string) => actor.permissions.includes('*') || actor.permissions.includes(permission);
     const seesAllVisits = actor.roles.some((role) => role === 'director' || role === 'administrator');
     const seesOwnVisits = actor.roles.includes('doctor');
@@ -129,8 +136,7 @@ export class StaffAlertsService {
       showVisits
         ? this.prisma.visit.findMany({
             where: {
-              status: { in: [VisitStatus.DRAFT, VisitStatus.IN_PROGRESS] },
-              hospitalBoxId: null,
+              ...buildOverdueVisitWhere(now),
               ...(seesAllVisits ? {} : { employeeId: actor.id }),
             },
             orderBy: { startedAt: 'asc' },
@@ -139,7 +145,6 @@ export class StaffAlertsService {
               id: true,
               status: true,
               startedAt: true,
-              updatedAt: true,
               owner: { select: { fullName: true } },
               animal: { select: { nickname: true } },
               employee: { select: { fullName: true } },
@@ -204,17 +209,20 @@ export class StaffAlertsService {
         : Promise.resolve([]),
     ]);
 
-    const items: StaffAlertCandidate[] = visits.map((visit) => ({
-      key: `visit:${visit.id}`,
-      kind: 'UNFINISHED_VISIT',
-      title: `Незавершённый приём: ${visit.animal.nickname}`,
-      description: `${visit.status === VisitStatus.DRAFT ? 'Черновик' : 'В работе'} · ${visit.owner.fullName} · ${visit.employee?.fullName ?? 'врач не указан'}`,
-      href: `/visits/${visit.id}`,
-      count: 1,
-      severity: 'warning',
-      occurredAt: visit.updatedAt,
-      version: hashVersion([visit.id, visit.status, visit.updatedAt.toISOString()]),
-    }));
+    const items: StaffAlertCandidate[] = visits.map((visit) => {
+      const overdueAt = getVisitOverdueAt(visit.startedAt);
+      return {
+        key: `visit:${visit.id}`,
+        kind: 'UNFINISHED_VISIT',
+        title: `Незавершённый приём более часа: ${visit.animal.nickname}`,
+        description: `В работе ${formatVisitOverdueDuration(visit.startedAt, now)} · ${visit.owner.fullName} · ${visit.employee?.fullName ?? 'врач не указан'}`,
+        href: `/visits/${visit.id}`,
+        count: 1,
+        severity: 'error',
+        occurredAt: overdueAt,
+        version: hashVersion([visit.id, VisitStatus.IN_PROGRESS, overdueAt.toISOString(), VISIT_OVERDUE_THRESHOLD_MINUTES]),
+      };
+    });
 
     if (failedDeliveries.length) {
       items.push(aggregateAlert({

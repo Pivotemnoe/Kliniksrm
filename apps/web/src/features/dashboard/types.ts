@@ -45,9 +45,11 @@ export type DashboardSummary = {
   };
   visits: {
     active: number;
+    overdue: number;
     completedToday: number;
     totalToday: number;
     items: DashboardVisitItem[];
+    overdueItems: DashboardVisitItem[];
     todayItems: DashboardVisitItem[];
   };
   finance: {

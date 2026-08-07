@@ -16,3 +16,19 @@ export type AuditLogItem = {
   createdAt: string;
   actor?: AuditActor | null;
 };
+
+export type AuditVisitControlResponse = {
+  range: { from: string; to: string };
+  thresholdMinutes: number;
+  totals: {
+    completedVisits: number;
+    overdueVisits: number;
+    notificationsIssued: number;
+  };
+  daily: Array<{
+    date: string;
+    completedVisits: number;
+    overdueVisits: number;
+    notificationsIssued: number;
+  }>;
+};

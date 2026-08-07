@@ -1,8 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, VisitStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditExportQueryDto } from './dto/audit-export-query.dto';
 import { CreateActivityLogDto } from './dto/create-activity-log.dto';
+import { AuditVisitControlQueryDto } from './dto/audit-visit-control-query.dto';
+import { clinicDateKey, resolveReportRange } from '../reports/report-range';
+import { VISIT_OVERDUE_THRESHOLD_MINUTES } from '../visits/visit-overdue';
 
 type AuditInput = {
   actorId?: string | null;
@@ -54,6 +57,18 @@ export class AuditService {
     });
   }
 
+  async getVisitControl(query: AuditVisitControlQueryDto) {
+    const range = resolveReportRange(query);
+    return this.buildVisitControl({
+      start: range.start,
+      end: range.end,
+      from: range.from,
+      to: range.to,
+      offsetMinutes: range.offsetMinutes,
+      employeeId: query.employeeId,
+    });
+  }
+
   async logActivity(actorId: string, dto: CreateActivityLogDto, ipAddress?: string | null, userAgent?: string | null) {
     const action = `ui.${dto.type}`;
     const metadata: Prisma.InputJsonObject = {
@@ -98,6 +113,14 @@ export class AuditService {
       take: limit,
     });
 
+    const visitControl = await this.buildVisitControl({
+      start: from,
+      end: to,
+      from: clinicDateKey(from),
+      to: clinicDateKey(to),
+      offsetMinutes: getClinicOffsetMinutes(),
+    });
+
     return {
       generatedAt: now.toISOString(),
       range: {
@@ -109,6 +132,7 @@ export class AuditService {
         limit,
       },
       summary: buildSummary(events),
+      visitControl,
       events: events.map((event) => ({
         id: event.id,
         at: event.createdAt.toISOString(),
@@ -123,6 +147,95 @@ export class AuditService {
       })),
     };
   }
+
+  private async buildVisitControl(input: {
+    start: Date;
+    end: Date;
+    from: string;
+    to: string;
+    offsetMinutes: number;
+    employeeId?: string;
+  }) {
+    const dateWhere = { gte: input.start, lte: input.end };
+    const [completedVisits, overdueAlerts, issuedNotifications] = await Promise.all([
+      this.prisma.visit.findMany({
+        where: {
+          status: VisitStatus.COMPLETED,
+          completedAt: dateWhere,
+          hospitalBoxId: null,
+          ...(input.employeeId ? { employeeId: input.employeeId } : {}),
+        },
+        select: { id: true, completedAt: true },
+      }),
+      this.prisma.visitOverdueAlert.findMany({
+        where: {
+          overdueAt: dateWhere,
+          ...(input.employeeId ? { employeeId: input.employeeId } : {}),
+        },
+        select: { id: true, visitId: true, overdueAt: true },
+      }),
+      this.prisma.visitOverdueAlert.findMany({
+        where: {
+          createdAt: dateWhere,
+          ...(input.employeeId ? { employeeId: input.employeeId } : {}),
+        },
+        select: { id: true, visitId: true, createdAt: true },
+      }),
+    ]);
+
+    const rows = seedVisitControlDays(input.from, input.to);
+    for (const visit of completedVisits) {
+      if (!visit.completedAt) continue;
+      getVisitControlRow(rows, clinicDateKey(visit.completedAt, input.offsetMinutes)).completedVisits += 1;
+    }
+    for (const alert of overdueAlerts) {
+      getVisitControlRow(rows, clinicDateKey(alert.overdueAt, input.offsetMinutes)).overdueVisits += 1;
+    }
+    for (const notification of issuedNotifications) {
+      getVisitControlRow(rows, clinicDateKey(notification.createdAt, input.offsetMinutes)).notificationsIssued += 1;
+    }
+
+    return {
+      range: { from: input.from, to: input.to },
+      thresholdMinutes: VISIT_OVERDUE_THRESHOLD_MINUTES,
+      totals: {
+        completedVisits: completedVisits.length,
+        overdueVisits: overdueAlerts.length,
+        notificationsIssued: issuedNotifications.length,
+      },
+      daily: [...rows.values()].sort((left, right) => left.date.localeCompare(right.date)),
+    };
+  }
+}
+
+function seedVisitControlDays(from: string, to: string) {
+  const rows = new Map<string, { date: string; completedVisits: number; overdueVisits: number; notificationsIssued: number }>();
+  const cursor = new Date(`${from}T00:00:00.000Z`);
+  const end = new Date(`${to}T00:00:00.000Z`);
+  while (cursor <= end) {
+    const key = cursor.toISOString().slice(0, 10);
+    rows.set(key, visitControlRow(key));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return rows;
+}
+
+function getVisitControlRow(
+  rows: Map<string, { date: string; completedVisits: number; overdueVisits: number; notificationsIssued: number }>,
+  date: string,
+) {
+  const row = rows.get(date) ?? visitControlRow(date);
+  rows.set(date, row);
+  return row;
+}
+
+function visitControlRow(date: string) {
+  return { date, completedVisits: 0, overdueVisits: 0, notificationsIssued: 0 };
+}
+
+function getClinicOffsetMinutes() {
+  const parsed = Number(process.env.CLINIC_UTC_OFFSET_MINUTES ?? 180);
+  return Number.isFinite(parsed) ? parsed : 180;
 }
 
 type AuditEvent = Prisma.AuditLogGetPayload<{

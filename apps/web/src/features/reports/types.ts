@@ -51,6 +51,8 @@ export type ClinicReport = {
   traffic: {
     visitsTotal: number;
     visitsCompleted: number;
+    visitsOverdue: number;
+    overdueNotifications: number;
     visitsCancelled: number;
     appointmentsTotal: number;
     appointmentsCompleted: number;
@@ -58,7 +60,15 @@ export type ClinicReport = {
     appointmentsNoShow: number;
     uniqueOwners: number;
     newOwners: number;
-    daily: Array<{ date: string; billedAmount: number; paidAmount: number; visits: number }>;
+    daily: Array<{
+      date: string;
+      billedAmount: number;
+      paidAmount: number;
+      visits: number;
+      completedVisits: number;
+      overdueVisits: number;
+      overdueNotifications: number;
+    }>;
   };
   sales: {
     services: ReportSalesRow[];
@@ -71,6 +81,8 @@ export type ClinicReport = {
     position: string | null;
     visits: number;
     completedVisits: number;
+    overdueVisits: number;
+    overdueNotifications: number;
     billedAmount: number;
   }>;
   vaccinations: {

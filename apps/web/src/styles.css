@@ -774,6 +774,10 @@ body {
   padding: 0 16px 16px;
 }
 
+.audit-visit-control-panel {
+  margin-bottom: 14px;
+}
+
 .permission-list {
   display: flex;
   flex-wrap: wrap;
@@ -861,6 +865,49 @@ body {
   grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
   gap: 12px;
   margin-bottom: 14px;
+}
+
+.dashboard-overdue-banner {
+  display: flex;
+  width: 100%;
+  min-height: 38px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding: 7px 12px;
+  border: 1px solid #ff7875;
+  border-left: 5px solid #cf1322;
+  border-radius: 6px;
+  background: #fff1f0;
+  color: #a8071a;
+  cursor: pointer;
+  text-align: left;
+}
+
+.dashboard-overdue-banner:hover,
+.dashboard-overdue-banner:focus-visible {
+  border-color: #cf1322;
+  background: #ffe7e5;
+  outline: none;
+}
+
+.dashboard-overdue-banner-copy {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.dashboard-overdue-banner-copy strong {
+  color: #a8071a;
+}
+
+.dashboard-overdue-banner-action {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: underline;
 }
 
 .dashboard-action-tile {
@@ -3223,6 +3270,16 @@ body {
 
   .dashboard-action-copy strong {
     font-size: 24px;
+  }
+
+  .dashboard-overdue-banner {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .dashboard-overdue-banner-copy {
+    flex-wrap: wrap;
   }
 
   .toolbar-row {
