@@ -243,6 +243,25 @@ test('врач видит полный лист, назначения и вып�
   assert.match(styles, /@media \(max-width: 760px\)[\s\S]*\.hospital-sheet-grid \{\s+grid-template-columns: 1fr;/);
 });
 
+test('в карте стационара текущий день показан выше прошедших дней', async () => {
+  const sheet = await read('apps/web/src/features/hospital/HospitalSheet.tsx');
+  const { compareHospitalDayKeys } = await import('../apps/web/src/features/hospital/hospitalDayOrder.ts');
+  const today = '2026-08-07';
+  const days = ['2026-07-29', '2026-08-08', '2026-08-06', today, '2026-08-10'];
+
+  assert.match(sheet, /const todayKey = dateKey\(new Date\(\)\.toISOString\(\), timeZone\)/);
+  assert.match(sheet, /\.sort\(\(\[leftKey\], \[rightKey\]\) => compareHospitalDayKeys\(leftKey, rightKey, todayKey\)\)/);
+  assert.match(sheet, /const sortedGroup = \[\.\.\.group\]\.sort\(\(left, right\) => new Date\(left\.recordedAt\)\.getTime\(\) - new Date\(right\.recordedAt\)\.getTime\(\)\)/);
+  assert.match(sheet, /records: sortedGroup/);
+  assert.deepEqual(days.sort((left, right) => compareHospitalDayKeys(left, right, today)), [
+    today,
+    '2026-08-08',
+    '2026-08-10',
+    '2026-08-06',
+    '2026-07-29',
+  ]);
+});
+
 test('план лечения создаёт несколько действий, повторов и складских списаний без перезаписи старых записей', async () => {
   const [schema, migration, catalogMigration, controller, service, dto, modal, sheet, api, types] = await Promise.all([
     read('prisma/schema.prisma'),

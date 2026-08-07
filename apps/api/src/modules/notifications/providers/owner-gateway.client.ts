@@ -18,6 +18,8 @@ export type OwnerGatewayStatus = {
   maxLinked: boolean;
   telegramLinked: boolean;
   syncedAt: string | null;
+  activatedAt: string | null;
+  lastSeenAt: string | null;
 };
 
 export type OwnerGatewayPortalStatistics = {

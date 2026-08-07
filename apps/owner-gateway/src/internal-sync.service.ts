@@ -61,19 +61,28 @@ export class InternalSyncService {
   }
 
   async getStatus(ownerId: string) {
-    const owner = await this.prisma.ownerSnapshot.findUnique({
-      where: { ownerId },
-      select: {
-        syncedAt: true,
-        bindings: { select: { channel: true } },
-      },
-    });
+    const [owner, sessionActivity] = await Promise.all([
+      this.prisma.ownerSnapshot.findUnique({
+        where: { ownerId },
+        select: {
+          syncedAt: true,
+          bindings: { select: { channel: true } },
+        },
+      }),
+      this.prisma.portalSession.aggregate({
+        where: { ownerId },
+        _min: { createdAt: true },
+        _max: { lastSeenAt: true },
+      }),
+    ]);
 
     return {
       hasSnapshot: Boolean(owner),
       maxLinked: owner?.bindings.some((binding) => binding.channel === 'MAX') ?? false,
       telegramLinked: owner?.bindings.some((binding) => binding.channel === 'TELEGRAM') ?? false,
       syncedAt: owner?.syncedAt ?? null,
+      activatedAt: sessionActivity._min.createdAt,
+      lastSeenAt: sessionActivity._max.lastSeenAt,
     };
   }
 

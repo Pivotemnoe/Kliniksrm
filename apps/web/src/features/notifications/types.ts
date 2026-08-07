@@ -73,6 +73,8 @@ export type ClientPortalAccess = {
     maxLinked: boolean;
     telegramLinked: boolean;
     syncedAt: string | null;
+    activatedAt: string | null;
+    lastSeenAt: string | null;
   } | null;
   gatewaySync?: 'synced' | 'skipped_not_configured' | 'failed';
   owner?: {

@@ -1,5 +1,6 @@
 import { EditOutlined, FileAddOutlined, StopOutlined } from '@ant-design/icons';
 import { Button, Checkbox, Empty, Space, Tag, Tooltip, Typography } from 'antd';
+import { compareHospitalDayKeys } from './hospitalDayOrder';
 import type { HospitalRecord } from './types';
 
 export function HospitalSheet({
@@ -244,19 +245,24 @@ function TemperatureChart({ points, timeZone }: { points: Array<{ at: string; va
 }
 
 export function groupHospitalRecords(records: HospitalRecord[], timeZone: string) {
-  const sorted = [...records].sort((left, right) => new Date(left.recordedAt).getTime() - new Date(right.recordedAt).getTime());
+  const todayKey = dateKey(new Date().toISOString(), timeZone);
   const groups = new Map<string, HospitalRecord[]>();
-  for (const record of sorted) {
+  for (const record of records) {
     const key = dateKey(record.recordedAt, timeZone);
     const group = groups.get(key) ?? [];
     group.push(record);
     groups.set(key, group);
   }
-  return [...groups.entries()].map(([key, group]) => ({
-    key,
-    label: new Intl.DateTimeFormat('ru-RU', { timeZone, weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }).format(new Date(group[0].recordedAt)),
-    records: group,
-  }));
+  return [...groups.entries()]
+    .sort(([leftKey], [rightKey]) => compareHospitalDayKeys(leftKey, rightKey, todayKey))
+    .map(([key, group]) => {
+      const sortedGroup = [...group].sort((left, right) => new Date(left.recordedAt).getTime() - new Date(right.recordedAt).getTime());
+      return {
+        key,
+        label: new Intl.DateTimeFormat('ru-RU', { timeZone, weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }).format(new Date(sortedGroup[0].recordedAt)),
+        records: sortedGroup,
+      };
+    });
 }
 
 function dateKey(value: string, timeZone: string) {

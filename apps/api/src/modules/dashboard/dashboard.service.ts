@@ -13,6 +13,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthEmployee } from '../auth/auth.types';
 import { OwnerGatewayClient } from '../notifications/providers/owner-gateway.client';
+import { clinicDateKey, resolveReportRange } from '../reports/report-range';
 import { buildOverdueVisitWhere } from '../visits/visit-overdue';
 import { DashboardQueryDto } from './dto/dashboard-query.dto';
 import { buildDirectorPortalStatistics, LocalPortalOwner } from './portal-statistics';
@@ -316,7 +317,10 @@ export class DashboardService {
       throw new ForbiddenException('Статистика личных кабинетов доступна только директору');
     }
 
-    const [totalOwners, portalAccesses, gateway] = await Promise.all([
+    const now = new Date();
+    const todayDate = clinicDateKey(now);
+    const todayRange = resolveReportRange({ from: todayDate, to: todayDate }, now);
+    const [totalOwners, portalAccesses, gateway, invitationsCreatedToday] = await Promise.all([
       this.prisma.owner.count(),
       this.prisma.clientPortalAccess.findMany({
         select: {
@@ -335,6 +339,18 @@ export class DashboardService {
         },
       }),
       this.ownerGatewayClient.getPortalStatistics(),
+      this.prisma.auditLog.count({
+        where: {
+          createdAt: { gte: todayRange.start, lte: todayRange.end },
+          OR: [
+            { action: 'client_portal.invite_create' },
+            {
+              action: 'client_portal.access_update',
+              metadata: { path: ['status'], equals: 'INVITED' },
+            },
+          ],
+        },
+      }),
     ]);
 
     const accessOwnerIds = new Set(portalAccesses.map((access) => access.ownerId));
@@ -381,6 +397,13 @@ export class DashboardService {
       totalOwners,
       localOwners,
       gateway,
+      now,
+      today: {
+        date: todayDate,
+        start: todayRange.start,
+        end: todayRange.end,
+        invitationsCreated: invitationsCreatedToday,
+      },
     });
   }
 }

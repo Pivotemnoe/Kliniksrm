@@ -17,6 +17,12 @@ export type DirectorPortalStatistics = {
   calculatedAt: string;
   gatewayAvailable: boolean;
   gatewayUpdatedAt: string | null;
+  today: {
+    date: string;
+    invitationsCreated: number;
+    activated: number;
+    activeOwners: number;
+  };
   totals: {
     owners: number;
     registered: number;
@@ -46,6 +52,12 @@ export function buildDirectorPortalStatistics(input: {
   localOwners: LocalPortalOwner[];
   gateway: OwnerGatewayPortalStatistics | null;
   now?: Date;
+  today?: {
+    date: string;
+    start: Date;
+    end: Date;
+    invitationsCreated: number;
+  };
   listLimit?: number;
 }): DirectorPortalStatistics {
   const now = input.now ?? new Date();
@@ -89,11 +101,22 @@ export function buildDirectorPortalStatistics(input: {
     return rightDate.localeCompare(leftDate) || left.fullName.localeCompare(right.fullName, 'ru');
   });
   const limit = Math.max(1, Math.min(input.listLimit ?? 100, 500));
+  const today = input.today;
 
   return {
     calculatedAt: now.toISOString(),
     gatewayAvailable: Boolean(input.gateway),
     gatewayUpdatedAt: toIsoDate(input.gateway?.generatedAt ?? null),
+    today: {
+      date: today?.date ?? now.toISOString().slice(0, 10),
+      invitationsCreated: today?.invitationsCreated ?? 0,
+      activated: today
+        ? items.filter((item) => isWithin(item.activatedAt, today.start, today.end)).length
+        : 0,
+      activeOwners: today
+        ? items.filter((item) => isWithin(item.lastSeenAt, today.start, today.end)).length
+        : 0,
+    },
     totals: {
       owners: input.totalOwners,
       registered: items.filter((item) => item.registered).length,
@@ -144,4 +167,12 @@ function toIsoDate(value: string | null | undefined) {
 
 function isOnOrAfter(value: string | null, threshold: Date) {
   return value ? new Date(value) >= threshold : false;
+}
+
+function isWithin(value: string | null, start: Date, end: Date) {
+  if (!value) {
+    return false;
+  }
+  const date = new Date(value);
+  return date >= start && date <= end;
 }

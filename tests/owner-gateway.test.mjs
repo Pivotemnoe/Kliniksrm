@@ -115,3 +115,28 @@ test('шлюз агрегирует первую активацию, после�
   assert.equal(result.owners.find((owner) => owner.ownerId === 'owner-2')?.maxLinked, true);
   assert.equal(result.owners.find((owner) => owner.ownerId === 'owner-2')?.activatedAt, null);
 });
+
+test('статус одного владельца возвращает не только мессенджеры, но и фактический вход', async () => {
+  const { InternalSyncService } = require('../apps/owner-gateway/dist/internal-sync.service.js');
+  const service = new InternalSyncService({
+    ownerSnapshot: {
+      findUnique: async () => ({
+        syncedAt: new Date('2026-08-07T08:00:00.000Z'),
+        bindings: [{ channel: 'MAX' }],
+      }),
+    },
+    portalSession: {
+      aggregate: async () => ({
+        _min: { createdAt: new Date('2026-08-07T08:10:00.000Z') },
+        _max: { lastSeenAt: new Date('2026-08-07T09:15:00.000Z') },
+      }),
+    },
+  }, null, null, null);
+
+  const result = await service.getStatus('owner-1');
+  assert.equal(result.hasSnapshot, true);
+  assert.equal(result.maxLinked, true);
+  assert.equal(result.telegramLinked, false);
+  assert.equal(result.activatedAt.toISOString(), '2026-08-07T08:10:00.000Z');
+  assert.equal(result.lastSeenAt.toISOString(), '2026-08-07T09:15:00.000Z');
+});

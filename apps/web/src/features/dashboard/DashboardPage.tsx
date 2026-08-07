@@ -479,6 +479,9 @@ function PortalStatisticsDrawer({
         />
       ) : null}
       <Descriptions bordered size="small" column={{ xs: 1, sm: 2 }} className="portal-statistics-summary">
+        <Descriptions.Item label="Приглашений создано сегодня">{statistics?.today.invitationsCreated ?? '—'}</Descriptions.Item>
+        <Descriptions.Item label="Активировали сегодня">{formatTodayGatewayMetric(statistics, 'activated')}</Descriptions.Item>
+        <Descriptions.Item label="Заходили сегодня">{formatTodayGatewayMetric(statistics, 'activeOwners')}</Descriptions.Item>
         <Descriptions.Item label="Владельцев в CRM">{statistics?.totals.owners ?? '—'}</Descriptions.Item>
         <Descriptions.Item label="Активировали кабинет">{formatGatewayMetric(statistics, 'registered')}</Descriptions.Item>
         <Descriptions.Item label="Приглашены, но не вошли">{statistics?.totals.invited ?? '—'}</Descriptions.Item>
@@ -951,9 +954,9 @@ function getPortalStatisticsHint(statistics: DirectorPortalStatistics | undefine
     return 'Загрузка данных';
   }
   if (!statistics.gatewayAvailable) {
-    return 'Только локальные данные · шлюз недоступен';
+    return `Сегодня приглашений ${statistics.today.invitationsCreated} · шлюз недоступен`;
   }
-  return `Приглашены ${statistics.totals.invited} · активны 30 дней ${statistics.totals.active30Days}`;
+  return `Сегодня приглашений ${statistics.today.invitationsCreated} · активаций ${statistics.today.activated}`;
 }
 
 function formatGatewayMetric(
@@ -964,6 +967,20 @@ function formatGatewayMetric(
     return '—';
   }
   const value = statistics.totals[metric];
+  if (statistics.gatewayAvailable) {
+    return value;
+  }
+  return value > 0 ? `${value}+` : '—';
+}
+
+function formatTodayGatewayMetric(
+  statistics: DirectorPortalStatistics | undefined,
+  metric: 'activated' | 'activeOwners',
+) {
+  if (!statistics) {
+    return '—';
+  }
+  const value = statistics.today[metric];
   if (statistics.gatewayAvailable) {
     return value;
   }

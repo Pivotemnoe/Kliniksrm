@@ -167,6 +167,9 @@ export function OwnerCommunicationTab({ owner }: OwnerCommunicationTabProps) {
   const connectionStatusLoading = portalQuery.isLoading;
   const maxLinked = Boolean(portalAccess?.gatewayStatus?.maxLinked || owner.maxUserId);
   const telegramLinked = Boolean(portalAccess?.gatewayStatus?.telegramLinked || owner.telegramChatId);
+  const portalActivatedAt = earliestDateTime(portalAccess?.lastLoginAt, portalAccess?.gatewayStatus?.activatedAt);
+  const portalLastSeenAt = latestDateTime(portalAccess?.lastLoginAt, portalAccess?.gatewayStatus?.lastSeenAt);
+  const portalActivated = Boolean(portalActivatedAt);
   const portalCanReceive = Boolean(
     portalAccess?.gatewayStatus?.hasSnapshot
       && (portalAccess.status === 'INVITED' || portalAccess.status === 'ENABLED'),
@@ -246,7 +249,9 @@ export function OwnerCommunicationTab({ owner }: OwnerCommunicationTabProps) {
               {connectionStatusLoading
                 ? 'Проверяем доступ к личному кабинету…'
                 : portalCanReceive
-                ? `Личный кабинет доступен${additionalDeliveryChannels ? `. Дополнительно подключены: ${additionalDeliveryChannels}` : ''}`
+                ? portalActivated
+                  ? `Владелец вошёл в личный кабинет${additionalDeliveryChannels ? `. Дополнительно подключены: ${additionalDeliveryChannels}` : ''}`
+                  : `Приглашение создано, владелец ещё не вошёл${additionalDeliveryChannels ? `. Уже подключены: ${additionalDeliveryChannels}` : ''}`
                 : 'Сначала создайте владельцу личный кабинет'}
             </Typography.Text>
           </Space>
@@ -366,7 +371,8 @@ export function OwnerCommunicationTab({ owner }: OwnerCommunicationTabProps) {
             <Descriptions bordered size="small" column={{ xs: 1, md: 2 }} className="form-alert">
               <Descriptions.Item label="Приглашён">{formatDateTime(portalAccess.invitedAt)}</Descriptions.Item>
               <Descriptions.Item label="Действует до">{formatDateTime(portalAccess.inviteExpiresAt)}</Descriptions.Item>
-              <Descriptions.Item label="Последний вход">{formatDateTime(portalAccess.lastLoginAt)}</Descriptions.Item>
+              <Descriptions.Item label="Первый вход">{formatDateTime(portalActivatedAt)}</Descriptions.Item>
+              <Descriptions.Item label="Последняя активность">{formatDateTime(portalLastSeenAt)}</Descriptions.Item>
               <Descriptions.Item label="Причина блокировки">{portalAccess.blockedReason || '—'}</Descriptions.Item>
             </Descriptions>
           ) : null}
@@ -670,6 +676,14 @@ function formatInviteChannel(channel: PortalInviteChannel) {
   }
 
   return channel === 'MAX' ? 'MAX' : 'Telegram';
+}
+
+function earliestDateTime(...values: Array<string | null | undefined>) {
+  return values.filter((value): value is string => Boolean(value)).sort()[0] ?? null;
+}
+
+function latestDateTime(...values: Array<string | null | undefined>) {
+  return values.filter((value): value is string => Boolean(value)).sort().at(-1) ?? null;
 }
 
 function getChannelPrompt(channel: PortalInviteChannel, owner: Owner) {

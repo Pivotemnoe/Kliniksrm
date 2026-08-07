@@ -88,6 +88,12 @@ export type DirectorPortalStatistics = {
   calculatedAt: string;
   gatewayAvailable: boolean;
   gatewayUpdatedAt: string | null;
+  today: {
+    date: string;
+    invitationsCreated: number;
+    activated: number;
+    activeOwners: number;
+  };
   totals: {
     owners: number;
     registered: number;

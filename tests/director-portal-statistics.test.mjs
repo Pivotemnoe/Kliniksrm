@@ -10,6 +10,12 @@ test('директорская статистика считает только 
   const statistics = buildDirectorPortalStatistics({
     totalOwners: 14_106,
     now: new Date('2026-08-06T10:00:00.000Z'),
+    today: {
+      date: '2026-08-06',
+      start: new Date('2026-08-05T21:00:00.000Z'),
+      end: new Date('2026-08-06T20:59:59.999Z'),
+      invitationsCreated: 4,
+    },
     localOwners: [
       portalOwner('owner-1', { status: 'INVITED' }),
       portalOwner('owner-2', { status: 'INVITED', invitedAt: '2026-08-05T10:00:00.000Z' }),
@@ -22,8 +28,8 @@ test('директорская статистика считает только 
       owners: [
         {
           ownerId: 'owner-1',
-          activatedAt: '2026-08-01T10:00:00.000Z',
-          lastSeenAt: '2026-08-05T10:00:00.000Z',
+          activatedAt: '2026-08-06T08:00:00.000Z',
+          lastSeenAt: '2026-08-06T09:00:00.000Z',
           telegramLinked: true,
           maxLinked: false,
         },
@@ -39,6 +45,12 @@ test('директорская статистика считает только 
   });
 
   assert.equal(statistics.gatewayAvailable, true);
+  assert.deepEqual(statistics.today, {
+    date: '2026-08-06',
+    invitationsCreated: 4,
+    activated: 1,
+    activeOwners: 1,
+  });
   assert.equal(statistics.totals.owners, 14_106);
   assert.equal(statistics.totals.registered, 3);
   assert.equal(statistics.totals.invited, 1);
@@ -56,6 +68,12 @@ test('без публичного шлюза сохраняются локаль
   const statistics = buildDirectorPortalStatistics({
     totalOwners: 2,
     now: new Date('2026-08-06T10:00:00.000Z'),
+    today: {
+      date: '2026-08-06',
+      start: new Date('2026-08-05T21:00:00.000Z'),
+      end: new Date('2026-08-06T20:59:59.999Z'),
+      invitationsCreated: 2,
+    },
     localOwners: [portalOwner('owner-1', { status: 'ENABLED', lastLoginAt: '2026-08-06T09:00:00.000Z' })],
     gateway: null,
   });
@@ -64,6 +82,9 @@ test('без публичного шлюза сохраняются локаль
   assert.equal(statistics.gatewayUpdatedAt, null);
   assert.equal(statistics.totals.registered, 1);
   assert.equal(statistics.totals.active30Days, 1);
+  assert.equal(statistics.today.invitationsCreated, 2);
+  assert.equal(statistics.today.activated, 1);
+  assert.equal(statistics.today.activeOwners, 1);
 });
 
 test('карточка личных кабинетов находится только в директорской сводке и объясняет методику подсчёта', async () => {
@@ -72,6 +93,20 @@ test('карточка личных кабинетов находится тол
   assert.match(dashboard, /title="Личные кабинеты"/);
   assert.match(dashboard, /Активированным считается кабинет, в который владелец хотя бы один раз успешно вошёл/);
   assert.match(dashboard, /Публичный шлюз сейчас недоступен/);
+  assert.match(dashboard, /Приглашений создано сегодня/);
+  assert.match(dashboard, /Активировали сегодня/);
+  assert.match(dashboard, /Заходили сегодня/);
+});
+
+test('карточка владельца отличает созданное приглашение от фактического входа', async () => {
+  const ownerCommunication = await readFile(
+    new URL('../apps/web/src/features/owners/OwnerCommunicationTab.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(ownerCommunication, /Приглашение создано, владелец ещё не вошёл/);
+  assert.match(ownerCommunication, /Владелец вошёл в личный кабинет/);
+  assert.match(ownerCommunication, /gatewayStatus\?\.activatedAt/);
+  assert.match(ownerCommunication, /gatewayStatus\?\.lastSeenAt/);
 });
 
 function portalOwner(ownerId, overrides = {}) {
