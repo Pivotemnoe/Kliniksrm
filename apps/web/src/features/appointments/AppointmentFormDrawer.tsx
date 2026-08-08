@@ -12,6 +12,7 @@ import { RussianPhoneInput } from '../../shared/ui/RussianPhoneInput';
 import { AnimalCatalogFields } from '../animals/AnimalCatalogFields';
 import { AnimalMutationInput, AnimalSex } from '../animals/types';
 import { listOwnerAnimals, listOwners } from '../owners/owners.api';
+import { QuickCreateAnimalButton } from '../owners/QuickCreateAnimalButton';
 import { OwnerMutationInput } from '../owners/types';
 import { getSchedulingResources } from '../scheduling/scheduling.api';
 import { Appointment, AppointmentMutationInput } from './types';
@@ -277,6 +278,10 @@ export function AppointmentFormDrawer({
                     disabled={!ownerId}
                     placeholder="Выберите пациента"
                     onChange={(value) => field.onChange(value ?? '')}
+                  />
+                  <QuickCreateAnimalButton
+                    ownerId={ownerId}
+                    onCreated={(animal) => setValue('animalId', animal.id, { shouldDirty: true, shouldValidate: true })}
                   />
                 </Form.Item>
               )}

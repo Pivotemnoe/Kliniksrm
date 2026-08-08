@@ -15,6 +15,7 @@ import { isAnimalBirthDateInputValid, normalizeAnimalBirthDateInput } from '../.
 import { AnimalCatalogFields } from '../animals/AnimalCatalogFields';
 import { animalStatusOptions, normalizeAnimalStatusInput } from '../animals/animalStatus';
 import { AnimalMutationInput, AnimalSex } from '../animals/types';
+import { QuickCreateAnimalButton } from '../owners/QuickCreateAnimalButton';
 import { Owner, OwnerMutationInput } from '../owners/types';
 import { QueueEntry, QueueMutationInput, QueueUrgency, queueUrgencyLabels } from './types';
 import { VisitType, visitTypeLabels } from '../visits/types';
@@ -418,6 +419,10 @@ function ExistingClientFields({
               disabled={!ownerId}
               placeholder="Выберите пациента"
               onChange={(value) => field.onChange(value ?? '')}
+            />
+            <QuickCreateAnimalButton
+              ownerId={ownerId}
+              onCreated={(animal) => setValue('animalId', animal.id, { shouldDirty: true, shouldValidate: true })}
             />
           </Form.Item>
         )}

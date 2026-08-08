@@ -10,6 +10,7 @@ import { fromDateTimeText, normalizeDateTimeText, toDateTimeText } from '../../s
 import { nullToEmpty, optionalString } from '../../shared/utils/forms';
 import { Appointment } from '../appointments/types';
 import { listOwnerAnimals, listOwners } from '../owners/owners.api';
+import { QuickCreateAnimalButton } from '../owners/QuickCreateAnimalButton';
 import { QueueEntry } from '../queue/types';
 import { getSchedulingResources } from '../scheduling/scheduling.api';
 import { CreateVisitInput, VisitType, visitStatusColors, visitStatusLabels, visitTypeLabels } from './types';
@@ -204,6 +205,12 @@ export function VisitFormDrawer({
                   placeholder="Выберите пациента"
                   onChange={(value) => field.onChange(value ?? '')}
                 />
+                {!sourceContext ? (
+                  <QuickCreateAnimalButton
+                    ownerId={ownerId}
+                    onCreated={(animal) => setValue('animalId', animal.id, { shouldDirty: true, shouldValidate: true })}
+                  />
+                ) : null}
               </Form.Item>
             )}
           />

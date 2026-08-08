@@ -3031,6 +3031,11 @@ body {
   gap: 0 16px;
 }
 
+.form-field-action-button {
+  margin-top: 4px;
+  padding-inline: 0;
+}
+
 .form-grid-two {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
