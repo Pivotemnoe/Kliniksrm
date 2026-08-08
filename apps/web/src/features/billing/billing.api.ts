@@ -4,9 +4,11 @@ import { buildQuery } from '../../shared/utils/query';
 import {
   Bill,
   BillAlertsResponse,
+  BillSelectionResponse,
   BillItem,
   BillItemMutationInput,
   BillListItem,
+  BulkPayBillsInput,
   CreateBillInput,
   CreatePaymentInput,
   ListBillsQuery,
@@ -21,6 +23,18 @@ export function listBills(query: ListBillsQuery) {
 
 export function listBillAlerts(query: ListBillsQuery) {
   return apiRequest<BillAlertsResponse>(`/v1/bills/alerts${buildQuery(query)}`);
+}
+
+export function listBillSelection(query: ListBillsQuery) {
+  return apiRequest<BillSelectionResponse>(`/v1/bills/selection${buildQuery(query)}`);
+}
+
+export function bulkCancelBills(billIds: string[]) {
+  return apiRequest<{ count: number; billIds: string[] }>('/v1/bills/bulk-cancel', { method: 'POST', body: { billIds } });
+}
+
+export function bulkPayBills(input: BulkPayBillsInput) {
+  return apiRequest<{ count: number; totalAmount: number; billIds: string[] }>('/v1/bills/bulk-pay', { method: 'POST', body: input });
 }
 
 export function createBill(input: CreateBillInput) {

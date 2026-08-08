@@ -4,6 +4,7 @@ import { AuthEmployee } from '../auth/auth.types';
 import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { CreatePayrollAdjustmentDto } from './dto/create-payroll-adjustment.dto';
+import { CreatePayrollManualAccrualDto } from './dto/create-payroll-manual-accrual.dto';
 import { CreatePayrollPeriodDto } from './dto/create-payroll-period.dto';
 import { UpsertPayrollProfileDto } from './dto/upsert-payroll-profile.dto';
 import { PayrollService } from './payroll.service';
@@ -68,6 +69,17 @@ export class PayrollController {
     @CurrentEmployee() actor: AuthEmployee,
   ) {
     return this.payrollService.addAdjustment(periodId, dto, actor.id);
+  }
+
+  @Post('periods/:periodId/manual-accruals')
+  @RequirePermissions('payroll.manage')
+  @ApiCreatedResponse({ description: 'One-off salary accrual added to a draft payroll period.' })
+  addManualAccrual(
+    @Param('periodId') periodId: string,
+    @Body() dto: CreatePayrollManualAccrualDto,
+    @CurrentEmployee() actor: AuthEmployee,
+  ) {
+    return this.payrollService.addManualAccrual(periodId, dto, actor.id);
   }
 
   @Post('periods/:periodId/approve')

@@ -29,6 +29,10 @@ export function addPayrollAdjustment(periodId: string, input: { employeeId: stri
   return apiRequest<PayrollPeriod>(`/v1/payroll/periods/${periodId}/adjustments`, { method: 'POST', body: input });
 }
 
+export function addPayrollManualAccrual(periodId: string, input: { employeeId: string; amount: number; accruedAt: string; reason: string }) {
+  return apiRequest<PayrollPeriod>(`/v1/payroll/periods/${periodId}/manual-accruals`, { method: 'POST', body: input });
+}
+
 export function approvePayrollPeriod(periodId: string) {
   return apiRequest<PayrollPeriod>(`/v1/payroll/periods/${periodId}/approve`, { method: 'POST' });
 }

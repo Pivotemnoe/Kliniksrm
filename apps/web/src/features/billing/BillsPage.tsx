@@ -1,7 +1,7 @@
 import { DownOutlined, FileAddOutlined, SearchOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Dropdown, Form, Input, Modal, Select, Space, Table, Tag, Typography } from 'antd';
+import { Alert, App, Button, Dropdown, Form, Input, Modal, Select, Space, Table, Tag, Typography } from 'antd';
 import type { MenuProps } from 'antd';
 import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
@@ -16,14 +16,19 @@ import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDate, formatDateTime } from '../../shared/utils/date';
 import { formatMoney, toMoneyNumber } from '../../shared/utils/money';
 import { listOwnerAnimals, listOwners } from '../owners/owners.api';
-import { cancelBill, createBill, listBills } from './billing.api';
+import { getFinanceSettings } from '../finance/finance.api';
+import { bulkCancelBills, bulkPayBills, cancelBill, createBill, listBills, listBillSelection } from './billing.api';
 import {
+  BillAmountFilter,
   BillListItem,
   BillSource,
+  BulkPayBillsInput,
   PaymentStatus,
+  PaymentType,
   billSourceLabels,
   paymentStatusColors,
   paymentStatusLabels,
+  paymentTypeLabels,
 } from './types';
 
 const pageSize = 10;
@@ -40,13 +45,16 @@ export function BillsPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<BillStatusFilter | undefined>(() => getInitialStatusFilter(searchParams));
   const [source, setSource] = useState<BillSource | undefined>();
+  const [amountFilter, setAmountFilter] = useState<BillAmountFilter | undefined>();
   const [offset, setOffset] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
+  const [bulkPaymentOpen, setBulkPaymentOpen] = useState(false);
+  const [selectedBillIds, setSelectedBillIds] = useState<string[]>([]);
   const status = statusFilter === 'DEBT' ? undefined : statusFilter;
   const debtOnly = statusFilter === 'DEBT';
   const billsQuery = useQuery({
-    queryKey: ['bills', { search, status, debtOnly, source, limit: pageSize, offset }],
-    queryFn: () => listBills({ search, status, debtOnly, source, limit: pageSize, offset }),
+    queryKey: ['bills', { search, status, debtOnly, source, amount: amountFilter, limit: pageSize, offset }],
+    queryFn: () => listBills({ search, status, debtOnly, source, amount: amountFilter, limit: pageSize, offset }),
   });
   const cancelMutation = useMutation({
     mutationFn: cancelBill,
@@ -57,11 +65,55 @@ export function BillsPage() {
     onError: (error) => message.error(getErrorMessage(error)),
   });
   const { isPending: cancelPending, mutateAsync: cancelBillAsync } = cancelMutation;
+  const selectionQuery = { search, status, debtOnly, source, amount: amountFilter };
+  const selectAllMutation = useMutation({
+    mutationFn: () => listBillSelection(selectionQuery),
+    onSuccess: (result) => {
+      const actionableIds = result.items
+        .filter((bill) => {
+          const debt = toMoneyNumber(bill.totalAmount) - toMoneyNumber(bill.paidAmount);
+          const cancellable = canManage && bill.status !== 'CANCELLED' && toMoneyNumber(bill.paidAmount) <= 0;
+          const payable = canManagePayments && bill.status !== 'CANCELLED' && debt > 0;
+          return cancellable || payable;
+        })
+        .map((bill) => bill.id);
+      setSelectedBillIds(actionableIds);
+      if (actionableIds.length) {
+        message.success(`Выбрано счетов: ${actionableIds.length}`);
+      } else {
+        message.info('По текущим фильтрам нет счетов, доступных вам для массового действия');
+      }
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
+  const bulkCancelMutation = useMutation({
+    mutationFn: (billIds: string[]) => bulkCancelBills(billIds),
+    onSuccess: async (result) => {
+      await queryClient.invalidateQueries({ queryKey: ['bills'] });
+      setSelectedBillIds([]);
+      message.success(`Отменено счетов: ${result.count}`);
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
+  const bulkPayMutation = useMutation({
+    mutationFn: (input: Omit<BulkPayBillsInput, 'billIds'>) => bulkPayBills({ ...input, billIds: selectedBillIds }),
+    onSuccess: async (result) => {
+      await queryClient.invalidateQueries({ queryKey: ['bills'] });
+      setSelectedBillIds([]);
+      setBulkPaymentOpen(false);
+      message.success(`Полностью оплачено счетов: ${result.count}`);
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
 
   useEffect(() => {
     setStatusFilter(getInitialStatusFilter(searchParams));
     setOffset(0);
   }, [searchParams]);
+
+  useEffect(() => {
+    setSelectedBillIds([]);
+  }, [amountFilter, debtOnly, search, source, status]);
 
   const columns = useMemo<ColumnsType<BillListItem>>(
     () => [
@@ -184,6 +236,17 @@ export function BillsPage() {
     setOffset((current - 1) * size);
   }
 
+  function confirmBulkCancellation() {
+    modal.confirm({
+      title: `Отменить выбранные счета (${selectedBillIds.length})?`,
+      content: 'Все выбранные счета будут отменены одним действием. Если хотя бы один счёт уже имеет оплату, ни один счёт не изменится.',
+      okText: 'Отменить счета',
+      cancelText: 'Назад',
+      okButtonProps: { danger: true },
+      onOk: () => bulkCancelMutation.mutateAsync(selectedBillIds),
+    });
+  }
+
   return (
     <div className="page">
       <PageHeader
@@ -235,11 +298,47 @@ export function BillsPage() {
               }}
               options={Object.entries(billSourceLabels).map(([value, label]) => ({ value, label }))}
             />
+            <Select
+              allowClear
+              className="status-filter"
+              placeholder="Сумма"
+              value={amountFilter}
+              onChange={(value) => {
+                setAmountFilter(value);
+                setOffset(0);
+              }}
+              options={[
+                { value: 'ZERO', label: 'Только нулевые' },
+                { value: 'POSITIVE', label: 'С суммой больше нуля' },
+              ]}
+            />
           </Space>
         </div>
         <div className="list-panel-body">
           <Space direction="vertical" size={16} className="full-width">
             {billsQuery.isError ? <Typography.Text type="danger">{getErrorMessage(billsQuery.error)}</Typography.Text> : null}
+            {(canManage || canManagePayments) && (billsQuery.data?.total ?? 0) > 0 ? (
+              <Alert
+                type={selectedBillIds.length ? 'info' : 'warning'}
+                showIcon
+                message={selectedBillIds.length ? `Выбрано счетов: ${selectedBillIds.length}` : 'Выберите счета галочками или выберите все найденные'}
+                description="Массовая отмена доступна только для счетов без оплат. Массовая оплата полностью погашает остаток каждого выбранного счёта."
+                action={(
+                  <Space wrap>
+                    <Button loading={selectAllMutation.isPending} onClick={() => selectAllMutation.mutate()}>
+                      Выбрать все найденные ({billsQuery.data?.total ?? 0})
+                    </Button>
+                    {selectedBillIds.length ? <Button onClick={() => setSelectedBillIds([])}>Снять выбор</Button> : null}
+                    {selectedBillIds.length && canManagePayments ? (
+                      <Button type="primary" onClick={() => setBulkPaymentOpen(true)}>Оплатить выбранные</Button>
+                    ) : null}
+                    {selectedBillIds.length && canManage ? (
+                      <Button danger loading={bulkCancelMutation.isPending} onClick={confirmBulkCancellation}>Отменить выбранные</Button>
+                    ) : null}
+                  </Space>
+                )}
+              />
+            ) : null}
             <Table<BillListItem>
               rowKey="id"
               columns={columns}
@@ -247,6 +346,17 @@ export function BillsPage() {
               loading={billsQuery.isLoading}
               pagination={{ current: offset / pageSize + 1, pageSize, total: billsQuery.data?.total ?? 0, showSizeChanger: false }}
               onChange={handleTableChange}
+              rowSelection={canManage || canManagePayments ? {
+                selectedRowKeys: selectedBillIds,
+                preserveSelectedRowKeys: true,
+                onChange: (keys) => setSelectedBillIds(keys.map(String)),
+                getCheckboxProps: (record) => {
+                  const debt = toMoneyNumber(record.totalAmount) - toMoneyNumber(record.paidAmount);
+                  const cancellable = canManage && record.status !== 'CANCELLED' && toMoneyNumber(record.paidAmount) <= 0;
+                  const payable = canManagePayments && record.status !== 'CANCELLED' && debt > 0;
+                  return { disabled: !cancellable && !payable };
+                },
+              } : undefined}
               onRow={(record) => ({ onDoubleClick: () => navigate(`/bills/${record.id}`) })}
               className="dense-table"
             />
@@ -254,7 +364,102 @@ export function BillsPage() {
         </div>
       </div>
       <ManualBillDrawer open={createOpen} onClose={() => setCreateOpen(false)} />
+      <BulkPaymentModal
+        open={bulkPaymentOpen}
+        count={selectedBillIds.length}
+        loading={bulkPayMutation.isPending}
+        onClose={() => setBulkPaymentOpen(false)}
+        onSubmit={(values) => bulkPayMutation.mutate(values)}
+      />
     </div>
+  );
+}
+
+type BulkPaymentFormValues = Omit<BulkPayBillsInput, 'billIds'>;
+
+function BulkPaymentModal({
+  open,
+  count,
+  loading,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean;
+  count: number;
+  loading: boolean;
+  onClose: () => void;
+  onSubmit: (values: BulkPaymentFormValues) => void;
+}) {
+  const [form] = Form.useForm<BulkPaymentFormValues>();
+  const financeQuery = useQuery({ queryKey: ['finance', 'settings'], queryFn: getFinanceSettings, enabled: open });
+  const paymentMethodId = Form.useWatch('paymentMethodId', form);
+  const activePaymentMethods = financeQuery.data?.paymentMethods.filter((method) => method.isActive) ?? [];
+  const activeCashboxes = financeQuery.data?.cashboxes.filter((cashbox) => cashbox.isActive) ?? [];
+
+  useEffect(() => {
+    if (open) form.resetFields();
+  }, [form, open]);
+
+  useEffect(() => {
+    const method = activePaymentMethods.find((item) => item.id === paymentMethodId);
+    if (method) form.setFieldValue('type', method.type);
+  }, [activePaymentMethods, form, paymentMethodId]);
+
+  return (
+    <Modal
+      open={open}
+      title={`Полностью оплатить выбранные счета (${count})`}
+      okText="Провести оплаты"
+      cancelText="Отмена"
+      confirmLoading={loading}
+      onCancel={onClose}
+      onOk={() => form.submit()}
+      destroyOnHidden
+      width={560}
+    >
+      <Alert
+        type="warning"
+        showIcon
+        message="Будет погашен весь остаток каждого выбранного счёта"
+        description="Операция выполняется целиком: если хотя бы один счёт нельзя оплатить, оплаты не будут созданы ни по одному счёту."
+        style={{ marginBottom: 16 }}
+      />
+      <Form<BulkPaymentFormValues>
+        form={form}
+        layout="vertical"
+        initialValues={{ type: 'CASH' satisfies PaymentType }}
+        onFinish={onSubmit}
+      >
+        <Form.Item name="paymentMethodId" label="Способ оплаты">
+          <Select
+            allowClear
+            loading={financeQuery.isLoading}
+            placeholder="Выберите способ оплаты"
+            options={activePaymentMethods.map((method) => ({ value: method.id, label: method.title }))}
+          />
+        </Form.Item>
+        <Form.Item name="type" label="Тип оплаты" rules={[{ required: true, message: 'Выберите тип оплаты' }]}>
+          <Select
+            disabled={Boolean(paymentMethodId)}
+            options={Object.entries(paymentTypeLabels).map(([value, label]) => ({ value, label }))}
+          />
+        </Form.Item>
+        <Form.Item name="cashboxId" label="Касса">
+          <Select
+            allowClear
+            loading={financeQuery.isLoading}
+            placeholder="Без кассы"
+            options={activeCashboxes.map((cashbox) => ({
+              value: cashbox.id,
+              label: cashbox.office?.name ? `${cashbox.title} · ${cashbox.office.name}` : cashbox.title,
+            }))}
+          />
+        </Form.Item>
+        <Form.Item name="comment" label="Комментарий">
+          <Input.TextArea rows={3} maxLength={1000} />
+        </Form.Item>
+      </Form>
+    </Modal>
   );
 }
 

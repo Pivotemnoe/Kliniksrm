@@ -6,6 +6,7 @@ import { DecimalValue } from '../visits/types';
 export type PaymentStatus = 'UNPAID' | 'PARTIAL' | 'PAID' | 'REFUNDED' | 'CANCELLED';
 export type PaymentType = 'CASH' | 'CARD' | 'BANK_TRANSFER' | 'DEPOSIT' | 'OTHER';
 export type BillSource = 'VISIT' | 'SALE' | 'MANUAL';
+export type BillAmountFilter = 'ZERO' | 'POSITIVE';
 
 export type BillOwner = Pick<Owner, 'id' | 'fullName' | 'phone' | 'extraPhone'>;
 export type BillAnimal = Pick<Animal, 'id' | 'nickname' | 'species' | 'breed' | 'sex' | 'status'>;
@@ -116,6 +117,7 @@ export type ListBillsQuery = {
   search?: string;
   status?: PaymentStatus;
   source?: BillSource;
+  amount?: BillAmountFilter;
   ownerId?: string;
   animalId?: string;
   visitId?: string;
@@ -124,6 +126,22 @@ export type ListBillsQuery = {
   debtOnly?: boolean;
   limit?: number;
   offset?: number;
+};
+
+export type BillSelectionItem = Pick<BillListItem, 'id' | 'status' | 'totalAmount' | 'paidAmount'>;
+
+export type BillSelectionResponse = {
+  items: BillSelectionItem[];
+  total: number;
+};
+
+export type BulkPayBillsInput = {
+  billIds: string[];
+  type: PaymentType;
+  paymentMethodId?: string;
+  cashboxId?: string;
+  paidAt?: string;
+  comment?: string;
 };
 
 export type BillAlertsResponse = {

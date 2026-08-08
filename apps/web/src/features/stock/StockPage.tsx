@@ -1,8 +1,9 @@
-import { DeleteOutlined, DownOutlined, EditOutlined, EyeOutlined, PaperClipOutlined, PlusOutlined, PrinterOutlined } from '@ant-design/icons';
+import { CreditCardOutlined, DeleteOutlined, DownOutlined, EditOutlined, EyeOutlined, PaperClipOutlined, PlusOutlined, PrinterOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, AutoComplete, Button, Checkbox, Descriptions, Drawer, Dropdown, Form, Input, InputNumber, Modal, Radio, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
+import { Alert, App, AutoComplete, Button, Checkbox, DatePicker, Descriptions, Drawer, Dropdown, Form, Input, InputNumber, Modal, Radio, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
 import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
+import dayjs, { Dayjs } from 'dayjs';
 import JsBarcode from 'jsbarcode';
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { Controller, useFieldArray, useForm, useWatch } from 'react-hook-form';
@@ -19,6 +20,7 @@ import { listSupplyFiles, uploadSupplyFile } from '../files/files.api';
 import {
   createProduct,
   createService,
+  createSupplierPayment,
   createSupplyInvoice,
   deleteProduct,
   deleteService,
@@ -61,6 +63,7 @@ export function StockPage() {
   const [supplyOpen, setSupplyOpen] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<SupplyInvoice | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<SupplyInvoice | null>(null);
+  const [paymentInvoice, setPaymentInvoice] = useState<SupplyInvoice | null>(null);
   const resourcesQuery = useQuery({ queryKey: ['stock', 'resources'], queryFn: getStockResources });
   const catalogQualityQuery = useQuery({ queryKey: ['stock', 'catalog-quality'], queryFn: getCatalogQuality });
   const deleteProductMutation = useMutation({
@@ -218,7 +221,7 @@ export function StockPage() {
             {
               key: 'invoices',
               label: 'Накладные',
-              children: <InvoicesTable search={search} offset={offset} canManage={canManage} onOpen={setSelectedInvoice} onEdit={(invoice) => {
+              children: <InvoicesTable search={search} offset={offset} canManage={canManage} onOpen={setSelectedInvoice} onPay={setPaymentInvoice} onEdit={(invoice) => {
                 setEditingInvoice(invoice);
                 setSupplyOpen(true);
               }} onTableChange={handleTableChange} />,
@@ -327,17 +330,28 @@ export function StockPage() {
         {selectedInvoice ? (
           <Space direction="vertical" size={16} className="full-width">
             {canManage ? (
-              <Button icon={<EditOutlined />} onClick={() => {
-                setEditingInvoice(selectedInvoice);
-                setSelectedInvoice(null);
-                setSupplyOpen(true);
-              }}>
-                Исправить накладную
-              </Button>
+              <Space wrap>
+                <Button icon={<EditOutlined />} onClick={() => {
+                  setEditingInvoice(selectedInvoice);
+                  setSelectedInvoice(null);
+                  setSupplyOpen(true);
+                }}>
+                  Исправить накладную
+                </Button>
+                {getSupplyInvoiceRemainingAmount(selectedInvoice) > 0 && selectedInvoice.supplierId ? (
+                  <Button type="primary" icon={<CreditCardOutlined />} onClick={() => setPaymentInvoice(selectedInvoice)}>
+                    Оплатить накладную
+                  </Button>
+                ) : null}
+              </Space>
             ) : null}
             <Typography.Text>
               {formatDate(selectedInvoice.suppliedAt)} · {selectedInvoice.supplier?.title ?? 'Поставщик не указан'} · {formatMoney(selectedInvoice.totalAmount)}
             </Typography.Text>
+            <Descriptions size="small" bordered column={2} items={[
+              { key: 'paid', label: 'Оплачено', children: formatMoney(getSupplyInvoicePaidAmount(selectedInvoice)) },
+              { key: 'debt', label: 'Долг', children: getSupplyInvoiceRemainingAmount(selectedInvoice) > 0 ? <strong>{formatMoney(getSupplyInvoiceRemainingAmount(selectedInvoice))}</strong> : <Tag color="green">Оплачено полностью</Tag> },
+            ]} />
             <Table
               rowKey="id"
               size="small"
@@ -362,6 +376,16 @@ export function StockPage() {
           </Space>
         ) : null}
       </Drawer>
+      <SupplyInvoicePaymentModal
+        invoice={paymentInvoice}
+        resources={resourcesQuery.data}
+        onClose={() => setPaymentInvoice(null)}
+        onSaved={async () => {
+          await queryClient.invalidateQueries({ queryKey: ['stock'] });
+          setPaymentInvoice(null);
+          setSelectedInvoice(null);
+        }}
+      />
       <PriceTagEditor product={printingProduct} organization={resourcesQuery.data?.organization ?? null} onClose={() => setPrintingProduct(null)} />
     </div>
   );
@@ -599,6 +623,7 @@ function InvoicesTable({
   offset,
   canManage,
   onOpen,
+  onPay,
   onEdit,
   onTableChange,
 }: {
@@ -606,6 +631,7 @@ function InvoicesTable({
   offset: number;
   canManage: boolean;
   onOpen: (invoice: SupplyInvoice) => void;
+  onPay: (invoice: SupplyInvoice) => void;
   onEdit: (invoice: SupplyInvoice) => void;
   onTableChange: (pagination: TablePaginationConfig) => void;
 }) {
@@ -620,19 +646,105 @@ function InvoicesTable({
       { title: 'Поставщик', key: 'supplier', render: (_, record) => record.supplier?.title ?? '—' },
       { title: 'Позиций', key: 'items', render: (_, record) => record.items.length },
       { title: 'Сумма', dataIndex: 'totalAmount', key: 'totalAmount', render: formatMoney },
+      { title: 'Оплачено', key: 'paid', render: (_, record) => formatMoney(getSupplyInvoicePaidAmount(record)) },
+      { title: 'Долг', key: 'debt', render: (_, record) => {
+        const remaining = getSupplyInvoiceRemainingAmount(record);
+        return remaining > 0 ? <strong>{formatMoney(remaining)}</strong> : <Tag color="green">Оплачено</Tag>;
+      } },
       {
         title: '',
         key: 'actions',
         render: (_, record) => <Space size={6}>
           <Button size="small" icon={<PaperClipOutlined />} onClick={() => onOpen(record)}>Открыть</Button>
+          {canManage && record.supplierId && getSupplyInvoiceRemainingAmount(record) > 0 ? <Button size="small" type="primary" icon={<CreditCardOutlined />} onClick={() => onPay(record)}>Оплатить</Button> : null}
           {canManage ? <Button size="small" icon={<EditOutlined />} onClick={() => onEdit(record)}>Исправить</Button> : null}
         </Space>,
       },
     ],
-    [canManage, onEdit, onOpen],
+    [canManage, onEdit, onOpen, onPay],
   );
 
   return <StockTable query={invoicesQuery} columns={columns} offset={offset} onTableChange={onTableChange} />;
+}
+
+function SupplyInvoicePaymentModal({ invoice, resources, onClose, onSaved }: { invoice: SupplyInvoice | null; resources?: StockResources; onClose: () => void; onSaved: () => Promise<void> }) {
+  const { message } = App.useApp();
+  const [form] = Form.useForm<{ amount: number; paidAt: Dayjs; cashboxId: string; paymentMethodId: string; comment?: string }>();
+  const mutation = useMutation({
+    mutationFn: (values: { amount: number; paidAt: Dayjs; cashboxId: string; paymentMethodId: string; comment?: string }) => createSupplierPayment({
+      supplierId: invoice!.supplierId!,
+      supplyInvoiceId: invoice!.id,
+      amount: values.amount,
+      paidAt: values.paidAt.toISOString(),
+      cashboxId: values.cashboxId,
+      paymentMethodId: values.paymentMethodId,
+      comment: values.comment,
+    }),
+    onSuccess: async () => {
+      await onSaved();
+      form.resetFields();
+      message.success('Оплата накладной зарегистрирована');
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
+
+  useEffect(() => {
+    if (!invoice) return;
+    form.resetFields();
+    form.setFieldsValue({
+      amount: getSupplyInvoiceRemainingAmount(invoice),
+      paidAt: dayjs(),
+      comment: `Оплата накладной ${invoice.number || invoice.id.slice(0, 8)}`,
+    });
+  }, [form, invoice]);
+
+  return (
+    <Modal
+      open={Boolean(invoice)}
+      title={`Оплатить накладную ${invoice?.number || ''}`.trim()}
+      okText="Зарегистрировать оплату"
+      cancelText="Отмена"
+      confirmLoading={mutation.isPending}
+      onCancel={onClose}
+      onOk={() => form.submit()}
+      destroyOnHidden
+    >
+      {invoice ? (
+        <Form form={form} layout="vertical" onFinish={(values) => mutation.mutate(values)}>
+          <Alert
+            type="info"
+            showIcon
+            message={`${invoice.supplier?.title ?? 'Поставщик'} · долг ${formatMoney(getSupplyInvoiceRemainingAmount(invoice))}`}
+            description="Оплата будет привязана именно к этой накладной и уменьшит долг поставщику."
+            style={{ marginBottom: 16 }}
+          />
+          <Form.Item name="amount" label="Сумма оплаты" rules={[{ required: true, message: 'Введите сумму' }]}>
+            <InputNumber min={0.01} max={getSupplyInvoiceRemainingAmount(invoice)} precision={2} addonAfter="₽" style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item name="cashboxId" label="Из кассы" rules={[{ required: true, message: 'Выберите кассу' }]}>
+            <Select options={resources?.cashboxes.map((item) => ({ value: item.id, label: item.title }))} />
+          </Form.Item>
+          <Form.Item name="paymentMethodId" label="Способ оплаты" rules={[{ required: true, message: 'Выберите способ оплаты' }]}>
+            <Select options={resources?.paymentMethods.map((item) => ({ value: item.id, label: item.title }))} />
+          </Form.Item>
+          <Form.Item name="paidAt" label="Дата оплаты" rules={[{ required: true, message: 'Выберите дату' }]}>
+            <DatePicker format="DD.MM.YYYY" style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item name="comment" label="Комментарий">
+            <Input.TextArea rows={2} maxLength={500} />
+          </Form.Item>
+        </Form>
+      ) : null}
+    </Modal>
+  );
+}
+
+function getSupplyInvoicePaidAmount(invoice: SupplyInvoice) {
+  return invoice.payments.reduce((total, payment) => total + Number(payment.amount), 0);
+}
+
+function getSupplyInvoiceRemainingAmount(invoice: SupplyInvoice) {
+  return Math.max(Number(invoice.totalAmount) - getSupplyInvoicePaidAmount(invoice), 0);
 }
 
 function StockTable<T extends { id: string }>({

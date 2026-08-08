@@ -55,6 +55,7 @@ export type PayrollEntry = {
   serviceAmount: DecimalValue;
   productRevenue: DecimalValue;
   productAmount: DecimalValue;
+  manualAmount: DecimalValue;
   adjustmentAmount: DecimalValue;
   totalAmount: DecimalValue;
 };
@@ -62,8 +63,10 @@ export type PayrollEntry = {
 export type PayrollAdjustment = {
   id: string;
   employeeId: string;
+  type: 'ADJUSTMENT' | 'MANUAL_SALARY';
   amount: DecimalValue;
   reason: string;
+  accruedAt: string | null;
   createdAt: string;
   employee?: { id: string; fullName: string };
   createdBy?: { id: string; fullName: string } | null;

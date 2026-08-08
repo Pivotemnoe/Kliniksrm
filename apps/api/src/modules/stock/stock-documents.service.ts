@@ -354,8 +354,14 @@ export class StockDocumentsService {
     const supplier = await this.prisma.supplier.findUnique({ where: { id: dto.supplierId }, select: { id: true } });
     if (!supplier) throw new NotFoundException('Поставщик не найден');
     if (dto.supplyInvoiceId) {
-      const invoice = await this.prisma.supplyInvoice.findUnique({ where: { id: dto.supplyInvoiceId }, select: { supplierId: true } });
+      const invoice = await this.prisma.supplyInvoice.findUnique({
+        where: { id: dto.supplyInvoiceId },
+        select: { supplierId: true, totalAmount: true, payments: { select: { amount: true } } },
+      });
       if (!invoice || invoice.supplierId !== dto.supplierId) throw new BadRequestException('Накладная не относится к выбранному поставщику');
+      const remainingAmount = decimal(invoice.totalAmount).minus(sum(invoice.payments.map((payment) => payment.amount)));
+      if (remainingAmount.lessThanOrEqualTo(0)) throw new BadRequestException('Накладная уже полностью оплачена');
+      if (decimal(dto.amount).greaterThan(remainingAmount)) throw new BadRequestException('Сумма оплаты больше долга по накладной');
     }
     if (dto.cashboxId) {
       const cashbox = await this.prisma.cashbox.findUnique({ where: { id: dto.cashboxId }, select: { id: true, isActive: true } });
@@ -382,7 +388,7 @@ export class StockDocumentsService {
       action: 'stock.supplier_payment.create',
       entityType: 'SupplierPayment',
       entityId: payment.id,
-      metadata: { supplierId: dto.supplierId, amount: dto.amount, cashboxId: dto.cashboxId, paymentMethodId: dto.paymentMethodId },
+      metadata: { supplierId: dto.supplierId, supplyInvoiceId: dto.supplyInvoiceId ?? null, amount: dto.amount, cashboxId: dto.cashboxId, paymentMethodId: dto.paymentMethodId },
     });
     return payment;
   }

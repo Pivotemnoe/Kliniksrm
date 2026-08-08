@@ -2,6 +2,11 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { BillSource, PaymentStatus } from '@prisma/client';
 import { IsBooleanString, IsDateString, IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
+export enum BillAmountFilter {
+  ZERO = 'ZERO',
+  POSITIVE = 'POSITIVE',
+}
+
 export class ListBillsQueryDto {
   @ApiPropertyOptional({ enum: PaymentStatus })
   @IsOptional()
@@ -12,6 +17,11 @@ export class ListBillsQueryDto {
   @IsOptional()
   @IsEnum(BillSource)
   source?: BillSource;
+
+  @ApiPropertyOptional({ enum: BillAmountFilter })
+  @IsOptional()
+  @IsEnum(BillAmountFilter)
+  amount?: BillAmountFilter;
 
   @ApiPropertyOptional()
   @IsOptional()

@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Button, DatePicker, Descriptions, Form, Input, InputNumber, Modal, Select, Space, Switch, Table, Tabs, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { Dayjs } from 'dayjs';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
@@ -12,6 +12,7 @@ import { formatDate } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
 import {
   addPayrollAdjustment,
+  addPayrollManualAccrual,
   approvePayrollPeriod,
   createPayrollPeriod,
   getPayrollPeriod,
@@ -20,7 +21,7 @@ import {
   recalculatePayrollPeriod,
   savePayrollProfile,
 } from './payroll.api';
-import { PayrollEmployee, PayrollEntry, PayrollPeriod, PayrollProfileInput } from './types';
+import { PayrollAdjustment, PayrollEmployee, PayrollEntry, PayrollPeriod, PayrollProfileInput } from './types';
 
 const { RangePicker } = DatePicker;
 
@@ -157,18 +158,114 @@ function CreatePeriodModal({ open, onClose, onSaved }: { open: boolean; onClose:
 
 function PeriodDetailsModal({ period, loading, employees, canManage, onClose, onChanged }: { period?: PayrollPeriod; loading: boolean; employees: PayrollEmployee[]; canManage: boolean; onClose: () => void; onChanged: () => Promise<void> }) {
   const { message } = App.useApp();
-  const [form] = Form.useForm<{ employeeId: string; amount: number; reason: string }>();
-  const mutation = useMutation({ mutationFn: (input: { employeeId: string; amount: number; reason: string }) => addPayrollAdjustment(period!.id, input), onSuccess: async () => { await onChanged(); form.resetFields(); message.success('Корректировка учтена'); }, onError: (error) => message.error(getErrorMessage(error)) });
-  const columns: ColumnsType<PayrollEntry> = [
+  const [salaryOpen, setSalaryOpen] = useState(false);
+  const [adjustmentForm] = Form.useForm<{ employeeId: string; amount: number; reason: string }>();
+  const [salaryForm] = Form.useForm<{ employeeId: string; amount: number; accruedAt: Dayjs; reason: string }>();
+  const adjustmentMutation = useMutation({
+    mutationFn: (input: { employeeId: string; amount: number; reason: string }) => addPayrollAdjustment(period!.id, input),
+    onSuccess: async () => {
+      await onChanged();
+      adjustmentForm.resetFields();
+      message.success('Премия или удержание учтены');
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
+  const salaryMutation = useMutation({
+    mutationFn: (input: { employeeId: string; amount: number; accruedAt: string; reason: string }) => addPayrollManualAccrual(period!.id, input),
+    onSuccess: async () => {
+      await onChanged();
+      salaryForm.resetFields();
+      setSalaryOpen(false);
+      message.success('Зарплата начислена сотруднику');
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
+
+  useEffect(() => {
+    if (!salaryOpen || !period) return;
+    const now = dayjs();
+    const startsAt = dayjs(period.startsAt);
+    const endsAt = dayjs(period.endsAt);
+    salaryForm.setFieldsValue({
+      accruedAt: now.isBefore(startsAt) || now.isAfter(endsAt) ? startsAt : now,
+      reason: 'Зарплата за рабочий день',
+    });
+  }, [period, salaryForm, salaryOpen]);
+
+  const entryColumns: ColumnsType<PayrollEntry> = [
     { title: 'Сотрудник', dataIndex: 'employeeName', key: 'employeeName', fixed: 'left' },
     { title: 'Фикс.', dataIndex: 'fixedAmount', key: 'fixedAmount', render: formatMoney },
     { title: 'Смены', key: 'shifts', render: (_, row) => `${row.shiftCount} / ${formatMoney(row.shiftAmount)}` },
     { title: 'Услуги', key: 'services', render: (_, row) => `${formatMoney(row.serviceRevenue)} → ${formatMoney(row.serviceAmount)}` },
     { title: 'Товары', key: 'products', render: (_, row) => `${formatMoney(row.productRevenue)} → ${formatMoney(row.productAmount)}` },
-    { title: 'Коррект.', dataIndex: 'adjustmentAmount', key: 'adjustmentAmount', render: formatMoney },
+    { title: 'Внесено вручную', dataIndex: 'manualAmount', key: 'manualAmount', render: (value) => formatMoney(value ?? 0) },
+    { title: 'Премии / удержания', dataIndex: 'adjustmentAmount', key: 'adjustmentAmount', render: formatMoney },
     { title: 'Итого', dataIndex: 'totalAmount', key: 'totalAmount', render: (value) => <strong>{formatMoney(value)}</strong> },
   ];
-  return <Modal open={Boolean(period) || loading} title={period?.title ?? 'Расчёт зарплаты'} onCancel={onClose} footer={<Button onClick={onClose}>Закрыть</Button>} width={1180} loading={loading}>
-    {period ? <><Descriptions size="small" bordered items={[{ key: 'dates', label: 'Период', children: `${formatDate(period.startsAt)} — ${formatDate(period.endsAt)}` }, { key: 'status', label: 'Статус', children: period.status === 'APPROVED' ? 'Утверждён' : 'Черновик' }, { key: 'total', label: 'Итого', children: formatMoney(period.totalAmount) }, { key: 'approved', label: 'Утвердил', children: period.approvedBy?.fullName ?? '—' }]} /><Table rowKey="id" columns={columns} dataSource={period.entries ?? []} pagination={false} scroll={{ x: 1050 }} style={{ marginTop: 16 }} />{period.status === 'DRAFT' && canManage ? <Form form={form} layout="inline" onFinish={(values) => mutation.mutate(values)} style={{ marginTop: 20 }}><Form.Item name="employeeId" rules={[{ required: true }]}><Select placeholder="Сотрудник" style={{ width: 260 }} options={employees.map((item) => ({ value: item.id, label: item.fullName }))} /></Form.Item><Form.Item name="amount" rules={[{ required: true }]}><InputNumber precision={2} placeholder="Премия или удержание" addonAfter="₽" /></Form.Item><Form.Item name="reason" rules={[{ required: true }]}><Input placeholder="Основание корректировки" style={{ width: 300 }} /></Form.Item><Button type="primary" htmlType="submit" loading={mutation.isPending}>Добавить</Button></Form> : null}</> : null}
-  </Modal>;
+  const adjustmentColumns: ColumnsType<PayrollAdjustment> = [
+    { title: 'Дата', key: 'date', render: (_, row) => formatDate(row.accruedAt ?? row.createdAt) },
+    { title: 'Сотрудник', key: 'employee', render: (_, row) => row.employee?.fullName ?? '—' },
+    { title: 'Вид', dataIndex: 'type', key: 'type', render: (value) => value === 'MANUAL_SALARY' ? <Tag color="blue">Ручная зарплата</Tag> : <Tag>Премия / удержание</Tag> },
+    { title: 'Сумма', dataIndex: 'amount', key: 'amount', render: (value) => <strong>{formatMoney(value)}</strong> },
+    { title: 'Основание', dataIndex: 'reason', key: 'reason' },
+    { title: 'Внёс', key: 'createdBy', render: (_, row) => row.createdBy?.fullName ?? '—' },
+  ];
+
+  return (
+    <>
+      <Modal open={Boolean(period) || loading} title={period?.title ?? 'Расчёт зарплаты'} onCancel={onClose} footer={<Button onClick={onClose}>Закрыть</Button>} width={1240} loading={loading}>
+        {period ? (
+          <>
+            <Descriptions size="small" bordered items={[{ key: 'dates', label: 'Период', children: `${formatDate(period.startsAt)} — ${formatDate(period.endsAt)}` }, { key: 'status', label: 'Статус', children: period.status === 'APPROVED' ? 'Утверждён' : 'Черновик' }, { key: 'total', label: 'Итого', children: formatMoney(period.totalAmount) }, { key: 'approved', label: 'Утвердил', children: period.approvedBy?.fullName ?? '—' }]} />
+            {period.status === 'DRAFT' && canManage ? (
+              <Space wrap style={{ marginTop: 16 }}>
+                <Button type="primary" icon={<PlusOutlined />} onClick={() => setSalaryOpen(true)}>Внести зарплату</Button>
+                <Typography.Text type="secondary">Для разовой выплаты за день правила начисления не нужны.</Typography.Text>
+              </Space>
+            ) : null}
+            <Table rowKey="id" columns={entryColumns} dataSource={period.entries ?? []} pagination={false} scroll={{ x: 1200 }} style={{ marginTop: 16 }} />
+
+            <Typography.Title level={5} style={{ marginTop: 24 }}>Ручные начисления и корректировки</Typography.Title>
+            <Table rowKey="id" size="small" columns={adjustmentColumns} dataSource={period.adjustments ?? []} pagination={false} scroll={{ x: 900 }} />
+
+            {period.status === 'DRAFT' && canManage ? (
+              <Form form={adjustmentForm} layout="inline" onFinish={(values) => adjustmentMutation.mutate(values)} style={{ marginTop: 20 }}>
+                <Form.Item name="employeeId" rules={[{ required: true, message: 'Выберите сотрудника' }]}><Select placeholder="Сотрудник" style={{ width: 260 }} options={employees.map((item) => ({ value: item.id, label: item.fullName }))} /></Form.Item>
+                <Form.Item name="amount" rules={[{ required: true, message: 'Введите сумму' }, { validator: (_, value) => Number(value) !== 0 ? Promise.resolve() : Promise.reject(new Error('Сумма не может быть нулевой')) }]}><InputNumber precision={2} placeholder="Премия или удержание" addonAfter="₽" /></Form.Item>
+                <Form.Item name="reason" rules={[{ required: true, message: 'Укажите основание' }]}><Input placeholder="Основание премии или удержания" style={{ width: 300 }} /></Form.Item>
+                <Button icon={<CalculatorOutlined />} htmlType="submit" loading={adjustmentMutation.isPending}>Добавить корректировку</Button>
+              </Form>
+            ) : null}
+          </>
+        ) : null}
+      </Modal>
+
+      <Modal
+        open={salaryOpen && Boolean(period)}
+        title="Внести зарплату сотруднику"
+        okText="Начислить зарплату"
+        cancelText="Отмена"
+        confirmLoading={salaryMutation.isPending}
+        onCancel={() => setSalaryOpen(false)}
+        onOk={() => salaryForm.submit()}
+        destroyOnHidden
+      >
+        <Form form={salaryForm} layout="vertical" onFinish={(values) => salaryMutation.mutate({ ...values, accruedAt: values.accruedAt.startOf('day').toISOString() })}>
+          <Form.Item name="employeeId" label="Сотрудник" rules={[{ required: true, message: 'Выберите сотрудника' }]}>
+            <Select showSearch optionFilterProp="label" options={employees.map((item) => ({ value: item.id, label: item.fullName }))} />
+          </Form.Item>
+          <Form.Item name="accruedAt" label="Рабочий день" rules={[{ required: true, message: 'Выберите дату' }]}>
+            <DatePicker format="DD.MM.YYYY" style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item name="amount" label="Сумма зарплаты" rules={[{ required: true, message: 'Введите сумму' }]}>
+            <InputNumber min={0.01} precision={2} addonAfter="₽" style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item name="reason" label="Основание" rules={[{ required: true, message: 'Укажите основание' }]}>
+            <Input maxLength={500} />
+          </Form.Item>
+          <Typography.Text type="secondary">Начисление попадёт в строку сотрудника и в итог этого расчётного периода. После утверждения периода оно войдёт в отчёт по зарплате.</Typography.Text>
+        </Form>
+      </Modal>
+    </>
+  );
 }

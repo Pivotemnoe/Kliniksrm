@@ -1321,6 +1321,10 @@ const stockBatchInclude = {
 
 const supplyInvoiceInclude = {
   supplier: true,
+  payments: {
+    select: { id: true, amount: true, paidAt: true, supplyInvoiceId: true, cashboxId: true, paymentMethodId: true, comment: true },
+    orderBy: { paidAt: 'desc' },
+  },
   items: {
     include: {
       product: { include: { category: true } },
@@ -1334,6 +1338,10 @@ const supplyInvoiceInclude = {
 function getSupplyInvoiceInclude(itemWhere?: Prisma.SupplyInvoiceItemWhereInput | null) {
   return {
     supplier: true,
+    payments: {
+      select: { id: true, amount: true, paidAt: true, supplyInvoiceId: true, cashboxId: true, paymentMethodId: true, comment: true },
+      orderBy: { paidAt: 'desc' },
+    },
     items: {
       ...(itemWhere ? { where: itemWhere } : {}),
       include: {

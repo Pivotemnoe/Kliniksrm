@@ -4,6 +4,7 @@ import { AuthEmployee } from '../auth/auth.types';
 import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { AddBillItemDto } from './dto/add-bill-item.dto';
+import { BulkBillIdsDto, BulkPayBillsDto } from './dto/bulk-bills.dto';
 import { CreateBillDto } from './dto/create-bill.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { ListBillsQueryDto } from './dto/list-bills-query.dto';
@@ -29,6 +30,27 @@ export class BillingController {
   @ApiOkResponse({ description: 'Bills with unpaid debt.' })
   listBillAlerts(@Query() query: ListBillsQueryDto) {
     return this.billingService.listBillAlerts(query);
+  }
+
+  @Get('selection')
+  @RequirePermissions('billing.read')
+  @ApiOkResponse({ description: 'Actionable bill ids matching the active list filters.' })
+  listBillSelection(@Query() query: ListBillsQueryDto) {
+    return this.billingService.listBillSelection(query);
+  }
+
+  @Post('bulk-cancel')
+  @RequirePermissions('billing.manage')
+  @ApiOkResponse({ description: 'Selected unpaid bills cancelled atomically.' })
+  bulkCancelBills(@Body() dto: BulkBillIdsDto, @CurrentEmployee() actor: AuthEmployee) {
+    return this.billingService.bulkCancelBills(dto, actor.id);
+  }
+
+  @Post('bulk-pay')
+  @RequirePermissions('payments.manage')
+  @ApiCreatedResponse({ description: 'Selected bills fully paid atomically.' })
+  bulkPayBills(@Body() dto: BulkPayBillsDto, @CurrentEmployee() actor: AuthEmployee) {
+    return this.billingService.bulkPayBills(dto, actor.id);
   }
 
   @Post()

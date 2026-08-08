@@ -101,6 +101,15 @@ export type SupplyInvoice = {
   number: string | null;
   suppliedAt: string;
   totalAmount: DecimalValue;
+  payments: Array<{
+    id: string;
+    amount: DecimalValue;
+    paidAt: string;
+    supplyInvoiceId: string | null;
+    cashboxId: string | null;
+    paymentMethodId: string | null;
+    comment: string | null;
+  }>;
   items: SupplyInvoiceItem[];
   createdAt: string;
 };

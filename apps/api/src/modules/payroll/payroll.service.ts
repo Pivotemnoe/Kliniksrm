@@ -1,8 +1,9 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { EmployeeStatus, PaymentStatus, PayrollPeriodStatus, Prisma } from '@prisma/client';
+import { EmployeeStatus, PaymentStatus, PayrollAdjustmentType, PayrollPeriodStatus, Prisma } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreatePayrollAdjustmentDto } from './dto/create-payroll-adjustment.dto';
+import { CreatePayrollManualAccrualDto } from './dto/create-payroll-manual-accrual.dto';
 import { CreatePayrollPeriodDto } from './dto/create-payroll-period.dto';
 import { UpsertPayrollProfileDto } from './dto/upsert-payroll-profile.dto';
 
@@ -206,7 +207,37 @@ export class PayrollService {
   }
 
   async addAdjustment(periodId: string, dto: CreatePayrollAdjustmentDto, actorId: string) {
-    await this.ensureEmployeeExists(dto.employeeId);
+    return this.createPayrollAmount(periodId, {
+      employeeId: dto.employeeId,
+      amount: dto.amount,
+      reason: dto.reason,
+      type: PayrollAdjustmentType.ADJUSTMENT,
+    }, actorId, 'payroll.adjustment.create');
+  }
+
+  async addManualAccrual(periodId: string, dto: CreatePayrollManualAccrualDto, actorId: string) {
+    return this.createPayrollAmount(periodId, {
+      employeeId: dto.employeeId,
+      amount: dto.amount,
+      reason: dto.reason,
+      type: PayrollAdjustmentType.MANUAL_SALARY,
+      accruedAt: new Date(dto.accruedAt),
+    }, actorId, 'payroll.manual_salary.create');
+  }
+
+  private async createPayrollAmount(
+    periodId: string,
+    input: {
+      employeeId: string;
+      amount: number;
+      reason: string;
+      type: PayrollAdjustmentType;
+      accruedAt?: Date;
+    },
+    actorId: string,
+    auditAction: string,
+  ) {
+    await this.ensureEmployeeExists(input.employeeId);
     await this.prisma.$transaction(async (tx) => {
       const claimed = await tx.payrollPeriod.updateMany({
         where: { id: periodId, status: PayrollPeriodStatus.DRAFT },
@@ -218,12 +249,17 @@ export class PayrollService {
         throw new BadRequestException('Утверждённый расчёт нельзя изменять');
       }
       const period = await tx.payrollPeriod.findUniqueOrThrow({ where: { id: periodId } });
+      if (input.accruedAt && (input.accruedAt < period.startsAt || input.accruedAt > period.endsAt)) {
+        throw new BadRequestException('Дата начисления должна входить в расчётный период');
+      }
       await tx.payrollAdjustment.create({
         data: {
           periodId,
-          employeeId: dto.employeeId,
-          amount: dto.amount,
-          reason: dto.reason.trim(),
+          employeeId: input.employeeId,
+          type: input.type,
+          amount: input.amount,
+          reason: input.reason.trim(),
+          accruedAt: input.accruedAt,
           createdById: actorId,
         },
       });
@@ -237,10 +273,16 @@ export class PayrollService {
     });
     await this.auditService.log({
       actorId,
-      action: 'payroll.adjustment.create',
+      action: auditAction,
       entityType: 'PayrollPeriod',
       entityId: periodId,
-      metadata: { employeeId: dto.employeeId, amount: dto.amount, reason: dto.reason.trim() },
+      metadata: {
+        employeeId: input.employeeId,
+        amount: input.amount,
+        reason: input.reason.trim(),
+        type: input.type,
+        accruedAt: input.accruedAt?.toISOString() ?? null,
+      },
     });
     return this.getPeriod(periodId);
   }
@@ -270,45 +312,67 @@ export class PayrollService {
     endsAt: Date,
     client: Prisma.TransactionClient | PrismaService = this.prisma,
   ) {
-    const profiles = await client.payrollProfile.findMany({
-      where: { isActive: true, employee: { status: EmployeeStatus.ACTIVE } },
-      include: {
-        employee: { select: { id: true, fullName: true } },
-        serviceRules: true,
-        productRules: true,
-      },
-      orderBy: { employee: { fullName: 'asc' } },
-    });
-    const employeeIds = profiles.map((profile) => profile.employeeId);
-    if (!employeeIds.length) return [];
-
-    const [shifts, bills, adjustments] = await Promise.all([
-      client.employeeShift.findMany({
-        where: { employeeId: { in: employeeIds }, isActive: true, startsAt: { gte: startsAt }, endsAt: { lte: endsAt } },
-        select: { employeeId: true },
-      }),
-      client.bill.findMany({
-        where: {
-          createdAt: { gte: startsAt, lte: endsAt },
-          status: { notIn: [PaymentStatus.CANCELLED, PaymentStatus.REFUNDED] },
-          OR: [
-            { visit: { employeeId: { in: employeeIds }, status: 'COMPLETED' } },
-            { sale: { employeeId: { in: employeeIds } } },
-          ],
+    const [profiles, adjustments] = await Promise.all([
+      client.payrollProfile.findMany({
+        where: { isActive: true, employee: { status: EmployeeStatus.ACTIVE } },
+        include: {
+          employee: { select: { id: true, fullName: true } },
+          serviceRules: true,
+          productRules: true,
         },
+        orderBy: { employee: { fullName: 'asc' } },
+      }),
+      client.payrollAdjustment.findMany({
+        where: { periodId },
         select: {
-          id: true,
-          totalAmount: true,
-          paidAmount: true,
-          visit: { select: { employeeId: true, status: true } },
-          sale: { select: { employeeId: true } },
-          items: { select: { serviceId: true, productId: true, totalAmount: true } },
+          employeeId: true,
+          amount: true,
+          type: true,
+          employee: { select: { id: true, fullName: true } },
         },
       }),
-      client.payrollAdjustment.findMany({ where: { periodId }, select: { employeeId: true, amount: true } }),
     ]);
+    const employeeIds = profiles.map((profile) => profile.employeeId);
+    let shifts: Array<{ employeeId: string }> = [];
+    let bills: PayrollSourceBill[] = [];
+    if (employeeIds.length) {
+      [shifts, bills] = await Promise.all([
+        client.employeeShift.findMany({
+          where: { employeeId: { in: employeeIds }, isActive: true, startsAt: { gte: startsAt }, endsAt: { lte: endsAt } },
+          select: { employeeId: true },
+        }),
+        client.bill.findMany({
+          where: {
+            createdAt: { gte: startsAt, lte: endsAt },
+            status: { notIn: [PaymentStatus.CANCELLED, PaymentStatus.REFUNDED] },
+            OR: [
+              { visit: { employeeId: { in: employeeIds }, status: 'COMPLETED' } },
+              { sale: { employeeId: { in: employeeIds } } },
+            ],
+          },
+          select: {
+            id: true,
+            totalAmount: true,
+            paidAmount: true,
+            visit: { select: { employeeId: true, status: true } },
+            sale: { select: { employeeId: true } },
+            items: { select: { serviceId: true, productId: true, totalAmount: true } },
+          },
+        }),
+      ]);
+    }
 
-    return profiles.map((profile) => calculateEmployeePayroll(profile, shifts, bills, adjustments));
+    const entries: Array<ReturnType<typeof calculateEmployeePayroll> | ReturnType<typeof calculateManualPayrollEntry>> =
+      profiles.map((profile) => calculateEmployeePayroll(profile, shifts, bills, adjustments));
+    const profileEmployeeIds = new Set(employeeIds);
+    const manualEmployees = new Map(adjustments
+      .filter((adjustment) => !profileEmployeeIds.has(adjustment.employeeId))
+      .map((adjustment) => [adjustment.employeeId, adjustment.employee]));
+    for (const [employeeId, employee] of manualEmployees) {
+      entries.push(calculateManualPayrollEntry(employee, adjustments.filter((item) => item.employeeId === employeeId)));
+    }
+
+    return entries.sort((left, right) => left.employeeName.localeCompare(right.employeeName, 'ru'));
   }
 
   private async ensureEmployeeExists(employeeId: string) {
@@ -321,7 +385,7 @@ export function calculateEmployeePayroll(
   profile: PayrollProfileWithRules,
   shifts: Array<{ employeeId: string }>,
   bills: PayrollSourceBill[],
-  adjustments: Array<{ employeeId: string; amount: Prisma.Decimal }>,
+  adjustments: Array<{ employeeId: string; amount: Prisma.Decimal; type?: PayrollAdjustmentType }>,
 ) {
   const shiftCount = shifts.filter((shift) => shift.employeeId === profile.employeeId).length;
   const fixedAmount = decimal(profile.fixedAmount);
@@ -355,10 +419,14 @@ export function calculateEmployeePayroll(
     }
   }
 
-  const adjustmentAmount = adjustments
-    .filter((item) => item.employeeId === profile.employeeId)
+  const employeeAdjustments = adjustments.filter((item) => item.employeeId === profile.employeeId);
+  const manualAmount = employeeAdjustments
+    .filter((item) => item.type === PayrollAdjustmentType.MANUAL_SALARY)
     .reduce((total, item) => total.plus(item.amount), decimal(0));
-  const totalAmount = fixedAmount.plus(shiftAmount).plus(serviceAmount).plus(productAmount).plus(adjustmentAmount);
+  const adjustmentAmount = employeeAdjustments
+    .filter((item) => item.type !== PayrollAdjustmentType.MANUAL_SALARY)
+    .reduce((total, item) => total.plus(item.amount), decimal(0));
+  const totalAmount = fixedAmount.plus(shiftAmount).plus(serviceAmount).plus(productAmount).plus(manualAmount).plus(adjustmentAmount);
 
   return {
     employeeId: profile.employeeId,
@@ -370,10 +438,11 @@ export function calculateEmployeePayroll(
     serviceAmount,
     productRevenue,
     productAmount,
+    manualAmount,
     adjustmentAmount,
     totalAmount,
     snapshot: {
-      version: 1,
+      version: 2,
       profileId: profile.id,
       fixedAmount: fixedAmount.toString(),
       shiftRate: decimal(profile.shiftRate).toString(),
@@ -382,6 +451,41 @@ export function calculateEmployeePayroll(
       serviceRules: profile.serviceRules.map((rule) => ({ serviceId: rule.serviceId, percent: rule.percent.toString() })),
       productRules: profile.productRules.map((rule) => ({ productId: rule.productId, percent: rule.percent.toString() })),
       sourceBills,
+      calculatedAt: new Date().toISOString(),
+    } satisfies Prisma.InputJsonObject,
+  };
+}
+
+export function calculateManualPayrollEntry(
+  employee: { id: string; fullName: string },
+  adjustments: Array<{ employeeId: string; amount: Prisma.Decimal; type?: PayrollAdjustmentType }>,
+) {
+  const manualAmount = adjustments
+    .filter((item) => item.type === PayrollAdjustmentType.MANUAL_SALARY)
+    .reduce((total, item) => total.plus(item.amount), decimal(0));
+  const adjustmentAmount = adjustments
+    .filter((item) => item.type !== PayrollAdjustmentType.MANUAL_SALARY)
+    .reduce((total, item) => total.plus(item.amount), decimal(0));
+  const zero = decimal(0);
+
+  return {
+    employeeId: employee.id,
+    employeeName: employee.fullName,
+    fixedAmount: zero,
+    shiftCount: 0,
+    shiftAmount: zero,
+    serviceRevenue: zero,
+    serviceAmount: zero,
+    productRevenue: zero,
+    productAmount: zero,
+    manualAmount,
+    adjustmentAmount,
+    totalAmount: manualAmount.plus(adjustmentAmount),
+    snapshot: {
+      version: 2,
+      profileId: null,
+      manualOnly: true,
+      sourceBills: 0,
       calculatedAt: new Date().toISOString(),
     } satisfies Prisma.InputJsonObject,
   };

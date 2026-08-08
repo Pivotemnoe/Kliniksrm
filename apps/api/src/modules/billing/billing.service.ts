@@ -8,9 +8,10 @@ import { toStockQuantity } from '../stock/stock-units';
 import { resolveServiceUnitPrice, servicePricingSelect } from '../stock/service-pricing';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { AddBillItemDto } from './dto/add-bill-item.dto';
+import { BulkBillIdsDto, BulkPayBillsDto } from './dto/bulk-bills.dto';
 import { CreateBillDto } from './dto/create-bill.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
-import { ListBillsQueryDto } from './dto/list-bills-query.dto';
+import { BillAmountFilter, ListBillsQueryDto } from './dto/list-bills-query.dto';
 import { RefundPaymentDto } from './dto/refund-payment.dto';
 import { UpdateBillDto } from './dto/update-bill.dto';
 import { UpdateBillItemDto } from './dto/update-bill-item.dto';
@@ -32,32 +33,7 @@ export class BillingService {
     }
 
     const { limit, offset } = parsePagination(query);
-    const search = query.search?.trim();
-    const where: Prisma.BillWhereInput = {
-      ...(query.status ? { status: query.status } : {}),
-      ...(query.source ? { source: query.source } : {}),
-      ...(query.ownerId ? { ownerId: query.ownerId } : {}),
-      ...(query.animalId ? { animalId: query.animalId } : {}),
-      ...(query.visitId ? { visitId: query.visitId } : {}),
-      ...(query.dateFrom || query.dateTo
-        ? {
-            createdAt: {
-              ...(query.dateFrom ? { gte: new Date(query.dateFrom) } : {}),
-              ...(query.dateTo ? { lte: new Date(query.dateTo) } : {}),
-            },
-          }
-        : {}),
-      ...(search
-        ? {
-            OR: [
-              { owner: { fullName: { contains: search, mode: 'insensitive' } } },
-              { owner: { phone: { contains: search, mode: 'insensitive' } } },
-              { animal: { nickname: { contains: search, mode: 'insensitive' } } },
-              { items: { some: { title: { contains: search, mode: 'insensitive' } } } },
-            ],
-          }
-        : {}),
-    };
+    const where = buildBillWhere(query);
 
     const [items, total] = await this.prisma.$transaction([
       this.prisma.bill.findMany({
@@ -75,32 +51,7 @@ export class BillingService {
 
   async listBillAlerts(query: ListBillsQueryDto) {
     const { limit, offset } = parsePagination(query);
-    const search = query.search?.trim();
-    const where: Prisma.BillWhereInput = {
-      status: { in: [PaymentStatus.UNPAID, PaymentStatus.PARTIAL] },
-      ...(query.source ? { source: query.source } : {}),
-      ...(query.ownerId ? { ownerId: query.ownerId } : {}),
-      ...(query.animalId ? { animalId: query.animalId } : {}),
-      ...(query.visitId ? { visitId: query.visitId } : {}),
-      ...(query.dateFrom || query.dateTo
-        ? {
-            createdAt: {
-              ...(query.dateFrom ? { gte: new Date(query.dateFrom) } : {}),
-              ...(query.dateTo ? { lte: new Date(query.dateTo) } : {}),
-            },
-          }
-        : {}),
-      ...(search
-        ? {
-            OR: [
-              { owner: { fullName: { contains: search, mode: 'insensitive' } } },
-              { owner: { phone: { contains: search, mode: 'insensitive' } } },
-              { animal: { nickname: { contains: search, mode: 'insensitive' } } },
-              { items: { some: { title: { contains: search, mode: 'insensitive' } } } },
-            ],
-          }
-        : {}),
-    };
+    const where = buildBillWhere(query, { in: [PaymentStatus.UNPAID, PaymentStatus.PARTIAL] });
 
     const bills = await this.prisma.bill.findMany({
       where,
@@ -122,6 +73,33 @@ export class BillingService {
       limit,
       offset,
     };
+  }
+
+  async listBillSelection(query: ListBillsQueryDto) {
+    const statusOverride: Prisma.EnumPaymentStatusFilter | undefined = query.debtOnly === 'true'
+      ? { in: [PaymentStatus.UNPAID, PaymentStatus.PARTIAL] }
+      : query.status
+        ? undefined
+        : { notIn: [PaymentStatus.CANCELLED, PaymentStatus.PAID] };
+    const candidates = await this.prisma.bill.findMany({
+      where: buildBillWhere(query, statusOverride),
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, status: true, totalAmount: true, paidAmount: true },
+      take: maxBulkBills + 1,
+    });
+    const items = candidates.filter((bill) => {
+      const debt = decimal(bill.totalAmount).minus(bill.paidAmount);
+      if (query.debtOnly === 'true' && debt.lessThanOrEqualTo(0)) return false;
+      const cancellable = bill.status !== PaymentStatus.CANCELLED && decimal(bill.paidAmount).lessThanOrEqualTo(0);
+      const payable = bill.status !== PaymentStatus.CANCELLED && debt.greaterThan(0);
+      return cancellable || payable;
+    });
+
+    if (items.length > maxBulkBills) {
+      throw new BadRequestException(`Найдено больше ${maxBulkBills} счетов. Уточните фильтры перед массовым действием`);
+    }
+
+    return { items, total: items.length };
   }
 
   async createBill(dto: CreateBillDto, actorId: string) {
@@ -211,6 +189,110 @@ export class BillingService {
     });
 
     return updatedBill;
+  }
+
+  async bulkCancelBills(dto: BulkBillIdsDto, actorId: string) {
+    const billIds = dto.billIds;
+    await this.prisma.$transaction(async (tx) => {
+      const bills = await tx.bill.findMany({
+        where: { id: { in: billIds } },
+        select: billStockContextSelect,
+      });
+      const billsById = new Map(bills.map((bill) => [bill.id, bill]));
+
+      for (const billId of billIds) {
+        const bill = billsById.get(billId);
+        if (!bill) throw new NotFoundException(`Счёт ${billId.slice(0, 8)} не найден`);
+        if (bill.status === PaymentStatus.CANCELLED) {
+          throw new BadRequestException(`Счёт ${billId.slice(0, 8)} уже отменён`);
+        }
+        if (decimal(bill.paidAmount).greaterThan(0)) {
+          throw new BadRequestException(`Счёт ${billId.slice(0, 8)} имеет оплату и не может быть отменён`);
+        }
+      }
+
+      for (const billId of billIds) {
+        await this.restoreBillProductItems(tx, billsById.get(billId)!);
+      }
+      await tx.bill.updateMany({
+        where: { id: { in: billIds } },
+        data: { status: PaymentStatus.CANCELLED },
+      });
+    });
+
+    await this.auditService.log({
+      actorId,
+      action: 'bill.bulk_cancel',
+      entityType: 'Bill',
+      entityId: billIds[0],
+      metadata: { count: billIds.length, billIds },
+    });
+    return { count: billIds.length, billIds };
+  }
+
+  async bulkPayBills(dto: BulkPayBillsDto, actorId: string) {
+    const billIds = dto.billIds;
+    const paymentSettings = await this.financeService.resolvePaymentSettings(dto.paymentMethodId, dto.cashboxId);
+    const paymentType = paymentSettings.type ?? dto.type;
+    const paidAt = dto.paidAt ? new Date(dto.paidAt) : new Date();
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const bills = await tx.bill.findMany({
+        where: { id: { in: billIds } },
+        select: billStockContextSelect,
+      });
+      const billsById = new Map(bills.map((bill) => [bill.id, bill]));
+
+      for (const billId of billIds) {
+        const bill = billsById.get(billId);
+        if (!bill) throw new NotFoundException(`Счёт ${billId.slice(0, 8)} не найден`);
+        assertBillCanBePaid(bill, billId);
+      }
+
+      const payments: Array<{ id: string; billId: string; amount: Prisma.Decimal }> = [];
+      let totalAmount = decimal(0);
+      for (const billId of billIds) {
+        const bill = billsById.get(billId)!;
+        const amount = decimal(bill.totalAmount).minus(bill.paidAmount);
+        if (paymentType === PaymentType.DEPOSIT) {
+          await this.withdrawOwnerDeposit(tx, bill, amount, billId);
+        }
+        const payment = await tx.payment.create({
+          data: {
+            billId,
+            employeeId: actorId,
+            paymentMethodId: paymentSettings.paymentMethodId,
+            cashboxId: paymentSettings.cashboxId,
+            type: paymentType,
+            amount,
+            paidAt,
+            comment: dto.comment?.trim() || `Массовая полная оплата ${billIds.length} счетов`,
+          },
+          select: { id: true, billId: true, amount: true },
+        });
+        await this.recalculateBillTotals(tx, billId);
+        payments.push(payment);
+        totalAmount = totalAmount.plus(amount);
+      }
+      return { payments, totalAmount };
+    });
+
+    await this.auditService.log({
+      actorId,
+      action: 'payment.bulk_create',
+      entityType: 'Payment',
+      entityId: result.payments[0]?.id ?? null,
+      metadata: {
+        count: result.payments.length,
+        billIds,
+        paymentIds: result.payments.map((payment) => payment.id),
+        totalAmount: result.totalAmount.toString(),
+        type: paymentType,
+        paymentMethodId: paymentSettings.paymentMethodId,
+        cashboxId: paymentSettings.cashboxId,
+      },
+    });
+    return { count: result.payments.length, totalAmount: result.totalAmount, billIds };
   }
 
   async reopenBill(billId: string, actorId: string) {
@@ -969,6 +1051,69 @@ export class BillingService {
     });
 
     return accesses.length ? accesses.map((access) => access.warehouseId) : null;
+  }
+}
+
+const maxBulkBills = 1000;
+
+const billStockContextSelect = {
+  id: true,
+  ownerId: true,
+  status: true,
+  source: true,
+  totalAmount: true,
+  paidAmount: true,
+  visitId: true,
+  saleId: true,
+} satisfies Prisma.BillSelect;
+
+export function buildBillWhere(
+  query: ListBillsQueryDto,
+  statusOverride?: PaymentStatus | Prisma.EnumPaymentStatusFilter,
+): Prisma.BillWhereInput {
+  const search = query.search?.trim();
+  const status = statusOverride ?? query.status;
+  return {
+    ...(status ? { status } : {}),
+    ...(query.source ? { source: query.source } : {}),
+    ...(query.amount === BillAmountFilter.ZERO ? { totalAmount: { equals: 0 } } : {}),
+    ...(query.amount === BillAmountFilter.POSITIVE ? { totalAmount: { gt: 0 } } : {}),
+    ...(query.ownerId ? { ownerId: query.ownerId } : {}),
+    ...(query.animalId ? { animalId: query.animalId } : {}),
+    ...(query.visitId ? { visitId: query.visitId } : {}),
+    ...(query.dateFrom || query.dateTo
+      ? {
+          createdAt: {
+            ...(query.dateFrom ? { gte: new Date(query.dateFrom) } : {}),
+            ...(query.dateTo ? { lte: new Date(query.dateTo) } : {}),
+          },
+        }
+      : {}),
+    ...(search
+      ? {
+          OR: [
+            { owner: { fullName: { contains: search, mode: 'insensitive' } } },
+            { owner: { phone: { contains: search, mode: 'insensitive' } } },
+            { animal: { nickname: { contains: search, mode: 'insensitive' } } },
+            { items: { some: { title: { contains: search, mode: 'insensitive' } } } },
+          ],
+        }
+      : {}),
+  };
+}
+
+function assertBillCanBePaid(
+  bill: { status: PaymentStatus; totalAmount: Prisma.Decimal; paidAmount: Prisma.Decimal },
+  billId: string,
+) {
+  if (bill.status === PaymentStatus.CANCELLED) {
+    throw new BadRequestException(`Счёт ${billId.slice(0, 8)} отменён и не может быть оплачен`);
+  }
+  if (decimal(bill.totalAmount).lessThanOrEqualTo(0)) {
+    throw new BadRequestException(`Счёт ${billId.slice(0, 8)} имеет нулевую сумму`);
+  }
+  if (decimal(bill.paidAmount).greaterThanOrEqualTo(bill.totalAmount)) {
+    throw new BadRequestException(`Счёт ${billId.slice(0, 8)} уже оплачен`);
   }
 }
 
