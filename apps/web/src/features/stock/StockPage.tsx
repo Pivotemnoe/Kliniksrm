@@ -125,7 +125,7 @@ export function StockPage() {
   }
 
   return (
-    <div className="page">
+    <div className="page stock-page">
       <PageHeader
         title="Склад"
         description="Товары, услуги, остатки и приёмка на склад."

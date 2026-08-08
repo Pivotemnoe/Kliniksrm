@@ -248,7 +248,7 @@ export function BillsPage() {
   }
 
   return (
-    <div className="page">
+    <div className="page bills-page">
       <PageHeader
         title="Счета"
         description="Счета по приёмам, продажам и ручным начислениям."
@@ -319,6 +319,7 @@ export function BillsPage() {
             {billsQuery.isError ? <Typography.Text type="danger">{getErrorMessage(billsQuery.error)}</Typography.Text> : null}
             {(canManage || canManagePayments) && (billsQuery.data?.total ?? 0) > 0 ? (
               <Alert
+                className="bill-bulk-alert"
                 type={selectedBillIds.length ? 'info' : 'warning'}
                 showIcon
                 message={selectedBillIds.length ? `Выбрано счетов: ${selectedBillIds.length}` : 'Выберите счета галочками или выберите все найденные'}

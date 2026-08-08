@@ -2,14 +2,15 @@ import {
   CalendarOutlined,
   DownOutlined,
   LogoutOutlined,
+  MenuOutlined,
   MessageOutlined,
   SwapOutlined,
   UserOutlined,
   WalletOutlined,
 } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { Avatar, Badge, Button, Dropdown, Layout, Menu, Space, Tooltip, Typography } from 'antd';
-import { useMemo } from 'react';
+import { Avatar, Badge, Button, Drawer, Dropdown, Layout, Menu, Space, Tooltip, Typography } from 'antd';
+import { useEffect, useMemo, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { appConfig, isDemoAuthMode } from '../app/config';
 import { hasPermission } from '../auth/permissions';
@@ -37,6 +38,7 @@ const roleLabels: Record<string, string> = {
 export function CrmLayout() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const { data } = useCurrentEmployee();
   const logoutMutation = useLogoutMutation();
   const employee = data?.employee;
@@ -93,6 +95,16 @@ export function CrmLayout() {
       : []),
   ];
 
+  useEffect(() => {
+    setMobileNavigationOpen(false);
+    document.querySelector<HTMLElement>('.crm-content')?.scrollTo({ top: 0, left: 0 });
+  }, [location.pathname]);
+
+  function navigateFromShell(path: string) {
+    setMobileNavigationOpen(false);
+    navigate(path);
+  }
+
   return (
     <Layout className="crm-shell">
       <Sider width={72} collapsedWidth={72} collapsed className="crm-sider">
@@ -115,41 +127,68 @@ export function CrmLayout() {
       </Sider>
       <Layout>
         <Header className="crm-header">
+          <div className="mobile-header-navigation">
+            <Button
+              type="text"
+              shape="circle"
+              className="mobile-nav-trigger"
+              icon={<MenuOutlined />}
+              aria-label="Открыть меню разделов"
+              onClick={() => setMobileNavigationOpen(true)}
+            />
+            <button
+              className="mobile-brand-button"
+              type="button"
+              onClick={() => navigateFromShell(getEmployeeDefaultRoute(employee))}
+              aria-label={`Открыть главную ${appConfig.brandName}`}
+            >
+              <img src={appConfig.logoUrl} alt="" className="mobile-brand-logo" />
+              <span>{appConfig.brandName}</span>
+            </button>
+          </div>
           <GlobalSearch />
           <Space size={12} className="header-actions">
-            <Tooltip title="Сообщения сотрудникам">
-              <Badge count={internalMessagesQuery.data?.totalUnread || undefined} size="small">
-                <Button
-                  type="text"
-                  shape="circle"
-                  icon={<MessageOutlined />}
-                  aria-label="Сообщения сотрудникам"
-                  onClick={() => navigate('/staff-messages')}
-                />
-              </Badge>
-            </Tooltip>
+            <span className="header-action header-action-messages">
+              <Tooltip title="Сообщения сотрудникам">
+                <Badge count={internalMessagesQuery.data?.totalUnread || undefined} size="small">
+                  <Button
+                    type="text"
+                    shape="circle"
+                    icon={<MessageOutlined />}
+                    aria-label="Сообщения сотрудникам"
+                    onClick={() => navigate('/staff-messages')}
+                  />
+                </Badge>
+              </Tooltip>
+            </span>
             {canReadOnlineRequests ? (
-              <Tooltip title="Заявки клиентов на приём">
-                <Button
-                  type="text"
-                  shape="circle"
-                  icon={<CalendarOutlined />}
-                  aria-label="Заявки на приём"
-                  onClick={() => navigate('/online-requests')}
-                />
-              </Tooltip>
+              <span className="header-action header-action-requests">
+                <Tooltip title="Заявки клиентов на приём">
+                  <Button
+                    type="text"
+                    shape="circle"
+                    icon={<CalendarOutlined />}
+                    aria-label="Заявки на приём"
+                    onClick={() => navigate('/online-requests')}
+                  />
+                </Tooltip>
+              </span>
             ) : null}
-            <StaffAlertsPopover />
+            <span className="header-action header-action-alerts">
+              <StaffAlertsPopover />
+            </span>
             {canReadBusiness || canReadFinanceSettings ? (
-              <Tooltip title={canReadBusiness ? 'Финансы и отчётность клиники: прибыль, расходы и движение денег' : 'Финансовые настройки'}>
-                <Button
-                  type="text"
-                  icon={<WalletOutlined />}
-                  onClick={() => navigate(canReadBusiness ? '/business' : '/settings/finance')}
-                >
-                  {canReadBusiness ? 'Бизнес' : 'Финансы'}
-                </Button>
-              </Tooltip>
+              <span className="header-action header-action-finance">
+                <Tooltip title={canReadBusiness ? 'Финансы и отчётность клиники: прибыль, расходы и движение денег' : 'Финансовые настройки'}>
+                  <Button
+                    type="text"
+                    icon={<WalletOutlined />}
+                    onClick={() => navigate(canReadBusiness ? '/business' : '/settings/finance')}
+                  >
+                    {canReadBusiness ? 'Бизнес' : 'Финансы'}
+                  </Button>
+                </Tooltip>
+              </span>
             ) : null}
             <Dropdown menu={{ items: employeeMenuItems }} trigger={['click']} placement="bottomRight">
               <button className="employee-menu-button" type="button" aria-label="Меню текущего сотрудника">
@@ -175,6 +214,49 @@ export function CrmLayout() {
           </RouteLoadBoundary>
         </Content>
       </Layout>
+      <Drawer
+        title={(
+          <span className="mobile-navigation-title">
+            <img src={appConfig.logoUrl} alt="" />
+            <span>{appConfig.brandName}</span>
+          </span>
+        )}
+        placement="left"
+        width={340}
+        open={mobileNavigationOpen}
+        onClose={() => setMobileNavigationOpen(false)}
+        className="mobile-navigation-drawer"
+      >
+        <Menu
+          mode="inline"
+          selectedKeys={[selectedKey]}
+          items={accessibleMenuItems}
+          onClick={({ key }) => {
+            const path = String(key);
+            if (path.startsWith('/')) navigateFromShell(path);
+          }}
+        />
+        <div className="mobile-navigation-quick-actions">
+          <Typography.Text type="secondary">Быстрые действия</Typography.Text>
+          <Button icon={<MessageOutlined />} onClick={() => navigateFromShell('/staff-messages')}>
+            Сообщения сотрудникам
+            {internalMessagesQuery.data?.totalUnread ? ` (${internalMessagesQuery.data.totalUnread})` : ''}
+          </Button>
+          {canReadOnlineRequests ? (
+            <Button icon={<CalendarOutlined />} onClick={() => navigateFromShell('/online-requests')}>
+              Заявки на приём
+            </Button>
+          ) : null}
+          {canReadBusiness || canReadFinanceSettings ? (
+            <Button icon={<WalletOutlined />} onClick={() => navigateFromShell(canReadBusiness ? '/business' : '/settings/finance')}>
+              {canReadBusiness ? 'Бизнес' : 'Финансы'}
+            </Button>
+          ) : null}
+          <Button icon={<UserOutlined />} onClick={() => navigateFromShell('/profile')}>
+            Профиль и смена пароля
+          </Button>
+        </div>
+      </Drawer>
     </Layout>
   );
 }

@@ -14,7 +14,7 @@ export function PageHeader({ title, description, extra }: PageHeaderProps) {
         <Typography.Title level={2}>{title}</Typography.Title>
         {description ? <Typography.Text type="secondary">{description}</Typography.Text> : null}
       </div>
-      {extra}
+      {extra ? <div className="page-header-extra">{extra}</div> : null}
     </div>
   );
 }

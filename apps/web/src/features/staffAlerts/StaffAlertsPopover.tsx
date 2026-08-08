@@ -86,6 +86,7 @@ export function StaffAlertsPopover() {
 
   return (
     <Popover
+      rootClassName="staff-alerts-popover-root"
       content={content}
       trigger="click"
       placement="bottomRight"

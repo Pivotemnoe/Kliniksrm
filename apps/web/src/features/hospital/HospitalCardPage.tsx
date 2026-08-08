@@ -220,7 +220,7 @@ export function HospitalCardPage() {
                 <Descriptions.Item label="Ответственный">{stay.employee?.fullName ?? 'Не назначен'}</Descriptions.Item>
                 <Descriptions.Item label="Статус"><Tag color={hospitalStatusColors[stay.status]}>{hospitalStatusLabels[stay.status]}</Tag></Descriptions.Item>
                 <Descriptions.Item label="Счёт">{stay.bill ? `${formatMoney(stay.bill.totalAmount)} · оплачено ${formatMoney(stay.bill.paidAmount)}` : '—'}</Descriptions.Item>
-                <Descriptions.Item label="Причина помещения" span={3}>{stay.exam?.purpose || 'Не указана'}</Descriptions.Item>
+                <Descriptions.Item label="Причина помещения" span="filled">{stay.exam?.purpose || 'Не указана'}</Descriptions.Item>
               </Descriptions>
               {canManage && active ? (
                 <div className="hospital-card-actions">

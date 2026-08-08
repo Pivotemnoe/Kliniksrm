@@ -92,7 +92,7 @@ export function PayrollPage() {
   ], [approveMutation, canApprove, canManage, modal, recalculateMutation]);
 
   return (
-    <div className="page">
+    <div className="page payroll-page">
       <PageHeader
         title="Зарплата"
         description="Прозрачный расчёт по сменам и фактически оплаченным услугам и товарам. Утверждённые периоды не изменяются."
@@ -100,8 +100,8 @@ export function PayrollPage() {
       />
       <div className="list-panel">
         <Tabs items={[
-          { key: 'periods', label: 'Расчётные периоды', children: <Table rowKey="id" columns={periodColumns} dataSource={periodsQuery.data ?? []} loading={periodsQuery.isLoading} pagination={false} scroll={{ x: 980 }} /> },
-          { key: 'profiles', label: 'Правила начисления', children: <Table rowKey="id" columns={employeeColumns} dataSource={resourcesQuery.data?.employees ?? []} loading={resourcesQuery.isLoading} pagination={false} scroll={{ x: 900 }} /> },
+          { key: 'periods', label: 'Расчётные периоды', children: <Table className="responsive-data-table" rowKey="id" columns={periodColumns} dataSource={periodsQuery.data ?? []} loading={periodsQuery.isLoading} pagination={false} scroll={{ x: 980 }} /> },
+          { key: 'profiles', label: 'Правила начисления', children: <Table className="responsive-data-table" rowKey="id" columns={employeeColumns} dataSource={resourcesQuery.data?.employees ?? []} loading={resourcesQuery.isLoading} pagination={false} scroll={{ x: 900 }} /> },
         ]} />
       </div>
       <ProfileModal employee={profileEmployee} resources={resourcesQuery.data} onClose={() => setProfileEmployee(null)} onSaved={refresh} />
@@ -216,17 +216,17 @@ function PeriodDetailsModal({ period, loading, employees, canManage, onClose, on
       <Modal open={Boolean(period) || loading} title={period?.title ?? 'Расчёт зарплаты'} onCancel={onClose} footer={<Button onClick={onClose}>Закрыть</Button>} width={1240} loading={loading}>
         {period ? (
           <>
-            <Descriptions size="small" bordered items={[{ key: 'dates', label: 'Период', children: `${formatDate(period.startsAt)} — ${formatDate(period.endsAt)}` }, { key: 'status', label: 'Статус', children: period.status === 'APPROVED' ? 'Утверждён' : 'Черновик' }, { key: 'total', label: 'Итого', children: formatMoney(period.totalAmount) }, { key: 'approved', label: 'Утвердил', children: period.approvedBy?.fullName ?? '—' }]} />
+            <Descriptions column={{ xs: 1, sm: 2, lg: 4 }} size="small" bordered items={[{ key: 'dates', label: 'Период', children: `${formatDate(period.startsAt)} — ${formatDate(period.endsAt)}` }, { key: 'status', label: 'Статус', children: period.status === 'APPROVED' ? 'Утверждён' : 'Черновик' }, { key: 'total', label: 'Итого', children: formatMoney(period.totalAmount) }, { key: 'approved', label: 'Утвердил', children: period.approvedBy?.fullName ?? '—' }]} />
             {period.status === 'DRAFT' && canManage ? (
               <Space wrap style={{ marginTop: 16 }}>
                 <Button type="primary" icon={<PlusOutlined />} onClick={() => setSalaryOpen(true)}>Внести зарплату</Button>
                 <Typography.Text type="secondary">Для разовой выплаты за день правила начисления не нужны.</Typography.Text>
               </Space>
             ) : null}
-            <Table rowKey="id" columns={entryColumns} dataSource={period.entries ?? []} pagination={false} scroll={{ x: 1200 }} style={{ marginTop: 16 }} />
+            <Table className="responsive-data-table" rowKey="id" columns={entryColumns} dataSource={period.entries ?? []} pagination={false} scroll={{ x: 1200 }} style={{ marginTop: 16 }} />
 
             <Typography.Title level={5} style={{ marginTop: 24 }}>Ручные начисления и корректировки</Typography.Title>
-            <Table rowKey="id" size="small" columns={adjustmentColumns} dataSource={period.adjustments ?? []} pagination={false} scroll={{ x: 900 }} />
+            <Table className="responsive-data-table" rowKey="id" size="small" columns={adjustmentColumns} dataSource={period.adjustments ?? []} pagination={false} scroll={{ x: 900 }} />
 
             {period.status === 'DRAFT' && canManage ? (
               <Form form={adjustmentForm} layout="inline" onFinish={(values) => adjustmentMutation.mutate(values)} style={{ marginTop: 20 }}>

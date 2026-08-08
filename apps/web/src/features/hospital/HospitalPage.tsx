@@ -138,7 +138,7 @@ export function HospitalPage() {
   }
 
   return (
-    <div className="page">
+    <div className="page hospital-page">
       <PageHeader
         title="Стационар"
         description="Госпитализированные пациенты и боксы на текущий день."

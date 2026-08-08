@@ -108,7 +108,64 @@ export function VisitCardPage() {
 
   return (
     <div className="workbench">
-      <aside className="context-panel">
+      <nav className="visit-mobile-toolbar" aria-label="Быстрая навигация по приёму">
+        <Button size="small" icon={<LeftOutlined />} onClick={() => navigate('/visits')}>
+          Приёмы
+        </Button>
+        <Typography.Text strong ellipsis>{visit?.animal.nickname ?? 'Пациент'}</Typography.Text>
+        <Button
+          size="small"
+          onClick={() => scrollToCrmSection('.visit-work-area')}
+        >
+          Осмотр
+        </Button>
+        <Button
+          size="small"
+          onClick={() => scrollToCrmSection('#visit-context-panel')}
+        >
+          Данные
+        </Button>
+      </nav>
+      {canManage && visit ? (
+        <div className="visit-mobile-status-actions">
+          <Tag color={visitStatusColors[visit.status]}>{visitStatusLabels[visit.status]}</Tag>
+          <Space wrap>
+            {visit.status === 'DRAFT' ? (
+              <Button icon={<PlayCircleOutlined />} loading={actionMutation.isPending} onClick={() => actionMutation.mutate('start')}>
+                В работу
+              </Button>
+            ) : null}
+            {visit.status === 'IN_PROGRESS' ? (
+              <Button
+                type="primary"
+                icon={<CheckOutlined />}
+                loading={actionMutation.isPending}
+                onClick={() => {
+                  if (primaryDiagnosisIssue) {
+                    showDiagnosisWarning(modal, primaryDiagnosisIssue);
+                    return;
+                  }
+
+                  actionMutation.mutate('complete');
+                }}
+              >
+                Завершить
+              </Button>
+            ) : null}
+            {visit.status === 'DRAFT' || visit.status === 'IN_PROGRESS' ? (
+              <Button danger icon={<CloseOutlined />} loading={actionMutation.isPending} onClick={() => actionMutation.mutate('cancel')}>
+                Отменить
+              </Button>
+            ) : null}
+          </Space>
+        </div>
+      ) : null}
+      <aside className="context-panel" id="visit-context-panel">
+        <div className="visit-mobile-return visit-mobile-return-top">
+          <Button type="primary" onClick={() => scrollToCrmSection('.visit-work-area')}>
+            Вернуться к осмотру
+          </Button>
+        </div>
         <div className="context-section">
           <div className="context-section-header">
             <button className="table-link" type="button" onClick={() => navigate('/visits')}>
@@ -290,6 +347,11 @@ export function VisitCardPage() {
             </div>
           </div>
         ) : null}
+        <div className="visit-mobile-return">
+          <Button type="primary" onClick={() => scrollToCrmSection('.visit-work-area')}>
+            Вернуться к осмотру
+          </Button>
+        </div>
       </aside>
       <main className="work-area visit-work-area">
         <div className="work-surface">
@@ -385,6 +447,17 @@ export function VisitCardPage() {
       </Modal>
     </div>
   );
+}
+
+function scrollToCrmSection(selector: string) {
+  const content = document.querySelector<HTMLElement>('.crm-content');
+  const target = document.querySelector<HTMLElement>(selector);
+  if (!content || !target) return;
+
+  const alertsHeight = document.querySelector<HTMLElement>('.global-operational-alerts')?.getBoundingClientRect().height ?? 0;
+  const contentTop = content.getBoundingClientRect().top;
+  const targetTop = target.getBoundingClientRect().top - contentTop + content.scrollTop;
+  content.scrollTo({ top: Math.max(0, targetTop - alertsHeight - 8), behavior: 'smooth' });
 }
 
 function ContextRow({ label, value }: { label: string; value?: ReactNode }) {

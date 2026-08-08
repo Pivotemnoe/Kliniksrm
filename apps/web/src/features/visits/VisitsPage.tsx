@@ -155,7 +155,7 @@ export function VisitsPage() {
   }
 
   return (
-    <div className="page">
+    <div className="page visits-page">
       <PageHeader
         title={isPersonalVisits ? 'Мои приёмы' : 'Приёмы'}
         extra={
