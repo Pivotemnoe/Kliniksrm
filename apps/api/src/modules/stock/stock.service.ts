@@ -102,6 +102,9 @@ export class StockService {
     const batchWarehouseWhere = this.getBatchWarehouseWhere(query.warehouseId, warehouseScope);
     const { limit, offset } = parsePagination(query);
     const search = query.search?.trim();
+    const stockState = query.stockState ?? 'all';
+    const sortBy = query.sortBy ?? 'title';
+    const sortOrder = query.sortOrder ?? 'asc';
     const where: Prisma.ProductWhereInput = {
       isActive: true,
       ...(query.productId ? { id: query.productId } : {}),
@@ -121,10 +124,58 @@ export class StockService {
         : {}),
     };
 
+    if (stockState !== 'all' || sortBy !== 'title') {
+      const summaries = await this.prisma.product.findMany({
+        where,
+        select: { id: true, title: true, category: { select: { title: true } } },
+      });
+      const stockRestByProduct = new Map<string, Prisma.Decimal>();
+
+      if (summaries.length && (stockState !== 'all' || sortBy === 'stockRest')) {
+        const stockTotals = await this.prisma.stockBatch.groupBy({
+          by: ['productId'],
+          where: { ...batchWarehouseWhere, productId: { in: summaries.map((item) => item.id) } },
+          _sum: { rest: true },
+        });
+        for (const total of stockTotals) {
+          stockRestByProduct.set(total.productId, total._sum.rest ?? new Prisma.Decimal(0));
+        }
+      }
+
+      const ordered = summaries
+        .map((item) => ({
+          id: item.id,
+          title: item.title,
+          categoryTitle: item.category?.title ?? '',
+          stockRest: stockRestByProduct.get(item.id) ?? new Prisma.Decimal(0),
+        }))
+        .filter((item) => stockState === 'all'
+          || (stockState === 'zero' ? item.stockRest.equals(0) : item.stockRest.greaterThan(0)))
+        .sort((left, right) => compareProductListItems(left, right, sortBy, sortOrder));
+      const pageIds = ordered.slice(offset, offset + limit).map((item) => item.id);
+      const products = pageIds.length
+        ? await this.prisma.product.findMany({
+            where: { id: { in: pageIds } },
+            include: getProductInclude(batchWarehouseWhere),
+          })
+        : [];
+      const productsById = new Map(products.map((item) => [item.id, serializeProduct(item)]));
+
+      return {
+        items: pageIds.flatMap((id) => {
+          const product = productsById.get(id);
+          return product ? [product] : [];
+        }),
+        total: ordered.length,
+        limit,
+        offset,
+      };
+    }
+
     const [items, total] = await this.prisma.$transaction([
       this.prisma.product.findMany({
         where,
-        orderBy: { title: 'asc' },
+        orderBy: { title: sortOrder },
         include: getProductInclude(batchWarehouseWhere),
         skip: offset,
         take: limit,
@@ -1362,6 +1413,28 @@ function serializeProduct(product: Prisma.ProductGetPayload<{ include: typeof pr
     barcode: selectPrimaryNumericBarcode(product),
     stockRest,
   };
+}
+
+type ProductListItem = {
+  id: string;
+  title: string;
+  categoryTitle: string;
+  stockRest: Prisma.Decimal;
+};
+
+function compareProductListItems(
+  left: ProductListItem,
+  right: ProductListItem,
+  sortBy: 'title' | 'category' | 'stockRest',
+  sortOrder: 'asc' | 'desc',
+) {
+  const primary = sortBy === 'stockRest'
+    ? left.stockRest.comparedTo(right.stockRest)
+    : sortBy === 'category'
+      ? left.categoryTitle.localeCompare(right.categoryTitle, 'ru', { sensitivity: 'base' })
+      : left.title.localeCompare(right.title, 'ru', { sensitivity: 'base' });
+  const directed = sortOrder === 'desc' ? -primary : primary;
+  return directed || left.title.localeCompare(right.title, 'ru', { sensitivity: 'base' });
 }
 
 function selectPrimaryNumericBarcode(product: { barcode: string | null; barcodes: Array<{ value: string; isPrimary?: boolean }> }) {

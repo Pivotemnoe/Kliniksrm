@@ -16,6 +16,10 @@ export function createBusinessEntry(input: BusinessEntryInput) {
   return apiRequest<BusinessEntry>('/v1/business/entries', { method: 'POST', body: input });
 }
 
+export function createBusinessEntries(inputs: BusinessEntryInput[]) {
+  return apiRequest<BusinessEntry[]>('/v1/business/entries/batch', { method: 'POST', body: { entries: inputs } });
+}
+
 export function voidBusinessEntry(entryId: string, reason: string) {
   return apiRequest<BusinessEntry>(`/v1/business/entries/${entryId}/void`, { method: 'POST', body: { reason } });
 }

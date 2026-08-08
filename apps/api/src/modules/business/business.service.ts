@@ -88,6 +88,41 @@ export class BusinessService {
   }
 
   async createEntry(dto: CreateBusinessEntryDto, actor: BusinessActor) {
+    const [entry] = await this.createEntriesBatch([dto], actor);
+    return entry;
+  }
+
+  async createEntriesBatch(dtos: CreateBusinessEntryDto[], actor: BusinessActor) {
+    const prepared: Array<{ data: Prisma.BusinessEntryUncheckedCreateInput }> = [];
+    for (const dto of dtos) {
+      prepared.push(await this.prepareEntry(dto, actor));
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const entries = [];
+      for (const item of prepared) {
+        const entry = await tx.businessEntry.create({
+          data: item.data,
+          include: entryInclude,
+        });
+        await tx.auditLog.create({
+          data: {
+            actorId: actor.id,
+            action: 'business.entry.create',
+            entityType: 'BusinessEntry',
+            entityId: entry.id,
+            metadata: { type: entry.type, source: entry.source, amount: Number(entry.amount) },
+          },
+        });
+        entries.push(entry);
+      }
+      return entries;
+    });
+  }
+
+  private async prepareEntry(dto: CreateBusinessEntryDto, actor: BusinessActor): Promise<{
+    data: Prisma.BusinessEntryUncheckedCreateInput;
+  }> {
     const category = await this.prisma.businessCategory.findUnique({ where: { id: dto.categoryId } });
     if (!category || !category.isActive) throw new NotFoundException('Активная статья доходов или расходов не найдена');
     const directorAccess = has(actor, 'business.manage');
@@ -117,7 +152,7 @@ export class BusinessService {
       if (dto.officeId && close.officeId !== dto.officeId) throw new BadRequestException('Операция относится к другому филиалу');
     }
 
-    const entry = await this.prisma.businessEntry.create({
+    return {
       data: {
         type: dto.type,
         source,
@@ -135,10 +170,7 @@ export class BusinessService {
         requiresResolution: source === BusinessEntrySource.UNRECORDED_REVENUE || dto.requiresResolution === true,
         createdById: actor.id,
       },
-      include: entryInclude,
-    });
-    await this.auditService.log({ actorId: actor.id, action: 'business.entry.create', entityType: 'BusinessEntry', entityId: entry.id, metadata: { type: entry.type, source: entry.source, amount: entry.amount } });
-    return entry;
+    };
   }
 
   async voidEntry(entryId: string, dto: BusinessActionDto, actor: BusinessActor) {

@@ -886,6 +886,14 @@ body {
   padding: 0 16px 16px;
 }
 
+.stock-products-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px 0;
+}
+
 .audit-visit-control-panel {
   margin-bottom: 14px;
 }
@@ -4193,6 +4201,19 @@ body {
   .list-panel > .ant-tabs,
   .report-tabs {
     padding: 0 10px 12px;
+  }
+
+  .stock-products-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 10px 10px 0;
+  }
+
+  .stock-products-toolbar > .ant-space,
+  .stock-products-toolbar > .ant-space > .ant-space-item,
+  .stock-products-toolbar .ant-select,
+  .stock-products-toolbar .ant-btn {
+    width: 100%;
   }
 
   .ant-tabs-nav-wrap {

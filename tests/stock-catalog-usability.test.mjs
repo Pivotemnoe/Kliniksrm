@@ -104,6 +104,28 @@ test('категории имеют готовый справочник и но�
   assert.match(service, /resolveServiceCategoryId/);
 });
 
+test('товары фильтруются по нулевому остатку и сортируются по названию, группе и количеству', async () => {
+  const [page, api, dto, service] = await Promise.all([
+    read('apps/web/src/features/stock/StockPage.tsx'),
+    read('apps/web/src/features/stock/stock.api.ts'),
+    read('apps/api/src/modules/stock/dto/list-stock-query.dto.ts'),
+    read('apps/api/src/modules/stock/stock.service.ts'),
+  ]);
+
+  assert.match(page, /Только нулевые/);
+  assert.match(page, /Только в наличии/);
+  assert.match(page, /По названию/);
+  assert.match(page, /По группе/);
+  assert.match(page, /По остатку/);
+  assert.match(page, /Все группы/);
+  assert.match(api, /ProductStockState = 'all' \| 'zero' \| 'positive'/);
+  assert.match(dto, /stockState\?: 'all' \| 'zero' \| 'positive'/);
+  assert.match(dto, /sortBy\?: 'title' \| 'category' \| 'stockRest'/);
+  assert.match(service, /stockBatch\.groupBy/);
+  assert.match(service, /item\.stockRest\.equals\(0\)/);
+  assert.match(service, /compareProductListItems/);
+});
+
 test('ценник печатает графический штрих-код и реквизиты организации', async () => {
   const page = await read('apps/web/src/features/stock/StockPage.tsx');
   const service = await read('apps/api/src/modules/stock/stock.service.ts');

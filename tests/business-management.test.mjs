@@ -86,3 +86,28 @@ test('интерфейс этапа 3.5 показывает понятные р
   assert.match(menu, /label: 'Бизнес'/);
   assert.match(stock, /Касса и способ оплаты нужны, чтобы расход автоматически попал в закрытие дня/);
 });
+
+test('закрытие дня принимает свободные причины и сохраняет несколько операций одной транзакцией', async () => {
+  const [modal, api, controller, service, batchDto, daily] = await Promise.all([
+    read('apps/web/src/features/business/BusinessEntryModal.tsx'),
+    read('apps/web/src/features/business/business.api.ts'),
+    read('apps/api/src/modules/business/business.controller.ts'),
+    read('apps/api/src/modules/business/business.service.ts'),
+    read('apps/api/src/modules/business/dto/create-business-entries-batch.dto.ts'),
+    read('apps/web/src/features/business/DailyFinancePage.tsx'),
+  ]);
+
+  assert.match(modal, /Form\.List name="items"/);
+  assert.match(modal, /Причина дохода/);
+  assert.match(modal, /Причина расхода/);
+  assert.match(modal, /Добавить ещё доход/);
+  assert.match(modal, /Добавить ещё расход/);
+  assert.match(modal, /comment: item\.reason\.trim\(\)/);
+  assert.match(api, /\/v1\/business\/entries\/batch/);
+  assert.match(controller, /createEntriesBatch/);
+  assert.match(batchDto, /ArrayMinSize\(1\)/);
+  assert.match(batchDto, /ArrayMaxSize\(50\)/);
+  assert.match(service, /createEntriesBatch[\s\S]*?this\.prisma\.\$transaction/);
+  assert.match(service, /tx\.auditLog\.create/);
+  assert.match(daily, /entry\.comment \|\| entry\.category\.title/);
+});

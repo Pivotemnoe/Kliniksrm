@@ -160,7 +160,7 @@ export function DailyFinancePage() {
 
   const entryColumns = useMemo<ColumnsType<BusinessEntry>>(() => [
     { title: 'Время', dataIndex: 'occurredAt', key: 'occurredAt', render: formatDateTime },
-    { title: 'Операция', key: 'operation', render: (_, entry) => <><div>{entry.category.title}</div><Typography.Text type="secondary">{entry.comment || entry.counterparty || 'Без комментария'}</Typography.Text></> },
+    { title: 'Операция', key: 'operation', render: (_, entry) => <><div>{entry.comment || entry.category.title}</div><Typography.Text type="secondary">{entry.comment ? entry.category.title : entry.counterparty || 'Без пояснения'}</Typography.Text></> },
     { title: 'Сумма', dataIndex: 'amount', key: 'amount', align: 'right', render: (value, entry) => <Typography.Text type={entry.type === 'INCOME' ? 'success' : undefined}>{entry.type === 'INCOME' ? '+' : '−'}{formatMoney(value)}</Typography.Text> },
     { title: 'Касса', key: 'cashbox', render: (_, entry) => [entry.paymentMethod?.title, entry.cashbox?.title].filter(Boolean).join(' · ') || 'Не указана' },
     { title: 'Статус', key: 'status', render: (_, entry) => entry.status === 'VOIDED' ? <Tag>Отменена</Tag> : entry.requiresResolution ? <Tag color="orange">Требует проверки</Tag> : <Tag color="green">Учтена</Tag> },

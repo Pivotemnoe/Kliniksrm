@@ -6,6 +6,7 @@ import { RequireAnyPermissions, RequirePermissions } from '../auth/decorators/re
 import { BusinessService } from './business.service';
 import { BusinessActionDto } from './dto/business-action.dto';
 import { BusinessReportQueryDto } from './dto/business-report-query.dto';
+import { CreateBusinessEntriesBatchDto } from './dto/create-business-entries-batch.dto';
 import { CreateBusinessEntryDto } from './dto/create-business-entry.dto';
 import { DailyCloseQueryDto } from './dto/daily-close-query.dto';
 import { ListBusinessEntriesQueryDto } from './dto/list-business-entries-query.dto';
@@ -35,6 +36,13 @@ export class BusinessController {
   @ApiCreatedResponse({ description: 'Manual management entry registered.' })
   createEntry(@Body() dto: CreateBusinessEntryDto, @CurrentEmployee() actor: AuthEmployee) {
     return this.businessService.createEntry(dto, actor);
+  }
+
+  @Post('entries/batch')
+  @RequireAnyPermissions('daily_finance.manage', 'business.manage')
+  @ApiCreatedResponse({ description: 'Several manual management entries registered atomically.' })
+  createEntriesBatch(@Body() dto: CreateBusinessEntriesBatchDto, @CurrentEmployee() actor: AuthEmployee) {
+    return this.businessService.createEntriesBatch(dto.entries, actor);
   }
 
   @Post('entries/:entryId/void')

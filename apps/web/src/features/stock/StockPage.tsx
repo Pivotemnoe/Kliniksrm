@@ -30,6 +30,9 @@ import {
   listServices,
   listStockBatches,
   listSupplyInvoices,
+  type ProductSortBy,
+  type ProductSortOrder,
+  type ProductStockState,
   updateSupplyInvoice,
   updateProduct,
   updateService,
@@ -182,6 +185,7 @@ export function StockPage() {
                 <ProductsTable
                   search={search}
                   offset={offset}
+                  categories={resourcesQuery.data?.productCategories ?? []}
                   canManage={canManage}
                   onOpen={setSelectedProduct}
                   onEdit={(product) => {
@@ -192,6 +196,7 @@ export function StockPage() {
                   onPrint={setPrintingProduct}
                   onAdjustStock={(product) => navigate(`/stock/operations?inventoryProductId=${encodeURIComponent(product.id)}`)}
                   onTableChange={handleTableChange}
+                  onFiltersChange={() => setOffset(0)}
                 />
               ),
             },
@@ -417,6 +422,7 @@ function getStockTabFromPath(pathname: string) {
 function ProductsTable({
   search,
   offset,
+  categories,
   canManage,
   onOpen,
   onEdit,
@@ -424,9 +430,11 @@ function ProductsTable({
   onPrint,
   onAdjustStock,
   onTableChange,
+  onFiltersChange,
 }: {
   search: string;
   offset: number;
+  categories: StockResources['productCategories'];
   canManage: boolean;
   onOpen: (product: Product) => void;
   onEdit: (product: Product) => void;
@@ -434,10 +442,15 @@ function ProductsTable({
   onPrint: (product: Product) => void;
   onAdjustStock: (product: Product) => void;
   onTableChange: (pagination: TablePaginationConfig) => void;
+  onFiltersChange: () => void;
 }) {
+  const [categoryId, setCategoryId] = useState<string>();
+  const [stockState, setStockState] = useState<ProductStockState>('all');
+  const [sortBy, setSortBy] = useState<ProductSortBy>('title');
+  const [sortOrder, setSortOrder] = useState<ProductSortOrder>('asc');
   const productsQuery = useQuery({
-    queryKey: ['stock', 'products', { search, limit: pageSize, offset }],
-    queryFn: () => listProducts({ search, limit: pageSize, offset }),
+    queryKey: ['stock', 'products', { search, categoryId, stockState, sortBy, sortOrder, limit: pageSize, offset }],
+    queryFn: () => listProducts({ search, categoryId, stockState, sortBy, sortOrder, limit: pageSize, offset }),
   });
   const columns = useMemo<ColumnsType<Product>>(
     () => [
@@ -518,7 +531,63 @@ function ProductsTable({
     [canManage, onAdjustStock, onDelete, onEdit, onOpen, onPrint],
   );
 
-  return <StockTable query={productsQuery} columns={columns} offset={offset} onTableChange={onTableChange} />;
+  function resetPageAnd(change: () => void) {
+    change();
+    onFiltersChange();
+  }
+
+  const hasCustomFilters = Boolean(categoryId) || stockState !== 'all' || sortBy !== 'title' || sortOrder !== 'asc';
+
+  return (
+    <>
+      <div className="stock-products-toolbar">
+        <Typography.Text strong>Показать товары</Typography.Text>
+        <Space wrap>
+          <Select
+            allowClear
+            showSearch
+            optionFilterProp="label"
+            value={categoryId}
+            placeholder="Все группы"
+            style={{ minWidth: 210 }}
+            options={categories.map((item) => ({ value: item.id, label: item.title }))}
+            onChange={(value) => resetPageAnd(() => setCategoryId(value))}
+          />
+          <Select<ProductStockState>
+            value={stockState}
+            style={{ minWidth: 180 }}
+            options={[
+              { value: 'all', label: 'Все остатки' },
+              { value: 'zero', label: 'Только нулевые' },
+              { value: 'positive', label: 'Только в наличии' },
+            ]}
+            onChange={(value) => resetPageAnd(() => setStockState(value))}
+          />
+          <Select<ProductSortBy>
+            value={sortBy}
+            style={{ minWidth: 170 }}
+            options={[
+              { value: 'title', label: 'По названию' },
+              { value: 'category', label: 'По группе' },
+              { value: 'stockRest', label: 'По остатку' },
+            ]}
+            onChange={(value) => resetPageAnd(() => setSortBy(value))}
+          />
+          <Select<ProductSortOrder>
+            value={sortOrder}
+            style={{ minWidth: 170 }}
+            options={[
+              { value: 'asc', label: 'По возрастанию' },
+              { value: 'desc', label: 'По убыванию' },
+            ]}
+            onChange={(value) => resetPageAnd(() => setSortOrder(value))}
+          />
+          {hasCustomFilters ? <Button onClick={() => resetPageAnd(() => { setCategoryId(undefined); setStockState('all'); setSortBy('title'); setSortOrder('asc'); })}>Сбросить</Button> : null}
+        </Space>
+      </div>
+      <StockTable query={productsQuery} columns={columns} offset={offset} onTableChange={onTableChange} />
+    </>
+  );
 }
 
 function ServicesTable({

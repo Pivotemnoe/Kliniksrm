@@ -20,11 +20,18 @@ import {
   CatalogQualityReport,
 } from './types';
 
-type StockListQuery = {
+export type ProductStockState = 'all' | 'zero' | 'positive';
+export type ProductSortBy = 'title' | 'category' | 'stockRest';
+export type ProductSortOrder = 'asc' | 'desc';
+
+export type StockListQuery = {
   search?: string;
   categoryId?: string;
   warehouseId?: string;
   productId?: string;
+  stockState?: ProductStockState;
+  sortBy?: ProductSortBy;
+  sortOrder?: ProductSortOrder;
   limit?: number;
   offset?: number;
 };
