@@ -30,12 +30,12 @@ test('миграция оповещений и сообщений только �
   assert.doesNotMatch(migration, /ALTER TABLE "(?:Owner|Animal|Visit|Bill|Product|StockBatch)"/);
 });
 
-test('врач получает только свои незавершённые приёмы и не получает склад при одном праве чтения', async () => {
+test('каждый сотрудник получает все незавершённые приёмы клиники независимо от роли', async () => {
   let productQueryCount = 0;
   const prisma = {
     visit: {
       findMany: async ({ where }) => {
-        assert.equal(where.employeeId, 'doctor-1');
+        assert.equal(Object.hasOwn(where, 'employeeId'), false);
         assert.equal(where.hospitalBoxId, null);
         assert.equal(where.status, 'IN_PROGRESS');
         assert.ok(where.startedAt.lt instanceof Date);
@@ -44,6 +44,7 @@ test('врач получает только свои незавершённые
         return [unfinishedVisit];
       },
     },
+    vaccination: { findMany: async () => [] },
     product: { findMany: async () => { productQueryCount += 1; return []; } },
     staffAlertRead: { findMany: async () => [] },
   };
@@ -51,8 +52,8 @@ test('врач получает только свои незавершённые
 
   const result = await service.list(actor({
     id: 'doctor-1',
-    roles: ['doctor'],
-    permissions: ['visits.read', 'stock.read'],
+    roles: [],
+    permissions: [],
   }));
 
   assert.equal(productQueryCount, 0);
@@ -70,6 +71,7 @@ test('приём в работе менее часа не попадает в к
     visit: {
       findMany: async ({ where }) => recentlyStarted < where.startedAt.lt ? [unfinishedVisit] : [],
     },
+    vaccination: { findMany: async () => [] },
     staffAlertRead: { findMany: async () => [] },
   };
   const service = new StaffAlertsService(prisma, { log: async () => undefined });
@@ -82,6 +84,48 @@ test('приём в работе менее часа не попадает в к
 
   assert.equal(result.items.length, 0);
   assert.equal(result.unreadTotal, 0);
+});
+
+test('просроченная вакцинация видна каждому сотруднику независимо от его прав', async () => {
+  const prisma = {
+    visit: { findMany: async () => [] },
+    vaccination: {
+      findMany: async () => [{
+        id: 'vaccination-1',
+        title: 'Рабифел',
+        expiresAt: new Date(Date.now() - 48 * 60 * 60_000),
+        animal: {
+          id: 'animal-1',
+          nickname: 'Лео',
+          owner: { fullName: 'Владелец', phone: '+7 900 000-00-00' },
+        },
+      }],
+    },
+    staffAlertRead: { findMany: async () => [] },
+  };
+  const service = new StaffAlertsService(prisma, { log: async () => undefined });
+
+  const result = await service.list(actor({ roles: [], permissions: [] }));
+
+  assert.equal(result.items.length, 1);
+  assert.equal(result.items[0].kind, 'OVERDUE_VACCINATION');
+  assert.match(result.items[0].title, /Просрочена вакцинация: Лео/);
+});
+
+test('сбой необязательного раздела не скрывает критические предупреждения', async () => {
+  const prisma = {
+    visit: { findMany: async () => [unfinishedVisit] },
+    vaccination: { findMany: async () => [] },
+    newsPost: { findMany: async () => { throw new Error('news unavailable'); } },
+    staffAlertRead: { findMany: async () => [] },
+  };
+  const service = new StaffAlertsService(prisma, { log: async () => undefined });
+  service.logger.error = () => undefined;
+
+  const result = await service.list(actor({ permissions: ['news.read'] }));
+
+  assert.equal(result.items.length, 1);
+  assert.equal(result.items[0].kind, 'UNFINISHED_VISIT');
 });
 
 test('переход порога часа один раз создаёт событие и системную запись аудита', async () => {
@@ -126,6 +170,8 @@ test('переход порога часа один раз создаёт соб
 
 test('низкий остаток доступен сотруднику, который управляет складом', async () => {
   const prisma = {
+    visit: { findMany: async () => [] },
+    vaccination: { findMany: async () => [] },
     employeeWarehouseAccess: { findMany: async () => [{ warehouseId: 'warehouse-1' }] },
     product: {
       findMany: async ({ select }) => {
@@ -220,6 +266,28 @@ test('колокольчик, глобальная красная плашка, 
   assert.match(messages, /Выберите сотрудника/);
   assert.match(messages, /Сообщения сотрудникам/);
   assert.match(routes, /path: '\/staff-messages'/);
+});
+
+test('активность синхронизируется между вкладками, а скрытая вкладка не завершает общую сессию', async () => {
+  const auth = await read('apps/web/src/auth/useAuth.ts');
+
+  assert.match(auth, /temichevvet:staff-session:last-activity/);
+  assert.match(auth, /window\.addEventListener\('storage', handleSharedActivity\)/);
+  assert.match(auth, /document\.visibilityState !== 'visible'/);
+  assert.match(auth, /scheduleIdleCheck\(hiddenTabIdleRecheckMs\)/);
+  assert.match(auth, /Re-read immediately before logout/);
+});
+
+test('ошибка загрузки критических оповещений не маскируется пустым списком', async () => {
+  const [operationalAlerts, popover] = await Promise.all([
+    read('apps/web/src/layouts/GlobalOperationalAlerts.tsx'),
+    read('apps/web/src/features/staffAlerts/StaffAlertsPopover.tsx'),
+  ]);
+
+  assert.match(operationalAlerts, /Не удалось проверить незавершённые приёмы и вакцинации/);
+  assert.match(operationalAlerts, /Проверить снова/);
+  assert.match(popover, /Не удалось загрузить оповещения/);
+  assert.match(popover, /Повторить/);
 });
 
 const unfinishedVisit = {

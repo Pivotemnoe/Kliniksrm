@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
   NotificationStatus,
   OnlineRequestStatus,
@@ -33,6 +33,8 @@ type StaffAlertCandidate = {
 
 @Injectable()
 export class StaffAlertsService {
+  private readonly logger = new Logger(StaffAlertsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
@@ -116,15 +118,11 @@ export class StaffAlertsService {
   private async buildCandidates(actor: AuthEmployee): Promise<StaffAlertCandidate[]> {
     const now = new Date();
     const can = (permission: string) => actor.permissions.includes('*') || actor.permissions.includes(permission);
-    const seesAllVisits = actor.roles.some((role) => role === 'director' || role === 'administrator');
-    const seesOwnVisits = actor.roles.includes('doctor');
-    const showVisits = can('visits.read') && (seesAllVisits || seesOwnVisits);
     const showFailedDeliveries = can('notifications.manage');
     const showOnlineRequests = can('appointments.manage');
     const showBills = can('billing.manage') || can('payments.manage');
     const showStock = can('stock.manage');
     const showNews = can('news.read');
-    const showVaccinations = can('animals.read');
 
     const warehouseAccesses = showStock
       ? await this.prisma.employeeWarehouseAccess.findMany({
@@ -135,50 +133,45 @@ export class StaffAlertsService {
     const warehouseIds = warehouseAccesses.map((access) => access.warehouseId);
 
     const [visits, failedDeliveries, onlineRequests, unpaidBills, stockProducts, unreadNews, vaccinationCandidates] = await Promise.all([
-      showVisits
-        ? this.prisma.visit.findMany({
-            where: {
-              ...buildOverdueVisitWhere(now),
-              ...(seesAllVisits ? {} : { employeeId: actor.id }),
-            },
-            orderBy: { startedAt: 'asc' },
-            take: 40,
-            select: {
-              id: true,
-              status: true,
-              startedAt: true,
-              owner: { select: { fullName: true } },
-              animal: { select: { nickname: true } },
-              employee: { select: { fullName: true } },
-            },
-          })
-        : Promise.resolve([]),
+      this.prisma.visit.findMany({
+        where: buildOverdueVisitWhere(now),
+        orderBy: { startedAt: 'asc' },
+        take: 40,
+        select: {
+          id: true,
+          status: true,
+          startedAt: true,
+          owner: { select: { fullName: true } },
+          animal: { select: { nickname: true } },
+          employee: { select: { fullName: true } },
+        },
+      }),
       showFailedDeliveries
-        ? this.prisma.notificationOutbox.findMany({
+        ? this.loadOptionalCandidates('failed deliveries', () => this.prisma.notificationOutbox.findMany({
             where: { status: NotificationStatus.FAILED },
             orderBy: { updatedAt: 'desc' },
             take: 200,
             select: { id: true, updatedAt: true },
-          })
+          }))
         : Promise.resolve([]),
       showOnlineRequests
-        ? this.prisma.onlineAppointmentRequest.findMany({
+        ? this.loadOptionalCandidates('online requests', () => this.prisma.onlineAppointmentRequest.findMany({
             where: { status: OnlineRequestStatus.NEW },
             orderBy: { createdAt: 'desc' },
             take: 200,
             select: { id: true, createdAt: true },
-          })
+          }))
         : Promise.resolve([]),
       showBills
-        ? this.prisma.bill.findMany({
+        ? this.loadOptionalCandidates('unpaid bills', () => this.prisma.bill.findMany({
             where: { status: { in: [PaymentStatus.UNPAID, PaymentStatus.PARTIAL] } },
             orderBy: { updatedAt: 'desc' },
             take: 500,
             select: { id: true, status: true, totalAmount: true, paidAmount: true, updatedAt: true },
-          })
+          }))
         : Promise.resolve([]),
       showStock
-        ? this.prisma.product.findMany({
+        ? this.loadOptionalCandidates('low stock', () => this.prisma.product.findMany({
             where: { isActive: true, minStock: { not: null } },
             orderBy: { title: 'asc' },
             take: 500,
@@ -195,10 +188,10 @@ export class StaffAlertsService {
                 select: { rest: true, updatedAt: true },
               },
             },
-          })
+          }))
         : Promise.resolve([]),
       showNews
-        ? this.prisma.newsPost.findMany({
+        ? this.loadOptionalCandidates('news', () => this.prisma.newsPost.findMany({
             where: {
               archivedAt: null,
               OR: [{ audienceRoleCodes: { isEmpty: true } }, { audienceRoleCodes: { hasSome: actor.roles } }],
@@ -207,27 +200,25 @@ export class StaffAlertsService {
             orderBy: { publishedAt: 'desc' },
             take: 100,
             select: { id: true, publishedAt: true },
-          })
+          }))
         : Promise.resolve([]),
-      showVaccinations
-        ? this.prisma.vaccination.findMany({
-            where: { expiresAt: { not: null } },
-            orderBy: [{ expiresAt: 'desc' }, { createdAt: 'desc' }],
-            take: 2000,
+      this.prisma.vaccination.findMany({
+        where: { expiresAt: { not: null } },
+        orderBy: [{ expiresAt: 'desc' }, { createdAt: 'desc' }],
+        take: 2000,
+        select: {
+          id: true,
+          title: true,
+          expiresAt: true,
+          animal: {
             select: {
               id: true,
-              title: true,
-              expiresAt: true,
-              animal: {
-                select: {
-                  id: true,
-                  nickname: true,
-                  owner: { select: { fullName: true, phone: true } },
-                },
-              },
+              nickname: true,
+              owner: { select: { fullName: true, phone: true } },
             },
-          })
-        : Promise.resolve([]),
+          },
+        },
+      }),
     ]);
 
     const items: StaffAlertCandidate[] = visits.map((visit) => {
@@ -362,6 +353,18 @@ export class StaffAlertsService {
     }
 
     return items;
+  }
+
+  private async loadOptionalCandidates<T>(section: string, load: () => Promise<T[]>): Promise<T[]> {
+    try {
+      return await load();
+    } catch (error) {
+      this.logger.error(
+        `Не удалось загрузить необязательный раздел оповещений: ${section}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+      return [];
+    }
   }
 }
 

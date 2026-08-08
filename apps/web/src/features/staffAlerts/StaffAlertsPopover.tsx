@@ -1,6 +1,6 @@
 import { BellOutlined, CheckOutlined, ExclamationCircleOutlined, InfoCircleOutlined, WarningOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Badge, Button, Empty, Popover, Spin, Tag, Typography } from 'antd';
+import { Alert, App, Badge, Button, Empty, Popover, Spin, Tag, Typography } from 'antd';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';
@@ -53,6 +53,14 @@ export function StaffAlertsPopover() {
       </div>
       {alertsQuery.isLoading ? (
         <div className="staff-alerts-loading"><Spin size="small" /></div>
+      ) : alertsQuery.isError && !alertsQuery.data ? (
+        <Alert
+          type="error"
+          showIcon
+          message="Не удалось загрузить оповещения"
+          description="Проверьте соединение с сервером и повторите запрос."
+          action={<Button size="small" onClick={() => void alertsQuery.refetch()}>Повторить</Button>}
+        />
       ) : unreadItems.length ? (
         <div className="staff-alerts-list">
           {unreadItems.map((item) => (

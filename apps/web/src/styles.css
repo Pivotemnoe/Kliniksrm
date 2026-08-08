@@ -1069,6 +1069,11 @@ body {
 
 .dashboard-overdue-banner-action {
   flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
   font-size: 12px;
   font-weight: 700;
   text-decoration: underline;

@@ -37,6 +37,27 @@ export function GlobalOperationalAlerts() {
     navigate(item.href);
   }
 
+  if (alertsQuery.isError && !alertsQuery.data) {
+    return (
+      <div className="global-operational-alerts" aria-label="Рабочие предупреждения клиники">
+        <div className="dashboard-overdue-banner dashboard-vaccination-banner-danger" role="alert">
+          <span className="dashboard-overdue-banner-copy">
+            <ExclamationCircleOutlined />
+            <strong>Не удалось проверить незавершённые приёмы и вакцинации</strong>
+            <span>Связь с сервером оповещений прервана</span>
+          </span>
+          <button
+            type="button"
+            className="dashboard-overdue-banner-action"
+            onClick={() => void alertsQuery.refetch()}
+          >
+            Проверить снова
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!overdueVisits.length && !vaccinationAlerts.length) return null;
 
   return (
