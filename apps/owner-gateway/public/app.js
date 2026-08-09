@@ -115,14 +115,17 @@ function renderPortal(response) {
         <p class="service-promo-note">Первичный ориентир — без звонка и ожидания ответа. Сервис не ставит диагноз и не заменяет врача.</p>
       </div>
     </section>
-    <nav class="tabs" aria-label="Разделы личного кабинета">
-      ${tabButton('animals', `Пациенты · ${animals.length}`, true)}
-      ${tabButton('appointments', `Записи · ${appointments.length}`)}
-      ${tabButton('booking', 'Записаться')}
-      ${tabButton('visits', `Приёмы · ${visits.length}`)}
-      ${tabButton('documents', `Документы · ${documents.length}`)}
-      ${tabButton('bills', `Счета · ${bills.length}`)}
-      ${tabButton('notifications', `Сообщения · ${notifications.length}`, false, unreadNotifications)}
+    <nav class="portal-menu" aria-labelledby="portal-menu-title">
+      <h2 id="portal-menu-title">Разделы кабинета</h2>
+      <div class="tabs">
+        ${tabButton('animals', `Пациенты · ${animals.length}`, true)}
+        ${tabButton('appointments', `Записи · ${appointments.length}`)}
+        ${tabButton('booking', 'Записаться')}
+        ${tabButton('visits', `Приёмы · ${visits.length}`)}
+        ${tabButton('documents', `Документы · ${documents.length}`)}
+        ${tabButton('bills', `Счета · ${bills.length}`)}
+        ${tabButton('notifications', `Сообщения · ${notifications.length}`, false, unreadNotifications)}
+      </div>
     </nav>
     ${section('animals', 'Мои животные', renderAnimals(animals), false)}
     ${section('appointments', 'Записи в клинику', renderAppointments(appointments), true)}

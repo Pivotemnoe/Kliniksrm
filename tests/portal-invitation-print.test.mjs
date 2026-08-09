@@ -62,3 +62,18 @@ test('личный кабинет рекламирует отдельный се
   assert.match(localPortal, /Сервис не ставит диагноз и не заменяет врача/);
   assert.match(localPortal, /href="https:\/\/temichevvet\.ru"/);
 });
+
+test('разделы мобильного личного кабинета собраны в одну сетку без горизонтальной прокрутки', async () => {
+  const publicPortal = await read('apps/owner-gateway/public/app.js');
+  const portalStyles = await read('apps/owner-gateway/public/app.css');
+  const serviceWorker = await read('apps/owner-gateway/public/sw.js');
+
+  assert.match(publicPortal, /<nav class="portal-menu" aria-labelledby="portal-menu-title">/);
+  assert.match(publicPortal, /<h2 id="portal-menu-title">Разделы кабинета<\/h2>/);
+  assert.match(portalStyles, /\.tabs \{ display: grid;/);
+  assert.match(portalStyles, /grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
+  assert.match(portalStyles, /@media \(max-width: 360px\)[\s\S]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.doesNotMatch(portalStyles, /\.tabs[^}]*overflow-x:\s*auto/s);
+  assert.match(serviceWorker, /temichevvet-owner-shell-v11/);
+  assert.match(serviceWorker, /20260809-compact-navigation/);
+});
