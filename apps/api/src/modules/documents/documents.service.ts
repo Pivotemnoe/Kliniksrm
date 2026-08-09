@@ -616,6 +616,39 @@ export class DocumentsService {
                 },
               },
             },
+            appointment: {
+              select: {
+                office: {
+                  select: {
+                    organization: {
+                      select: { displayName: true, logoStorageKey: true, logoMimeType: true },
+                    },
+                  },
+                },
+              },
+            },
+            queueEntry: {
+              select: {
+                office: {
+                  select: {
+                    organization: {
+                      select: { displayName: true, logoStorageKey: true, logoMimeType: true },
+                    },
+                  },
+                },
+              },
+            },
+            hospitalBox: {
+              select: {
+                office: {
+                  select: {
+                    organization: {
+                      select: { displayName: true, logoStorageKey: true, logoMimeType: true },
+                    },
+                  },
+                },
+              },
+            },
             animal: { select: { nickname: true, species: true, breed: true, sex: true } },
             employee: { select: { fullName: true } },
           },
@@ -626,10 +659,24 @@ export class DocumentsService {
       throw new NotFoundException('Документ приёма не найден');
     }
 
+    const linkedOrganization =
+      document.visit.appointment?.office?.organization ??
+      document.visit.queueEntry?.office?.organization ??
+      document.visit.hospitalBox?.office.organization ??
+      document.visit.owner.office?.organization ??
+      null;
+    const fallbackOrganization = linkedOrganization
+      ? null
+      : await tx.organization.findFirst({
+          orderBy: { createdAt: 'asc' },
+          select: { displayName: true, logoStorageKey: true, logoMimeType: true },
+        });
+    const organization = linkedOrganization ?? fallbackOrganization;
+
     const pdfSnapshot: DocumentPdfSnapshot = {
       title: document.title,
       body: document.body ?? '',
-      clinicName: document.visit.owner.office?.organization.displayName ?? 'TemichevVet',
+      clinicName: organization?.displayName ?? 'TemichevVet',
       visitStartedAt: document.visit.startedAt.toISOString(),
       employeeName: document.visit.employee?.fullName ?? '',
       ownerName: document.visit.owner.fullName,
@@ -642,7 +689,6 @@ export class DocumentsService {
         .filter(Boolean)
         .join(', '),
     };
-    const organization = document.visit.owner.office?.organization;
     const clinicLogo = await this.loadPdfLogo(organization?.logoStorageKey, organization?.logoMimeType);
     const clinicLogoSha256 = clinicLogo ? createHash('sha256').update(clinicLogo.data).digest('hex') : null;
     const snapshot = {

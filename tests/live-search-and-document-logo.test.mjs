@@ -51,6 +51,12 @@ test('новый PDF получает загруженный логотип ор
 
   assert.match(documentsService, /logoStorageKey: true/);
   assert.match(documentsService, /logoMimeType: true/);
+  assert.match(documentsService, /document\.visit\.appointment\?\.office\?\.organization/);
+  assert.match(documentsService, /document\.visit\.queueEntry\?\.office\?\.organization/);
+  assert.match(documentsService, /document\.visit\.hospitalBox\?\.office\.organization/);
+  assert.match(documentsService, /document\.visit\.owner\.office\?\.organization/);
+  assert.match(documentsService, /tx\.organization\.findFirst/);
+  assert.match(documentsService, /clinicName: organization\?\.displayName/);
   assert.match(documentsService, /this\.storage\.getObject\(storageKey\)/);
   assert.match(documentsService, /clinicLogoSha256/);
   assert.match(documentsService, /this\.pdfService\.render\(pdfSnapshot, clinicLogo\)/);
