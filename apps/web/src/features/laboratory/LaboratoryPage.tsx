@@ -2,7 +2,7 @@ import { CheckCircleOutlined, EditOutlined, ExperimentOutlined, PlayCircleOutlin
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Alert, Button, Card, Drawer, Form, Input, Select, Space, Switch, Table, Tabs, Tag, Typography } from 'antd';
-import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
+import { ColumnsType } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -11,6 +11,7 @@ import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { LiveSearchInput } from '../../shared/ui/LiveSearchInput';
+import { InfiniteTable, useInfiniteListQuery } from '../../shared/ui/InfiniteTable';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { AttachmentsPanel } from '../files/AttachmentsPanel';
 import { listLaboratoryFiles, listLaboratoryOrderFiles, uploadLaboratoryFile, uploadLaboratoryOrderFile } from '../files/files.api';
@@ -39,7 +40,6 @@ import {
 import { LaboratoryOrder, LaboratoryOrderInput, LaboratoryOrderItem, LaboratoryOrderItemInput, LaboratoryProfile, LaboratoryResources, LaboratoryTest } from './types';
 import { LaboratoryResultsImporter } from './LaboratoryResultsImporter';
 
-const pageSize = 10;
 type OrderStatusFilter = VisitLaboratoryOrderStatus | 'ACTIVE';
 const nullableText = z.string().trim().optional().transform((value) => value || undefined);
 const testSchema = z.object({
@@ -90,7 +90,6 @@ export function LaboratoryPage() {
   const [orderStatus, setOrderStatus] = useState<OrderStatusFilter | undefined>(() => getInitialOrderStatus(searchParams.get('status')));
   const [fromDate, setFromDate] = useState(searchParams.get('from') ?? '');
   const [toDate, setToDate] = useState(searchParams.get('to') ?? '');
-  const [offset, setOffset] = useState(0);
   const [selectedOrder, setSelectedOrder] = useState<LaboratoryOrder | null>(null);
   const [editingItem, setEditingItem] = useState<{ order: LaboratoryOrder; item: LaboratoryOrderItem } | null>(null);
   const [editingTest, setEditingTest] = useState<LaboratoryTest | null>(null);
@@ -101,13 +100,6 @@ export function LaboratoryPage() {
 
   function handleSearch(value: string) {
     setSearch(value.trim());
-    setOffset(0);
-  }
-
-  function handleTableChange(pagination: TablePaginationConfig) {
-    const current = pagination.current ?? 1;
-    const size = pagination.pageSize ?? pageSize;
-    setOffset((current - 1) * size);
   }
 
   return (
@@ -134,21 +126,18 @@ export function LaboratoryPage() {
           setOrderStatus('ACTIVE');
           setFromDate('');
           setToDate('');
-          setOffset(0);
         }}
         onSelectOrdered={() => {
           setActiveTab('orders');
           setOrderStatus('ORDERED');
           setFromDate('');
           setToDate('');
-          setOffset(0);
         }}
         onSelectInProgress={() => {
           setActiveTab('orders');
           setOrderStatus('IN_PROGRESS');
           setFromDate('');
           setToDate('');
-          setOffset(0);
         }}
         onSelectCompletedToday={() => {
           const today = toDateInput(new Date());
@@ -156,7 +145,6 @@ export function LaboratoryPage() {
           setOrderStatus('COMPLETED');
           setFromDate(today);
           setToDate(today);
-          setOffset(0);
         }}
       />
       <div className="list-panel">
@@ -164,7 +152,6 @@ export function LaboratoryPage() {
           activeKey={activeTab}
           onChange={(key) => {
             setActiveTab(key);
-            setOffset(0);
           }}
           tabBarExtraContent={
             <Space wrap>
@@ -177,7 +164,6 @@ export function LaboratoryPage() {
                     value={orderStatus}
                     onChange={(value) => {
                       setOrderStatus(value);
-                      setOffset(0);
                     }}
                     options={[
                       { value: 'ACTIVE', label: 'Активные' },
@@ -190,7 +176,6 @@ export function LaboratoryPage() {
                     value={fromDate}
                     onChange={(event) => {
                       setFromDate(event.target.value);
-                      setOffset(0);
                     }}
                     aria-label="Лабораторные заказы с даты"
                   />
@@ -200,7 +185,6 @@ export function LaboratoryPage() {
                     value={toDate}
                     onChange={(event) => {
                       setToDate(event.target.value);
-                      setOffset(0);
                     }}
                     aria-label="Лабораторные заказы по дату"
                   />
@@ -213,7 +197,6 @@ export function LaboratoryPage() {
                   value={species}
                   onChange={(value) => {
                     setSpecies(value);
-                    setOffset(0);
                   }}
                   options={resourcesQuery.data?.species.map((item) => ({ value: item.title, label: item.title })) ?? []}
                 />
@@ -231,9 +214,7 @@ export function LaboratoryPage() {
                   status={orderStatus}
                   fromDate={fromDate}
                   toDate={toDate}
-                  offset={offset}
                   canManage={canManage}
-                  onTableChange={handleTableChange}
                   onOpenOrder={setSelectedOrder}
                   onEditItem={(order, item) => setEditingItem({ order, item })}
                 />
@@ -246,9 +227,7 @@ export function LaboratoryPage() {
                 <TestsTable
                   search={search}
                   species={species}
-                  offset={offset}
                   canManage={canManage}
-                  onTableChange={handleTableChange}
                   onEdit={openTest}
                 />
               ),
@@ -260,9 +239,7 @@ export function LaboratoryPage() {
                 <ProfilesTable
                   search={search}
                   species={species}
-                  offset={offset}
                   canManage={canManage}
-                  onTableChange={handleTableChange}
                   onEdit={openProfile}
                 />
               ),
@@ -373,9 +350,7 @@ function OrdersTable({
   status,
   fromDate,
   toDate,
-  offset,
   canManage,
-  onTableChange,
   onOpenOrder,
   onEditItem,
 }: {
@@ -383,25 +358,23 @@ function OrdersTable({
   status?: OrderStatusFilter;
   fromDate?: string;
   toDate?: string;
-  offset: number;
   canManage: boolean;
-  onTableChange: (pagination: TablePaginationConfig) => void;
   onOpenOrder: (order: LaboratoryOrder) => void;
   onEditItem: (order: LaboratoryOrder, item: LaboratoryOrderItem) => void;
 }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { message } = App.useApp();
-  const query = useQuery({
-    queryKey: ['laboratory', 'orders', { search, status, fromDate, toDate, limit: pageSize, offset }],
-    queryFn: () =>
+  const query = useInfiniteListQuery({
+    queryKey: ['laboratory', 'orders', { search, status, fromDate, toDate }],
+    queryFn: ({ limit, offset }) =>
       listLaboratoryOrders({
         search,
         status: status && status !== 'ACTIVE' ? status : undefined,
         activeOnly: status === 'ACTIVE' ? true : undefined,
         from: fromDate || undefined,
         to: toDate || undefined,
-        limit: pageSize,
+        limit,
         offset,
       }),
   });
@@ -509,13 +482,11 @@ function OrdersTable({
   return (
     <div className="list-panel-body">
       {query.isError ? <Alert type="error" showIcon message={getErrorMessage(query.error)} className="form-alert" /> : null}
-      <Table<LaboratoryOrder>
+      <InfiniteTable<LaboratoryOrder>
+        query={query}
+        errorText={query.isError ? getErrorMessage(query.error) : undefined}
         rowKey="id"
         columns={columns}
-        dataSource={query.data?.items ?? []}
-        loading={query.isLoading}
-        pagination={{ current: offset / pageSize + 1, pageSize, total: query.data?.total ?? 0, showSizeChanger: false }}
-        onChange={onTableChange}
         className="dense-table"
         scroll={{ x: 1390 }}
         onRow={(order) => ({ onDoubleClick: () => onOpenOrder(order) })}
@@ -694,21 +665,17 @@ function ResultDrawer({
 function TestsTable({
   search,
   species,
-  offset,
   canManage,
-  onTableChange,
   onEdit,
 }: {
   search: string;
   species?: string;
-  offset: number;
   canManage: boolean;
-  onTableChange: (pagination: TablePaginationConfig) => void;
   onEdit: (test: LaboratoryTest) => void;
 }) {
-  const query = useQuery({
-    queryKey: ['laboratory', 'tests', { search, species, limit: pageSize, offset }],
-    queryFn: () => listLaboratoryTests({ search, species, limit: pageSize, offset }),
+  const query = useInfiniteListQuery({
+    queryKey: ['laboratory', 'tests', { search, species }],
+    queryFn: ({ limit, offset }) => listLaboratoryTests({ search, species, limit, offset }),
   });
   const columns = useMemo<ColumnsType<LaboratoryTest>>(
     () => [
@@ -739,13 +706,11 @@ function TestsTable({
   return (
     <div className="list-panel-body">
       {query.isError ? <Alert type="error" showIcon message={getErrorMessage(query.error)} className="form-alert" /> : null}
-      <Table<LaboratoryTest>
+      <InfiniteTable<LaboratoryTest>
+        query={query}
+        errorText={query.isError ? getErrorMessage(query.error) : undefined}
         rowKey="id"
         columns={columns}
-        dataSource={query.data?.items ?? []}
-        loading={query.isLoading}
-        pagination={{ current: offset / pageSize + 1, pageSize, total: query.data?.total ?? 0, showSizeChanger: false }}
-        onChange={onTableChange}
         className="dense-table"
         scroll={{ x: 1180 }}
       />
@@ -756,21 +721,17 @@ function TestsTable({
 function ProfilesTable({
   search,
   species,
-  offset,
   canManage,
-  onTableChange,
   onEdit,
 }: {
   search: string;
   species?: string;
-  offset: number;
   canManage: boolean;
-  onTableChange: (pagination: TablePaginationConfig) => void;
   onEdit: (profile: LaboratoryProfile) => void;
 }) {
-  const query = useQuery({
-    queryKey: ['laboratory', 'profiles', { search, species, limit: pageSize, offset }],
-    queryFn: () => listLaboratoryProfiles({ search, species, limit: pageSize, offset }),
+  const query = useInfiniteListQuery({
+    queryKey: ['laboratory', 'profiles', { search, species }],
+    queryFn: ({ limit, offset }) => listLaboratoryProfiles({ search, species, limit, offset }),
   });
   const columns = useMemo<ColumnsType<LaboratoryProfile>>(
     () => [
@@ -806,13 +767,11 @@ function ProfilesTable({
   return (
     <div className="list-panel-body">
       {query.isError ? <Alert type="error" showIcon message={getErrorMessage(query.error)} className="form-alert" /> : null}
-      <Table<LaboratoryProfile>
+      <InfiniteTable<LaboratoryProfile>
+        query={query}
+        errorText={query.isError ? getErrorMessage(query.error) : undefined}
         rowKey="id"
         columns={columns}
-        dataSource={query.data?.items ?? []}
-        loading={query.isLoading}
-        pagination={{ current: offset / pageSize + 1, pageSize, total: query.data?.total ?? 0, showSizeChanger: false }}
-        onChange={onTableChange}
         className="dense-table"
         scroll={{ x: 980 }}
       />

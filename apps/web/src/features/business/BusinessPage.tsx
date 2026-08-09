@@ -8,6 +8,7 @@ import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { PageHeader } from '../../shared/ui/PageHeader';
+import { ProgressiveTable } from '../../shared/ui/InfiniteTable';
 import { formatDate, formatDateTime } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
 import { BusinessEntryModal } from './BusinessEntryModal';
@@ -93,7 +94,7 @@ export function BusinessPage() {
             { key: 'cash', label: 'Деньги', children: <CashTab summary={summary} /> },
             { key: 'daily', label: 'По дням', children: <DailyTab summary={summary} /> },
             { key: 'categories', label: 'Статьи', children: <CategoriesTab summary={summary} /> },
-            { key: 'operations', label: `Операции · ${entriesQuery.data?.length ?? 0}`, children: <><div className="list-panel-header"><Typography.Text type="secondary">Внесённые вручную доходы и расходы. Записи не удаляются: ошибочную операцию можно только отменить с указанием причины.</Typography.Text>{canManage ? <Space><Button icon={<PlusOutlined />} onClick={() => setEntryType('INCOME')}>Доход</Button><Button icon={<PlusOutlined />} onClick={() => setEntryType('EXPENSE')}>Расход</Button></Space> : null}</div><Table rowKey="id" columns={operationColumns} dataSource={entriesQuery.data ?? []} loading={entriesQuery.isLoading} pagination={{ pageSize: 15, hideOnSinglePage: true }} scroll={{ x: 960 }} locale={{ emptyText: 'Ручных операций за период нет' }} /></> },
+            { key: 'operations', label: `Операции · ${entriesQuery.data?.length ?? 0}`, children: <><div className="list-panel-header"><Typography.Text type="secondary">Внесённые вручную доходы и расходы. Записи не удаляются: ошибочную операцию можно только отменить с указанием причины.</Typography.Text>{canManage ? <Space><Button icon={<PlusOutlined />} onClick={() => setEntryType('INCOME')}>Доход</Button><Button icon={<PlusOutlined />} onClick={() => setEntryType('EXPENSE')}>Расход</Button></Space> : null}</div><ProgressiveTable rowKey="id" columns={operationColumns} dataSource={entriesQuery.data ?? []} loading={entriesQuery.isLoading} scroll={{ x: 960 }} locale={{ emptyText: 'Ручных операций за период нет' }} /></> },
             { key: 'control', label: 'Контроль', children: <ControlTab summary={summary} /> },
           ]} />
         </div>
@@ -140,7 +141,7 @@ function CashTab({ summary }: { summary: BusinessSummary }) {
 }
 
 function DailyTab({ summary }: { summary: BusinessSummary }) {
-  return <Table rowKey="date" pagination={{ pageSize: 31, hideOnSinglePage: true }} dataSource={summary.current.daily} locale={{ emptyText: 'Данных за период нет' }} columns={[
+  return <ProgressiveTable rowKey="date" dataSource={summary.current.daily} locale={{ emptyText: 'Данных за период нет' }} columns={[
     { title: 'Дата', dataIndex: 'date', render: formatDate },
     { title: 'Выручка', dataIndex: 'accruedRevenue', align: 'right', render: formatMoney },
     { title: 'Себестоимость', dataIndex: 'costOfGoods', align: 'right', render: formatMoney },
@@ -163,7 +164,7 @@ function ControlTab({ summary }: { summary: BusinessSummary }) {
     { title: 'Ожидалось', dataIndex: 'expectedAmount', align: 'right', render: formatMoney }, { title: 'Фактически', dataIndex: 'actualAmount', align: 'right', render: formatMoney },
     { title: 'Расхождение', dataIndex: 'difference', align: 'right', render: (value) => <Typography.Text type={Number(value) === 0 ? 'secondary' : 'danger'}>{formatMoney(value)}</Typography.Text> },
   ];
-  return <><div className="report-metrics-grid"><Card><Statistic title="Черновиков" value={summary.control.draftDays} /></Card><Card><Statistic title="Ожидают проверки" value={summary.control.submittedDays} /></Card><Card><Statistic title="Утверждено" value={summary.control.approvedDays} /></Card><Card><Statistic title="Сумма расхождений" value={summary.control.totalDifference} precision={2} suffix="₽" /></Card></div><Table rowKey="id" columns={columns} dataSource={summary.closes} pagination={{ pageSize: 20, hideOnSinglePage: true }} scroll={{ x: 850 }} locale={{ emptyText: 'Закрытий дня за период нет' }} /></>;
+  return <><div className="report-metrics-grid"><Card><Statistic title="Черновиков" value={summary.control.draftDays} /></Card><Card><Statistic title="Ожидают проверки" value={summary.control.submittedDays} /></Card><Card><Statistic title="Утверждено" value={summary.control.approvedDays} /></Card><Card><Statistic title="Сумма расхождений" value={summary.control.totalDifference} precision={2} suffix="₽" /></Card></div><ProgressiveTable rowKey="id" columns={columns} dataSource={summary.closes} scroll={{ x: 850 }} locale={{ emptyText: 'Закрытий дня за период нет' }} /></>;
 }
 
 function exportSummary(summary: BusinessSummary) {

@@ -20,6 +20,7 @@ import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { LiveSearchInput } from '../../shared/ui/LiveSearchInput';
+import { InfiniteTable, useInfiniteListQuery } from '../../shared/ui/InfiniteTable';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import {
   cleanupLearnedMedicalPhrases,
@@ -35,8 +36,6 @@ import { createDocumentTemplate, listDocumentTemplates, updateDocumentTemplate }
 import { DocumentVariablePalette } from './DocumentVariablePalette';
 import { insertDocumentTemplateContent } from './documentTemplateEditor';
 import { DocumentTemplate } from './types';
-
-const textTemplatePageSize = 20;
 
 const documentTemplateSchema = z.object({
   title: z.string().trim().min(2, 'Укажите название').max(200),
@@ -200,7 +199,6 @@ export function DocumentTemplatesPage() {
 function TextTemplatesPanel({ canManage }: { canManage: boolean }) {
   const { message, modal } = App.useApp();
   const queryClient = useQueryClient();
-  const [page, setPage] = useState(1);
   const [searchDraft, setSearchDraft] = useState('');
   const [filters, setFilters] = useState<{
     field?: string;
@@ -212,10 +210,9 @@ function TextTemplatesPanel({ canManage }: { canManage: boolean }) {
   }>({ isActive: true, source: 'SYSTEM' });
   const [editingTemplate, setEditingTemplate] = useState<MedicalPhrase | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const offset = (page - 1) * textTemplatePageSize;
-  const templatesQuery = useQuery({
-    queryKey: ['medical-phrases', 'manage', 'templates-center', filters, page],
-    queryFn: () => manageMedicalPhrases({ ...filters, limit: textTemplatePageSize, offset }),
+  const templatesQuery = useInfiniteListQuery({
+    queryKey: ['medical-phrases', 'manage', 'templates-center', filters],
+    queryFn: ({ limit, offset }) => manageMedicalPhrases({ ...filters, limit, offset }),
     enabled: canManage,
   });
   const { control, handleSubmit, reset, watch } = useForm<TextTemplateFormValues>({
@@ -357,7 +354,6 @@ function TextTemplatesPanel({ canManage }: { canManage: boolean }) {
 
   function updateFilter<K extends keyof typeof filters>(key: K, value: (typeof filters)[K]) {
     setFilters((current) => ({ ...current, [key]: value }));
-    setPage(1);
   }
 
   function openCreate() {
@@ -389,13 +385,11 @@ function TextTemplatesPanel({ canManage }: { canManage: boolean }) {
 
   function submitSearch() {
     setFilters((current) => ({ ...current, search: searchDraft.trim() || undefined }));
-    setPage(1);
   }
 
   function resetFilters() {
     setSearchDraft('');
     setFilters({ isActive: true, source: 'SYSTEM' });
-    setPage(1);
   }
 
   function confirmRemove(template: MedicalPhrase) {
@@ -482,20 +476,13 @@ function TextTemplatesPanel({ canManage }: { canManage: boolean }) {
         </div>
         <div className="list-panel-body">
           {templatesQuery.isError ? <Alert type="error" showIcon message={getErrorMessage(templatesQuery.error)} className="form-alert" /> : null}
-          <Table<MedicalPhrase>
+          <InfiniteTable<MedicalPhrase>
+            query={templatesQuery}
+            errorText={templatesQuery.isError ? getErrorMessage(templatesQuery.error) : undefined}
             rowKey="id"
             className="dense-table"
             columns={columns}
-            dataSource={templatesQuery.data?.items ?? []}
-            loading={templatesQuery.isLoading}
             scroll={{ x: 1540 }}
-            pagination={{
-              current: page,
-              pageSize: textTemplatePageSize,
-              total: templatesQuery.data?.total ?? 0,
-              showSizeChanger: false,
-              onChange: setPage,
-            }}
             onRow={(record) => ({ onDoubleClick: () => openEdit(record) })}
           />
         </div>

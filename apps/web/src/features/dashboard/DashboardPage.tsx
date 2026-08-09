@@ -19,6 +19,7 @@ import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { PageHeader } from '../../shared/ui/PageHeader';
+import { ProgressiveTable } from '../../shared/ui/InfiniteTable';
 import { formatDate, formatDateTime } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
 import { appointmentStatusColors, appointmentStatusLabels } from '../appointments/types';
@@ -496,11 +497,10 @@ function PortalStatisticsDrawer({
       <Typography.Paragraph type="secondary" className="portal-statistics-note">
         Активированным считается кабинет, в который владелец хотя бы один раз успешно вошёл. Одного созданного приглашения или QR-кода недостаточно.
       </Typography.Paragraph>
-      <Table<DirectorPortalOwnerItem>
+      <ProgressiveTable<DirectorPortalOwnerItem>
         rowKey="ownerId"
         loading={loading}
         dataSource={statistics?.items ?? []}
-        pagination={{ pageSize: 10, showSizeChanger: false }}
         scroll={{ x: 760 }}
         locale={{ emptyText: 'Активаций и приглашений пока нет' }}
         columns={[

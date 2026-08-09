@@ -1,17 +1,16 @@
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Space, Table, Typography } from 'antd';
-import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { App, Button, Space } from 'antd';
+import { ColumnsType } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';
+import { InfiniteTable, useInfiniteListQuery } from '../../shared/ui/InfiniteTable';
 import { LiveSearchInput } from '../../shared/ui/LiveSearchInput';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { createOwner, listOwners } from './owners.api';
 import { OwnerFormDrawer } from './OwnerFormDrawer';
 import { Owner, OwnerMutationInput } from './types';
-
-const pageSize = 10;
 
 export function OwnersPage() {
   const navigate = useNavigate();
@@ -20,11 +19,10 @@ export function OwnersPage() {
   const { message } = App.useApp();
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [searchInput, setSearchInput] = useState(searchParams.get('search') ?? '');
-  const [offset, setOffset] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
-  const ownersQuery = useQuery({
-    queryKey: ['owners', { search, limit: pageSize, offset }],
-    queryFn: () => listOwners({ search, limit: pageSize, offset }),
+  const ownersQuery = useInfiniteListQuery({
+    queryKey: ['owners', { search }],
+    queryFn: ({ limit, offset }) => listOwners({ search, limit, offset }),
   });
   const createMutation = useMutation({
     mutationFn: (values: OwnerMutationInput) => createOwner(values),
@@ -41,7 +39,6 @@ export function OwnersPage() {
     const nextSearch = searchParams.get('search') ?? '';
     setSearch(nextSearch);
     setSearchInput(nextSearch);
-    setOffset(0);
   }, [searchParams]);
 
   const columns = useMemo<ColumnsType<Owner>>(
@@ -83,12 +80,6 @@ export function OwnersPage() {
     [navigate],
   );
 
-  function handleTableChange(pagination: TablePaginationConfig) {
-    const current = pagination.current ?? 1;
-    const size = pagination.pageSize ?? pageSize;
-    setOffset((current - 1) * size);
-  }
-
   return (
     <div className="page">
       <PageHeader
@@ -110,31 +101,20 @@ export function OwnersPage() {
             onSearch={(value) => {
               setSearch(value.trim());
               setSearchInput(value);
-              setOffset(0);
             }}
           />
           <Button>Фильтры</Button>
         </div>
         <div className="list-panel-body">
         <Space direction="vertical" size={16} className="full-width">
-          {ownersQuery.isError ? (
-            <Typography.Text type="danger">{getErrorMessage(ownersQuery.error)}</Typography.Text>
-          ) : null}
-          <Table<Owner>
+          <InfiniteTable<Owner>
+            query={ownersQuery}
+            errorText={ownersQuery.isError ? getErrorMessage(ownersQuery.error) : undefined}
             rowKey="id"
             columns={columns}
-            dataSource={ownersQuery.data?.items ?? []}
-            loading={ownersQuery.isLoading}
             onRow={(record) => ({
               onDoubleClick: () => navigate(`/owners/${record.id}`),
             })}
-            pagination={{
-              current: offset / pageSize + 1,
-              pageSize,
-              total: ownersQuery.data?.total ?? 0,
-              showSizeChanger: false,
-            }}
-            onChange={handleTableChange}
             className="dense-table"
           />
         </Space>

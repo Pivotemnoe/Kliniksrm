@@ -1,8 +1,8 @@
 import { CheckCircleOutlined, EditOutlined, PlusOutlined, PushpinOutlined, StopOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Alert, Button, Checkbox, Drawer, Form, Input, Select, Space, Switch, Table, Tag, Typography } from 'antd';
-import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
+import { App, Alert, Button, Checkbox, Drawer, Form, Input, Select, Space, Switch, Tag, Typography } from 'antd';
+import { ColumnsType } from 'antd/es/table';
 import { useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -10,6 +10,7 @@ import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { LiveSearchInput } from '../../shared/ui/LiveSearchInput';
+import { InfiniteTable, useInfiniteListQuery } from '../../shared/ui/InfiniteTable';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDateTime } from '../../shared/utils/date';
 import { listRoles } from '../employees/employees.api';
@@ -17,7 +18,6 @@ import { RoleTemplate } from '../employees/types';
 import { archiveNewsPost, createNewsPost, listNewsPosts, markNewsPostRead, updateNewsPost } from './news.api';
 import { NewsPost, NewsPostInput, NewsPriority, newsPriorityColors, newsPriorityLabels } from './types';
 
-const pageSize = 10;
 const priorityOptions = Object.entries(newsPriorityLabels).map(([value, label]) => ({ value, label }));
 
 const newsSchema = z.object({
@@ -40,12 +40,11 @@ export function NewsPage() {
   const [priority, setPriority] = useState<NewsPriority | undefined>();
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [includeArchived, setIncludeArchived] = useState(false);
-  const [offset, setOffset] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingPost, setEditingPost] = useState<NewsPost | null>(null);
-  const newsQuery = useQuery({
-    queryKey: ['news', { search, priority, unreadOnly, includeArchived, limit: pageSize, offset }],
-    queryFn: () => listNewsPosts({ search, priority, unreadOnly, includeArchived, limit: pageSize, offset }),
+  const newsQuery = useInfiniteListQuery({
+    queryKey: ['news', { search, priority, unreadOnly, includeArchived }],
+    queryFn: ({ limit, offset }) => listNewsPosts({ search, priority, unreadOnly, includeArchived, limit, offset }),
   });
   const rolesQuery = useQuery({ queryKey: ['roles'], queryFn: listRoles, enabled: canManage });
   const saveMutation = useMutation({
@@ -137,12 +136,6 @@ export function NewsPage() {
     [archiveMutation, canManage, readMutation, rolesQuery.data],
   );
 
-  function handleTableChange(pagination: TablePaginationConfig) {
-    const current = pagination.current ?? 1;
-    const size = pagination.pageSize ?? pageSize;
-    setOffset((current - 1) * size);
-  }
-
   function openCreate() {
     setEditingPost(null);
     setDrawerOpen(true);
@@ -181,7 +174,6 @@ export function NewsPage() {
               placeholder="Поиск по новостям"
               onSearch={(value) => {
                 setSearch(value);
-                setOffset(0);
               }}
             />
             <Select
@@ -192,14 +184,12 @@ export function NewsPage() {
               options={priorityOptions}
               onChange={(value) => {
                 setPriority(value);
-                setOffset(0);
               }}
             />
             <Checkbox
               checked={unreadOnly}
               onChange={(event) => {
                 setUnreadOnly(event.target.checked);
-                setOffset(0);
               }}
             >
               Только непрочитанные
@@ -209,7 +199,6 @@ export function NewsPage() {
                 checked={includeArchived}
                 onChange={(event) => {
                   setIncludeArchived(event.target.checked);
-                  setOffset(0);
                 }}
               >
                 Показывать архив
@@ -219,19 +208,12 @@ export function NewsPage() {
         </div>
         <div className="list-panel-body">
           {newsQuery.isError ? <Alert type="error" showIcon message={getErrorMessage(newsQuery.error)} className="form-alert" /> : null}
-          <Table<NewsPost>
+          <InfiniteTable<NewsPost>
+            query={newsQuery}
+            errorText={newsQuery.isError ? getErrorMessage(newsQuery.error) : undefined}
             rowKey="id"
             className="dense-table"
             columns={columns}
-            dataSource={newsQuery.data?.items ?? []}
-            loading={newsQuery.isLoading}
-            pagination={{
-              current: offset / pageSize + 1,
-              pageSize,
-              total: newsQuery.data?.total ?? 0,
-              showSizeChanger: false,
-            }}
-            onChange={handleTableChange}
             onRow={(post) => ({ onDoubleClick: () => canManage && openEdit(post) })}
           />
         </div>

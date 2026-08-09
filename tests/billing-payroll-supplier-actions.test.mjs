@@ -90,11 +90,11 @@ test('оплата накладной доступна из карточки и 
   assert.match(service, /Сумма оплаты больше долга по накладной/);
 });
 
-test('адаптивная CRM локально проверена и ожидает приёмку на реальных устройствах', async () => {
+test('адаптивная CRM остаётся в работе до приёмки на реальных устройствах', async () => {
   const plan = JSON.parse(await read('docs/product/temichevvet-improvement-plan.json'));
   const item = plan.items.find((candidate) => candidate.id === 'P1.5');
-  assert.equal(item?.status, 'LOCAL_VERIFIED');
+  assert.equal(item?.status, 'IN_PROGRESS');
   assert.match(item?.title ?? '', /планшетов и телефонов/);
   assert.match(item?.next_action ?? '', /приёмку ролями врача, администратора и директора/);
-  assert.match(item?.current_state ?? '', /ширинах от 320 до 1440 px/);
+  assert.match(item?.current_state ?? '', /порциями по 50 строк/);
 });

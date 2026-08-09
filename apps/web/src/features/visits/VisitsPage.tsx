@@ -1,12 +1,13 @@
 import { FolderOpenOutlined, OrderedListOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Select, Space, Table, Tag, Typography } from 'antd';
-import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
+import { App, Button, Select, Space, Tag } from 'antd';
+import { ColumnsType } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
+import { InfiniteTable, useInfiniteListQuery } from '../../shared/ui/InfiniteTable';
 import { LiveSearchInput } from '../../shared/ui/LiveSearchInput';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDateTime } from '../../shared/utils/date';
@@ -19,8 +20,6 @@ import { createVisit, listVisits } from './visits.api';
 import { VisitFormDrawer } from './VisitFormDrawer';
 import { CreateVisitInput, VisitListItem, VisitStatus, visitStatusColors, visitStatusLabels } from './types';
 
-const pageSize = 10;
-
 export function VisitsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -32,7 +31,6 @@ export function VisitsPage() {
   const canCreateQueue = canManageQueue || canManage;
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<VisitStatus | undefined>();
-  const [offset, setOffset] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
   const [createQueueOpen, setCreateQueueOpen] = useState(false);
   const appointmentId = searchParams.get('appointmentId') ?? undefined;
@@ -43,9 +41,9 @@ export function VisitsPage() {
   const employeeId = searchParams.get('employeeId') ?? undefined;
   const isPersonalVisits = Boolean(employeeId && employeeId === auth?.employee.id);
 
-  const visitsQuery = useQuery({
-    queryKey: ['visits', { search, status, employeeId, limit: pageSize, offset }],
-    queryFn: () => listVisits({ search, status, employeeId, limit: pageSize, offset }),
+  const visitsQuery = useInfiniteListQuery({
+    queryKey: ['visits', { search, status, employeeId }],
+    queryFn: ({ limit, offset }) => listVisits({ search, status, employeeId, limit, offset }),
   });
   const appointmentQuery = useQuery({
     queryKey: ['appointments', appointmentId],
@@ -141,12 +139,6 @@ export function VisitsPage() {
     [navigate],
   );
 
-  function handleTableChange(pagination: TablePaginationConfig) {
-    const current = pagination.current ?? 1;
-    const size = pagination.pageSize ?? pageSize;
-    setOffset((current - 1) * size);
-  }
-
   function closeCreateDrawer() {
     setCreateOpen(false);
     if (createRequested || appointmentId || queueEntryId || initialOwnerId || initialAnimalId) {
@@ -184,7 +176,6 @@ export function VisitsPage() {
             className="search-input"
             onSearch={(value) => {
               setSearch(value.trim());
-              setOffset(0);
             }}
           />
           <Select
@@ -194,27 +185,18 @@ export function VisitsPage() {
             value={status}
             onChange={(value) => {
               setStatus(value);
-              setOffset(0);
             }}
             options={Object.entries(visitStatusLabels).map(([value, label]) => ({ value, label }))}
           />
         </div>
         <div className="list-panel-body">
         <Space direction="vertical" size={16} className="full-width">
-          {visitsQuery.isError ? <Typography.Text type="danger">{getErrorMessage(visitsQuery.error)}</Typography.Text> : null}
-          <Table<VisitListItem>
+          <InfiniteTable<VisitListItem>
+            query={visitsQuery}
+            errorText={visitsQuery.isError ? getErrorMessage(visitsQuery.error) : undefined}
             rowKey="id"
             columns={columns}
-            dataSource={visitsQuery.data?.items ?? []}
-            loading={visitsQuery.isLoading}
             onRow={(record) => ({ onDoubleClick: () => navigate(`/visits/${record.id}`) })}
-            pagination={{
-              current: offset / pageSize + 1,
-              pageSize,
-              total: visitsQuery.data?.total ?? 0,
-              showSizeChanger: false,
-            }}
-            onChange={handleTableChange}
             className="dense-table"
           />
         </Space>

@@ -1,8 +1,8 @@
 import { CheckOutlined, CloseOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Form, Input, Modal, Select, Space, Table, Tag, Typography } from 'antd';
-import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
+import { Alert, App, Button, Form, Input, Modal, Select, Space, Tag, Typography } from 'antd';
+import { ColumnsType } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
@@ -12,6 +12,7 @@ import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
 import { LiveSearchInput } from '../../shared/ui/LiveSearchInput';
+import { InfiniteTable, useInfiniteListQuery } from '../../shared/ui/InfiniteTable';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDateTime } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
@@ -26,8 +27,6 @@ import {
 } from './hospital.api';
 import { HospitalStay, HospitalStayStatus } from './types';
 
-const pageSize = 10;
-
 export function HospitalPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -37,13 +36,11 @@ export function HospitalPage() {
   const [search, setSearch] = useState('');
   const [boxId, setBoxId] = useState<string | undefined>();
   const [status, setStatus] = useState<HospitalStayStatus | undefined>();
-  const [offset, setOffset] = useState(0);
   const [admitOpen, setAdmitOpen] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
-  const hospitalQuery = useQuery({
-    queryKey: ['hospital', { search, boxId, status, limit: pageSize, offset }],
-    queryFn: () => listHospital({ search, hospitalBoxId: boxId, status, limit: pageSize, offset }),
-    refetchInterval: 30_000,
+  const hospitalQuery = useInfiniteListQuery({
+    queryKey: ['hospital', { search, boxId, status }],
+    queryFn: ({ limit, offset }) => listHospital({ search, hospitalBoxId: boxId, status, limit, offset }),
   });
   const resourcesQuery = useQuery({ queryKey: ['hospital', 'resources'], queryFn: getHospitalResources });
   const actionMutation = useMutation({
@@ -55,15 +52,19 @@ export function HospitalPage() {
     },
     onError: (error) => message.error(getErrorMessage(error)),
   });
-  const treatmentAlerts = (hospitalQuery.data?.items ?? [])
+  const hospitalItems = useMemo(() => hospitalQuery.data?.pages.flatMap((page) => page.items) ?? [], [hospitalQuery.data]);
+  const treatmentAlerts = hospitalItems
     .filter((stay) => stay.status === 'ACTIVE')
     .map((stay) => ({ stay, treatment: getStayTreatmentStatus(stay, nowMs) }))
     .filter(({ treatment }) => treatment.dueCount > 0);
 
   useEffect(() => {
-    const timer = window.setInterval(() => setNowMs(Date.now()), 30_000);
+    const timer = window.setInterval(() => {
+      setNowMs(Date.now());
+      void hospitalQuery.refetch();
+    }, 30_000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [hospitalQuery.refetch]);
 
   const columns = useMemo<ColumnsType<HospitalStay>>(
     () => [
@@ -131,12 +132,6 @@ export function HospitalPage() {
     [actionMutation, canManage, navigate, nowMs],
   );
 
-  function handleTableChange(pagination: TablePaginationConfig) {
-    const current = pagination.current ?? 1;
-    const size = pagination.pageSize ?? pageSize;
-    setOffset((current - 1) * size);
-  }
-
   return (
     <div className="page hospital-page">
       <PageHeader
@@ -169,7 +164,6 @@ export function HospitalPage() {
             className="search-input"
             onSearch={(value) => {
               setSearch(value.trim());
-              setOffset(0);
             }}
           />
           <Select
@@ -179,7 +173,6 @@ export function HospitalPage() {
             value={boxId}
             onChange={(value) => {
               setBoxId(value);
-              setOffset(0);
             }}
             options={resourcesQuery.data?.boxes.map((box) => ({ value: box.id, label: box.name })) ?? []}
           />
@@ -190,21 +183,18 @@ export function HospitalPage() {
             value={status}
             onChange={(value) => {
               setStatus(value);
-              setOffset(0);
             }}
             options={hospitalStatusOptions}
           />
         </div>
         <div className="list-panel-body">
           {hospitalQuery.isError ? <Typography.Text type="danger">{getErrorMessage(hospitalQuery.error)}</Typography.Text> : null}
-          <Table<HospitalStay>
+          <InfiniteTable<HospitalStay>
+            query={hospitalQuery}
+            errorText={hospitalQuery.isError ? getErrorMessage(hospitalQuery.error) : undefined}
             rowKey="id"
             className="dense-table"
             columns={columns}
-            dataSource={hospitalQuery.data?.items ?? []}
-            loading={hospitalQuery.isLoading}
-            pagination={{ current: offset / pageSize + 1, pageSize, total: hospitalQuery.data?.total ?? 0, showSizeChanger: false }}
-            onChange={handleTableChange}
             onRow={(record) => ({ onDoubleClick: () => navigate(`/hospital/${record.id}`) })}
           />
         </div>

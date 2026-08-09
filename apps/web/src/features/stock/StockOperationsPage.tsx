@@ -9,6 +9,7 @@ import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { PageHeader } from '../../shared/ui/PageHeader';
+import { InfiniteTable, useInfiniteListQuery } from '../../shared/ui/InfiniteTable';
 import { formatDate } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
 import {
@@ -26,8 +27,6 @@ import {
 } from './stock.api';
 import { StockDocument, StockDocumentMutationInput, StockDocumentType, StockMovement, StockResources, Supplier, SupplierBalance } from './types';
 import { SupplierModal } from './SupplierModal';
-
-const historyPageSize = 20;
 
 const documentTitles: Record<StockDocumentType, string> = {
   INVENTORY: 'Инвентаризация',
@@ -58,16 +57,14 @@ export function StockOperationsPage() {
   const [paymentSupplier, setPaymentSupplier] = useState<SupplierBalance | null>(null);
   const [supplierOpen, setSupplierOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
-  const [documentPage, setDocumentPage] = useState(1);
-  const [movementPage, setMovementPage] = useState(1);
   const resourcesQuery = useQuery({ queryKey: ['stock', 'resources'], queryFn: getStockResources });
-  const documentsQuery = useQuery({
-    queryKey: ['stock', 'documents', documentPage],
-    queryFn: () => listStockDocuments({ limit: historyPageSize, offset: (documentPage - 1) * historyPageSize }),
+  const documentsQuery = useInfiniteListQuery({
+    queryKey: ['stock', 'documents'],
+    queryFn: ({ limit, offset }) => listStockDocuments({ limit, offset }),
   });
-  const movementsQuery = useQuery({
-    queryKey: ['stock', 'movements', movementPage],
-    queryFn: () => listStockMovements({ limit: historyPageSize, offset: (movementPage - 1) * historyPageSize }),
+  const movementsQuery = useInfiniteListQuery({
+    queryKey: ['stock', 'movements'],
+    queryFn: ({ limit, offset }) => listStockMovements({ limit, offset }),
   });
   const suppliersQuery = useQuery({ queryKey: ['stock', 'supplier-balances'], queryFn: listSupplierBalances, enabled: canManage });
 
@@ -131,8 +128,8 @@ export function StockOperationsPage() {
   return <div className="page">
     <PageHeader title="Складские операции" description="Инвентаризации, перемещения, возвраты, списания, пересортица и взаиморасчёты с поставщиками." extra={canManage ? <Space wrap><Button icon={<PlusOutlined />} onClick={() => { setEditingSupplier(null); setSupplierOpen(true); }}>Новый поставщик</Button><Button type="primary" icon={<PlusOutlined />} onClick={() => { setEditingDocument(null); setCorrectionSource(null); setDocumentOpen(true); }}>Новый документ</Button></Space> : null} />
     <div className="list-panel"><Tabs items={[
-      { key: 'documents', label: 'Документы', children: <Table rowKey="id" columns={documentColumns} dataSource={documentsQuery.data?.items ?? []} loading={documentsQuery.isLoading} pagination={{ current: documentPage, pageSize: historyPageSize, total: documentsQuery.data?.total ?? 0, showSizeChanger: false, onChange: setDocumentPage }} scroll={{ x: 1050 }} /> },
-      { key: 'movements', label: 'История движения', children: <Table rowKey="id" columns={movementColumns} dataSource={movementsQuery.data?.items ?? []} loading={movementsQuery.isLoading} pagination={{ current: movementPage, pageSize: historyPageSize, total: movementsQuery.data?.total ?? 0, showSizeChanger: false, onChange: setMovementPage }} scroll={{ x: 1100 }} /> },
+      { key: 'documents', label: 'Документы', children: <InfiniteTable query={documentsQuery} errorText={documentsQuery.isError ? getErrorMessage(documentsQuery.error) : undefined} rowKey="id" columns={documentColumns} scroll={{ x: 1050 }} /> },
+      { key: 'movements', label: 'История движения', children: <InfiniteTable query={movementsQuery} errorText={movementsQuery.isError ? getErrorMessage(movementsQuery.error) : undefined} rowKey="id" columns={movementColumns} scroll={{ x: 1100 }} /> },
       ...(canManage ? [{ key: 'suppliers', label: 'Поставщики и расчёты', children: <Table rowKey="id" columns={supplierColumns} dataSource={suppliersQuery.data ?? []} loading={suppliersQuery.isLoading} pagination={false} scroll={{ x: 850 }} /> }] : []),
     ]} /></div>
     <StockDocumentModal open={documentOpen} document={editingDocument} correctionSource={correctionSource} initialProductId={initialProductId} resources={resourcesQuery.data} onClose={closeDocumentModal} onSaved={refresh} />

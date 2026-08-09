@@ -4506,6 +4506,16 @@ body {
   }
 }
 
+.infinite-list-status {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px 12px 4px;
+  text-align: center;
+}
+
 @media (max-width: 540px) {
   .header-action-messages,
   .header-action-requests {

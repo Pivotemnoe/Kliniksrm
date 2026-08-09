@@ -16,6 +16,7 @@ import { AuditService } from '../audit/audit.service';
 import { AuthEmployee } from '../auth/auth.types';
 import { FinanceService } from '../finance/finance.service';
 import { MedicalPhrasesService } from '../medical-phrases/medical-phrases.service';
+import { OwnerGatewaySnapshotSyncService } from '../notifications/owner-gateway-snapshot-sync.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { AddVisitServiceDto } from './dto/add-visit-service.dto';
@@ -44,6 +45,7 @@ export class VisitsService {
     private readonly schedulingService: SchedulingService,
     private readonly financeService: FinanceService,
     private readonly medicalPhrasesService: MedicalPhrasesService,
+    private readonly ownerGatewaySnapshotSyncService: OwnerGatewaySnapshotSyncService,
   ) {}
 
   async listVisits(query: ListVisitsQueryDto) {
@@ -194,6 +196,14 @@ export class VisitsService {
 
       if (dto.status) {
         await this.syncVisitSourceStatus(tx, updatedVisit, dto.status);
+        if (isPortalSnapshotStatus(dto.status)) {
+          await this.ownerGatewaySnapshotSyncService.enqueue({
+            ownerId: existing.ownerId,
+            visitId,
+            visitStatus: dto.status,
+            actorId: actor.id,
+          }, tx);
+        }
       }
 
       return updatedVisit;
@@ -206,6 +216,10 @@ export class VisitsService {
       entityId: visit.id,
       metadata: { changedFields: Object.keys(dto), status: visit.status },
     });
+
+    if (dto.status && isPortalSnapshotStatus(dto.status)) {
+      void this.ownerGatewaySnapshotSyncService.syncNow();
+    }
 
     return this.getVisit(visit.id);
   }
@@ -735,6 +749,15 @@ export class VisitsService {
 
       await this.syncVisitSourceStatus(tx, updatedVisit, status);
 
+      if (isPortalSnapshotStatus(status)) {
+        await this.ownerGatewaySnapshotSyncService.enqueue({
+          ownerId: existing.ownerId,
+          visitId,
+          visitStatus: status,
+          actorId: actor.id,
+        }, tx);
+      }
+
       return updatedVisit;
     });
 
@@ -745,6 +768,10 @@ export class VisitsService {
       entityId: visit.id,
       metadata: { status },
     });
+
+    if (isPortalSnapshotStatus(status)) {
+      void this.ownerGatewaySnapshotSyncService.syncNow();
+    }
 
     return this.getVisit(visit.id);
   }
@@ -1561,6 +1588,10 @@ function ensureVisitEditable(visit: { status: VisitStatus; completedAt: Date | n
   }
 
   throw new BadRequestException('Завершённый приём можно редактировать только директору или в течение 30 минут после завершения');
+}
+
+function isPortalSnapshotStatus(status: VisitStatus) {
+  return status === VisitStatus.COMPLETED || status === VisitStatus.CANCELLED;
 }
 
 function uniqueIds(ids?: string[]) {

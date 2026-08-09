@@ -1,7 +1,7 @@
 import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Form, Input, Modal, Select, Space, Switch, Table, Tag, Tooltip, Typography } from 'antd';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { App, Button, Form, Input, Modal, Select, Space, Switch, Tag, Tooltip, Typography } from 'antd';
 import { ColumnsType } from 'antd/es/table';
 import { useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
@@ -10,6 +10,7 @@ import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { LiveSearchInput } from '../../shared/ui/LiveSearchInput';
+import { InfiniteTable, useInfiniteListQuery } from '../../shared/ui/InfiniteTable';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import {
   cleanupLearnedMedicalPhrases,
@@ -19,8 +20,6 @@ import {
   updateMedicalPhrase,
 } from './medicalPhrases.api';
 import { MedicalPhrase, MedicalPhraseSource, UpsertMedicalPhrasePayload } from './types';
-
-const PAGE_SIZE = 20;
 
 const fieldOptions = [
   { value: 'visit.exam.anamnesis', label: 'Анамнез' },
@@ -70,7 +69,6 @@ export function MedicalPhrasesSettingsPage() {
   const queryClient = useQueryClient();
   const { data: auth } = useCurrentEmployee();
   const canManage = hasPermission(auth?.employee, 'settings.manage');
-  const [page, setPage] = useState(1);
   const [searchDraft, setSearchDraft] = useState('');
   const [filters, setFilters] = useState<{
     field?: string;
@@ -82,10 +80,9 @@ export function MedicalPhrasesSettingsPage() {
   }>({ isActive: true });
   const [editingPhrase, setEditingPhrase] = useState<MedicalPhrase | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const offset = (page - 1) * PAGE_SIZE;
-  const phrasesQuery = useQuery({
-    queryKey: ['medical-phrases', 'manage', filters, page],
-    queryFn: () => manageMedicalPhrases({ ...filters, limit: PAGE_SIZE, offset }),
+  const phrasesQuery = useInfiniteListQuery({
+    queryKey: ['medical-phrases', 'manage', filters],
+    queryFn: ({ limit, offset }) => manageMedicalPhrases({ ...filters, limit, offset }),
     enabled: canManage,
   });
   const { control, handleSubmit, reset, watch } = useForm<PhraseFormValues>({
@@ -232,7 +229,6 @@ export function MedicalPhrasesSettingsPage() {
 
   function updateFilter<K extends keyof typeof filters>(key: K, value: (typeof filters)[K]) {
     setFilters((current) => ({ ...current, [key]: value }));
-    setPage(1);
   }
 
   function openCreate() {
@@ -264,13 +260,11 @@ export function MedicalPhrasesSettingsPage() {
 
   function submitSearch() {
     setFilters((current) => ({ ...current, search: searchDraft.trim() || undefined }));
-    setPage(1);
   }
 
   function resetFilters() {
     setSearchDraft('');
     setFilters({ isActive: true });
-    setPage(1);
   }
 
   function confirmRemove(phrase: MedicalPhrase) {
@@ -376,20 +370,13 @@ export function MedicalPhrasesSettingsPage() {
         </div>
         <div className="list-panel-body">
           {phrasesQuery.isError ? <Typography.Text type="danger">{getErrorMessage(phrasesQuery.error)}</Typography.Text> : null}
-          <Table<MedicalPhrase>
+          <InfiniteTable<MedicalPhrase>
+            query={phrasesQuery}
+            errorText={phrasesQuery.isError ? getErrorMessage(phrasesQuery.error) : undefined}
             rowKey="id"
             className="dense-table"
             columns={columns}
-            dataSource={phrasesQuery.data?.items ?? []}
-            loading={phrasesQuery.isLoading}
             scroll={{ x: 1480 }}
-            pagination={{
-              current: page,
-              pageSize: PAGE_SIZE,
-              total: phrasesQuery.data?.total ?? 0,
-              showSizeChanger: false,
-              onChange: setPage,
-            }}
             onRow={(record) => ({ onDoubleClick: () => openEdit(record) })}
           />
         </div>

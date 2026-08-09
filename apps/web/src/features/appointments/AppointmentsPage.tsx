@@ -1,13 +1,14 @@
 import { LeftOutlined, PlusOutlined, RightOutlined, SearchOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Input, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
-import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
+import { App, Button, Input, Select, Space, Tabs, Tag, Typography } from 'antd';
+import { ColumnsType } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
+import { InfiniteTable, useInfiniteListQuery } from '../../shared/ui/InfiniteTable';
 import { LiveSearchInput } from '../../shared/ui/LiveSearchInput';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDateTime, getDayBounds } from '../../shared/utils/date';
@@ -24,8 +25,6 @@ import {
   appointmentStatusLabels,
 } from './types';
 
-const pageSize = 10;
-
 export function AppointmentsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -38,14 +37,13 @@ export function AppointmentsPage() {
   const [search, setSearch] = useState('');
   const [date, setDate] = useState(toDateInput(new Date()));
   const [status, setStatus] = useState<AppointmentStatus | undefined>();
-  const [offset, setOffset] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
   const dateBounds = getDayBounds(date);
   const weekDays = useMemo(() => getWeekDays(date), [date]);
   const weekBounds = useMemo(() => getRangeBounds(weekDays[0].value, weekDays[6].value), [weekDays]);
-  const appointmentsQuery = useQuery({
-    queryKey: ['appointments', { search, status, employeeId, date, limit: pageSize, offset }],
-    queryFn: () => listAppointments({ search, status, employeeId, ...dateBounds, limit: pageSize, offset }),
+  const appointmentsQuery = useInfiniteListQuery({
+    queryKey: ['appointments', { search, status, employeeId, date }],
+    queryFn: ({ limit, offset }) => listAppointments({ search, status, employeeId, ...dateBounds, limit, offset }),
   });
   const weeklyAppointmentsQuery = useQuery({
     queryKey: ['appointments-week', { search, status, employeeId, from: weekBounds.dateFrom, to: weekBounds.dateTo }],
@@ -140,12 +138,6 @@ export function AppointmentsPage() {
     [navigate],
   );
 
-  function handleTableChange(pagination: TablePaginationConfig) {
-    const current = pagination.current ?? 1;
-    const size = pagination.pageSize ?? pageSize;
-    setOffset((current - 1) * size);
-  }
-
   return (
     <div className="page">
       <PageHeader
@@ -168,15 +160,12 @@ export function AppointmentsPage() {
         canManage={canManage}
         onSelectDate={(value) => {
           setDate(value);
-          setOffset(0);
         }}
         onMoveWeek={(direction) => {
           setDate(shiftDate(date, direction * 7));
-          setOffset(0);
         }}
         onToday={() => {
           setDate(toDateInput(new Date()));
-          setOffset(0);
         }}
         onCreate={() => setCreateOpen(true)}
         onOpen={(appointmentId) => navigate(`/schedule/${appointmentId}`)}
@@ -197,7 +186,6 @@ export function AppointmentsPage() {
                       className="search-input"
                       onSearch={(value) => {
                         setSearch(value.trim());
-                        setOffset(0);
                       }}
                     />
                     <Space wrap>
@@ -207,7 +195,6 @@ export function AppointmentsPage() {
                         value={date}
                         onChange={(event) => {
                           setDate(event.target.value);
-                          setOffset(0);
                         }}
                       />
                       <Select
@@ -217,7 +204,6 @@ export function AppointmentsPage() {
                         value={status}
                         onChange={(value) => {
                           setStatus(value);
-                          setOffset(0);
                         }}
                         options={Object.entries(appointmentStatusLabels).map(([value, label]) => ({ value, label }))}
                       />
@@ -225,27 +211,17 @@ export function AppointmentsPage() {
                   </div>
                   <div className="list-panel-body">
                     <Space direction="vertical" size={16} className="full-width">
-                      {appointmentsQuery.isError ? (
-                        <Typography.Text type="danger">{getErrorMessage(appointmentsQuery.error)}</Typography.Text>
-                      ) : null}
                       <SelectedDayShiftsSummary
                         date={date}
                         shifts={selectedDayShifts}
                         loading={weeklyShiftsQuery.isLoading}
                       />
-                      <Table<Appointment>
+                      <InfiniteTable<Appointment>
+                        query={appointmentsQuery}
+                        errorText={appointmentsQuery.isError ? getErrorMessage(appointmentsQuery.error) : undefined}
                         rowKey="id"
                         columns={columns}
-                        dataSource={appointmentsQuery.data?.items ?? []}
-                        loading={appointmentsQuery.isLoading}
                         onRow={(record) => ({ onDoubleClick: () => navigate(`/schedule/${record.id}`) })}
-                        pagination={{
-                          current: offset / pageSize + 1,
-                          pageSize,
-                          total: appointmentsQuery.data?.total ?? 0,
-                          showSizeChanger: false,
-                        }}
-                        onChange={handleTableChange}
                         className="dense-table"
                       />
                     </Space>

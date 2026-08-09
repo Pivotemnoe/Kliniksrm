@@ -13,9 +13,9 @@ import {
 } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Alert, Button, Drawer, Dropdown, Form, Input, Popconfirm, QRCode, Select, Space, Table, Tag, Typography } from 'antd';
+import { App, Alert, Button, Drawer, Dropdown, Form, Input, Popconfirm, QRCode, Select, Space, Tag, Typography } from 'antd';
 import type { MenuProps } from 'antd';
-import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
+import { ColumnsType } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
@@ -24,6 +24,7 @@ import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { LiveSearchInput } from '../../shared/ui/LiveSearchInput';
+import { InfiniteTable, useInfiniteListQuery } from '../../shared/ui/InfiniteTable';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { RussianPhoneInput } from '../../shared/ui/RussianPhoneInput';
 import { formatDateTime, fromDatetimeLocal, toDatetimeLocal } from '../../shared/utils/date';
@@ -45,7 +46,6 @@ import {
   UpdateOnlineRequestInput,
 } from './types';
 
-const pageSize = 10;
 const activeStatuses: OnlineRequestStatus[] = ['NEW', 'IN_REVIEW'];
 const statusOptions = Object.entries(onlineRequestStatusLabels).map(([value, label]) => ({ value, label }));
 
@@ -84,14 +84,13 @@ export function OnlineRequestsPage() {
   const canManage = hasPermission(auth?.employee, 'appointments.manage');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<OnlineRequestStatus | undefined>();
-  const [offset, setOffset] = useState(0);
   const [selectedRequest, setSelectedRequest] = useState<OnlineAppointmentRequest | null>(null);
   const [drawerIntent, setDrawerIntent] = useState<RequestDrawerIntent>('confirm');
   const publicRequestUrl = useMemo(() => getPublicOnlineRequestUrl(), []);
 
-  const requestsQuery = useQuery({
-    queryKey: ['online-requests', { search, status, limit: pageSize, offset }],
-    queryFn: () => listOnlineRequests({ search, status, limit: pageSize, offset }),
+  const requestsQuery = useInfiniteListQuery({
+    queryKey: ['online-requests', { search, status }],
+    queryFn: ({ limit, offset }) => listOnlineRequests({ search, status, limit, offset }),
   });
   const actionMutation = useMutation({
     mutationFn: ({ request, action }: { request: OnlineAppointmentRequest; action: 'cancel' | 'archive' }) =>
@@ -231,12 +230,6 @@ export function OnlineRequestsPage() {
     [canManage, message, navigate, quickAcceptMutation],
   );
 
-  function handleTableChange(pagination: TablePaginationConfig) {
-    const current = pagination.current ?? 1;
-    const size = pagination.pageSize ?? pageSize;
-    setOffset((current - 1) * size);
-  }
-
   return (
     <div className="page">
       <PageHeader
@@ -277,7 +270,6 @@ export function OnlineRequestsPage() {
               placeholder="Поиск по клиенту, телефону или пациенту"
               onSearch={(value) => {
                 setSearch(value);
-                setOffset(0);
               }}
             />
             <Select
@@ -288,7 +280,6 @@ export function OnlineRequestsPage() {
               options={statusOptions}
               onChange={(value) => {
                 setStatus(value);
-                setOffset(0);
               }}
             />
           </Space>
@@ -303,19 +294,12 @@ export function OnlineRequestsPage() {
         </div>
         <div className="list-panel-body">
           {requestsQuery.isError ? <Alert type="error" showIcon message={getErrorMessage(requestsQuery.error)} className="form-alert" /> : null}
-          <Table<OnlineAppointmentRequest>
+          <InfiniteTable<OnlineAppointmentRequest>
+            query={requestsQuery}
+            errorText={requestsQuery.isError ? getErrorMessage(requestsQuery.error) : undefined}
             rowKey="id"
             className="dense-table"
             columns={columns}
-            dataSource={requestsQuery.data?.items ?? []}
-            loading={requestsQuery.isLoading}
-            pagination={{
-              current: offset / pageSize + 1,
-              pageSize,
-              total: requestsQuery.data?.total ?? 0,
-              showSizeChanger: false,
-            }}
-            onChange={handleTableChange}
             scroll={{ x: 1580 }}
             onRow={(request) => ({ onDoubleClick: () => openRequest(request, 'edit') })}
           />

@@ -1,7 +1,7 @@
 import { CheckOutlined, CloseOutlined, EditOutlined, PlusOutlined, SearchOutlined, UndoOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Input, Segmented, Select, Space, Table, Tag, Typography } from 'antd';
-import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
+import { App, Button, Input, Segmented, Select, Space, Tag, Typography } from 'antd';
+import { ColumnsType } from 'antd/es/table';
 import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';
@@ -9,6 +9,7 @@ import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
 import { LiveSearchInput } from '../../shared/ui/LiveSearchInput';
+import { InfiniteTable, useInfiniteListQuery } from '../../shared/ui/InfiniteTable';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDateTime, getDayBounds } from '../../shared/utils/date';
 import { getSchedulingResources } from '../scheduling/scheduling.api';
@@ -17,7 +18,6 @@ import { archiveTask, cancelTask, completeTask, createTask, listTasks, reopenTas
 import { TaskFormDrawer } from './TaskFormDrawer';
 import { CreateTaskInput, getTaskTypeLabel, Task, TaskMutationInput, TaskStatus, taskStatusColors, taskStatusLabels } from './types';
 
-const pageSize = 10;
 type DuePreset = 'all' | 'overdue' | 'today' | 'tomorrow';
 
 export function TasksPage() {
@@ -40,13 +40,12 @@ export function TasksPage() {
   const [duePreset, setDuePreset] = useState<DuePreset>(() => (isPersonalTasks ? 'all' : 'today'));
   const [assigneeId, setAssigneeId] = useState<string | undefined>();
   const [assigneeRoleCode, setAssigneeRoleCode] = useState<string | undefined>();
-  const [offset, setOffset] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const dueBounds = getTaskDueBounds(duePreset, dueDate);
-  const tasksQuery = useQuery({
-    queryKey: ['tasks', { search, status, dueDate, duePreset, assigneeId, assigneeRoleCode, mine: isPersonalTasks, limit: pageSize, offset }],
-    queryFn: () => listTasks({ search, status, assigneeId, assigneeRoleCode, mine: isPersonalTasks || undefined, ...dueBounds, limit: pageSize, offset }),
+  const tasksQuery = useInfiniteListQuery({
+    queryKey: ['tasks', { search, status, dueDate, duePreset, assigneeId, assigneeRoleCode, mine: isPersonalTasks }],
+    queryFn: ({ limit, offset }) => listTasks({ search, status, assigneeId, assigneeRoleCode, mine: isPersonalTasks || undefined, ...dueBounds, limit, offset }),
   });
   const resourcesQuery = useQuery({
     queryKey: ['scheduling', 'resources'],
@@ -184,12 +183,6 @@ export function TasksPage() {
     [actionMutation, canManage, navigate],
   );
 
-  function handleTableChange(pagination: TablePaginationConfig) {
-    const current = pagination.current ?? 1;
-    const size = pagination.pageSize ?? pageSize;
-    setOffset((current - 1) * size);
-  }
-
   function closeForm() {
     setCreateOpen(false);
     setEditingTask(null);
@@ -232,7 +225,6 @@ export function TasksPage() {
             className="search-input"
             onSearch={(value) => {
               setSearch(value.trim());
-              setOffset(0);
             }}
           />
           <Segmented<DuePreset>
@@ -240,7 +232,6 @@ export function TasksPage() {
             onChange={(value) => {
               setDuePreset(value);
               setDueDate('');
-              setOffset(0);
             }}
             options={[
               { value: 'today', label: 'Сегодня' },
@@ -257,7 +248,6 @@ export function TasksPage() {
               onChange={(event) => {
                 setDueDate(event.target.value);
                 setDuePreset('all');
-                setOffset(0);
               }}
             />
             <Select
@@ -267,7 +257,6 @@ export function TasksPage() {
               value={status}
               onChange={(value) => {
                 setStatus(value);
-                setOffset(0);
               }}
               options={Object.entries(taskStatusLabels).map(([value, label]) => ({ value, label }))}
             />
@@ -285,7 +274,6 @@ export function TasksPage() {
                       if (value) {
                         setAssigneeRoleCode(undefined);
                       }
-                      setOffset(0);
                     }}
                     options={resourcesQuery.data?.employees.map((employee) => ({ value: employee.id, label: employee.fullName }))}
                   />
@@ -302,7 +290,6 @@ export function TasksPage() {
                       if (value) {
                         setAssigneeId(undefined);
                       }
-                      setOffset(0);
                     }}
                     options={rolesQuery.data?.map((role) => ({ value: role.code, label: role.title }))}
                   />
@@ -314,19 +301,12 @@ export function TasksPage() {
         <div className="list-panel-body">
           <Space direction="vertical" size={16} className="full-width">
             {tasksQuery.isError ? <Typography.Text type="danger">{getErrorMessage(tasksQuery.error)}</Typography.Text> : null}
-            <Table<Task>
+            <InfiniteTable<Task>
+              query={tasksQuery}
+              errorText={tasksQuery.isError ? getErrorMessage(tasksQuery.error) : undefined}
               rowKey="id"
               columns={columns}
-              dataSource={tasksQuery.data?.items ?? []}
-              loading={tasksQuery.isLoading}
               onRow={(record) => ({ onDoubleClick: () => navigate(`/tasks/${record.id}`) })}
-              pagination={{
-                current: offset / pageSize + 1,
-                pageSize,
-                total: tasksQuery.data?.total ?? 0,
-                showSizeChanger: false,
-              }}
-              onChange={handleTableChange}
               className="dense-table"
             />
           </Space>

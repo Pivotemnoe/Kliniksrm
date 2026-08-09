@@ -1,9 +1,9 @@
 import { DownOutlined, FileAddOutlined, SearchOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Dropdown, Form, Input, Modal, Select, Space, Table, Tag, Typography } from 'antd';
+import { Alert, App, Button, Dropdown, Form, Input, Modal, Select, Space, Tag, Typography } from 'antd';
 import type { MenuProps } from 'antd';
-import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
+import { ColumnsType } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
+import { InfiniteTable, useInfiniteListQuery } from '../../shared/ui/InfiniteTable';
 import { LiveSearchInput } from '../../shared/ui/LiveSearchInput';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDate, formatDateTime } from '../../shared/utils/date';
@@ -31,7 +32,6 @@ import {
   paymentTypeLabels,
 } from './types';
 
-const pageSize = 10;
 type BillStatusFilter = PaymentStatus | 'DEBT';
 
 export function BillsPage() {
@@ -46,16 +46,16 @@ export function BillsPage() {
   const [statusFilter, setStatusFilter] = useState<BillStatusFilter | undefined>(() => getInitialStatusFilter(searchParams));
   const [source, setSource] = useState<BillSource | undefined>();
   const [amountFilter, setAmountFilter] = useState<BillAmountFilter | undefined>();
-  const [offset, setOffset] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
   const [bulkPaymentOpen, setBulkPaymentOpen] = useState(false);
   const [selectedBillIds, setSelectedBillIds] = useState<string[]>([]);
   const status = statusFilter === 'DEBT' ? undefined : statusFilter;
   const debtOnly = statusFilter === 'DEBT';
-  const billsQuery = useQuery({
-    queryKey: ['bills', { search, status, debtOnly, source, amount: amountFilter, limit: pageSize, offset }],
-    queryFn: () => listBills({ search, status, debtOnly, source, amount: amountFilter, limit: pageSize, offset }),
+  const billsQuery = useInfiniteListQuery({
+    queryKey: ['bills', { search, status, debtOnly, source, amount: amountFilter }],
+    queryFn: ({ limit, offset }) => listBills({ search, status, debtOnly, source, amount: amountFilter, limit, offset }),
   });
+  const billsTotal = billsQuery.data?.pages[0]?.total ?? 0;
   const cancelMutation = useMutation({
     mutationFn: cancelBill,
     onSuccess: async () => {
@@ -108,7 +108,6 @@ export function BillsPage() {
 
   useEffect(() => {
     setStatusFilter(getInitialStatusFilter(searchParams));
-    setOffset(0);
   }, [searchParams]);
 
   useEffect(() => {
@@ -230,12 +229,6 @@ export function BillsPage() {
     [canManage, canManagePayments, cancelBillAsync, cancelPending, modal, navigate],
   );
 
-  function handleTableChange(pagination: TablePaginationConfig) {
-    const current = pagination.current ?? 1;
-    const size = pagination.pageSize ?? pageSize;
-    setOffset((current - 1) * size);
-  }
-
   function confirmBulkCancellation() {
     modal.confirm({
       title: `Отменить выбранные счета (${selectedBillIds.length})?`,
@@ -269,7 +262,6 @@ export function BillsPage() {
             className="search-input"
             onSearch={(value) => {
               setSearch(value.trim());
-              setOffset(0);
             }}
           />
           <Space wrap>
@@ -280,7 +272,6 @@ export function BillsPage() {
               value={statusFilter}
               onChange={(value) => {
                 setStatusFilter(value);
-                setOffset(0);
               }}
               options={[
                 { value: 'DEBT', label: 'С долгом' },
@@ -294,7 +285,6 @@ export function BillsPage() {
               value={source}
               onChange={(value) => {
                 setSource(value);
-                setOffset(0);
               }}
               options={Object.entries(billSourceLabels).map(([value, label]) => ({ value, label }))}
             />
@@ -305,7 +295,6 @@ export function BillsPage() {
               value={amountFilter}
               onChange={(value) => {
                 setAmountFilter(value);
-                setOffset(0);
               }}
               options={[
                 { value: 'ZERO', label: 'Только нулевые' },
@@ -316,8 +305,7 @@ export function BillsPage() {
         </div>
         <div className="list-panel-body">
           <Space direction="vertical" size={16} className="full-width">
-            {billsQuery.isError ? <Typography.Text type="danger">{getErrorMessage(billsQuery.error)}</Typography.Text> : null}
-            {(canManage || canManagePayments) && (billsQuery.data?.total ?? 0) > 0 ? (
+            {(canManage || canManagePayments) && billsTotal > 0 ? (
               <Alert
                 className="bill-bulk-alert"
                 type={selectedBillIds.length ? 'info' : 'warning'}
@@ -327,7 +315,7 @@ export function BillsPage() {
                 action={(
                   <Space wrap>
                     <Button loading={selectAllMutation.isPending} onClick={() => selectAllMutation.mutate()}>
-                      Выбрать все найденные ({billsQuery.data?.total ?? 0})
+                      Выбрать все найденные ({billsTotal})
                     </Button>
                     {selectedBillIds.length ? <Button onClick={() => setSelectedBillIds([])}>Снять выбор</Button> : null}
                     {selectedBillIds.length && canManagePayments ? (
@@ -340,13 +328,11 @@ export function BillsPage() {
                 )}
               />
             ) : null}
-            <Table<BillListItem>
+            <InfiniteTable<BillListItem>
+              query={billsQuery}
+              errorText={billsQuery.isError ? getErrorMessage(billsQuery.error) : undefined}
               rowKey="id"
               columns={columns}
-              dataSource={billsQuery.data?.items ?? []}
-              loading={billsQuery.isLoading}
-              pagination={{ current: offset / pageSize + 1, pageSize, total: billsQuery.data?.total ?? 0, showSizeChanger: false }}
-              onChange={handleTableChange}
               rowSelection={canManage || canManagePayments ? {
                 selectedRowKeys: selectedBillIds,
                 preserveSelectedRowKeys: true,

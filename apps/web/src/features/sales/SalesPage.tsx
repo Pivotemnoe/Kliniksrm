@@ -1,7 +1,7 @@
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Button, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, Typography } from 'antd';
-import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
+import { ColumnsType } from 'antd/es/table';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
@@ -9,6 +9,7 @@ import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { LiveSearchInput } from '../../shared/ui/LiveSearchInput';
+import { InfiniteTable, useInfiniteListQuery } from '../../shared/ui/InfiniteTable';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDateTime } from '../../shared/utils/date';
 import { formatMoney, toMoneyNumber } from '../../shared/utils/money';
@@ -19,8 +20,6 @@ import { paymentStatusColors, paymentStatusLabels } from '../billing/types';
 import { createSale, listSales } from './sales.api';
 import { CreateSaleInput, SaleListItem } from './types';
 
-const pageSize = 10;
-
 export function SalesPage() {
   const navigate = useNavigate();
   const { data: auth } = useCurrentEmployee();
@@ -28,12 +27,11 @@ export function SalesPage() {
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [offset, setOffset] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
   const dateBounds = getSalesDateBounds(dateFrom, dateTo);
-  const salesQuery = useQuery({
-    queryKey: ['sales', { search, dateFrom, dateTo, limit: pageSize, offset }],
-    queryFn: () => listSales({ search, ...dateBounds, limit: pageSize, offset }),
+  const salesQuery = useInfiniteListQuery({
+    queryKey: ['sales', { search, dateFrom, dateTo }],
+    queryFn: ({ limit, offset }) => listSales({ search, ...dateBounds, limit, offset }),
   });
 
   const columns = useMemo<ColumnsType<SaleListItem>>(
@@ -105,12 +103,6 @@ export function SalesPage() {
     [navigate],
   );
 
-  function handleTableChange(pagination: TablePaginationConfig) {
-    const current = pagination.current ?? 1;
-    const size = pagination.pageSize ?? pageSize;
-    setOffset((current - 1) * size);
-  }
-
   return (
     <div className="page">
       <PageHeader
@@ -133,7 +125,6 @@ export function SalesPage() {
             className="search-input"
             onSearch={(value) => {
               setSearch(value.trim());
-              setOffset(0);
             }}
           />
           <Space wrap>
@@ -145,7 +136,6 @@ export function SalesPage() {
                 value={dateFrom}
                 onChange={(event) => {
                   setDateFrom(event.target.value);
-                  setOffset(0);
                 }}
               />
             </Space>
@@ -157,7 +147,6 @@ export function SalesPage() {
                 value={dateTo}
                 onChange={(event) => {
                   setDateTo(event.target.value);
-                  setOffset(0);
                 }}
               />
             </Space>
@@ -166,7 +155,6 @@ export function SalesPage() {
                 onClick={() => {
                   setDateFrom('');
                   setDateTo('');
-                  setOffset(0);
                 }}
               >
                 Сбросить даты
@@ -177,14 +165,12 @@ export function SalesPage() {
         <div className="list-panel-body">
           <Space direction="vertical" size={16} className="full-width">
             {salesQuery.isError ? <Typography.Text type="danger">{getErrorMessage(salesQuery.error)}</Typography.Text> : null}
-            <Table<SaleListItem>
+            <InfiniteTable<SaleListItem>
+              query={salesQuery}
+              errorText={salesQuery.isError ? getErrorMessage(salesQuery.error) : undefined}
               rowKey="id"
               className="dense-table"
               columns={columns}
-              dataSource={salesQuery.data?.items ?? []}
-              loading={salesQuery.isLoading}
-              pagination={{ current: offset / pageSize + 1, pageSize, total: salesQuery.data?.total ?? 0, showSizeChanger: false }}
-              onChange={handleTableChange}
               onRow={(record) => ({ onDoubleClick: () => navigate(`/sales/${record.id}`) })}
             />
           </Space>

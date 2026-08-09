@@ -2,7 +2,7 @@ import { CloseOutlined, EditOutlined, EyeOutlined, PlusOutlined, RedoOutlined } 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Alert, Button, Checkbox, Descriptions, Drawer, Form, Input, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
-import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
+import { ColumnsType } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { useSearchParams } from 'react-router-dom';
@@ -11,6 +11,7 @@ import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { PageHeader } from '../../shared/ui/PageHeader';
+import { InfiniteTable, useInfiniteListQuery } from '../../shared/ui/InfiniteTable';
 import { fromDatetimeLocal, formatDateTime } from '../../shared/utils/date';
 import { getOwner, listOwnerAnimals, listOwners } from '../owners/owners.api';
 import {
@@ -37,7 +38,6 @@ import {
   TelegramBroadcastPreview,
 } from './types';
 
-const pageSize = 10;
 const channelOptions = Object.entries(notificationChannelLabels).map(([value, label]) => ({ value, label }));
 
 export function MessagesPage() {
@@ -48,7 +48,6 @@ export function MessagesPage() {
   const canManage = hasPermission(auth?.employee, 'notifications.manage');
   const [status, setStatus] = useState<NotificationStatus | undefined>();
   const [channel, setChannel] = useState<NotificationChannel | undefined>();
-  const [offset, setOffset] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
   const [composerDefaults, setComposerDefaults] = useState<NotificationComposerDefaults>({});
   const [broadcastOpen, setBroadcastOpen] = useState(false);
@@ -56,13 +55,11 @@ export function MessagesPage() {
   const [editingTemplate, setEditingTemplate] = useState<NotificationTemplate | null>(null);
   const [selectedOutbox, setSelectedOutbox] = useState<NotificationOutboxItem | null>(null);
 
-  const outboxQuery = useQuery({
-    queryKey: ['notifications', 'outbox', { status, channel, limit: pageSize, offset }],
-    queryFn: () => listNotificationOutbox({ status, channel, limit: pageSize, offset }),
-    refetchInterval: (query) => query.state.data?.items.some(
-      (item) => item.status === 'QUEUED' || item.status === 'SENDING',
-    ) ? 2_000 : false,
+  const outboxQuery = useInfiniteListQuery({
+    queryKey: ['notifications', 'outbox', { status, channel }],
+    queryFn: ({ limit, offset }) => listNotificationOutbox({ status, channel, limit, offset }),
   });
+  const outboxItems = useMemo(() => outboxQuery.data?.pages.flatMap((page) => page.items) ?? [], [outboxQuery.data]);
   const templatesQuery = useQuery({
     queryKey: ['notifications', 'templates'],
     queryFn: () => listNotificationTemplates(),
@@ -102,11 +99,17 @@ export function MessagesPage() {
       return;
     }
 
-    const updatedItem = outboxQuery.data?.items.find((item) => item.id === selectedOutbox.id);
+    const updatedItem = outboxItems.find((item) => item.id === selectedOutbox.id);
     if (updatedItem && updatedItem.updatedAt !== selectedOutbox.updatedAt) {
       setSelectedOutbox(updatedItem);
     }
-  }, [outboxQuery.data, selectedOutbox]);
+  }, [outboxItems, selectedOutbox]);
+
+  useEffect(() => {
+    if (!outboxItems.some((item) => item.status === 'QUEUED' || item.status === 'SENDING')) return;
+    const timer = window.setInterval(() => void outboxQuery.refetch(), 2_000);
+    return () => window.clearInterval(timer);
+  }, [outboxItems, outboxQuery.refetch]);
 
   useEffect(() => {
     if (!canManage || searchParams.get('compose') !== '1') {
@@ -246,12 +249,6 @@ export function MessagesPage() {
     [canManage],
   );
 
-  function handleTableChange(pagination: TablePaginationConfig) {
-    const current = pagination.current ?? 1;
-    const size = pagination.pageSize ?? pageSize;
-    setOffset((current - 1) * size);
-  }
-
   return (
     <div className="page">
       <PageHeader
@@ -296,7 +293,6 @@ export function MessagesPage() {
                       value={status}
                       onChange={(value) => {
                         setStatus(value);
-                        setOffset(0);
                       }}
                       options={Object.entries(notificationStatusLabels).map(([value, label]) => ({ value, label }))}
                     />
@@ -307,7 +303,6 @@ export function MessagesPage() {
                       value={channel}
                       onChange={(value) => {
                         setChannel(value);
-                        setOffset(0);
                       }}
                       options={channelOptions}
                     />
@@ -315,18 +310,11 @@ export function MessagesPage() {
                 </div>
                 <div className="list-panel-body">
                   {outboxQuery.isError ? <Alert type="error" showIcon message={getErrorMessage(outboxQuery.error)} className="form-alert" /> : null}
-                  <Table<NotificationOutboxItem>
+                  <InfiniteTable<NotificationOutboxItem>
+                    query={outboxQuery}
+                    errorText={outboxQuery.isError ? getErrorMessage(outboxQuery.error) : undefined}
                     rowKey="id"
                     columns={outboxColumns}
-                    dataSource={outboxQuery.data?.items ?? []}
-                    loading={outboxQuery.isLoading}
-                    pagination={{
-                      current: offset / pageSize + 1,
-                      pageSize,
-                      total: outboxQuery.data?.total ?? 0,
-                      showSizeChanger: false,
-                    }}
-                    onChange={handleTableChange}
                     className="dense-table"
                     scroll={{ x: 1500 }}
                     onRow={(item) => ({ onDoubleClick: () => setSelectedOutbox(item) })}

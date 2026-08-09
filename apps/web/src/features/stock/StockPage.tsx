@@ -2,7 +2,7 @@ import { CreditCardOutlined, DeleteOutlined, DownOutlined, EditOutlined, EyeOutl
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, App, AutoComplete, Button, Checkbox, DatePicker, Descriptions, Drawer, Dropdown, Form, Input, InputNumber, Modal, Radio, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
-import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
+import { ColumnsType } from 'antd/es/table';
 import dayjs, { Dayjs } from 'dayjs';
 import JsBarcode from 'jsbarcode';
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
@@ -13,6 +13,7 @@ import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { PageHeader } from '../../shared/ui/PageHeader';
+import { InfiniteTable, useInfiniteListQuery, type InfiniteQueryLike } from '../../shared/ui/InfiniteTable';
 import { formatDate } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
 import { AttachmentsPanel } from '../files/AttachmentsPanel';
@@ -42,8 +43,6 @@ import { formatServicePrice } from './service-pricing';
 import { SupplyInvoiceImporter } from './SupplyInvoiceImporter';
 import { SupplierModal } from './SupplierModal';
 
-const pageSize = 10;
-
 export function StockPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -55,7 +54,6 @@ export function StockPage() {
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const deferredSearchInput = useDeferredValue(searchInput);
-  const [offset, setOffset] = useState(0);
   const [productOpen, setProductOpen] = useState(false);
   const [serviceOpen, setServiceOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -96,14 +94,7 @@ export function StockPage() {
     const value = deferredSearchInput.trim();
     if (value.length > 0 && value.length < 3) return;
     setSearch(value);
-    setOffset(0);
   }, [deferredSearchInput]);
-
-  function handleTableChange(pagination: TablePaginationConfig) {
-    const current = pagination.current ?? 1;
-    const size = pagination.pageSize ?? pageSize;
-    setOffset((current - 1) * size);
-  }
 
   function confirmProductDeletion(product: Product) {
     modal.confirm({
@@ -163,7 +154,6 @@ export function StockPage() {
           activeKey={activeTab}
           onChange={(key) => {
             setActiveTab(key);
-            setOffset(0);
             navigate(stockTabPaths[key] ?? '/stock');
           }}
           tabBarExtraContent={
@@ -184,7 +174,6 @@ export function StockPage() {
               children: (
                 <ProductsTable
                   search={search}
-                  offset={offset}
                   categories={resourcesQuery.data?.productCategories ?? []}
                   canManage={canManage}
                   onOpen={setSelectedProduct}
@@ -195,8 +184,6 @@ export function StockPage() {
                   onDelete={confirmProductDeletion}
                   onPrint={setPrintingProduct}
                   onAdjustStock={(product) => navigate(`/stock/operations?inventoryProductId=${encodeURIComponent(product.id)}`)}
-                  onTableChange={handleTableChange}
-                  onFiltersChange={() => setOffset(0)}
                 />
               ),
             },
@@ -206,7 +193,6 @@ export function StockPage() {
               children: (
                 <ServicesTable
                   search={search}
-                  offset={offset}
                   canManage={canManage}
                   onOpen={setSelectedService}
                   onEdit={(service) => {
@@ -214,22 +200,21 @@ export function StockPage() {
                     setServiceOpen(true);
                   }}
                   onDelete={confirmServiceDeletion}
-                  onTableChange={handleTableChange}
                 />
               ),
             },
             {
               key: 'batches',
               label: 'Остатки',
-              children: <BatchesTable search={search} offset={offset} onTableChange={handleTableChange} />,
+              children: <BatchesTable search={search} />,
             },
             {
               key: 'invoices',
               label: 'Накладные',
-              children: <InvoicesTable search={search} offset={offset} canManage={canManage} onOpen={setSelectedInvoice} onPay={setPaymentInvoice} onEdit={(invoice) => {
+              children: <InvoicesTable search={search} canManage={canManage} onOpen={setSelectedInvoice} onPay={setPaymentInvoice} onEdit={(invoice) => {
                 setEditingInvoice(invoice);
                 setSupplyOpen(true);
-              }} onTableChange={handleTableChange} />,
+              }} />,
             },
           ]}
         />
@@ -421,7 +406,6 @@ function getStockTabFromPath(pathname: string) {
 
 function ProductsTable({
   search,
-  offset,
   categories,
   canManage,
   onOpen,
@@ -429,11 +413,8 @@ function ProductsTable({
   onDelete,
   onPrint,
   onAdjustStock,
-  onTableChange,
-  onFiltersChange,
 }: {
   search: string;
-  offset: number;
   categories: StockResources['productCategories'];
   canManage: boolean;
   onOpen: (product: Product) => void;
@@ -441,16 +422,14 @@ function ProductsTable({
   onDelete: (product: Product) => void;
   onPrint: (product: Product) => void;
   onAdjustStock: (product: Product) => void;
-  onTableChange: (pagination: TablePaginationConfig) => void;
-  onFiltersChange: () => void;
 }) {
   const [categoryId, setCategoryId] = useState<string>();
   const [stockState, setStockState] = useState<ProductStockState>('all');
   const [sortBy, setSortBy] = useState<ProductSortBy>('title');
   const [sortOrder, setSortOrder] = useState<ProductSortOrder>('asc');
-  const productsQuery = useQuery({
-    queryKey: ['stock', 'products', { search, categoryId, stockState, sortBy, sortOrder, limit: pageSize, offset }],
-    queryFn: () => listProducts({ search, categoryId, stockState, sortBy, sortOrder, limit: pageSize, offset }),
+  const productsQuery = useInfiniteListQuery({
+    queryKey: ['stock', 'products', { search, categoryId, stockState, sortBy, sortOrder }],
+    queryFn: ({ limit, offset }) => listProducts({ search, categoryId, stockState, sortBy, sortOrder, limit, offset }),
   });
   const columns = useMemo<ColumnsType<Product>>(
     () => [
@@ -531,11 +510,6 @@ function ProductsTable({
     [canManage, onAdjustStock, onDelete, onEdit, onOpen, onPrint],
   );
 
-  function resetPageAnd(change: () => void) {
-    change();
-    onFiltersChange();
-  }
-
   const hasCustomFilters = Boolean(categoryId) || stockState !== 'all' || sortBy !== 'title' || sortOrder !== 'asc';
 
   return (
@@ -551,7 +525,7 @@ function ProductsTable({
             placeholder="Все группы"
             style={{ minWidth: 210 }}
             options={categories.map((item) => ({ value: item.id, label: item.title }))}
-            onChange={(value) => resetPageAnd(() => setCategoryId(value))}
+            onChange={setCategoryId}
           />
           <Select<ProductStockState>
             value={stockState}
@@ -561,7 +535,7 @@ function ProductsTable({
               { value: 'zero', label: 'Только нулевые' },
               { value: 'positive', label: 'Только в наличии' },
             ]}
-            onChange={(value) => resetPageAnd(() => setStockState(value))}
+            onChange={setStockState}
           />
           <Select<ProductSortBy>
             value={sortBy}
@@ -571,7 +545,7 @@ function ProductsTable({
               { value: 'category', label: 'По группе' },
               { value: 'stockRest', label: 'По остатку' },
             ]}
-            onChange={(value) => resetPageAnd(() => setSortBy(value))}
+            onChange={setSortBy}
           />
           <Select<ProductSortOrder>
             value={sortOrder}
@@ -580,36 +554,32 @@ function ProductsTable({
               { value: 'asc', label: 'По возрастанию' },
               { value: 'desc', label: 'По убыванию' },
             ]}
-            onChange={(value) => resetPageAnd(() => setSortOrder(value))}
+            onChange={setSortOrder}
           />
-          {hasCustomFilters ? <Button onClick={() => resetPageAnd(() => { setCategoryId(undefined); setStockState('all'); setSortBy('title'); setSortOrder('asc'); })}>Сбросить</Button> : null}
+          {hasCustomFilters ? <Button onClick={() => { setCategoryId(undefined); setStockState('all'); setSortBy('title'); setSortOrder('asc'); }}>Сбросить</Button> : null}
         </Space>
       </div>
-      <StockTable query={productsQuery} columns={columns} offset={offset} onTableChange={onTableChange} />
+      <StockTable query={productsQuery} columns={columns} />
     </>
   );
 }
 
 function ServicesTable({
   search,
-  offset,
   canManage,
   onOpen,
   onEdit,
   onDelete,
-  onTableChange,
 }: {
   search: string;
-  offset: number;
   canManage: boolean;
   onOpen: (service: ServiceItem) => void;
   onEdit: (service: ServiceItem) => void;
   onDelete: (service: ServiceItem) => void;
-  onTableChange: (pagination: TablePaginationConfig) => void;
 }) {
-  const servicesQuery = useQuery({
-    queryKey: ['stock', 'services', { search, limit: pageSize, offset }],
-    queryFn: () => listServices({ search, limit: pageSize, offset }),
+  const servicesQuery = useInfiniteListQuery({
+    queryKey: ['stock', 'services', { search }],
+    queryFn: ({ limit, offset }) => listServices({ search, limit, offset }),
   });
   const columns = useMemo<ColumnsType<ServiceItem>>(
     () => [
@@ -650,21 +620,17 @@ function ServicesTable({
     [canManage, onDelete, onEdit, onOpen],
   );
 
-  return <StockTable query={servicesQuery} columns={columns} offset={offset} onTableChange={onTableChange} />;
+  return <StockTable query={servicesQuery} columns={columns} />;
 }
 
 function BatchesTable({
   search,
-  offset,
-  onTableChange,
 }: {
   search: string;
-  offset: number;
-  onTableChange: (pagination: TablePaginationConfig) => void;
 }) {
-  const batchesQuery = useQuery({
-    queryKey: ['stock', 'batches', { search, limit: pageSize, offset }],
-    queryFn: () => listStockBatches({ search, limit: pageSize, offset }),
+  const batchesQuery = useInfiniteListQuery({
+    queryKey: ['stock', 'batches', { search }],
+    queryFn: ({ limit, offset }) => listStockBatches({ search, limit, offset }),
   });
   const columns = useMemo<ColumnsType<StockBatch>>(
     () => [
@@ -684,29 +650,25 @@ function BatchesTable({
     [],
   );
 
-  return <StockTable query={batchesQuery} columns={columns} offset={offset} onTableChange={onTableChange} />;
+  return <StockTable query={batchesQuery} columns={columns} />;
 }
 
 function InvoicesTable({
   search,
-  offset,
   canManage,
   onOpen,
   onPay,
   onEdit,
-  onTableChange,
 }: {
   search: string;
-  offset: number;
   canManage: boolean;
   onOpen: (invoice: SupplyInvoice) => void;
   onPay: (invoice: SupplyInvoice) => void;
   onEdit: (invoice: SupplyInvoice) => void;
-  onTableChange: (pagination: TablePaginationConfig) => void;
 }) {
-  const invoicesQuery = useQuery({
-    queryKey: ['stock', 'invoices', { search, limit: pageSize, offset }],
-    queryFn: () => listSupplyInvoices({ search, limit: pageSize, offset }),
+  const invoicesQuery = useInfiniteListQuery({
+    queryKey: ['stock', 'invoices', { search }],
+    queryFn: ({ limit, offset }) => listSupplyInvoices({ search, limit, offset }),
   });
   const columns = useMemo<ColumnsType<SupplyInvoice>>(
     () => [
@@ -733,7 +695,7 @@ function InvoicesTable({
     [canManage, onEdit, onOpen, onPay],
   );
 
-  return <StockTable query={invoicesQuery} columns={columns} offset={offset} onTableChange={onTableChange} />;
+  return <StockTable query={invoicesQuery} columns={columns} />;
 }
 
 function SupplyInvoicePaymentModal({ invoice, resources, onClose, onSaved }: { invoice: SupplyInvoice | null; resources?: StockResources; onClose: () => void; onSaved: () => Promise<void> }) {
@@ -819,31 +781,19 @@ function getSupplyInvoiceRemainingAmount(invoice: SupplyInvoice) {
 function StockTable<T extends { id: string }>({
   query,
   columns,
-  offset,
-  onTableChange,
 }: {
-  query: {
-    data?: { items: T[]; total: number };
-    isLoading: boolean;
-    isError: boolean;
-    error: unknown;
-  };
+  query: InfiniteQueryLike<T> & { error: unknown };
   columns: ColumnsType<T>;
-  offset: number;
-  onTableChange: (pagination: TablePaginationConfig) => void;
 }) {
   return (
     <div className="list-panel-body">
-      {query.isError ? <Typography.Text type="danger">{getErrorMessage(query.error)}</Typography.Text> : null}
-      <Table<T>
+      <InfiniteTable<T>
+        query={query}
+        errorText={query.isError ? getErrorMessage(query.error) : undefined}
         rowKey="id"
         className="dense-table"
         columns={columns}
-        dataSource={query.data?.items ?? []}
-        loading={query.isLoading}
         scroll={{ x: 'max-content' }}
-        pagination={{ current: offset / pageSize + 1, pageSize, total: query.data?.total ?? 0, showSizeChanger: false }}
-        onChange={onTableChange}
       />
     </div>
   );

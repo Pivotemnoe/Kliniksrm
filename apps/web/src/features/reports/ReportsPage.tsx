@@ -4,10 +4,11 @@ import {
   ReloadOutlined,
 } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Button, Card, Input, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
+import { Alert, Button, Card, Input, Select, Space, Tabs, Tag, Typography } from 'antd';
 import { ReactNode, useMemo, useState } from 'react';
 import { getErrorMessage } from '../../api/errors';
 import { PageHeader } from '../../shared/ui/PageHeader';
+import { ProgressiveTable } from '../../shared/ui/InfiniteTable';
 import { formatDate } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
 import { exportReportToExcel, printReportAsPdf } from './reportExport';
@@ -126,10 +127,9 @@ function FinanceReport({ report }: { report: ClinicReport }) {
   return (
     <div className="report-section-grid">
       <Card title="Оплаты по способам">
-        <Table
+        <ProgressiveTable
           rowKey="key"
           size="small"
-          pagination={false}
           dataSource={report.finance.paymentMethods}
           locale={{ emptyText: 'Оплат за период нет' }}
           columns={[
@@ -151,10 +151,9 @@ function FinanceReport({ report }: { report: ClinicReport }) {
         </div>
       </Card>
       <Card title="Задолженность" className="report-wide-card">
-        <Table
+        <ProgressiveTable
           rowKey="billId"
           size="small"
-          pagination={{ pageSize: 10, hideOnSinglePage: true }}
           dataSource={report.finance.debtors}
           locale={{ emptyText: 'Задолженности нет' }}
           columns={[
@@ -193,10 +192,9 @@ function TrafficReport({ report }: { report: ClinicReport }) {
         </div>
       </Card>
       <Card title="По дням" className="report-wide-card">
-        <Table
+        <ProgressiveTable
           rowKey="date"
           size="small"
-          pagination={{ pageSize: 14, hideOnSinglePage: true }}
           dataSource={report.traffic.daily}
           locale={{ emptyText: 'Данных за период нет' }}
           columns={[
@@ -227,10 +225,9 @@ function SalesReport({ report }: { report: ClinicReport }) {
 function SalesTable({ title, items, wide = false }: { title: string; items: ReportSalesRow[]; wide?: boolean }) {
   return (
     <Card title={title} className={wide ? 'report-wide-card' : undefined}>
-      <Table
+      <ProgressiveTable
         rowKey="key"
         size="small"
-        pagination={{ pageSize: 10, hideOnSinglePage: true }}
         dataSource={items}
         locale={{ emptyText: 'Данных за период нет' }}
         columns={[
@@ -247,10 +244,9 @@ function SalesTable({ title, items, wide = false }: { title: string; items: Repo
 function EmployeesReport({ report }: { report: ClinicReport }) {
   return (
     <Card title="Работа сотрудников за период">
-      <Table
+      <ProgressiveTable
         rowKey="employeeId"
         size="small"
-        pagination={{ pageSize: 15, hideOnSinglePage: true }}
         dataSource={report.employees}
         locale={{ emptyText: 'Приёмов за период нет' }}
         columns={[
@@ -292,10 +288,9 @@ function VaccinationsReport({ report }: { report: ClinicReport }) {
 function VaccinationTable({ title, items, wide = false, danger = false }: { title: string; items: ReportVaccinationItem[]; wide?: boolean; danger?: boolean }) {
   return (
     <Card title={title} className={wide ? 'report-wide-card' : undefined}>
-      <Table
+      <ProgressiveTable
         rowKey="id"
         size="small"
-        pagination={{ pageSize: 10, hideOnSinglePage: true }}
         dataSource={items}
         locale={{ emptyText: 'Список пуст' }}
         columns={[
@@ -331,10 +326,9 @@ function StockReport({ report }: { report: ClinicReport }) {
         </div>
       </Card>
       <Card title="Товары с низким остатком" className="report-wide-card">
-        <Table
+        <ProgressiveTable
           rowKey="id"
           size="small"
-          pagination={{ pageSize: 15, hideOnSinglePage: true }}
           dataSource={report.stock.lowStockItems}
           locale={{ emptyText: 'Низких остатков нет' }}
           columns={[
@@ -346,10 +340,9 @@ function StockReport({ report }: { report: ClinicReport }) {
         />
       </Card>
       <Card title="Сроки годности партий" className="report-wide-card">
-        <Table
+        <ProgressiveTable
           rowKey="id"
           size="small"
-          pagination={{ pageSize: 15, hideOnSinglePage: true }}
           dataSource={report.stock.expiryItems}
           locale={{ emptyText: 'Просроченных и истекающих партий нет' }}
           columns={[

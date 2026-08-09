@@ -15,6 +15,7 @@ import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { PageHeader } from '../../shared/ui/PageHeader';
+import { ProgressiveTable } from '../../shared/ui/InfiniteTable';
 import { formatDateTime } from '../../shared/utils/date';
 import {
   acceptNewServer,
@@ -109,7 +110,7 @@ export function SupportPage() {
               </Space>
             </Form>
           </Card>
-          <Card title="Журнал обращений"><Table rowKey="id" dataSource={overview?.requests ?? []} columns={requestColumns} loading={overviewQuery.isLoading} scroll={{ x: 1000 }} pagination={{ pageSize: 10 }} /></Card>
+          <Card title="Журнал обращений"><ProgressiveTable rowKey="id" dataSource={overview?.requests ?? []} columns={requestColumns} loading={overviewQuery.isLoading} scroll={{ x: 1000 }} /></Card>
         </Space> },
         { key: 'license', label: 'Лицензия', children: <Space direction="vertical" size={16} className="full-width">
           <Card title={<Space><SafetyCertificateOutlined />Защита установки</Space>}>

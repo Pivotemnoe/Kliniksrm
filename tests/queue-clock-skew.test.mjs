@@ -38,7 +38,7 @@ test('интерфейс не вычисляет задержку по часа�
 
   assert.match(listPage, /record\.acceptWaitSeconds/);
   assert.match(cardPage, /queueEntry\.acceptWaitSeconds/);
-  assert.match(listPage, /refetchInterval/);
+  assert.match(listPage, /window\.setInterval\(\(\) => void queueQuery\.refetch\(\), 1000\)/);
   assert.match(cardPage, /refetchInterval/);
   assert.doesNotMatch(listPage, /getQueueAcceptWaitSeconds/);
   assert.doesNotMatch(cardPage, /getQueueAcceptWaitSeconds/);

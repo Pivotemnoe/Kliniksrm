@@ -85,8 +85,8 @@ test('интерфейс показывает зарплату, складски
   assert.match(stock, /Поставщики и расчёты/);
   assert.match(stock, /filterOption=\{false\}/);
   assert.match(stock, /needsActual \|\| Number\(batch\.rest\) > 0/);
-  assert.match(stock, /total: documentsQuery\.data\?\.total/);
-  assert.match(stock, /total: movementsQuery\.data\?\.total/);
+  assert.match(stock, /useInfiniteListQuery\(\{[\s\S]*listStockDocuments\(\{ limit, offset \}\)/);
+  assert.match(stock, /useInfiniteListQuery\(\{[\s\S]*listStockMovements\(\{ limit, offset \}\)/);
   assert.match(reports, /Сроки годности партий/);
   assert.match(menu, /Зарплата/);
   assert.match(menu, /Операции/);

@@ -1,12 +1,13 @@
 import { DownloadOutlined, SearchOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, App, Button, Input, Select, Space, Table, Tag, Typography } from 'antd';
+import { Alert, App, Button, Input, Select, Space, Tag, Typography } from 'antd';
 import { ColumnsType } from 'antd/es/table';
 import { useMemo, useState } from 'react';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { PageHeader } from '../../shared/ui/PageHeader';
+import { ProgressiveTable } from '../../shared/ui/InfiniteTable';
 import { formatDate, formatDateTime } from '../../shared/utils/date';
 import { exportAuditReport, getAuditVisitControl, listAuditLogs } from './audit.api';
 import { AuditLogItem } from './types';
@@ -156,12 +157,11 @@ export function AuditLogsPage() {
           </Space>
         </div>
         <div className="list-panel-body">
-          <Table
+          <ProgressiveTable
             rowKey="date"
             size="small"
             loading={visitControlQuery.isLoading}
             dataSource={visitControlQuery.data?.daily ?? []}
-            pagination={{ pageSize: 14, hideOnSinglePage: true }}
             locale={{ emptyText: 'Данных пока нет' }}
             columns={[
               { title: 'Дата', dataIndex: 'date', render: formatDate },
@@ -207,13 +207,12 @@ export function AuditLogsPage() {
           </Space>
         </div>
         <div className="list-panel-body">
-          <Table<AuditLogItem>
+          <ProgressiveTable<AuditLogItem>
             rowKey="id"
             className="dense-table"
             columns={columns}
             dataSource={filteredItems}
             loading={auditQuery.isLoading}
-            pagination={{ pageSize: 20, showSizeChanger: false }}
             scroll={{ x: 1200 }}
           />
         </div>
@@ -254,6 +253,7 @@ const actionLabels: Record<string, string> = {
   'notification.queue': 'Уведомление поставлено в очередь',
   'notification.retry': 'Уведомление повторено',
   'notification.cancel': 'Уведомление отменено',
+  'client_portal.snapshot_sync_automatic': 'Личный кабинет обновлён автоматически',
   'news.create': 'Новость опубликована',
   'news.update': 'Новость изменена',
   'news.archive': 'Новость отправлена в архив',

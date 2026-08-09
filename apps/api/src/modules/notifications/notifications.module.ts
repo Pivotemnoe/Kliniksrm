@@ -6,11 +6,12 @@ import { OwnerGatewayClient } from './providers/owner-gateway.client';
 import { NotificationsController } from './notifications.controller';
 import { NotificationsService } from './notifications.service';
 import { NotificationDispatcherService } from './notification-dispatcher.service';
+import { OwnerGatewaySnapshotSyncService } from './owner-gateway-snapshot-sync.service';
 
 @Module({
   imports: [AuditModule, ClientPortalModule],
   controllers: [NotificationsController],
-  providers: [NotificationsService, NotificationDispatcherService, MaxBotClient, OwnerGatewayClient],
-  exports: [OwnerGatewayClient],
+  providers: [NotificationsService, NotificationDispatcherService, OwnerGatewaySnapshotSyncService, MaxBotClient, OwnerGatewayClient],
+  exports: [OwnerGatewayClient, OwnerGatewaySnapshotSyncService],
 })
 export class NotificationsModule {}

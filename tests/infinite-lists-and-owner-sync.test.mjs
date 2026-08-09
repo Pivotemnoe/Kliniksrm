@@ -1,0 +1,79 @@
+import assert from 'node:assert/strict';
+import { readFile, readdir } from 'node:fs/promises';
+import path from 'node:path';
+import test from 'node:test';
+
+const root = process.cwd();
+const read = (relativePath) => readFile(path.join(root, relativePath), 'utf8');
+
+test('рабочие списки подгружаются вниз порциями без стрелочной пагинации', async () => {
+  const [infiniteTable, stockService, ...pages] = await Promise.all([
+    read('apps/web/src/shared/ui/InfiniteTable.tsx'),
+    read('apps/api/src/modules/stock/stock.service.ts'),
+    ...[
+      'owners/OwnersPage.tsx',
+      'animals/AnimalsPage.tsx',
+      'visits/VisitsPage.tsx',
+      'appointments/AppointmentsPage.tsx',
+      'queue/QueuePage.tsx',
+      'billing/BillsPage.tsx',
+      'stock/StockPage.tsx',
+      'hospital/HospitalPage.tsx',
+      'laboratory/LaboratoryPage.tsx',
+      'tasks/TasksPage.tsx',
+      'sales/SalesPage.tsx',
+      'onlineRequests/OnlineRequestsPage.tsx',
+      'notifications/MessagesPage.tsx',
+    ].map((file) => read(`apps/web/src/features/${file}`)),
+  ]);
+
+  assert.match(infiniteTable, /DEFAULT_INFINITE_PAGE_SIZE = 50/);
+  assert.match(infiniteTable, /useInfiniteQuery/);
+  assert.match(infiniteTable, /IntersectionObserver/);
+  assert.match(infiniteTable, /rootMargin: '700px 0px'/);
+  assert.match(infiniteTable, /pagination=\{false\}/);
+  for (const page of pages) {
+    assert.match(page, /useInfiniteListQuery/);
+    assert.match(page, /InfiniteTable/);
+  }
+
+  const featureFiles = await listFiles(path.join(root, 'apps/web/src/features'));
+  const sources = await Promise.all(featureFiles.filter((file) => file.endsWith('.tsx')).map((file) => readFile(file, 'utf8')));
+  assert.equal(sources.some((source) => /pagination=\{\{/.test(source)), false);
+
+  assert.match(stockService, /const sortBy = query\.sortBy \?\? 'title'/);
+  assert.match(stockService, /service\.findMany\(\{[\s\S]*orderBy: \{ title: 'asc' \}/);
+});
+
+test('завершение приёма атомарно ставит обновление личного кабинета в долговечную очередь', async () => {
+  const [syncService, visitsService, notificationsModule, visitsModule, schema] = await Promise.all([
+    read('apps/api/src/modules/notifications/owner-gateway-snapshot-sync.service.ts'),
+    read('apps/api/src/modules/visits/visits.service.ts'),
+    read('apps/api/src/modules/notifications/notifications.module.ts'),
+    read('apps/api/src/modules/visits/visits.module.ts'),
+    read('prisma/schema.prisma'),
+  ]);
+
+  assert.match(schema, /model BackgroundJob \{/);
+  assert.match(syncService, /client\.backgroundJob\.create/);
+  assert.match(syncService, /status: JobStatus\.PENDING/);
+  assert.match(syncService, /MAX_ATTEMPTS = 96/);
+  assert.match(syncService, /recoverStuckJobs/);
+  assert.match(syncService, /ownerGatewayClient\.syncSnapshot/);
+  assert.match(syncService, /catch \(error\)[\s\S]*scheduleRetry/);
+  assert.match(syncService, /private async scheduleRetry/);
+  assert.match(syncService, /client_portal\.snapshot_sync_automatic/);
+  assert.match(visitsService, /this\.prisma\.\$transaction\(async \(tx\) => \{[\s\S]*ownerGatewaySnapshotSyncService\.enqueue\([\s\S]*, tx\)/);
+  assert.match(visitsService, /VisitStatus\.COMPLETED \|\| status === VisitStatus\.CANCELLED/);
+  assert.match(notificationsModule, /exports: \[OwnerGatewayClient, OwnerGatewaySnapshotSyncService\]/);
+  assert.match(visitsModule, /NotificationsModule/);
+});
+
+async function listFiles(directory) {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const nested = await Promise.all(entries.map((entry) => {
+    const fullPath = path.join(directory, entry.name);
+    return entry.isDirectory() ? listFiles(fullPath) : [fullPath];
+  }));
+  return nested.flat();
+}

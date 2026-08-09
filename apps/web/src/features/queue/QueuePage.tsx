@@ -1,13 +1,14 @@
 import { CheckOutlined, ExportOutlined, FileTextOutlined, PhoneOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Segmented, Select, Space, Table, Tag, Typography } from 'antd';
-import { ColumnsType, TablePaginationConfig } from 'antd/es/table';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { App, Button, Segmented, Select, Space, Tag, Typography } from 'antd';
+import { ColumnsType } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
+import { InfiniteTable, useInfiniteListQuery } from '../../shared/ui/InfiniteTable';
 import { LiveSearchInput } from '../../shared/ui/LiveSearchInput';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDateTime } from '../../shared/utils/date';
@@ -26,7 +27,6 @@ import {
   queueUrgencyLabels,
 } from './types';
 
-const pageSize = 10;
 export function QueuePage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -41,16 +41,20 @@ export function QueuePage() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<QueueStatus | undefined>('WAITING');
   const [urgency, setUrgency] = useState<QueueUrgency | undefined>();
-  const [offset, setOffset] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
   const now = useNow();
   const dateRange = getQueueDateRange(status);
-  const queueQuery = useQuery({
-    queryKey: ['queue', { search, status, urgency, employeeId, limit: pageSize, offset, ...dateRange }],
-    queryFn: () => listQueue({ search, status, urgency, employeeId, limit: pageSize, offset, ...dateRange }),
-    refetchInterval: (query) =>
-      query.state.data?.items.some((item) => item.status === 'IN_PROGRESS' && item.acceptWaitSeconds > 0) ? 1000 : false,
+  const queueQuery = useInfiniteListQuery({
+    queryKey: ['queue', { search, status, urgency, employeeId, ...dateRange }],
+    queryFn: ({ limit, offset }) => listQueue({ search, status, urgency, employeeId, limit, offset, ...dateRange }),
   });
+  const queueItems = useMemo(() => queueQuery.data?.pages.flatMap((page) => page.items) ?? [], [queueQuery.data]);
+
+  useEffect(() => {
+    if (!queueItems.some((item) => item.status === 'IN_PROGRESS' && item.acceptWaitSeconds > 0)) return;
+    const timer = window.setInterval(() => void queueQuery.refetch(), 1000);
+    return () => window.clearInterval(timer);
+  }, [queueItems, queueQuery.refetch]);
 
   useEffect(() => {
     if (searchParams.get('create') !== '1') {
@@ -108,7 +112,6 @@ export function QueuePage() {
       await queryClient.invalidateQueries({ queryKey: ['visits'] });
       if (result.action === 'call') {
         setStatus('IN_PROGRESS');
-        setOffset(0);
       }
       const successText = {
         call: 'Клиент вызван на приём',
@@ -225,16 +228,10 @@ export function QueuePage() {
     [actionMutation, canCallQueue, canManage, canManageVisits, navigate, now],
   );
 
-  function handleTableChange(pagination: TablePaginationConfig) {
-    const current = pagination.current ?? 1;
-    const size = pagination.pageSize ?? pageSize;
-    setOffset((current - 1) * size);
-  }
-
   return (
     <div className="page">
       <PageHeader
-        title={`${isPersonalQueue ? 'Моя очередь' : 'Электронная очередь'}${queueQuery.data?.total !== undefined ? ` ${queueQuery.data.total}` : ''}`}
+        title={`${isPersonalQueue ? 'Моя очередь' : 'Электронная очередь'}${queueQuery.data?.pages[0]?.total !== undefined ? ` ${queueQuery.data.pages[0].total}` : ''}`}
         extra={
           <Space>
             <Button icon={<ExportOutlined />} onClick={() => window.open('/queue/tv', '_blank', 'noopener,noreferrer')}>
@@ -255,7 +252,6 @@ export function QueuePage() {
             value={status ?? 'ALL'}
             onChange={(value) => {
               setStatus(value === 'ALL' ? undefined : (value as QueueStatus));
-              setOffset(0);
             }}
             options={[
               { label: 'В очереди', value: 'WAITING' },
@@ -271,7 +267,6 @@ export function QueuePage() {
             value={urgency}
             onChange={(value) => {
               setUrgency(value);
-              setOffset(0);
             }}
             options={Object.entries(queueUrgencyLabels).map(([value, label]) => ({ value, label }))}
           />
@@ -286,24 +281,15 @@ export function QueuePage() {
               className="search-input"
               onSearch={(value) => {
                 setSearch(value.trim());
-                setOffset(0);
               }}
             />
           </div>
-          {queueQuery.isError ? <Typography.Text type="danger">{getErrorMessage(queueQuery.error)}</Typography.Text> : null}
-          <Table<QueueEntry>
+          <InfiniteTable<QueueEntry>
+            query={queueQuery}
+            errorText={queueQuery.isError ? getErrorMessage(queueQuery.error) : undefined}
             rowKey="id"
             columns={columns}
-            dataSource={queueQuery.data?.items ?? []}
-            loading={queueQuery.isLoading}
             onRow={(record) => ({ onDoubleClick: () => navigate(`/queue/${record.id}`) })}
-            pagination={{
-              current: offset / pageSize + 1,
-              pageSize,
-              total: queueQuery.data?.total ?? 0,
-              showSizeChanger: false,
-            }}
-            onChange={handleTableChange}
             className="dense-table"
             scroll={{ x: 1180 }}
           />

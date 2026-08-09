@@ -7,6 +7,7 @@ import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { PageHeader } from '../../shared/ui/PageHeader';
+import { ProgressiveTable } from '../../shared/ui/InfiniteTable';
 import { formatDateTime } from '../../shared/utils/date';
 import {
   createRemoteAccessInvitation,
@@ -175,11 +176,11 @@ export function RemoteAccessSettingsPage() {
           title={<Space><LaptopOutlined />Доверенные устройства</Space>}
           extra={<Popconfirm title="Отключить все устройства?" description="Все удалённые сеансы завершатся. Локальная работа CRM продолжится." okText="Отключить все" cancelText="Отмена" onConfirm={() => revokeAllMutation.mutate()}><Button danger disabled={!canManage || !(overview?.devices.some((device) => !device.revokedAt))}>Отключить все</Button></Popconfirm>}
         >
-          <Table rowKey="id" dataSource={overview?.devices ?? []} columns={deviceColumns} loading={overviewQuery.isLoading} scroll={{ x: 980 }} pagination={{ pageSize: 10 }} />
+          <ProgressiveTable rowKey="id" dataSource={overview?.devices ?? []} columns={deviceColumns} loading={overviewQuery.isLoading} scroll={{ x: 980 }} />
         </Card>
 
         <Card title="Последние приглашения">
-          <Table rowKey="id" dataSource={overview?.invitations ?? []} columns={invitationColumns} loading={overviewQuery.isLoading} scroll={{ x: 850 }} pagination={{ pageSize: 10 }} />
+          <ProgressiveTable rowKey="id" dataSource={overview?.invitations ?? []} columns={invitationColumns} loading={overviewQuery.isLoading} scroll={{ x: 850 }} />
         </Card>
       </Space>
     </div>

@@ -25,6 +25,7 @@ import {
 import { useMemo, useRef, useState } from 'react';
 import { ApiError, getErrorMessage } from '../../api/errors';
 import { PageHeader } from '../../shared/ui/PageHeader';
+import { ProgressiveTable } from '../../shared/ui/InfiniteTable';
 import {
   commitDataTransfer,
   DataTransferBatch,
@@ -411,12 +412,11 @@ export function VetafImportPage() {
         ) : null}
 
         <Card title="Журнал переноса">
-          <Table<DataTransferBatch>
+          <ProgressiveTable<DataTransferBatch>
             rowKey="id"
             loading={transfersQuery.isLoading}
             dataSource={transfersQuery.data?.batches ?? []}
             locale={{ emptyText: 'Переносов пока нет. Выберите файл выше, чтобы начать проверку.' }}
-            pagination={{ pageSize: 10 }}
             scroll={{ x: 960 }}
             columns={[
               { title: 'Дата', dataIndex: 'createdAt', key: 'createdAt', render: (value: string) => formatDate(value) },
@@ -501,10 +501,9 @@ function TransferStatus({ status }: { status: string }) {
 
 function IssuesTable({ issues }: { issues: VetafImportIssue[] }) {
   return (
-    <Table<VetafImportIssue>
+    <ProgressiveTable<VetafImportIssue>
       rowKey={(record, index) => `${record.rowNumber}-${record.field}-${index}`}
       size="small"
-      pagination={{ pageSize: 8 }}
       style={{ marginTop: 16 }}
       columns={[
         { title: 'Строка', dataIndex: 'rowNumber', key: 'rowNumber', width: 90 },
