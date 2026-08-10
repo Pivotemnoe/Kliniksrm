@@ -79,6 +79,10 @@ export class EmployeesService {
   }
 
   async createEmployee(dto: CreateEmployeeDto, actorId: string) {
+    if (dto.allowRemoteOutsideShift !== undefined) {
+      await this.assertDirector(actorId);
+    }
+
     const phoneNormalized = dto.phone !== undefined ? normalizePhoneForLookup(dto.phone) : null;
     const phone = formatNormalizedRussianPhone(phoneNormalized);
     const email = normalizeEmail(dto.email);
@@ -114,6 +118,7 @@ export class EmployeesService {
             position: dto.position,
             defaultRoute: normalizeDefaultRoute(dto.defaultRoute),
             restrictLoginToShifts: dto.restrictLoginToShifts ?? false,
+            allowRemoteOutsideShift: dto.allowRemoteOutsideShift ?? false,
             status: EmployeeStatus.ACTIVE,
             roles: {
               create: roles.map((role) => ({
@@ -161,6 +166,10 @@ export class EmployeesService {
   }
 
   async updateEmployee(employeeId: string, dto: UpdateEmployeeDto, actorId: string) {
+    if (dto.allowRemoteOutsideShift !== undefined) {
+      await this.assertDirector(actorId);
+    }
+
     const employee = await this.prisma.employee.findUnique({
       where: { id: employeeId },
       include: { user: true },
@@ -263,6 +272,7 @@ export class EmployeesService {
             ...(dto.position !== undefined ? { position: dto.position ?? null } : {}),
             ...(dto.defaultRoute !== undefined ? { defaultRoute: normalizeDefaultRoute(dto.defaultRoute) } : {}),
             ...(dto.restrictLoginToShifts !== undefined ? { restrictLoginToShifts: dto.restrictLoginToShifts } : {}),
+            ...(dto.allowRemoteOutsideShift !== undefined ? { allowRemoteOutsideShift: dto.allowRemoteOutsideShift } : {}),
             ...(dto.status !== undefined ? { status: dto.status } : {}),
           },
           include: employeeInclude,
@@ -369,6 +379,21 @@ export class EmployeesService {
     }
 
     return roles;
+  }
+
+  private async assertDirector(employeeId: string) {
+    const director = await this.prisma.employee.findFirst({
+      where: {
+        id: employeeId,
+        status: EmployeeStatus.ACTIVE,
+        roles: { some: { role: { code: 'director' } } },
+      },
+      select: { id: true },
+    });
+
+    if (!director) {
+      throw new BadRequestException('Разрешать удалённый просмотр вне смены может только директор');
+    }
   }
 
   private async resolvePermissionOverrides(permissionGrants: string[] = [], permissionDenials: string[] = []) {
@@ -530,6 +555,7 @@ function serializeEmployee(employee: Prisma.EmployeeGetPayload<{ include: typeof
     position: employee.position,
     defaultRoute: employee.defaultRoute,
     restrictLoginToShifts: employee.restrictLoginToShifts,
+    allowRemoteOutsideShift: employee.allowRemoteOutsideShift,
     status: employee.status,
     user: employee.user,
     roles: employee.roles.map(({ role }) => ({

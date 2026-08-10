@@ -255,12 +255,16 @@ test('колокольчик, глобальная красная плашка, 
   ]);
 
   assert.match(layout, /<StaffAlertsPopover \/>/);
-  assert.match(layout, /<GlobalOperationalAlerts \/>/);
+  assert.match(layout, /<GlobalOperationalAlerts[\s\S]*?internalMessages=\{internalMessagesQuery\.data\}/);
   assert.doesNotMatch(layout, /headerAlertTarget/);
   assert.match(popover, /Непросмотренные оповещения/);
   assert.match(popover, /unreadItems\.map/);
   assert.match(popover, /navigate\(item\.href\)/);
   assert.match(operationalAlerts, /dashboard-overdue-banner/);
+  assert.match(operationalAlerts, /Новое сообщение от/);
+  assert.match(operationalAlerts, /staff-message-banner/);
+  assert.match(operationalAlerts, /otherUnreadAlerts\.map/);
+  assert.match(operationalAlerts, /Непрочитанных сообщений/);
   assert.match(operationalAlerts, /Незавершённые приёмы/);
   assert.match(operationalAlerts, /Более часа:/);
   assert.match(messages, /Выберите сотрудника/);
@@ -309,6 +313,7 @@ function actor(overrides = {}) {
     position: null,
     defaultRoute: null,
     restrictLoginToShifts: false,
+    allowRemoteOutsideShift: false,
     status: 'ACTIVE',
     roles: [],
     permissions: [],

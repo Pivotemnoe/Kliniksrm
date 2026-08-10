@@ -2,6 +2,7 @@ import { Body, Controller, Get, HttpCode, Post, Query, Req } from '@nestjs/commo
 import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { AuthenticatedRequest } from '../auth/auth.types';
 import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
+import { AllowRemoteMutation } from '../auth/decorators/allow-remote-mutation.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { AuditService } from './audit.service';
 import { AuditExportQueryDto } from './dto/audit-export-query.dto';
@@ -35,6 +36,7 @@ export class AuditController {
   }
 
   @Post('activity')
+  @AllowRemoteMutation()
   @HttpCode(201)
   @ApiCreatedResponse({ description: 'Frontend activity event recorded.' })
   logActivity(

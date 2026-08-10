@@ -5,6 +5,7 @@ type RouteAccessRule = {
   path: string;
   anyOf?: string[];
   allOf?: string[];
+  roles?: string[];
 };
 
 const routeAccessRules: RouteAccessRule[] = [
@@ -17,7 +18,7 @@ const routeAccessRules: RouteAccessRule[] = [
   { path: '/settings/finance', anyOf: ['settings.read', 'settings.manage'] },
   { path: '/settings/audit', anyOf: ['audit.read'] },
   { path: '/settings/system', anyOf: ['backups.manage'] },
-  { path: '/settings/remote-access', anyOf: ['remote_access.read', 'remote_access.manage'] },
+  { path: '/settings/remote-access', anyOf: ['remote_access.read', 'remote_access.manage'], roles: ['director'] },
   { path: '/settings/support', anyOf: ['support.read', 'support.manage', 'license.manage', 'acceptance.manage'] },
   { path: '/settings/import', anyOf: ['owners.manage', 'stock.manage'] },
   {
@@ -106,6 +107,10 @@ export function canAccessPath(employee: Employee | undefined, pathname: string) 
   }
 
   if (rule.allOf?.some((permission) => !hasPermission(employee, permission))) {
+    return false;
+  }
+
+  if (rule.roles?.length && !rule.roles.some((role) => employee.roles.includes(role))) {
     return false;
   }
 

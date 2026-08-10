@@ -6,6 +6,7 @@ export type AuthEmployee = {
   position: string | null;
   defaultRoute: string | null;
   restrictLoginToShifts: boolean;
+  allowRemoteOutsideShift: boolean;
   mustChangePassword: boolean;
   status: string;
   roles: string[];
@@ -24,6 +25,9 @@ export type AuthenticatedRequest = {
   auth?: AuthContext;
   headers: Record<string, string | string[] | undefined>;
   ip?: string;
+  method?: string;
+  originalUrl?: string;
+  url?: string;
   socket?: {
     remoteAddress?: string;
   };

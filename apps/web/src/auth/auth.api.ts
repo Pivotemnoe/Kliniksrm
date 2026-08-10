@@ -14,7 +14,7 @@ export type ChangePasswordInput = {
 
 export function login(input: LoginInput) {
   if (isDemoAuthMode) {
-    return Promise.resolve({ employee: demoEmployee, expiresAt: new Date(Date.now() + 86_400_000).toISOString() });
+    return Promise.resolve({ employee: demoEmployee, expiresAt: new Date(Date.now() + 86_400_000).toISOString(), accessType: 'LOCAL' as const });
   }
 
   return apiRequest<AuthResponse>('/auth/login', {
@@ -25,10 +25,10 @@ export function login(input: LoginInput) {
 
 export function getMe() {
   if (isDemoAuthMode) {
-    return Promise.resolve({ employee: demoEmployee });
+    return Promise.resolve({ employee: demoEmployee, accessType: 'LOCAL' as const });
   }
 
-  return apiRequest<{ employee: AuthResponse['employee'] }>('/auth/me');
+  return apiRequest<{ employee: AuthResponse['employee']; accessType: 'LOCAL' | 'REMOTE' }>('/auth/me');
 }
 
 export function logout() {
@@ -60,6 +60,7 @@ const demoEmployee: AuthResponse['employee'] = {
   position: 'Директор',
   defaultRoute: '/dashboard',
   restrictLoginToShifts: false,
+  allowRemoteOutsideShift: false,
   mustChangePassword: false,
   status: 'ACTIVE',
   roles: ['director'],

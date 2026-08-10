@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { EmployeeStatus } from '@prisma/client';
+import { EmployeeStatus, Prisma } from '@prisma/client';
 import { createHash, randomBytes } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -17,7 +17,7 @@ export class RemoteAccessService {
   async getOverview(currentRemoteDeviceId?: string | null) {
     const organization = await this.getOrganization();
     const policy = await this.ensurePolicy(organization.id);
-    const [devices, invitations, eligibleEmployees] = await Promise.all([
+    const [devices, invitations, eligibleEmployees, recentRemoteLogins] = await Promise.all([
       this.prisma.remoteAccessDevice.findMany({
         where: { organizationId: organization.id },
         orderBy: { createdAt: 'desc' },
@@ -40,12 +40,28 @@ export class RemoteAccessService {
         where: {
           status: EmployeeStatus.ACTIVE,
           userId: { not: null },
-          roles: { some: { role: { code: { in: ['director', 'administrator'] } } } },
         },
         select: { id: true, fullName: true, position: true, roles: { select: { role: { select: { code: true, title: true } } } } },
         orderBy: { fullName: 'asc' },
       }),
+      this.prisma.auditLog.findMany({
+        where: {
+          action: 'auth.login',
+          metadata: { path: ['accessType'], equals: 'REMOTE' },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+        select: {
+          id: true,
+          actorId: true,
+          actor: { select: { id: true, fullName: true, position: true } },
+          metadata: true,
+          ipAddress: true,
+          createdAt: true,
+        },
+      }),
     ]);
+    const devicesById = new Map(devices.map((device) => [device.id, device]));
 
     return {
       organization: { id: organization.id, displayName: organization.displayName },
@@ -77,6 +93,17 @@ export class RemoteAccessService {
         revokedAt: invitation.revokedAt,
         createdAt: invitation.createdAt,
       })),
+      recentRemoteLogins: recentRemoteLogins.map((login) => {
+        const remoteDeviceId = readJsonString(login.metadata, 'remoteDeviceId');
+        const device = remoteDeviceId ? devicesById.get(remoteDeviceId) : null;
+        return {
+          id: login.id,
+          employee: login.actor,
+          device: device ? { id: device.id, name: device.name } : null,
+          ipAddress: login.ipAddress,
+          loggedInAt: login.createdAt,
+        };
+      }),
       eligibleEmployees: eligibleEmployees.map((employee) => ({
         id: employee.id,
         fullName: employee.fullName,
@@ -135,12 +162,11 @@ export class RemoteAccessService {
         id: dto.employeeId,
         status: EmployeeStatus.ACTIVE,
         userId: { not: null },
-        roles: { some: { role: { code: { in: ['director', 'administrator'] } } } },
       },
       select: { id: true, fullName: true },
     });
     if (!employee) {
-      throw new BadRequestException('Удалённый доступ можно выдать только активному директору или управляющему с учётной записью');
+      throw new BadRequestException('Удалённый доступ можно выдать только активному сотруднику с учётной записью');
     }
 
     await this.prisma.remoteAccessInvitation.updateMany({
@@ -289,6 +315,12 @@ export class RemoteAccessService {
   }
 }
 
+function readJsonString(metadata: Prisma.JsonValue | null, key: string) {
+  if (!metadata || Array.isArray(metadata) || typeof metadata !== 'object') return null;
+  const value = metadata[key];
+  return typeof value === 'string' ? value : null;
+}
+
 export function hashRemoteDeviceToken(token: string) {
   return hashToken(token);
 }
@@ -298,11 +330,11 @@ function hashToken(token: string) {
 }
 
 function defaultDeviceName(userAgent?: string | null) {
-  if (!userAgent) return 'Устройство руководителя';
+  if (!userAgent) return 'Устройство сотрудника';
   if (/iphone/i.test(userAgent)) return 'iPhone';
   if (/ipad/i.test(userAgent)) return 'iPad';
   if (/android/i.test(userAgent)) return 'Android';
   if (/macintosh|mac os/i.test(userAgent)) return 'Mac';
   if (/windows/i.test(userAgent)) return 'Windows-компьютер';
-  return 'Устройство руководителя';
+  return 'Устройство сотрудника';
 }

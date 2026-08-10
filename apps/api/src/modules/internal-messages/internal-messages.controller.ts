@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { AuthEmployee } from '../auth/auth.types';
 import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
+import { AllowRemoteMutation } from '../auth/decorators/allow-remote-mutation.decorator';
 import { CreateInternalMessageDto } from './dto/create-internal-message.dto';
 import { ListInternalMessagesQueryDto } from './dto/list-internal-messages-query.dto';
 import { InternalMessagesService } from './internal-messages.service';
@@ -30,12 +31,14 @@ export class InternalMessagesController {
   }
 
   @Post()
+  @AllowRemoteMutation()
   @ApiCreatedResponse({ description: 'Private internal message sent.' })
   send(@Body() dto: CreateInternalMessageDto, @CurrentEmployee() actor: AuthEmployee) {
     return this.internalMessagesService.send(dto, actor.id);
   }
 
   @Post('conversations/:employeeId/read')
+  @AllowRemoteMutation()
   @ApiOkResponse({ description: 'Incoming messages in one conversation marked as read.' })
   markConversationRead(@Param('employeeId') employeeId: string, @CurrentEmployee() actor: AuthEmployee) {
     return this.internalMessagesService.markConversationRead(employeeId, actor.id);

@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common
 import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { AuthEmployee } from '../auth/auth.types';
 import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
+import { AllowRemoteMutation } from '../auth/decorators/allow-remote-mutation.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { CreateNewsPostDto } from './dto/create-news-post.dto';
 import { ListNewsQueryDto } from './dto/list-news-query.dto';
@@ -42,6 +43,7 @@ export class NewsController {
   }
 
   @Post(':postId/read')
+  @AllowRemoteMutation()
   @RequirePermissions('news.read')
   @ApiOkResponse({ description: 'Internal news post marked as read.' })
   markRead(@Param('postId') postId: string, @CurrentEmployee() actor: AuthEmployee) {

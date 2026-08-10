@@ -6,6 +6,7 @@ export type Employee = {
   position: string | null;
   defaultRoute: string | null;
   restrictLoginToShifts: boolean;
+  allowRemoteOutsideShift: boolean;
   mustChangePassword: boolean;
   status: string;
   roles: string[];
@@ -15,4 +16,5 @@ export type Employee = {
 export type AuthResponse = {
   employee: Employee;
   expiresAt: string;
+  accessType: 'LOCAL' | 'REMOTE';
 };

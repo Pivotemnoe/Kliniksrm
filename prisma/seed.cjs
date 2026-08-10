@@ -99,7 +99,6 @@ const roles = [
       'daily_finance.read',
       'daily_finance.manage',
       'daily_finance.submit',
-      'remote_access.read',
     ],
   ],
   [

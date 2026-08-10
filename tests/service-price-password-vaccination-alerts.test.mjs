@@ -54,7 +54,7 @@ test('временный пароль принуждает сотрудника 
   assert.match(employees, /mustChangePassword: true/);
   assert.match(auth, /mustChangePassword: false/);
   assert.match(protectedRoute, /data\.employee\.mustChangePassword/);
-  assert.match(layout, /<GlobalOperationalAlerts \/>/);
+  assert.match(layout, /<GlobalOperationalAlerts[\s\S]*?internalMessages=\{internalMessagesQuery\.data\}/);
   assert.match(alerts, /TODAY_VACCINATION/);
   assert.match(alerts, /OVERDUE_VACCINATION/);
   assert.match(alerts, /Показать полный список/);

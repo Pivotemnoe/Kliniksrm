@@ -1,11 +1,17 @@
 import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import remoteRequestModule from '../apps/api/dist/modules/remote-access/remote-request.js';
 
 const root = new URL('../', import.meta.url);
 const read = (path) => readFile(new URL(path, root), 'utf8');
+const require = createRequire(import.meta.url);
 const { isRemoteGatewayRequest } = remoteRequestModule;
+const { AuthService } = require('../apps/api/dist/modules/auth/auth.service.js');
+const { RemoteAccessService } = require('../apps/api/dist/modules/remote-access/remote-access.service.js');
+const { SessionAuthGuard } = require('../apps/api/dist/modules/auth/session-auth.guard.js');
+const { SESSION_COOKIE_NAME } = require('../apps/api/dist/modules/auth/session-cookie.js');
 
 test('печатный лист приёма использует реквизиты клиники и не раскрывает служебные данные', async () => {
   const source = await read('apps/web/src/features/visits/visitPrint.ts');
@@ -107,6 +113,144 @@ test('одноразовое подключение не содержит отк
   assert.doesNotMatch(migration, /DROP TABLE|TRUNCATE|DELETE FROM "(Owner|Animal|Visit|Bill|Product)"/i);
 });
 
+test('директор может выбрать любого активного сотрудника, а администратор не видит управление удалённым доступом', async () => {
+  let eligibleWhere;
+  const prisma = {
+    organization: { findFirst: async () => ({ id: 'organization-1', displayName: 'Клиника' }) },
+    remoteAccessPolicy: { upsert: async () => ({ id: 'policy-1', organizationId: 'organization-1', enabled: true }) },
+    remoteAccessDevice: { findMany: async () => [] },
+    remoteAccessInvitation: { findMany: async () => [] },
+    employee: {
+      findMany: async ({ where }) => {
+        eligibleWhere = where;
+        return [{ id: 'doctor-1', fullName: 'Врач', position: 'Врач', roles: [{ role: { code: 'doctor', title: 'Врач' } }] }];
+      },
+    },
+    auditLog: { findMany: async () => [] },
+  };
+  const service = new RemoteAccessService(prisma, { log: async () => undefined });
+  const overview = await service.getOverview();
+
+  assert.equal(eligibleWhere.status, 'ACTIVE');
+  assert.deepEqual(eligibleWhere.userId, { not: null });
+  assert.equal(Object.hasOwn(eligibleWhere, 'roles'), false);
+  assert.equal(overview.eligibleEmployees[0].id, 'doctor-1');
+
+  const [controller, access, settings, seed, migration] = await Promise.all([
+    read('apps/api/src/modules/remote-access/remote-access.controller.ts'),
+    read('apps/web/src/auth/access.ts'),
+    read('apps/web/src/features/settings/SettingsOverviewPage.tsx'),
+    read('prisma/seed.cjs'),
+    read('prisma/migrations/20260810000300_staff_remote_read_only/migration.sql'),
+  ]);
+  assert.match(controller, /@RequireRoles\('director'\)/);
+  assert.match(access, /roles: \['director'\]/);
+  assert.match(settings, /roles: \['director'\]/);
+  const administratorPermissions = seed.match(/'administrator',[\s\S]*?\n\s*\],\n\s*\[/)?.[0] ?? '';
+  assert.doesNotMatch(administratorPermissions, /remote_access\.(?:read|manage)/);
+  assert.match(migration, /DELETE FROM "RolePermission"/);
+  assert.match(migration, /"code" = 'administrator'/);
+});
+
+test('удалённый просмотр вне смены не открывает локальный вход вне смены', async () => {
+  let shiftChecks = 0;
+  const service = new AuthService(
+    { employeeShift: { findFirst: async () => { shiftChecks += 1; return null; } } },
+    {},
+    { log: async () => undefined },
+  );
+  const employee = { id: 'doctor-1', restrictLoginToShifts: true, allowRemoteOutsideShift: true };
+
+  await service.assertEmployeeCanUseCrm(employee, 'auth.test', null, 'REMOTE');
+  assert.equal(shiftChecks, 0);
+  await assert.rejects(
+    service.assertEmployeeCanUseCrm(employee, 'auth.test', null, 'LOCAL'),
+    /нет активной смены/,
+  );
+  assert.equal(shiftChecks, 1);
+});
+
+test('удалённая сессия имеет серверный запрет рабочих изменений и узкие личные исключения', async () => {
+  const [guard, decorator, messages, alerts, audit, news, migration] = await Promise.all([
+    read('apps/api/src/modules/auth/session-auth.guard.ts'),
+    read('apps/api/src/modules/auth/decorators/allow-remote-mutation.decorator.ts'),
+    read('apps/api/src/modules/internal-messages/internal-messages.controller.ts'),
+    read('apps/api/src/modules/staff-alerts/staff-alerts.controller.ts'),
+    read('apps/api/src/modules/audit/audit.controller.ts'),
+    read('apps/api/src/modules/news/news.controller.ts'),
+    read('prisma/migrations/20260810000300_staff_remote_read_only/migration.sql'),
+  ]);
+
+  assert.match(guard, /session\.accessType === 'REMOTE' && isMutationMethod/);
+  assert.match(guard, /remote_access\.write_blocked/);
+  assert.match(guard, /режиме просмотра/);
+  assert.match(decorator, /ALLOW_REMOTE_MUTATION_KEY/);
+  assert.match(messages, /@AllowRemoteMutation\(\)/);
+  assert.match(alerts, /@AllowRemoteMutation\(\)/);
+  assert.match(audit, /@AllowRemoteMutation\(\)/);
+  assert.match(news, /@AllowRemoteMutation\(\)/);
+  assert.match(migration, /ADD COLUMN "allowRemoteOutsideShift" BOOLEAN NOT NULL DEFAULT false/);
+  assert.doesNotMatch(migration, /DROP TABLE|TRUNCATE|DELETE FROM "(?:Owner|Animal|Visit|Bill|Product|StockBatch)"/i);
+});
+
+test('guard реально отклоняет рабочую запись из удалённой сессии и пишет аудит', async () => {
+  const auditEntries = [];
+  let touched = 0;
+  const session = remoteSessionFixture();
+  let allowRemoteMutation = false;
+  const guard = new SessionAuthGuard(
+    {
+      getAllAndOverride: (key) => {
+        if (key === 'isPublic') return false;
+        if (key === 'allowRemoteMutation') return allowRemoteMutation;
+        return undefined;
+      },
+    },
+    {
+      session: { findUnique: async () => session, deleteMany: async () => ({ count: 0 }) },
+      remoteAccessDevice: { updateMany: async () => ({ count: 1 }) },
+    },
+    {
+      hashSessionToken: () => 'session-1',
+      assertEmployeeCanUseCrm: async () => undefined,
+      serializeEmployee: () => authEmployeeFixture(),
+      touchSession: async () => { touched += 1; },
+    },
+    { log: async (entry) => { auditEntries.push(entry); } },
+  );
+  const request = {
+    headers: { cookie: `${SESSION_COOKIE_NAME}=token` },
+    method: 'PATCH',
+    originalUrl: '/api/v1/visits/visit-1',
+    ip: '203.0.113.10',
+  };
+  const context = guardContext(request);
+
+  await assert.rejects(guard.canActivate(context), /режиме просмотра/);
+  assert.equal(touched, 0);
+  assert.equal(auditEntries[0].action, 'remote_access.write_blocked');
+  assert.equal(auditEntries[0].metadata.path, '/api/v1/visits/visit-1');
+
+  allowRemoteMutation = true;
+  request.originalUrl = '/api/v1/internal-messages';
+  assert.equal(await guard.canActivate(context), true);
+  assert.equal(touched, 1);
+});
+
+test('директор видит отдельную историю успешных удалённых входов', async () => {
+  const [service, page, types] = await Promise.all([
+    read('apps/api/src/modules/remote-access/remote-access.service.ts'),
+    read('apps/web/src/features/remoteAccess/RemoteAccessSettingsPage.tsx'),
+    read('apps/web/src/features/remoteAccess/types.ts'),
+  ]);
+
+  assert.match(service, /metadata: \{ path: \['accessType'\], equals: 'REMOTE' \}/);
+  assert.match(service, /recentRemoteLogins:/);
+  assert.match(page, /История удалённых входов/);
+  assert.match(page, /loggedInAt/);
+  assert.match(types, /recentRemoteLogins/);
+});
+
 test('внешний шлюз не хранит данные, а иностранный узел остаётся слепым TCP-транзитом', async () => {
   const [nginx, readme] = await Promise.all([
     read('deploy/staff-gateway/nginx-staff-https.conf.template'),
@@ -126,3 +270,47 @@ test('внешний шлюз не хранит данные, а иностра�
   assert.match(readme, /5\.129\.239\.104` используется только как слепой TCP-транзит/);
   assert.match(readme, /нет TLS-терминации, ключа внутреннего туннеля, базы, документов или журналов CRM/);
 });
+
+function guardContext(request) {
+  return {
+    getHandler: () => function handler() {},
+    getClass: () => class Controller {},
+    switchToHttp: () => ({ getRequest: () => request }),
+  };
+}
+
+function authEmployeeFixture() {
+  return {
+    id: 'doctor-1',
+    userId: 'user-1',
+    fullName: 'Врач',
+    phone: null,
+    position: 'Врач',
+    defaultRoute: '/visits',
+    restrictLoginToShifts: false,
+    allowRemoteOutsideShift: true,
+    mustChangePassword: false,
+    status: 'ACTIVE',
+    roles: ['doctor'],
+    permissions: ['visits.read', 'visits.manage'],
+  };
+}
+
+function remoteSessionFixture() {
+  return {
+    id: 'session-1',
+    userId: 'user-1',
+    accessType: 'REMOTE',
+    remoteDeviceId: 'device-1',
+    expiresAt: new Date(Date.now() + 60_000),
+    remoteDevice: {
+      id: 'device-1',
+      revokedAt: null,
+      organization: { remoteAccessPolicy: { enabled: true, idleTimeoutMinutes: 30 } },
+    },
+    user: {
+      mustChangePassword: false,
+      employee: { ...authEmployeeFixture(), roles: [], permissionOverrides: [] },
+    },
+  };
+}

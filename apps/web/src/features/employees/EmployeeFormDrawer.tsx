@@ -23,6 +23,7 @@ const employeeSchema = z
     position: optionalString(120),
     defaultRoute: z.string().optional().nullable(),
     restrictLoginToShifts: z.boolean().default(false),
+    allowRemoteOutsideShift: z.boolean().default(false),
     password: optionalString(200).refine((value) => !value || value.length >= 8, 'Минимум 8 символов'),
     status: z.enum(['ACTIVE', 'BLOCKED']),
     roleCodes: z.array(z.string()).min(1, 'Выберите хотя бы одну роль'),
@@ -61,6 +62,7 @@ type EmployeeFormDrawerProps = {
   initialEmployee?: Employee | null;
   submitError?: unknown;
   isSubmitting?: boolean;
+  canConfigureRemoteAccess?: boolean;
   onClose: () => void;
   onSubmit: (values: EmployeeFormValues) => void;
 };
@@ -73,6 +75,7 @@ export function EmployeeFormDrawer({
   initialEmployee,
   submitError,
   isSubmitting,
+  canConfigureRemoteAccess = false,
   onClose,
   onSubmit,
 }: EmployeeFormDrawerProps) {
@@ -204,6 +207,24 @@ export function EmployeeFormDrawer({
             </Form.Item>
           )}
         />
+        {canConfigureRemoteAccess ? (
+          <Controller
+            control={control}
+            name="allowRemoteOutsideShift"
+            render={({ field }) => (
+              <Form.Item>
+                <Checkbox checked={field.value} onChange={(event) => field.onChange(event.target.checked)}>
+                  Разрешить удалённый просмотр вне смены
+                </Checkbox>
+                <div>
+                  <Typography.Text type="secondary">
+                    Доверенное устройство сможет открыть разрешённые ролью разделы вне смены. Изменения рабочих данных удалённо всегда заблокированы.
+                  </Typography.Text>
+                </div>
+              </Form.Item>
+            )}
+          />
+        ) : null}
         <Controller
           control={control}
           name="roleCodes"
@@ -369,6 +390,7 @@ function getDefaultValues(employee?: Employee | null): EmployeeFormInput {
     position: nullToEmpty(employee?.position),
     defaultRoute: employee?.defaultRoute ?? '',
     restrictLoginToShifts: employee?.restrictLoginToShifts ?? false,
+    allowRemoteOutsideShift: employee?.allowRemoteOutsideShift ?? false,
     password: '',
     status: (employee?.status ?? 'ACTIVE') as EmployeeStatus,
     roleCodes: employee?.roles.map((role) => role.code) ?? [],
@@ -378,7 +400,7 @@ function getDefaultValues(employee?: Employee | null): EmployeeFormInput {
   };
 }
 
-export function toUpdateEmployeeInput(values: EmployeeFormValues): UpdateEmployeeInput {
+export function toUpdateEmployeeInput(values: EmployeeFormValues, includeRemotePolicy = true): UpdateEmployeeInput {
   return {
     fullName: values.fullName,
     phone: values.phone,
@@ -386,6 +408,7 @@ export function toUpdateEmployeeInput(values: EmployeeFormValues): UpdateEmploye
     position: values.position,
     defaultRoute: values.defaultRoute || null,
     restrictLoginToShifts: values.restrictLoginToShifts,
+    ...(includeRemotePolicy ? { allowRemoteOutsideShift: values.allowRemoteOutsideShift } : {}),
     password: values.password,
     status: values.status,
     roleCodes: values.roleCodes,

@@ -354,6 +354,7 @@ model Employee {
   defaultRoute                  String?
   medicalPhraseAssistantEnabled Boolean                      @default(true)
   restrictLoginToShifts         Boolean                      @default(false)
+  allowRemoteOutsideShift       Boolean                      @default(false)
   status                        EmployeeStatus               @default(ACTIVE)
   roles                         EmployeeRole[]
   permissionOverrides           EmployeePermissionOverride[]

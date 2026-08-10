@@ -1087,6 +1087,86 @@ body {
   text-decoration: underline;
 }
 
+.staff-message-banner,
+.staff-notice-banner {
+  border-color: #69b1ff;
+  border-left-color: #1677ff;
+  background: #e6f4ff;
+  color: #0958d9;
+  animation: staff-attention-banner-enter 240ms ease-out;
+}
+
+.staff-message-banner .dashboard-overdue-banner-copy strong,
+.staff-notice-banner .dashboard-overdue-banner-copy strong {
+  color: #0958d9;
+}
+
+.staff-message-banner:hover,
+.staff-message-banner:focus-visible,
+.staff-notice-banner:hover,
+.staff-notice-banner:focus-visible {
+  border-color: #1677ff;
+  background: #d6eaff;
+}
+
+.staff-notice-banner.dashboard-vaccination-banner {
+  border-color: #ffc53d;
+  border-left-color: #d48806;
+  background: #fffbe6;
+  color: #874d00;
+}
+
+.staff-notice-banner.dashboard-vaccination-banner .dashboard-overdue-banner-copy strong {
+  color: #874d00;
+}
+
+.staff-notice-banner.dashboard-vaccination-banner-danger {
+  border-color: #ff7875;
+  border-left-color: #cf1322;
+  background: #fff1f0;
+  color: #a8071a;
+}
+
+.staff-notice-banner.dashboard-vaccination-banner-danger .dashboard-overdue-banner-copy strong {
+  color: #a8071a;
+}
+
+.remote-read-only-banner {
+  border-color: #91caff;
+  border-left-color: #1677ff;
+  background: #f0f7ff;
+  color: #124b82;
+  cursor: default;
+}
+
+.remote-read-only-banner .dashboard-overdue-banner-copy strong {
+  color: #124b82;
+}
+
+.remote-read-only-banner:hover,
+.remote-read-only-banner:focus-visible {
+  border-color: #91caff;
+  background: #f0f7ff;
+}
+
+@keyframes staff-attention-banner-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .staff-message-banner,
+  .staff-notice-banner {
+    animation: none;
+  }
+}
+
 .dashboard-action-tile {
   --tile-color: #2a9d8f;
   display: grid;

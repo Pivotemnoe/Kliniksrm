@@ -27,6 +27,7 @@ type SettingsSection = {
   icon: ReactNode;
   permission?: string;
   permissions?: string[];
+  roles?: string[];
 };
 
 const settingsSections: SettingsSection[] = [
@@ -102,10 +103,11 @@ const settingsSections: SettingsSection[] = [
   },
   {
     title: 'Удалённый доступ',
-    description: 'Вход директора и управляющего вне клиники, доверенные устройства и отзыв сеансов.',
+    description: 'Персональный удалённый просмотр сотрудников, доверенные устройства и история входов.',
     path: '/settings/remote-access',
     icon: <SafetyCertificateOutlined />,
     permission: 'remote_access.read',
+    roles: ['director'],
   },
   {
     title: 'Сообщения',
@@ -128,7 +130,10 @@ export function SettingsOverviewPage() {
   const { data: auth } = useCurrentEmployee();
   const employee = auth?.employee;
   const visibleSections = settingsSections.filter(
-    (section) => (!section.permission || hasPermission(employee, section.permission)) && (!section.permissions || section.permissions.some((permission) => hasPermission(employee, permission))),
+    (section) =>
+      (!section.permission || hasPermission(employee, section.permission))
+      && (!section.permissions || section.permissions.some((permission) => hasPermission(employee, permission)))
+      && (!section.roles || section.roles.some((role) => employee?.roles.includes(role))),
   );
 
   return (

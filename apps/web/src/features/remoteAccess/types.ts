@@ -43,6 +43,13 @@ export type RemoteAccessOverview = {
     revokedAt: string | null;
     createdAt: string;
   }>;
+  recentRemoteLogins: Array<{
+    id: string;
+    employee: RemoteAccessEmployee | null;
+    device: { id: string; name: string } | null;
+    ipAddress: string | null;
+    loggedInAt: string;
+  }>;
 };
 
 export type RemoteAccessInvitationResult = {

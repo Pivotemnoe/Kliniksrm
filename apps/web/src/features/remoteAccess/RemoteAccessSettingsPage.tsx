@@ -1,4 +1,4 @@
-import { CopyOutlined, LaptopOutlined, LinkOutlined, SafetyCertificateOutlined, StopOutlined } from '@ant-design/icons';
+import { AuditOutlined, CopyOutlined, LaptopOutlined, LinkOutlined, SafetyCertificateOutlined, StopOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, App, Button, Card, Descriptions, Form, Input, InputNumber, Popconfirm, QRCode, Select, Space, Switch, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
@@ -22,12 +22,17 @@ import type { RemoteAccessInvitationResult, RemoteAccessOverview } from './types
 type InvitationForm = { employeeId: string; deviceName?: string };
 type DeviceRow = RemoteAccessOverview['devices'][number];
 type InvitationRow = RemoteAccessOverview['invitations'][number];
+type RemoteLoginRow = RemoteAccessOverview['recentRemoteLogins'][number];
 
 export function RemoteAccessSettingsPage() {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const { data: auth } = useCurrentEmployee();
-  const canManage = hasPermission(auth?.employee, 'remote_access.manage');
+  const canManage = Boolean(
+    auth?.accessType !== 'REMOTE'
+    && auth?.employee.roles.includes('director')
+    && hasPermission(auth.employee, 'remote_access.manage'),
+  );
   const [form] = Form.useForm<InvitationForm>();
   const [freshInvitation, setFreshInvitation] = useState<RemoteAccessInvitationResult | null>(null);
   const overviewQuery = useQuery({ queryKey: ['remote-access'], queryFn: getRemoteAccessOverview });
@@ -75,7 +80,7 @@ export function RemoteAccessSettingsPage() {
       ),
     },
     { title: 'Привязано', dataIndex: 'trustedAt', width: 165, render: formatDateTime },
-    { title: 'Последний вход', dataIndex: 'lastSeenAt', width: 165, render: (value) => value ? formatDateTime(value) : 'Ещё не входили' },
+    { title: 'Последняя активность', dataIndex: 'lastSeenAt', width: 165, render: (value) => value ? formatDateTime(value) : 'Ещё не входили' },
     { title: 'Адрес', dataIndex: 'lastIpAddress', width: 145, render: (value) => value || '—' },
     { title: 'Статус', width: 125, render: (_, row) => row.revokedAt ? <Tag>Отключено</Tag> : <Tag color="green">Разрешено</Tag> },
     {
@@ -88,7 +93,7 @@ export function RemoteAccessSettingsPage() {
   ], [canManage, revokeDeviceMutation]);
 
   const invitationColumns = useMemo<ColumnsType<InvitationRow>>(() => [
-    { title: 'Руководитель', key: 'employee', render: (_, row) => row.employee.fullName },
+    { title: 'Сотрудник', key: 'employee', render: (_, row) => row.employee.fullName },
     { title: 'Устройство', dataIndex: 'deviceName', render: (value) => value || 'Будет названо при подключении' },
     { title: 'Создано', dataIndex: 'createdAt', width: 165, render: formatDateTime },
     { title: 'Действует до', dataIndex: 'expiresAt', width: 165, render: formatDateTime },
@@ -107,17 +112,27 @@ export function RemoteAccessSettingsPage() {
     },
   ], [canManage, revokeInvitationMutation]);
 
+  const remoteLoginColumns = useMemo<ColumnsType<RemoteLoginRow>>(() => [
+    { title: 'Сотрудник', key: 'employee', render: (_, row) => row.employee ? `${row.employee.fullName}${row.employee.position ? ` · ${row.employee.position}` : ''}` : 'Удалённый сотрудник' },
+    { title: 'Устройство', key: 'device', render: (_, row) => row.device?.name || 'Ранее привязанное устройство' },
+    { title: 'Вход', dataIndex: 'loggedInAt', width: 180, render: formatDateTime },
+    { title: 'IP-адрес', dataIndex: 'ipAddress', width: 160, render: (value) => value || '—' },
+  ], []);
+
   return (
     <div className="page">
-      <PageHeader title="Удалённый доступ" description="Защищённый вход директора и управляющего вне локальной сети клиники." />
+      <PageHeader title="Удалённый доступ" description="Директор выдаёт сотрудникам персональный удалённый просмотр и контролирует историю входов." />
       <Space direction="vertical" size={16} className="full-width">
         {overviewQuery.isError ? <Alert type="error" showIcon message={getErrorMessage(overviewQuery.error)} /> : null}
+        {auth?.accessType === 'REMOTE' ? (
+          <Alert type="info" showIcon message="Удалённый режим: только просмотр" description="Выдавать, изменять и отзывать доступ можно только из локальной сети клиники." />
+        ) : null}
         <Alert
           type={overview?.gateway.configured ? 'success' : 'warning'}
           showIcon
           message={overview?.gateway.configured ? 'Российский шлюз подготовлен' : 'Внешний шлюз пока не настроен'}
           description={overview?.gateway.configured
-            ? `Вход руководителя будет выполняться через ${overview.gateway.publicUrl}. База и документы остаются на сервере клиники.`
+            ? `Вход сотрудников будет выполняться через ${overview.gateway.publicUrl}. База и документы остаются на сервере клиники.`
             : 'CRM не открыта напрямую в интернет. До отдельного безопасного развёртывания можно подготовить интерфейс, но включение доступа заблокировано.'}
         />
 
@@ -127,7 +142,7 @@ export function RemoteAccessSettingsPage() {
               <Space><Switch checked={overview?.policy.enabled} disabled={!canManage || policyMutation.isPending} onChange={(enabled) => policyMutation.mutate({ enabled })} />{overview?.policy.enabled ? <Tag color="green">Включён</Tag> : <Tag>Выключен</Tag>}</Space>
             </Descriptions.Item>
             <Descriptions.Item label="Адрес входа">{overview?.gateway.publicUrl ? <Typography.Text copyable>{overview.gateway.publicUrl}</Typography.Text> : 'Будет задан при развёртывании'}</Descriptions.Item>
-            <Descriptions.Item label="Привязка устройства">Одноразовая ссылка, затем личный пароль руководителя</Descriptions.Item>
+            <Descriptions.Item label="Привязка устройства">Одноразовая ссылка, затем личный пароль сотрудника</Descriptions.Item>
             <Descriptions.Item label="Хранение данных">Только TECNO в клинике</Descriptions.Item>
             <Descriptions.Item label="Ссылка действует">
               <InputNumber min={5} max={30} value={overview?.policy.enrollmentTtlMinutes} disabled={!canManage} addonAfter="мин" onChange={(value) => value && policyMutation.mutate({ enrollmentTtlMinutes: value })} />
@@ -137,20 +152,20 @@ export function RemoteAccessSettingsPage() {
             </Descriptions.Item>
           </Descriptions>
           <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>
-            Новое устройство разрешается только из локальной CRM. Руководитель входит под своей учётной записью; общий пароль клиники не используется. Все входы и отзывы записываются в журнал аудита.
+            Новое устройство разрешается только из локальной CRM. Каждый сотрудник входит под своей учётной записью, видит только разделы своей роли и не может изменять рабочие данные удалённо. Все входы и отзывы записываются в журнал аудита.
           </Typography.Paragraph>
         </Card>
 
-        <Card title={<Space><LinkOutlined />Подключить устройство руководителя</Space>}>
+        <Card title={<Space><LinkOutlined />Подключить устройство сотрудника</Space>}>
           <Form<InvitationForm> form={form} layout="inline" onFinish={(values) => invitationMutation.mutate(values)}>
-            <Form.Item name="employeeId" label="Руководитель" rules={[{ required: true, message: 'Выберите сотрудника' }]}>
+            <Form.Item name="employeeId" label="Сотрудник" rules={[{ required: true, message: 'Выберите сотрудника' }]}>
               <Select
                 style={{ width: 310 }}
-                placeholder="Директор или управляющий"
+                placeholder="Выберите активного сотрудника"
                 options={(overview?.eligibleEmployees ?? []).map((employee) => ({ value: employee.id, label: `${employee.fullName}${employee.position ? ` · ${employee.position}` : ''}` }))}
               />
             </Form.Item>
-            <Form.Item name="deviceName" label="Название"><Input style={{ width: 230 }} placeholder="Например, iPhone директора" maxLength={120} /></Form.Item>
+            <Form.Item name="deviceName" label="Название"><Input style={{ width: 230 }} placeholder="Например, iPhone врача" maxLength={120} /></Form.Item>
             <Form.Item><Button type="primary" htmlType="submit" disabled={!canManage || !overview?.policy.enabled || !overview?.gateway.configured} loading={invitationMutation.isPending}>Создать одноразовую ссылку</Button></Form.Item>
           </Form>
           {freshInvitation ? (
@@ -162,7 +177,7 @@ export function RemoteAccessSettingsPage() {
               description={<Space align="start" size={18} wrap>
                 <QRCode value={freshInvitation.enrollmentUrl} size={132} />
                 <Space direction="vertical">
-                  <Typography.Text>Откройте ссылку на устройстве руководителя до {formatDateTime(freshInvitation.expiresAt)}.</Typography.Text>
+                  <Typography.Text>Откройте ссылку на устройстве сотрудника до {formatDateTime(freshInvitation.expiresAt)}.</Typography.Text>
                   <Typography.Text copyable={{ text: freshInvitation.enrollmentUrl }} code>{freshInvitation.enrollmentUrl}</Typography.Text>
                   <Button icon={<CopyOutlined />} onClick={() => navigator.clipboard.writeText(freshInvitation.enrollmentUrl)}>Скопировать ссылку</Button>
                   <Typography.Text type="secondary">После обновления страницы ссылка больше не показывается. При необходимости создайте новую — предыдущая отменяется.</Typography.Text>
@@ -181,6 +196,10 @@ export function RemoteAccessSettingsPage() {
 
         <Card title="Последние приглашения">
           <ProgressiveTable rowKey="id" dataSource={overview?.invitations ?? []} columns={invitationColumns} loading={overviewQuery.isLoading} scroll={{ x: 850 }} />
+        </Card>
+
+        <Card title={<Space><AuditOutlined />История удалённых входов</Space>}>
+          <ProgressiveTable rowKey="id" dataSource={overview?.recentRemoteLogins ?? []} columns={remoteLoginColumns} loading={overviewQuery.isLoading} scroll={{ x: 760 }} />
         </Card>
       </Space>
     </div>

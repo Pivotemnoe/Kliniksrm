@@ -88,7 +88,7 @@ export class AuthService {
       throw new UnauthorizedException('Сотрудник заблокирован или не связан с пользователем');
     }
 
-    await this.assertEmployeeCanUseCrm(user.employee, 'auth.login_outside_shift', ipAddress);
+    await this.assertEmployeeCanUseCrm(user.employee, 'auth.login_outside_shift', ipAddress, access.accessType);
 
     let remoteDeviceId: string | null = null;
     let idleTimeoutMinutes = SESSION_IDLE_TIMEOUT_MINUTES;
@@ -117,7 +117,7 @@ export class AuthService {
           metadata: { reason: 'device_not_trusted' },
           ipAddress,
         });
-        throw new UnauthorizedException('Это устройство не привязано к учётной записи руководителя');
+        throw new UnauthorizedException('Это устройство не привязано к учётной записи сотрудника');
       }
 
       remoteDeviceId = device.id;
@@ -182,11 +182,12 @@ export class AuthService {
   }
 
   async assertEmployeeCanUseCrm(
-    employee: { id: string; restrictLoginToShifts?: boolean | null },
+    employee: { id: string; restrictLoginToShifts?: boolean | null; allowRemoteOutsideShift?: boolean | null },
     action: string,
     ipAddress?: string | null,
+    accessType: 'LOCAL' | 'REMOTE' = 'LOCAL',
   ) {
-    if (!employee.restrictLoginToShifts) {
+    if (!employee.restrictLoginToShifts || (accessType === 'REMOTE' && employee.allowRemoteOutsideShift)) {
       return;
     }
 
@@ -211,7 +212,7 @@ export class AuthService {
       entityType: 'Employee',
       entityId: employee.id,
       ipAddress,
-      metadata: { reason: 'no_active_shift' },
+      metadata: { reason: 'no_active_shift', accessType },
     });
 
     throw new UnauthorizedException('Сейчас у сотрудника нет активной смены. Вход разрешён только в назначенное рабочее время.');
@@ -283,6 +284,7 @@ export class AuthService {
     position: string | null;
     defaultRoute: string | null;
     restrictLoginToShifts?: boolean | null;
+    allowRemoteOutsideShift?: boolean | null;
     status: string;
     roles: Array<{
       role: {
@@ -326,6 +328,7 @@ export class AuthService {
       position: employee.position,
       defaultRoute: employee.defaultRoute,
       restrictLoginToShifts: Boolean(employee.restrictLoginToShifts),
+      allowRemoteOutsideShift: Boolean(employee.allowRemoteOutsideShift),
       mustChangePassword,
       status: employee.status,
       roles,

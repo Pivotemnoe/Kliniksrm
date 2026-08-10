@@ -51,6 +51,11 @@ export class UpdateEmployeeDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsBoolean()
+  allowRemoteOutsideShift?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
   @MinLength(8)
   @MaxLength(200)

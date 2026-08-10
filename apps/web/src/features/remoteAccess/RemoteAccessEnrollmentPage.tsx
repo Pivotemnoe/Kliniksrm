@@ -21,7 +21,7 @@ export function RemoteAccessEnrollmentPage() {
     <div className="auth-page">
       <Card className="auth-card">
         <Space direction="vertical" size={18} className="full-width">
-          <Space><SafetyCertificateOutlined style={{ fontSize: 28 }} /><div><Typography.Title level={3} style={{ margin: 0 }}>Подключение руководителя</Typography.Title><Typography.Text type="secondary">Удалённый доступ TemichevVet</Typography.Text></div></Space>
+          <Space><SafetyCertificateOutlined style={{ fontSize: 28 }} /><div><Typography.Title level={3} style={{ margin: 0 }}>Подключение сотрудника</Typography.Title><Typography.Text type="secondary">Персональный удалённый просмотр TemichevVet</Typography.Text></div></Space>
           <Alert type="info" showIcon message="Одноразовая привязка устройства" description="После привязки потребуется личный логин и пароль директора или управляющего. Данные клиники на этом устройстве не сохраняются." />
           {mutation.isError ? <Alert type="error" showIcon message={getErrorMessage(mutation.error)} /> : null}
           <Form<EnrollmentForm> layout="vertical" initialValues={{ code: initialCode }} onFinish={(values) => mutation.mutate(values)}>

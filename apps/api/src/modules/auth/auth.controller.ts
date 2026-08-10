@@ -2,7 +2,7 @@ import { Body, Controller, Get, HttpCode, Patch, Post, Req, Res, UnauthorizedExc
 import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { AuthenticatedRequest, CookieResponse } from './auth.types';
 import { AuthService } from './auth.service';
-import { CurrentEmployee } from './decorators/current-employee.decorator';
+import { AllowRemoteMutation } from './decorators/allow-remote-mutation.decorator';
 import { Public } from './decorators/public.decorator';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
@@ -33,16 +33,18 @@ export class AuthController {
     return {
       employee: result.employee,
       expiresAt: result.expiresAt,
+      accessType: accessTypeFor(remoteRequest),
     };
   }
 
   @Get('me')
   @ApiOkResponse({ description: 'Current authenticated employee.' })
-  me(@CurrentEmployee() employee: unknown) {
-    return { employee };
+  me(@Req() request: AuthenticatedRequest) {
+    return { employee: request.auth?.employee, accessType: request.auth?.accessType ?? 'LOCAL' };
   }
 
   @Post('logout')
+  @AllowRemoteMutation()
   @HttpCode(200)
   @ApiCreatedResponse({ description: 'Logout current session.' })
   async logout(@Req() request: AuthenticatedRequest, @Res({ passthrough: true }) response: CookieResponse) {
@@ -56,6 +58,7 @@ export class AuthController {
   }
 
   @Patch('password')
+  @AllowRemoteMutation()
   @HttpCode(200)
   @ApiOkResponse({ description: 'Change current employee password.' })
   async changePassword(@Body() dto: ChangePasswordDto, @Req() request: AuthenticatedRequest) {
@@ -73,6 +76,10 @@ export class AuthController {
 
     return { ok: true };
   }
+}
+
+function accessTypeFor(remoteRequest: boolean): 'LOCAL' | 'REMOTE' {
+  return remoteRequest ? 'REMOTE' : 'LOCAL';
 }
 
 function getIpAddress(request: AuthenticatedRequest) {

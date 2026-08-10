@@ -24,6 +24,7 @@ export function EmployeesPage() {
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const currentEmployee = currentEmployeeQuery.data?.employee;
+  const isDirector = currentEmployee?.roles.includes('director') ?? false;
   const canManage =
     hasPermission(currentEmployee, 'employees.manage') && hasPermission(currentEmployee, 'roles.manage');
   const canManageShifts = hasPermission(currentEmployee, 'appointments.manage');
@@ -174,6 +175,16 @@ export function EmployeesPage() {
       },
     ];
 
+    if (isDirector) {
+      columns.splice(5, 0, {
+        title: 'Удалённый просмотр',
+        dataIndex: 'allowRemoteOutsideShift',
+        key: 'allowRemoteOutsideShift',
+        width: 170,
+        render: (value: boolean) => (value ? <Tag color="blue">Вне смены разрешён</Tag> : <Tag>Только по общим правилам</Tag>),
+      });
+    }
+
     if (canManage) {
       columns.push({
         title: 'Действия',
@@ -198,7 +209,7 @@ export function EmployeesPage() {
     }
 
     return columns;
-  }, [archiveMutation, canManage, currentEmployee?.id, modal, restoreMutation]);
+  }, [archiveMutation, canManage, currentEmployee?.id, isDirector, modal, restoreMutation]);
 
   function closeEmployeeForm() {
     setCreateOpen(false);
@@ -208,7 +219,7 @@ export function EmployeesPage() {
   }
 
   function handleEmployeeSubmit(values: EmployeeFormValues) {
-    const normalizedValues = toUpdateEmployeeInput(values);
+    const normalizedValues = toUpdateEmployeeInput(values, isDirector);
 
     if (editingEmployee) {
       updateMutation.mutate({ employeeId: editingEmployee.id, values: normalizedValues });
@@ -226,6 +237,7 @@ export function EmployeesPage() {
       position: normalizedValues.position,
       defaultRoute: normalizedValues.defaultRoute,
       restrictLoginToShifts: normalizedValues.restrictLoginToShifts,
+      allowRemoteOutsideShift: normalizedValues.allowRemoteOutsideShift,
       password: normalizedValues.password,
       roleCodes: normalizedValues.roleCodes,
       permissionGrants: normalizedValues.permissionGrants,
@@ -299,6 +311,7 @@ export function EmployeesPage() {
         onClose={closeEmployeeForm}
         onSubmit={handleEmployeeSubmit}
         isSubmitting={createMutation.isPending || updateMutation.isPending}
+        canConfigureRemoteAccess={isDirector}
         submitError={editingEmployee ? updateMutation.error : createMutation.error}
       />
     </div>

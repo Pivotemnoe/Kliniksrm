@@ -1,4 +1,4 @@
-import { ExclamationCircleOutlined, MedicineBoxOutlined } from '@ant-design/icons';
+import { ExclamationCircleOutlined, EyeOutlined, MedicineBoxOutlined, MessageOutlined, NotificationOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Drawer, List, Space, Tag, Typography } from 'antd';
 import { useState } from 'react';
@@ -7,8 +7,15 @@ import { getErrorMessage } from '../api/errors';
 import { formatDate } from '../shared/utils/date';
 import { listStaffAlerts, markStaffAlertRead } from '../features/staffAlerts/staffAlerts.api';
 import type { StaffAlertItem } from '../features/staffAlerts/types';
+import type { InternalMessageConversationsResponse } from '../features/internalMessages/types';
 
-export function GlobalOperationalAlerts() {
+export function GlobalOperationalAlerts({
+  internalMessages,
+  remoteReadOnly = false,
+}: {
+  internalMessages?: InternalMessageConversationsResponse;
+  remoteReadOnly?: boolean;
+}) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { message } = App.useApp();
@@ -30,6 +37,15 @@ export function GlobalOperationalAlerts() {
   const todayVaccinations = activeAlerts.filter((item) => item.kind === 'TODAY_VACCINATION');
   const overdueVaccinations = activeAlerts.filter((item) => item.kind === 'OVERDUE_VACCINATION');
   const vaccinationAlerts = [...todayVaccinations, ...overdueVaccinations];
+  const otherUnreadAlerts = activeAlerts.filter((item) => item.unread && ![
+    'UNFINISHED_VISIT',
+    'TODAY_VACCINATION',
+    'OVERDUE_VACCINATION',
+  ].includes(item.kind));
+  const unreadConversations = (internalMessages?.items ?? [])
+    .filter((conversation) => conversation.unreadCount > 0)
+    .sort((left, right) => new Date(right.lastMessage.createdAt).getTime() - new Date(left.lastMessage.createdAt).getTime());
+  const latestUnreadConversation = unreadConversations[0];
 
   async function openAlert(item: StaffAlertItem) {
     if (item.unread) await markReadMutation.mutateAsync(item.key);
@@ -37,9 +53,13 @@ export function GlobalOperationalAlerts() {
     navigate(item.href);
   }
 
-  if (alertsQuery.isError && !alertsQuery.data) {
-    return (
-      <div className="global-operational-alerts" aria-label="Рабочие предупреждения клиники">
+  const alertsUnavailable = alertsQuery.isError && !alertsQuery.data;
+
+  if (!alertsUnavailable && !remoteReadOnly && !latestUnreadConversation && !overdueVisits.length && !vaccinationAlerts.length && !otherUnreadAlerts.length) return null;
+
+  return (
+    <div className="global-operational-alerts" aria-label="Рабочие предупреждения клиники">
+      {alertsUnavailable ? (
         <div className="dashboard-overdue-banner dashboard-vaccination-banner-danger" role="alert">
           <span className="dashboard-overdue-banner-copy">
             <ExclamationCircleOutlined />
@@ -54,14 +74,45 @@ export function GlobalOperationalAlerts() {
             Проверить снова
           </button>
         </div>
-      </div>
-    );
-  }
-
-  if (!overdueVisits.length && !vaccinationAlerts.length) return null;
-
-  return (
-    <div className="global-operational-alerts" aria-label="Рабочие предупреждения клиники">
+      ) : null}
+      {remoteReadOnly ? (
+        <div className="dashboard-overdue-banner remote-read-only-banner" role="status">
+          <span className="dashboard-overdue-banner-copy">
+            <EyeOutlined />
+            <strong>Удалённый просмотр</strong>
+            <span>Разделы доступны по вашей роли; изменение рабочих данных заблокировано</span>
+          </span>
+        </div>
+      ) : null}
+      {latestUnreadConversation ? (
+        <button
+          type="button"
+          className="dashboard-overdue-banner staff-message-banner"
+          onClick={() => navigate(`/staff-messages?with=${encodeURIComponent(latestUnreadConversation.employee.id)}`)}
+        >
+          <span className="dashboard-overdue-banner-copy">
+            <MessageOutlined />
+            <strong>Новое сообщение от {latestUnreadConversation.employee.fullName}</strong>
+            <span>Непрочитанных сообщений: {internalMessages?.totalUnread ?? latestUnreadConversation.unreadCount}</span>
+          </span>
+          <span className="dashboard-overdue-banner-action">Открыть переписку</span>
+        </button>
+      ) : null}
+      {otherUnreadAlerts.map((item) => (
+        <button
+          key={item.key}
+          type="button"
+          className={`dashboard-overdue-banner staff-notice-banner${item.severity === 'error' ? ' dashboard-vaccination-banner-danger' : item.severity === 'warning' ? ' dashboard-vaccination-banner' : ''}`}
+          onClick={() => void openAlert(item)}
+        >
+          <span className="dashboard-overdue-banner-copy">
+            <NotificationOutlined />
+            <strong>{item.title}</strong>
+            <span>{item.description}</span>
+          </span>
+          <span className="dashboard-overdue-banner-action">Открыть</span>
+        </button>
+      ))}
       {overdueVisits.length ? (
         <button
           type="button"

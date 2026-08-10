@@ -1,10 +1,12 @@
-import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
+import { CanActivate, ExecutionContext, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { EmployeeStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { AuthService } from './auth.service';
 import { AuthenticatedRequest } from './auth.types';
 import { IS_PUBLIC_KEY } from './decorators/public.decorator';
+import { ALLOW_REMOTE_MUTATION_KEY } from './decorators/allow-remote-mutation.decorator';
 import { parseCookie, SESSION_COOKIE_NAME } from './session-cookie';
 
 @Injectable()
@@ -13,6 +15,7 @@ export class SessionAuthGuard implements CanActivate {
     private readonly reflector: Reflector,
     private readonly prisma: PrismaService,
     private readonly authService: AuthService,
+    private readonly auditService: AuditService,
   ) {}
 
   async canActivate(context: ExecutionContext) {
@@ -87,7 +90,12 @@ export class SessionAuthGuard implements CanActivate {
     }
 
     try {
-      await this.authService.assertEmployeeCanUseCrm(session.user.employee, 'auth.session_outside_shift', getIpAddress(request));
+      await this.authService.assertEmployeeCanUseCrm(
+        session.user.employee,
+        'auth.session_outside_shift',
+        getIpAddress(request),
+        session.accessType,
+      );
     } catch (error) {
       await this.prisma.session.deleteMany({ where: { id: session.id } });
       throw error;
@@ -100,6 +108,25 @@ export class SessionAuthGuard implements CanActivate {
       remoteDeviceId: session.remoteDeviceId,
       employee: this.authService.serializeEmployee(session.user.employee, session.user.mustChangePassword),
     };
+
+    const allowRemoteMutation = this.reflector.getAllAndOverride<boolean>(ALLOW_REMOTE_MUTATION_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]) ?? false;
+    if (session.accessType === 'REMOTE' && isMutationMethod(request.method) && !allowRemoteMutation) {
+      await this.auditService.log({
+        actorId: session.user.employee.id,
+        action: 'remote_access.write_blocked',
+        entityType: 'RemoteAccessDevice',
+        entityId: session.remoteDeviceId ?? session.id,
+        metadata: {
+          method: request.method?.toUpperCase() ?? 'UNKNOWN',
+          path: request.originalUrl ?? request.url ?? null,
+        },
+        ipAddress: getIpAddress(request),
+      });
+      throw new ForbiddenException('Удалённый доступ работает только в режиме просмотра. Изменения можно внести только в локальной сети клиники.');
+    }
 
     const idleTimeoutMinutes = session.accessType === 'REMOTE'
       ? session.remoteDevice?.organization.remoteAccessPolicy?.idleTimeoutMinutes
@@ -114,6 +141,10 @@ export class SessionAuthGuard implements CanActivate {
 
     return true;
   }
+}
+
+function isMutationMethod(method?: string) {
+  return !['GET', 'HEAD', 'OPTIONS'].includes((method ?? 'GET').toUpperCase());
 }
 
 function getIpAddress(request: AuthenticatedRequest) {

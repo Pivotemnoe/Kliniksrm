@@ -25,6 +25,7 @@ export type Employee = {
   position: string | null;
   defaultRoute: string | null;
   restrictLoginToShifts: boolean;
+  allowRemoteOutsideShift: boolean;
   status: EmployeeStatus;
   user: {
     id: string;
@@ -58,6 +59,7 @@ export type CreateEmployeeInput = {
   position?: string;
   defaultRoute?: string | null;
   restrictLoginToShifts?: boolean;
+  allowRemoteOutsideShift?: boolean;
   password: string;
   roleCodes: string[];
   permissionGrants?: string[];
@@ -72,6 +74,7 @@ export type UpdateEmployeeInput = {
   position?: string;
   defaultRoute?: string | null;
   restrictLoginToShifts?: boolean;
+  allowRemoteOutsideShift?: boolean;
   password?: string;
   status: EmployeeStatus;
   roleCodes: string[];

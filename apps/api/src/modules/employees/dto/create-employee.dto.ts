@@ -46,6 +46,11 @@ export class CreateEmployeeDto {
   @IsBoolean()
   restrictLoginToShifts?: boolean;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  allowRemoteOutsideShift?: boolean;
+
   @ApiProperty()
   @IsString()
   @MinLength(8)

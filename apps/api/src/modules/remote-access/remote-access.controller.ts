@@ -3,7 +3,7 @@ import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import type { AuthenticatedRequest, CookieResponse } from '../auth/auth.types';
 import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
 import { Public } from '../auth/decorators/public.decorator';
-import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { RequirePermissions, RequireRoles } from '../auth/decorators/require-permissions.decorator';
 import { REMOTE_DEVICE_COOKIE_NAME, getRemoteDeviceCookieOptions } from './remote-access.constants';
 import { RemoteAccessService } from './remote-access.service';
 import { CreateRemoteAccessInvitationDto } from './dto/create-remote-access-invitation.dto';
@@ -18,6 +18,7 @@ export class RemoteAccessController {
 
   @Get()
   @RequirePermissions('remote_access.read')
+  @RequireRoles('director')
   @ApiOkResponse({ description: 'Remote access policy, trusted devices and recent invitations.' })
   overview(@Req() request: AuthenticatedRequest) {
     return this.remoteAccessService.getOverview(request.auth?.remoteDeviceId);
@@ -25,6 +26,7 @@ export class RemoteAccessController {
 
   @Patch('policy')
   @RequirePermissions('remote_access.manage')
+  @RequireRoles('director')
   @ApiOkResponse({ description: 'Remote access policy updated.' })
   updatePolicy(
     @Body() dto: UpdateRemoteAccessPolicyDto,
@@ -36,6 +38,7 @@ export class RemoteAccessController {
 
   @Post('invitations')
   @RequirePermissions('remote_access.manage')
+  @RequireRoles('director')
   @ApiCreatedResponse({ description: 'Single-use device enrollment invitation created.' })
   createInvitation(
     @Body() dto: CreateRemoteAccessInvitationDto,
@@ -47,6 +50,7 @@ export class RemoteAccessController {
 
   @Delete('invitations/:invitationId')
   @RequirePermissions('remote_access.manage')
+  @RequireRoles('director')
   @HttpCode(200)
   revokeInvitation(
     @Param('invitationId') invitationId: string,
@@ -58,6 +62,7 @@ export class RemoteAccessController {
 
   @Delete('devices/:deviceId')
   @RequirePermissions('remote_access.manage')
+  @RequireRoles('director')
   @HttpCode(200)
   revokeDevice(
     @Param('deviceId') deviceId: string,
@@ -69,6 +74,7 @@ export class RemoteAccessController {
 
   @Post('devices/revoke-all')
   @RequirePermissions('remote_access.manage')
+  @RequireRoles('director')
   @HttpCode(200)
   revokeAllDevices(@CurrentEmployee() actor: { id: string }, @Req() request: AuthenticatedRequest) {
     return this.remoteAccessService.revokeAllDevices(actor.id, getIpAddress(request));
