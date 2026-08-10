@@ -25,6 +25,7 @@ export function BusinessPage() {
   const [range, setRange] = useState<[Dayjs, Dayjs]>([dayjs().startOf('month'), dayjs()]);
   const [officeId, setOfficeId] = useState<string>();
   const [entryType, setEntryType] = useState<BusinessCategoryType | null>(null);
+  const [activeTab, setActiveTab] = useState('profit');
   const query = { from: range[0].format('YYYY-MM-DD'), to: range[1].format('YYYY-MM-DD'), officeId };
   const resourcesQuery = useQuery({ queryKey: ['business', 'resources'], queryFn: getBusinessResources });
   const summaryQuery = useQuery({ queryKey: ['business', 'summary', query], queryFn: () => getBusinessSummary(query) });
@@ -87,14 +88,14 @@ export function BusinessPage() {
           <Card><Statistic title="Долги клиентов" value={summary.balances.debtorsAmount} precision={2} suffix="₽" /></Card>
           <Card><Statistic title="Долг поставщикам" value={summary.balances.supplierPayable} precision={2} suffix="₽" /></Card>
         </div>
-        {summary.control.unresolvedEntries || summary.control.submittedDays ? <Alert type="warning" showIcon message="Есть операции, требующие внимания" description={`Непроверенная выручка: ${summary.control.unresolvedEntries}. Закрытий дня на проверке: ${summary.control.submittedDays}.`} /> : null}
+        {summary.control.unresolvedEntries || summary.control.submittedDays ? <Alert type="warning" showIcon message="Есть операции, требующие внимания" description={`Непроверенная выручка: ${summary.control.unresolvedEntries}. Закрытий дня на проверке: ${summary.control.submittedDays}. Неучтённая выручка автоматически подтверждается директором вместе с закрытием дня.`} action={summary.control.unresolvedEntries ? <Button size="small" onClick={() => setActiveTab('operations')}>Открыть операции</Button> : undefined} /> : null}
         <div className="list-panel">
-          <Tabs items={[
+          <Tabs activeKey={activeTab} onChange={setActiveTab} items={[
             { key: 'profit', label: 'Прибыль', children: <ProfitTab summary={summary} /> },
             { key: 'cash', label: 'Деньги', children: <CashTab summary={summary} /> },
             { key: 'daily', label: 'По дням', children: <DailyTab summary={summary} /> },
             { key: 'categories', label: 'Статьи', children: <CategoriesTab summary={summary} /> },
-            { key: 'operations', label: `Операции · ${entriesQuery.data?.length ?? 0}`, children: <><div className="list-panel-header"><Typography.Text type="secondary">Внесённые вручную доходы и расходы. Записи не удаляются: ошибочную операцию можно только отменить с указанием причины.</Typography.Text>{canManage ? <Space><Button icon={<PlusOutlined />} onClick={() => setEntryType('INCOME')}>Доход</Button><Button icon={<PlusOutlined />} onClick={() => setEntryType('EXPENSE')}>Расход</Button></Space> : null}</div><ProgressiveTable rowKey="id" columns={operationColumns} dataSource={entriesQuery.data ?? []} loading={entriesQuery.isLoading} scroll={{ x: 960 }} locale={{ emptyText: 'Ручных операций за период нет' }} /></> },
+            { key: 'operations', label: `Операции · ${entriesQuery.data?.length ?? 0}`, children: <><div className="list-panel-header"><Typography.Text type="secondary">Внесённые вручную доходы и расходы. Неучтённая выручка подтверждается автоматически при утверждении закрытия дня; до этого директор может проверить её здесь кнопкой «Проверено». Ошибочную операцию можно только отменить с указанием причины.</Typography.Text>{canManage ? <Space><Button icon={<PlusOutlined />} onClick={() => setEntryType('INCOME')}>Доход</Button><Button icon={<PlusOutlined />} onClick={() => setEntryType('EXPENSE')}>Расход</Button></Space> : null}</div><ProgressiveTable rowKey="id" columns={operationColumns} dataSource={entriesQuery.data ?? []} loading={entriesQuery.isLoading} scroll={{ x: 960 }} locale={{ emptyText: 'Ручных операций за период нет' }} /></> },
             { key: 'control', label: 'Контроль', children: <ControlTab summary={summary} /> },
           ]} />
         </div>

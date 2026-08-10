@@ -32,6 +32,10 @@ test('рабочие списки подгружаются вниз порция
   assert.match(infiniteTable, /IntersectionObserver/);
   assert.match(infiniteTable, /rootMargin: '700px 0px'/);
   assert.match(infiniteTable, /pagination=\{false\}/);
+  assert.match(infiniteTable, /TableWithTopScrollbar/);
+  assert.match(infiniteTable, /className="table-top-scroll"/);
+  assert.match(infiniteTable, /tableScroll\.scrollLeft = topScroll\.scrollLeft/);
+  assert.match(infiniteTable, /topScroll\.scrollLeft = tableScroll\.scrollLeft/);
   for (const page of pages) {
     assert.match(page, /useInfiniteListQuery/);
     assert.match(page, /InfiniteTable/);
@@ -43,6 +47,15 @@ test('рабочие списки подгружаются вниз порция
 
   assert.match(stockService, /const sortBy = query\.sortBy \?\? 'title'/);
   assert.match(stockService, /service\.findMany\(\{[\s\S]*orderBy: \{ title: 'asc' \}/);
+});
+
+test('таблица услуг ограничивает широкие колонки и не прячет цены за длинным названием', async () => {
+  const stockPage = await read('apps/web/src/features/stock/StockPage.tsx');
+  assert.match(stockPage, /title: 'Название'[\s\S]*?width: 360[\s\S]*?ellipsis: true/);
+  assert.match(stockPage, /title: 'Цена'[\s\S]*?width: 190/);
+  assert.match(stockPage, /title: 'Тип цены'[\s\S]*?width: 150/);
+  assert.match(stockPage, /fixed: 'right'/);
+  assert.match(stockPage, /StockTable query=\{servicesQuery\} columns=\{columns\} scrollX=\{1150\}/);
 });
 
 test('завершение приёма атомарно ставит обновление личного кабинета в долговечную очередь', async () => {

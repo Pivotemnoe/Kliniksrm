@@ -1313,6 +1313,28 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
+.table-scroll-shell {
+  min-width: 0;
+}
+
+.table-top-scroll {
+  height: 16px;
+  margin: 0 0 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-gutter: stable;
+}
+
+.table-top-scroll:focus-visible {
+  outline: 2px solid #1677ff;
+  outline-offset: 2px;
+}
+
+.table-top-scroll-inner {
+  height: 1px;
+}
+
 .dense-table .ant-table-thead > tr > th {
   color: #7d858f;
   font-size: 12px;

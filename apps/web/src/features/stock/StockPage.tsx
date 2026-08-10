@@ -583,11 +583,11 @@ function ServicesTable({
   });
   const columns = useMemo<ColumnsType<ServiceItem>>(
     () => [
-      { title: 'Название', dataIndex: 'title', key: 'title' },
-      { title: 'Категория', key: 'category', render: (_, record) => record.category?.title ?? '—' },
-      { title: 'Цена', key: 'price', render: (_, record) => formatServicePrice(record) },
-      { title: 'Тип цены', dataIndex: 'priceType', key: 'priceType', render: (value: string) => (value === 'FLOATING' ? 'Плавающая' : 'Фиксированная') },
-      { title: 'НДС', dataIndex: 'vatRate', key: 'vatRate', render: (value) => (value === null || value === undefined ? 'Без НДС' : `${value}%`) },
+      { title: 'Название', dataIndex: 'title', key: 'title', width: 360, ellipsis: true },
+      { title: 'Категория', key: 'category', width: 220, ellipsis: true, render: (_, record) => record.category?.title ?? '—' },
+      { title: 'Цена', key: 'price', width: 190, render: (_, record) => formatServicePrice(record) },
+      { title: 'Тип цены', dataIndex: 'priceType', key: 'priceType', width: 150, render: (value: string) => (value === 'FLOATING' ? 'Плавающая' : 'Фиксированная') },
+      { title: 'НДС', dataIndex: 'vatRate', key: 'vatRate', width: 100, render: (value) => (value === null || value === undefined ? 'Без НДС' : `${value}%`) },
       {
         title: '',
         key: 'actions',
@@ -620,7 +620,7 @@ function ServicesTable({
     [canManage, onDelete, onEdit, onOpen],
   );
 
-  return <StockTable query={servicesQuery} columns={columns} />;
+  return <StockTable query={servicesQuery} columns={columns} scrollX={1150} />;
 }
 
 function BatchesTable({
@@ -781,9 +781,11 @@ function getSupplyInvoiceRemainingAmount(invoice: SupplyInvoice) {
 function StockTable<T extends { id: string }>({
   query,
   columns,
+  scrollX = 'max-content',
 }: {
   query: InfiniteQueryLike<T> & { error: unknown };
   columns: ColumnsType<T>;
+  scrollX?: number | string;
 }) {
   return (
     <div className="list-panel-body">
@@ -793,7 +795,7 @@ function StockTable<T extends { id: string }>({
         rowKey="id"
         className="dense-table"
         columns={columns}
-        scroll={{ x: 'max-content' }}
+        scroll={{ x: scrollX }}
       />
     </div>
   );

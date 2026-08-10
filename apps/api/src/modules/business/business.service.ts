@@ -268,13 +268,46 @@ export class BusinessService {
     if (!decimal(close.expectedAmount).equals(snapshot.expectedAmount) || linesChanged) {
       throw new BadRequestException('После отправки изменились оплаты или расходы. Верните день администратору и сформируйте сверку заново');
     }
-    const updated = await this.prisma.businessDailyClose.update({
-      where: { id: closeId },
-      data: { status: BusinessDailyCloseStatus.APPROVED, approvedById: actorId, approvedAt: new Date() },
-      include: closeInclude,
+    const approvedAt = new Date();
+    const resolutionNote = 'Подтверждено при утверждении закрытия дня';
+    return this.prisma.$transaction(async (tx) => {
+      const unresolvedEntries = await tx.businessEntry.findMany({
+        where: { dailyCloseId: closeId, status: BusinessEntryStatus.ACTIVE, requiresResolution: true },
+        select: { id: true },
+      });
+
+      if (unresolvedEntries.length) {
+        await tx.businessEntry.updateMany({
+          where: { id: { in: unresolvedEntries.map((entry) => entry.id) } },
+          data: { requiresResolution: false, resolvedAt: approvedAt, resolvedById: actorId, resolutionNote },
+        });
+        await tx.auditLog.create({
+          data: {
+            actorId,
+            action: 'business.entry.resolve.daily_close',
+            entityType: 'BusinessDailyClose',
+            entityId: closeId,
+            metadata: { resolvedCount: unresolvedEntries.length, entryIds: unresolvedEntries.map((entry) => entry.id), reason: resolutionNote },
+          },
+        });
+      }
+
+      const updated = await tx.businessDailyClose.update({
+        where: { id: closeId },
+        data: { status: BusinessDailyCloseStatus.APPROVED, approvedById: actorId, approvedAt },
+        include: closeInclude,
+      });
+      await tx.auditLog.create({
+        data: {
+          actorId,
+          action: 'business.daily_close.approve',
+          entityType: 'BusinessDailyClose',
+          entityId: closeId,
+          metadata: { difference: Number(updated.difference), resolvedEntries: unresolvedEntries.length },
+        },
+      });
+      return updated;
     });
-    await this.auditService.log({ actorId, action: 'business.daily_close.approve', entityType: 'BusinessDailyClose', entityId: closeId, metadata: { difference: updated.difference } });
-    return updated;
   }
 
   async returnDailyClose(closeId: string, dto: BusinessActionDto, actorId: string) {

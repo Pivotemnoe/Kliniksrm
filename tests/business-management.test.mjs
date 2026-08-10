@@ -111,3 +111,24 @@ test('закрытие дня принимает свободные причин
   assert.match(service, /tx\.auditLog\.create/);
   assert.match(daily, /entry\.comment \|\| entry\.category\.title/);
 });
+
+test('утверждение закрытия дня подтверждает связанную неучтённую выручку и сохраняет аудит', async () => {
+  const [service, page, migration] = await Promise.all([
+    read('apps/api/src/modules/business/business.service.ts'),
+    read('apps/web/src/features/business/BusinessPage.tsx'),
+    read('prisma/migrations/20260810000200_business_close_resolution/migration.sql'),
+  ]);
+
+  assert.match(service, /approveDailyClose[\s\S]*?this\.prisma\.\$transaction/);
+  assert.match(service, /dailyCloseId: closeId[\s\S]*?requiresResolution: true/);
+  assert.match(service, /businessEntry\.updateMany/);
+  assert.match(service, /business\.entry\.resolve\.daily_close/);
+  assert.match(service, /resolvedEntries: unresolvedEntries\.length/);
+  assert.match(page, /автоматически подтверждается директором вместе с закрытием дня/);
+  assert.match(page, /Открыть операции/);
+  assert.match(migration, /close\."status" = 'APPROVED'/);
+  assert.match(migration, /business\.entry\.resolve\.daily_close\.backfill/);
+  assert.match(migration, /"requiresResolution" = false/);
+  assert.doesNotMatch(migration, /UPDATE "BusinessEntry"[\s\S]*?"amount"\s*=/);
+  assert.doesNotMatch(migration, /\b(?:DROP|TRUNCATE|DELETE\s+FROM)\b/i);
+});

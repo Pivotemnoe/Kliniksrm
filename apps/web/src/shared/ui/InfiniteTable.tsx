@@ -57,7 +57,7 @@ export function InfiniteTable<T extends object>({
   return (
     <>
       {query.isError && errorText ? <Typography.Text type="danger">{errorText}</Typography.Text> : null}
-      <Table<T>
+      <TableWithTopScrollbar<T>
         {...tableProps}
         dataSource={items}
         loading={query.isLoading}
@@ -93,7 +93,7 @@ export function ProgressiveTable<T extends object>({
 
   return (
     <>
-      <Table<T> {...tableProps} dataSource={visibleItems} pagination={false} />
+      <TableWithTopScrollbar<T> {...tableProps} dataSource={visibleItems} pagination={false} />
       {dataSource.length > chunkSize ? (
         <InfiniteListStatus
           loaded={visibleItems.length}
@@ -104,6 +104,65 @@ export function ProgressiveTable<T extends object>({
         />
       ) : null}
     </>
+  );
+}
+
+function TableWithTopScrollbar<T extends object>({ className, scroll, ...tableProps }: TableProps<T>) {
+  const shellRef = useRef<HTMLDivElement>(null);
+  const topScrollRef = useRef<HTMLDivElement>(null);
+  const topScrollInnerRef = useRef<HTMLDivElement>(null);
+  const hasHorizontalScroll = Boolean(scroll?.x);
+
+  useEffect(() => {
+    if (!hasHorizontalScroll) return;
+    const shell = shellRef.current;
+    const topScroll = topScrollRef.current;
+    const topScrollInner = topScrollInnerRef.current;
+    const tableScroll = shell?.querySelector<HTMLElement>('.ant-table-content, .ant-table-body');
+    if (!shell || !topScroll || !topScrollInner || !tableScroll) return;
+
+    let syncing = false;
+    const updateMetrics = () => {
+      topScrollInner.style.width = `${tableScroll.scrollWidth}px`;
+      topScroll.hidden = tableScroll.scrollWidth <= tableScroll.clientWidth + 1;
+      topScroll.scrollLeft = tableScroll.scrollLeft;
+    };
+    const syncFromTop = () => {
+      if (syncing) return;
+      syncing = true;
+      tableScroll.scrollLeft = topScroll.scrollLeft;
+      syncing = false;
+    };
+    const syncFromTable = () => {
+      if (syncing) return;
+      syncing = true;
+      topScroll.scrollLeft = tableScroll.scrollLeft;
+      syncing = false;
+    };
+
+    topScroll.addEventListener('scroll', syncFromTop, { passive: true });
+    tableScroll.addEventListener('scroll', syncFromTable, { passive: true });
+    const resizeObserver = new ResizeObserver(updateMetrics);
+    resizeObserver.observe(tableScroll);
+    const table = tableScroll.querySelector('table');
+    if (table) resizeObserver.observe(table);
+    const mutationObserver = new MutationObserver(updateMetrics);
+    mutationObserver.observe(tableScroll, { childList: true, subtree: true });
+    updateMetrics();
+
+    return () => {
+      topScroll.removeEventListener('scroll', syncFromTop);
+      tableScroll.removeEventListener('scroll', syncFromTable);
+      resizeObserver.disconnect();
+      mutationObserver.disconnect();
+    };
+  });
+
+  return (
+    <div ref={shellRef} className={['table-scroll-shell', className].filter(Boolean).join(' ')}>
+      {hasHorizontalScroll ? <div ref={topScrollRef} className="table-top-scroll" aria-label="Горизонтальная прокрутка таблицы" tabIndex={0} hidden><div ref={topScrollInnerRef} className="table-top-scroll-inner" /></div> : null}
+      <Table<T> {...tableProps} scroll={scroll} />
+    </div>
   );
 }
 
