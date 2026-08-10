@@ -3239,6 +3239,15 @@ body {
   padding-bottom: 2px;
 }
 
+.supply-supplier-field .ant-select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.supply-supplier-field .ant-btn {
+  flex: 0 0 auto;
+}
+
 .supply-line-card {
   padding: 8px 10px 9px;
   border: 1px solid #e5e7eb;

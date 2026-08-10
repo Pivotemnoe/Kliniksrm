@@ -1304,7 +1304,7 @@ function SupplyInvoiceModal({ open, invoice, resources, onClose }: { open: boole
             name="supplierId"
             render={({ field, fieldState }) => (
               <Form.Item label="Поставщик" required validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message ?? 'Поставщик выбирается из справочника.'}>
-                <Space.Compact className="full-width">
+                <Space.Compact block className="supply-supplier-field">
                   <Select {...field} showSearch optionFilterProp="label" options={resources?.suppliers.map((supplier) => ({ value: supplier.id, label: supplier.title })) ?? []} placeholder="Выберите поставщика" />
                   <Button icon={<PlusOutlined />} onClick={() => setSupplierOpen(true)}>Новый</Button>
                 </Space.Compact>
