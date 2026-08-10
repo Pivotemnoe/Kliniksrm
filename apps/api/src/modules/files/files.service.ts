@@ -6,6 +6,8 @@ import { AuditService } from '../audit/audit.service';
 import { AuthEmployee } from '../auth/auth.types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ObjectStorageService } from './object-storage.service';
+import { ArchiveFileMetadataDto, UpdateArchiveFileMetadataDto } from './dto/archive-file-metadata.dto';
+import { ListAnimalFilesQueryDto } from './dto/list-animal-files-query.dto';
 
 export type UploadedFilePayload = {
   originalname: string;
@@ -52,17 +54,124 @@ export class FilesService {
     return this.upload(scope, file, actorId);
   }
 
-  async listAnimalFiles(animalId: string) {
+  async listAnimalFiles(animalId: string, query: ListAnimalFilesQueryDto = {}) {
     await this.ensureAnimalScope(animalId);
-    return this.list({
-      purpose: FilePurpose.MEDICAL_DOCUMENT,
-      OR: [{ animalId }, { visit: { animalId } }],
-    });
+    const filters: Prisma.FileObjectWhereInput[] = [
+      { purpose: FilePurpose.MEDICAL_DOCUMENT },
+      { OR: [{ animalId }, { visit: { animalId } }] },
+    ];
+    const search = clean(query.search);
+    if (search) {
+      filters.push({
+        OR: [
+          { originalName: { contains: search, mode: 'insensitive' } },
+          { note: { contains: search, mode: 'insensitive' } },
+          { sourceLabel: { contains: search, mode: 'insensitive' } },
+        ],
+      });
+    }
+    if (query.category) filters.push({ archiveCategory: query.category });
+    if (query.dateFrom || query.dateTo) {
+      filters.push({
+        documentDate: {
+          ...(query.dateFrom ? { gte: startOfUtcDay(query.dateFrom) } : {}),
+          ...(query.dateTo ? { lt: nextUtcDay(query.dateTo) } : {}),
+        },
+      });
+    }
+    return this.list({ AND: filters });
   }
 
-  async uploadAnimalFile(animalId: string, file: UploadedFilePayload | undefined, actorId: string) {
+  async uploadAnimalFile(
+    animalId: string,
+    file: UploadedFilePayload | undefined,
+    actorId: string,
+    metadata: ArchiveFileMetadataDto = {},
+  ) {
     const animal = await this.ensureAnimalScope(animalId);
-    return this.upload({ kind: 'animal', animalId, ownerId: animal.ownerId }, file, actorId);
+    return this.upload({ kind: 'animal', animalId, ownerId: animal.ownerId }, file, actorId, metadata);
+  }
+
+  async uploadAnimalFilesBatch(
+    animalId: string,
+    files: UploadedFilePayload[] | undefined,
+    actorId: string,
+    metadata: ArchiveFileMetadataDto = {},
+  ) {
+    const animal = await this.ensureAnimalScope(animalId);
+    if (!files?.length) throw new BadRequestException('Выберите хотя бы один файл');
+    if (files.length > 20) throw new BadRequestException('За один раз можно загрузить не более 20 файлов');
+
+    const uploaded: Array<Prisma.FileObjectGetPayload<{ select: typeof publicFileSelect }>> = [];
+    const duplicates: Array<{ originalName: string; existingFileId: string }> = [];
+    const failed: Array<{ originalName: string; message: string }> = [];
+
+    for (const file of files) {
+      const originalName = normalizedOriginalName(file.originalname);
+      try {
+        this.validateFile(file, originalName);
+        const checksumSha256 = createHash('sha256').update(file.buffer).digest('hex');
+        const duplicate = await this.prisma.fileObject.findFirst({
+          where: {
+            purpose: FilePurpose.MEDICAL_DOCUMENT,
+            checksumSha256,
+            deletedAt: null,
+            OR: [{ animalId }, { visit: { animalId } }],
+          },
+          select: { id: true },
+        });
+        if (duplicate) {
+          duplicates.push({ originalName, existingFileId: duplicate.id });
+          continue;
+        }
+        uploaded.push(
+          await this.upload({ kind: 'animal', animalId, ownerId: animal.ownerId }, file, actorId, metadata),
+        );
+      } catch (error) {
+        failed.push({ originalName, message: readableUploadError(error) });
+      }
+    }
+
+    await this.auditService.log({
+      actorId,
+      action: 'file.batch_upload',
+      entityType: 'Animal',
+      entityId: animalId,
+      metadata: {
+        requestedCount: files.length,
+        uploadedCount: uploaded.length,
+        duplicateCount: duplicates.length,
+        failedCount: failed.length,
+        archiveCategory: clean(metadata.archiveCategory),
+      },
+    });
+
+    return { uploaded, duplicates, failed };
+  }
+
+  async updateArchiveMetadata(fileId: string, dto: UpdateArchiveFileMetadataDto, actor: AuthEmployee) {
+    const file = await this.prisma.fileObject.findFirst({
+      where: { id: fileId, deletedAt: null },
+      include: { visit: { select: { animalId: true } } },
+    });
+    if (!file) throw new NotFoundException('Файл не найден');
+    if (file.purpose !== FilePurpose.MEDICAL_DOCUMENT || (!file.animalId && !file.visit?.animalId)) {
+      throw new BadRequestException('Метаданные архива можно менять только у документов пациента');
+    }
+    this.ensurePurposePermission(file.purpose, actor, true);
+    const updated = await this.prisma.fileObject.update({
+      where: { id: file.id },
+      data: archiveMetadataData(dto),
+      select: publicFileSelect,
+    });
+    await this.auditService.log({
+      actorId: actor.id,
+      action: 'file.archive_metadata_update',
+      entityType: 'FileObject',
+      entityId: file.id,
+      metadata: { changedFields: Object.keys(dto) },
+    });
+    return updated;
   }
 
   async listLaboratoryFiles(orderId: string, itemId: string) {
@@ -116,6 +225,13 @@ export class FilesService {
   async delete(fileId: string, actor: AuthEmployee) {
     const file = await this.getActiveFile(fileId);
     this.ensurePurposePermission(file.purpose, actor, true);
+    const generatedDocument = await this.prisma.generatedDocument.findFirst({
+      where: { fileId: file.id },
+      select: { id: true },
+    });
+    if (generatedDocument) {
+      throw new BadRequestException('Сформированный PDF является неизменяемой медицинской записью и не может быть удалён');
+    }
 
     await this.storage.removeObject(file.storageKey);
     await this.prisma.fileObject.update({ where: { id: file.id }, data: { deletedAt: new Date() } });
@@ -138,7 +254,12 @@ export class FilesService {
     return files.map((file) => ({ ...file, originalName: normalizedOriginalName(file.originalName) }));
   }
 
-  private async upload(scope: FileScope, file: UploadedFilePayload | undefined, actorId: string) {
+  private async upload(
+    scope: FileScope,
+    file: UploadedFilePayload | undefined,
+    actorId: string,
+    archiveMetadata: ArchiveFileMetadataDto = {},
+  ) {
     const originalName = normalizedOriginalName(file?.originalname ?? '');
     this.validateFile(file, originalName);
     const extension = extname(originalName).toLowerCase();
@@ -158,6 +279,7 @@ export class FilesService {
           mimeType: file.mimetype,
           sizeBytes: file.size,
           checksumSha256,
+          ...(scope.kind === 'animal' ? archiveMetadataData(archiveMetadata) : {}),
         },
         select: publicFileSelect,
       });
@@ -166,7 +288,13 @@ export class FilesService {
         action: 'file.upload',
         entityType: 'FileObject',
         entityId: saved.id,
-        metadata: { purpose, originalName, sizeBytes: file.size, checksumSha256 },
+        metadata: {
+          purpose,
+          originalName,
+          sizeBytes: file.size,
+          checksumSha256,
+          ...(scope.kind === 'animal' ? { archiveCategory: clean(archiveMetadata.archiveCategory) } : {}),
+        },
       });
       return saved;
     } catch (error) {
@@ -253,6 +381,10 @@ const publicFileSelect = {
   mimeType: true,
   sizeBytes: true,
   checksumSha256: true,
+  archiveCategory: true,
+  documentDate: true,
+  sourceLabel: true,
+  note: true,
   purpose: true,
   uploadedById: true,
   uploadedBy: { select: { id: true, fullName: true } },
@@ -303,4 +435,39 @@ function decodeMojibakeFileName(value: string) {
 function clean(value?: string | null) {
   const result = value?.trim();
   return result || null;
+}
+
+function archiveMetadataData(metadata: ArchiveFileMetadataDto | UpdateArchiveFileMetadataDto) {
+  return {
+    ...(metadata.archiveCategory !== undefined ? { archiveCategory: clean(metadata.archiveCategory) } : {}),
+    ...(metadata.documentDate !== undefined
+      ? { documentDate: metadata.documentDate ? startOfUtcDay(metadata.documentDate) : null }
+      : {}),
+    ...(metadata.sourceLabel !== undefined ? { sourceLabel: clean(metadata.sourceLabel) } : {}),
+    ...(metadata.note !== undefined ? { note: clean(metadata.note) } : {}),
+  } satisfies Prisma.FileObjectUncheckedUpdateInput;
+}
+
+function startOfUtcDay(value: string) {
+  const date = new Date(`${value.slice(0, 10)}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) throw new BadRequestException('Укажите корректную дату документа');
+  return date;
+}
+
+function nextUtcDay(value: string) {
+  const date = startOfUtcDay(value);
+  date.setUTCDate(date.getUTCDate() + 1);
+  return date;
+}
+
+function readableUploadError(error: unknown) {
+  if (error instanceof BadRequestException) {
+    const response = error.getResponse();
+    if (typeof response === 'string') return response;
+    if (response && typeof response === 'object' && 'message' in response) {
+      const message = (response as { message?: string | string[] }).message;
+      return Array.isArray(message) ? message.join(', ') : message || 'Файл не загружен';
+    }
+  }
+  return error instanceof Error ? error.message : 'Файл не загружен';
 }

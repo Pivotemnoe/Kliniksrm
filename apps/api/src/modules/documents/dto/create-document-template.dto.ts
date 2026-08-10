@@ -25,6 +25,11 @@ export class CreateDocumentTemplateDto {
   @IsObject()
   variables?: Record<string, unknown> | null;
 
+  @ApiPropertyOptional({ description: 'Версионируемый визуальный макет страницы A4.' })
+  @IsOptional()
+  @IsObject()
+  layout?: Record<string, unknown> | null;
+
   @ApiPropertyOptional({
     description: 'Показывать подтверждение подписи для согласий и других официальных документов.',
     default: false,

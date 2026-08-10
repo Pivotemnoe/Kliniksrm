@@ -1,13 +1,16 @@
-import { Controller, Delete, Get, Header, Param, Post, Res, StreamableFile, UploadedFile, UseInterceptors } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { Body, Controller, Delete, Get, Header, Param, Patch, Post, Query, Res, StreamableFile, UploadedFile, UploadedFiles, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { ApiConsumes, ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { AuthEmployee } from '../auth/auth.types';
 import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
 import { RequireAnyPermissions, RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { FilesService, UploadedFilePayload } from './files.service';
+import { ArchiveFileMetadataDto, UpdateArchiveFileMetadataDto } from './dto/archive-file-metadata.dto';
+import { ListAnimalFilesQueryDto } from './dto/list-animal-files-query.dto';
 
 const uploadInterceptor = FileInterceptor('file', { limits: { fileSize: 15 * 1024 * 1024, files: 1 } });
+const batchUploadInterceptor = FilesInterceptor('files', 20, { limits: { fileSize: 15 * 1024 * 1024, files: 20 } });
 
 @ApiTags('files')
 @Controller('v1/files')
@@ -35,8 +38,8 @@ export class FilesController {
 
   @Get('animals/:animalId')
   @RequirePermissions('documents.read')
-  listAnimalFiles(@Param('animalId') animalId: string) {
-    return this.filesService.listAnimalFiles(animalId);
+  listAnimalFiles(@Param('animalId') animalId: string, @Query() query: ListAnimalFilesQueryDto) {
+    return this.filesService.listAnimalFiles(animalId, query);
   }
 
   @Post('animals/:animalId')
@@ -47,9 +50,35 @@ export class FilesController {
   uploadAnimalFile(
     @Param('animalId') animalId: string,
     @UploadedFile() file: UploadedFilePayload | undefined,
+    @Body() metadata: ArchiveFileMetadataDto,
     @CurrentEmployee() actor: AuthEmployee,
   ) {
-    return this.filesService.uploadAnimalFile(animalId, file, actor.id);
+    return this.filesService.uploadAnimalFile(animalId, file, actor.id, metadata);
+  }
+
+  @Post('animals/:animalId/batch')
+  @RequirePermissions('documents.manage')
+  @UseInterceptors(batchUploadInterceptor)
+  @ApiConsumes('multipart/form-data')
+  @ApiCreatedResponse({ description: 'Patient archive files uploaded with per-file duplicate and error report.' })
+  uploadAnimalFilesBatch(
+    @Param('animalId') animalId: string,
+    @UploadedFiles() files: UploadedFilePayload[] | undefined,
+    @Body() metadata: ArchiveFileMetadataDto,
+    @CurrentEmployee() actor: AuthEmployee,
+  ) {
+    return this.filesService.uploadAnimalFilesBatch(animalId, files, actor.id, metadata);
+  }
+
+  @Patch(':fileId/archive')
+  @RequirePermissions('documents.manage')
+  @ApiOkResponse({ description: 'Patient archive metadata updated.' })
+  updateArchiveMetadata(
+    @Param('fileId') fileId: string,
+    @Body() dto: UpdateArchiveFileMetadataDto,
+    @CurrentEmployee() actor: AuthEmployee,
+  ) {
+    return this.filesService.updateArchiveMetadata(fileId, dto, actor);
   }
 
   @Get('laboratory/orders/:orderId/items/:itemId')

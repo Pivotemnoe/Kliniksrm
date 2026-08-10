@@ -45,6 +45,24 @@ export async function apiUpload<T>(path: string, file: File, fields: Record<stri
   return payload as T;
 }
 
+export async function apiUploadMany<T>(
+  path: string,
+  files: File[],
+  fields: Record<string, string> = {},
+): Promise<T> {
+  const form = new FormData();
+  files.forEach((file) => form.append('files', file, file.name));
+  Object.entries(fields).forEach(([key, value]) => form.append(key, value));
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    method: 'POST',
+    credentials: 'include',
+    body: form,
+  });
+  const payload = await parseResponse(response);
+  assertResponseOk(response, payload);
+  return payload as T;
+}
+
 export async function apiDownload(path: string) {
   const response = await fetch(`${apiBaseUrl}${path}`, { credentials: 'include' });
   if (!response.ok) {

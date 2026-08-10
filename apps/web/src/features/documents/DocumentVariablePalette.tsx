@@ -70,7 +70,7 @@ export function DocumentVariablePalette({ onInsert, onInsertBlock }: DocumentVar
     <Space direction="vertical" size={10} className="full-width">
       {onInsert ? (
         <Typography.Text type="secondary">
-          Поле вставится туда, где стоит курсор. «Вставить блок» добавит готовый раздел с подписями и переносами строк.
+          Выберите текстовый блок: поле добавится в его конец и заполнится данными при создании документа в приёме.
         </Typography.Text>
       ) : null}
       {documentVariableGroups.map((group) => (

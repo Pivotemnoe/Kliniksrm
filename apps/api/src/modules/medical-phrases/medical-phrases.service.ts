@@ -9,6 +9,8 @@ import { CleanupMedicalPhrasesDto } from './dto/cleanup-medical-phrases.dto';
 import { ListMedicalPhrasesQueryDto } from './dto/list-medical-phrases-query.dto';
 import { ManageMedicalPhrasesQueryDto } from './dto/manage-medical-phrases-query.dto';
 import { UpsertMedicalPhraseDto } from './dto/upsert-medical-phrase.dto';
+import { SavePersonalMedicalPhraseDto } from './dto/save-personal-medical-phrase.dto';
+import { PersonalMedicalPhraseAction } from './dto/personal-medical-phrase-action.dto';
 
 const LEARNABLE_FIELDS = new Set([
   'visit.exam.anamnesis',
@@ -30,7 +32,12 @@ export class MedicalPhrasesService {
   ) {}
 
   async list(query: ListMedicalPhrasesQueryDto, actor: AuthEmployee) {
-    const where = buildListWhere(query, actor);
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: actor.id },
+      select: { medicalPhraseAssistantEnabled: true },
+    });
+    const assistantEnabled = employee?.medicalPhraseAssistantEnabled ?? true;
+    const where = buildListWhere(query, actor, assistantEnabled);
     const phrases = await this.prisma.medicalPhrase.findMany({
       where,
       take: 120,
@@ -38,7 +45,132 @@ export class MedicalPhrasesService {
 
     const items = phrases.sort(compareMedicalPhrases).map(serializeMedicalPhrase);
 
-    return { items };
+    return { items, assistantEnabled, suggestionThreshold: 2 };
+  }
+
+  async getPersonalSettings(actor: AuthEmployee) {
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: actor.id },
+      select: { medicalPhraseAssistantEnabled: true },
+    });
+    if (!employee) throw new NotFoundException('Сотрудник не найден');
+    return { enabled: employee.medicalPhraseAssistantEnabled, suggestionThreshold: 2 };
+  }
+
+  async updatePersonalSettings(enabled: boolean, actor: AuthEmployee) {
+    const employee = await this.prisma.employee.update({
+      where: { id: actor.id },
+      data: { medicalPhraseAssistantEnabled: enabled },
+      select: { medicalPhraseAssistantEnabled: true },
+    });
+    await this.auditService.log({
+      actorId: actor.id,
+      action: 'medicalPhrase.assistantSettings',
+      entityType: 'Employee',
+      entityId: actor.id,
+      metadata: { enabled },
+    });
+    return { enabled: employee.medicalPhraseAssistantEnabled, suggestionThreshold: 2 };
+  }
+
+  async savePersonal(dto: SavePersonalMedicalPhraseDto, actor: AuthEmployee) {
+    const field = required(dto.field, 'Укажите раздел фразы');
+    if (!LEARNABLE_FIELDS.has(field)) throw new BadRequestException('Этот раздел не поддерживает личные фразы');
+    const text = required(dto.text, 'Введите текст фразы');
+    const textHash = hashPhrase(text);
+    const scopeKey = getEmployeeScopeKey(actor.id);
+    const phrase = await this.prisma.medicalPhrase.upsert({
+      where: { field_scopeKey_textHash: { field, scopeKey, textHash } },
+      update: {
+        title: optionalText(dto.title) ?? buildTitle(text),
+        text,
+        species: optionalText(dto.species),
+        diagnosis: optionalText(dto.diagnosis),
+        isActive: true,
+        isAccepted: true,
+        isPinned: dto.isPinned ?? false,
+        dismissedAt: null,
+        lastUsedAt: new Date(),
+      },
+      create: {
+        field,
+        category: 'Личная фраза врача',
+        title: optionalText(dto.title) ?? buildTitle(text),
+        text,
+        textHash,
+        species: optionalText(dto.species),
+        diagnosis: optionalText(dto.diagnosis),
+        source: MedicalPhraseSource.EMPLOYEE,
+        scopeKey,
+        employeeId: actor.id,
+        isActive: true,
+        isAccepted: true,
+        isPinned: dto.isPinned ?? false,
+        usageCount: 1,
+        lastUsedAt: new Date(),
+      },
+      include: employeeInclude,
+    });
+    await this.auditService.log({
+      actorId: actor.id,
+      action: 'medicalPhrase.personalSave',
+      entityType: 'MedicalPhrase',
+      entityId: phrase.id,
+      metadata: { field, isPinned: phrase.isPinned },
+    });
+    return serializeMedicalPhrase(phrase);
+  }
+
+  async actOnPersonal(phraseId: string, action: PersonalMedicalPhraseAction, actor: AuthEmployee) {
+    const phrase = await this.prisma.medicalPhrase.findFirst({
+      where: { id: phraseId, source: MedicalPhraseSource.EMPLOYEE, employeeId: actor.id },
+    });
+    if (!phrase) throw new NotFoundException('Личная фраза не найдена');
+    const data: Prisma.MedicalPhraseUpdateInput =
+      action === 'ACCEPT'
+        ? { isAccepted: true, isActive: true, dismissedAt: null }
+        : action === 'REJECT'
+          ? { isAccepted: false, isPinned: false, isActive: false, dismissedAt: new Date() }
+          : action === 'PIN'
+            ? { isAccepted: true, isPinned: true, isActive: true, dismissedAt: null }
+            : { isPinned: false };
+    const updated = await this.prisma.medicalPhrase.update({
+      where: { id: phrase.id },
+      data,
+      include: employeeInclude,
+    });
+    await this.auditService.log({
+      actorId: actor.id,
+      action: `medicalPhrase.personal${action}`,
+      entityType: 'MedicalPhrase',
+      entityId: phrase.id,
+      metadata: { field: phrase.field },
+    });
+    return serializeMedicalPhrase(updated);
+  }
+
+  async removePersonal(phraseId: string, actor: AuthEmployee) {
+    const phrase = await this.prisma.medicalPhrase.findFirst({
+      where: { id: phraseId, source: MedicalPhraseSource.EMPLOYEE, employeeId: actor.id },
+    });
+    if (!phrase) throw new NotFoundException('Личная фраза не найдена');
+    await this.prisma.medicalPhrase.update({
+      where: { id: phrase.id },
+      data: {
+        isActive: false,
+        isAccepted: false,
+        isPinned: false,
+        dismissedAt: new Date(),
+      },
+    });
+    await this.auditService.log({
+      actorId: actor.id,
+      action: 'medicalPhrase.personalDelete',
+      entityType: 'MedicalPhrase',
+      entityId: phrase.id,
+      metadata: { field: phrase.field },
+    });
+    return { ok: true, mode: 'hidden' };
   }
 
   async listForManagement(query: ManageMedicalPhrasesQueryDto) {
@@ -190,15 +322,22 @@ export class MedicalPhrasesService {
       throw new NotFoundException('Быстрая фраза не найдена');
     }
 
-    return serializeMedicalPhrase(
-      await this.prisma.medicalPhrase.update({
-        where: { id: phrase.id },
-        data: {
-          usageCount: { increment: 1 },
-          lastUsedAt: new Date(),
-        },
-      }),
-    );
+    const updated = await this.prisma.medicalPhrase.update({
+      where: { id: phrase.id },
+      data: {
+        usageCount: { increment: 1 },
+        lastUsedAt: new Date(),
+      },
+      include: employeeInclude,
+    });
+    await this.auditService.log({
+      actorId: actor.id,
+      action: 'medicalPhrase.usage',
+      entityType: 'MedicalPhrase',
+      entityId: phrase.id,
+      metadata: { field: phrase.field, source: phrase.source },
+    });
+    return serializeMedicalPhrase(updated);
   }
 
   async learnFromText(fields: LearnableTextMap, actor: AuthEmployee) {
@@ -239,6 +378,8 @@ export class MedicalPhrasesService {
               scopeKey,
               employeeId: actor.id,
               isActive: true,
+              isAccepted: false,
+              isPinned: false,
               usageCount: 1,
               lastUsedAt: now,
             },
@@ -251,7 +392,11 @@ export class MedicalPhrasesService {
   }
 }
 
-function buildListWhere(query: ListMedicalPhrasesQueryDto, actor: AuthEmployee): Prisma.MedicalPhraseWhereInput {
+function buildListWhere(
+  query: ListMedicalPhrasesQueryDto,
+  actor: AuthEmployee,
+  assistantEnabled: boolean,
+): Prisma.MedicalPhraseWhereInput {
   const field = query.field?.trim();
   const species = query.species?.trim();
   const diagnosis = query.diagnosis?.trim();
@@ -259,10 +404,16 @@ function buildListWhere(query: ListMedicalPhrasesQueryDto, actor: AuthEmployee):
   const and: Prisma.MedicalPhraseWhereInput[] = [
     { isActive: true },
     {
-      OR: [
-        { source: { in: [MedicalPhraseSource.SYSTEM, MedicalPhraseSource.DIAGNOSIS_TEMPLATE] } },
-        { employeeId: actor.id },
-      ],
+      OR: assistantEnabled
+        ? [
+            { source: { in: [MedicalPhraseSource.SYSTEM, MedicalPhraseSource.DIAGNOSIS_TEMPLATE] } },
+            {
+              employeeId: actor.id,
+              dismissedAt: null,
+              OR: [{ isAccepted: true }, { usageCount: { gte: 2 } }],
+            },
+          ]
+        : [{ source: { in: [MedicalPhraseSource.SYSTEM, MedicalPhraseSource.DIAGNOSIS_TEMPLATE] } }],
     },
   ];
 
@@ -340,6 +491,8 @@ function buildManageWhere(query: ManageMedicalPhrasesQueryDto): Prisma.MedicalPh
 }
 
 function compareMedicalPhrases(left: MedicalPhrase, right: MedicalPhrase) {
+  if (left.isPinned !== right.isPinned) return left.isPinned ? -1 : 1;
+
   const leftRank = getSourceRank(left.source);
   const rightRank = getSourceRank(right.source);
 
@@ -392,6 +545,10 @@ function serializeMedicalPhrase(phrase: MedicalPhraseWithEmployee) {
     diagnosis: phrase.diagnosis,
     source: phrase.source,
     isActive: phrase.isActive,
+    isAccepted: phrase.isAccepted,
+    isPinned: phrase.isPinned,
+    isSuggested: phrase.source === MedicalPhraseSource.EMPLOYEE && !phrase.isAccepted && phrase.usageCount >= 2,
+    dismissedAt: phrase.dismissedAt,
     employee: phrase.employee
       ? {
           id: phrase.employee.id,

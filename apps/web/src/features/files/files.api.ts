@@ -1,5 +1,6 @@
-import { apiDownload, apiRequest, apiUpload } from '../../api/client';
-import { FileAttachment } from './types';
+import { apiDownload, apiRequest, apiUpload, apiUploadMany } from '../../api/client';
+import { buildQuery } from '../../shared/utils/query';
+import { FileAttachment, PatientArchiveBatchResult, PatientArchiveMetadata, PatientArchiveQuery } from './types';
 
 export function listVisitFiles(visitId: string) {
   return apiRequest<FileAttachment[]>(`/v1/files/visits/${visitId}`);
@@ -9,12 +10,20 @@ export function uploadVisitFile(visitId: string, file: File) {
   return apiUpload<FileAttachment>(`/v1/files/visits/${visitId}`, file);
 }
 
-export function listAnimalFiles(animalId: string) {
-  return apiRequest<FileAttachment[]>(`/v1/files/animals/${animalId}`);
+export function listAnimalFiles(animalId: string, query: PatientArchiveQuery = {}) {
+  return apiRequest<FileAttachment[]>(`/v1/files/animals/${animalId}${buildQuery(query)}`);
 }
 
-export function uploadAnimalFile(animalId: string, file: File) {
-  return apiUpload<FileAttachment>(`/v1/files/animals/${animalId}`, file);
+export function uploadAnimalFile(animalId: string, file: File, metadata: PatientArchiveMetadata = {}) {
+  return apiUpload<FileAttachment>(`/v1/files/animals/${animalId}`, file, metadataFields(metadata));
+}
+
+export function uploadAnimalFilesBatch(animalId: string, files: File[], metadata: PatientArchiveMetadata = {}) {
+  return apiUploadMany<PatientArchiveBatchResult>(`/v1/files/animals/${animalId}/batch`, files, metadataFields(metadata));
+}
+
+export function updateAnimalArchiveMetadata(fileId: string, metadata: PatientArchiveMetadata) {
+  return apiRequest<FileAttachment>(`/v1/files/${fileId}/archive`, { method: 'PATCH', body: metadata });
 }
 
 export function listLaboratoryFiles(orderId: string, itemId: string) {
@@ -55,4 +64,10 @@ export async function downloadAttachment(file: FileAttachment) {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+function metadataFields(metadata: PatientArchiveMetadata) {
+  return Object.fromEntries(
+    Object.entries(metadata).filter((entry): entry is [string, string] => typeof entry[1] === 'string' && Boolean(entry[1])),
+  );
 }

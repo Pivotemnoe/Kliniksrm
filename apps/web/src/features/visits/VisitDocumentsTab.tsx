@@ -31,6 +31,8 @@ import {
 } from '../documents/documents.api';
 import { DocumentVariablePalette } from '../documents/DocumentVariablePalette';
 import { VisitDocument } from '../documents/types';
+import { DocumentVisualEditor } from '../documents/DocumentVisualEditor';
+import { createDefaultDocumentLayout, documentLayoutToPlainText, DocumentLayout } from '../documents/documentLayout';
 import { createNotification } from '../notifications/notifications.api';
 import { CreateNotificationInput, NotificationChannel, notificationChannelLabels } from '../notifications/types';
 import { Visit } from './types';
@@ -58,6 +60,7 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
   const canSend = hasPermission(auth?.employee, 'notifications.manage');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingDocument, setEditingDocument] = useState<VisitDocument | null>(null);
+  const [documentLayout, setDocumentLayout] = useState<DocumentLayout | null>(null);
   const [printingDocumentId, setPrintingDocumentId] = useState<string | null>(null);
   const notificationTarget = useMemo(() => resolveOwnerNotificationTarget(visit), [visit]);
   const templatesQuery = useQuery({ queryKey: ['document-templates'], queryFn: listDocumentTemplates });
@@ -80,10 +83,14 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
   );
   const documentEditable = canManage && !documentFrozen;
   const saveMutation = useMutation({
-    mutationFn: (values: DocumentFormValues) =>
-      editingDocument
-        ? updateVisitDocument(visit.id, editingDocument.id, values)
-        : createVisitDocument(visit.id, values),
+    mutationFn: (values: DocumentFormValues) => {
+      const input = documentLayout
+        ? { ...values, body: documentLayoutToPlainText(documentLayout), layout: documentLayout }
+        : values;
+      return editingDocument
+        ? updateVisitDocument(visit.id, editingDocument.id, input)
+        : createVisitDocument(visit.id, input);
+    },
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['visits', visit.id, 'documents'] }),
@@ -97,9 +104,12 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
   });
   const finalizeMutation = useMutation({
     mutationFn: async ({ values, printWindow }: { values: DocumentFormValues; printWindow: Window }) => {
+      const input = documentLayout
+        ? { ...values, body: documentLayoutToPlainText(documentLayout), layout: documentLayout, status: 'GENERATED' as const }
+        : { ...values, status: 'GENERATED' as const };
       const document = editingDocument
-        ? await updateVisitDocument(visit.id, editingDocument.id, { ...values, status: 'GENERATED' })
-        : await createVisitDocument(visit.id, { ...values, status: 'GENERATED' });
+        ? await updateVisitDocument(visit.id, editingDocument.id, input)
+        : await createVisitDocument(visit.id, input);
       return { document, printWindow };
     },
     onSuccess: async ({ document, printWindow }) => {
@@ -314,12 +324,14 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
 
   function openCreate() {
     setEditingDocument(null);
+    setDocumentLayout(null);
     reset({ templateId: undefined, title: '', body: '' });
     setDrawerOpen(true);
   }
 
   function openEdit(document: VisitDocument) {
     setEditingDocument(document);
+    setDocumentLayout(document.layout ?? null);
     reset({
       templateId: document.templateId ?? undefined,
       title: document.title,
@@ -331,6 +343,7 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
   function closeDrawer() {
     setDrawerOpen(false);
     setEditingDocument(null);
+    setDocumentLayout(null);
     reset({ templateId: undefined, title: '', body: '' });
   }
 
@@ -546,6 +559,9 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
                     if (template && !editingDocument) {
                       setValue('title', template.title, { shouldDirty: true, shouldValidate: true });
                       setValue('body', template.body ?? '', { shouldDirty: true });
+                      setDocumentLayout(template.layout ?? null);
+                    } else if (!value && !editingDocument) {
+                      setDocumentLayout(null);
                     }
                   }}
                 />
@@ -561,34 +577,52 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
               </Form.Item>
             )}
           />
-          <Controller
-            control={control}
-            name="body"
-            render={({ field }) => (
-              <Form.Item label="Текст документа">
-                <Input.TextArea {...field} disabled={!documentEditable} rows={16} placeholder="Текст документа" />
-              </Form.Item>
-            )}
-          />
-          <div className="document-editor-grid">
-            <Card size="small" title={editingDocument ? 'Проверка' : 'Переменные шаблона'}>
-              {editingDocument ? (
-                <Typography.Text type="secondary">
-                  {documentFrozen
-                    ? 'Это сохранённая окончательная версия. Изменения шаблона на неё не повлияют.'
-                    : 'Переменные уже подставлены. Проверьте текст и исправьте его при необходимости.'}
-                </Typography.Text>
-              ) : (
-                <DocumentVariablePalette onInsert={insertVariable} />
-              )}
-            </Card>
-            <Card size="small" title="Предпросмотр">
-              <div className="document-preview">
-                <h3>{previewTitle || 'Без названия'}</h3>
-                <div>{renderVisitDocumentPreview(previewBody ?? '', visit) || 'Текст документа пока пустой'}</div>
+          {documentLayout ? (
+            <DocumentVisualEditor
+              value={documentLayout}
+              title={previewTitle || 'Без названия'}
+              disabled={!documentEditable}
+              renderText={(text) => renderVisitDocumentPreview(text, visit)}
+              onChange={(layout) => {
+                setDocumentLayout(layout);
+                setValue('body', documentLayoutToPlainText(layout), { shouldDirty: true });
+              }}
+            />
+          ) : (
+            <>
+              <Controller
+                control={control}
+                name="body"
+                render={({ field }) => (
+                  <Form.Item
+                    label="Текст документа"
+                    extra={documentEditable ? <Button size="small" onClick={() => setDocumentLayout(createDefaultDocumentLayout(field.value ?? ''))}>Перейти в визуальный A4</Button> : null}
+                  >
+                    <Input.TextArea {...field} disabled={!documentEditable} rows={16} placeholder="Текст документа" />
+                  </Form.Item>
+                )}
+              />
+              <div className="document-editor-grid">
+                <Card size="small" title={editingDocument ? 'Проверка' : 'Переменные шаблона'}>
+                  {editingDocument ? (
+                    <Typography.Text type="secondary">
+                      {documentFrozen
+                        ? 'Это сохранённая окончательная версия. Изменения шаблона на неё не повлияют.'
+                        : 'Переменные уже подставлены. Проверьте текст и исправьте его при необходимости.'}
+                    </Typography.Text>
+                  ) : (
+                    <DocumentVariablePalette onInsert={insertVariable} />
+                  )}
+                </Card>
+                <Card size="small" title="Предпросмотр">
+                  <div className="document-preview">
+                    <h3>{previewTitle || 'Без названия'}</h3>
+                    <div>{renderVisitDocumentPreview(previewBody ?? '', visit) || 'Текст документа пока пустой'}</div>
+                  </div>
+                </Card>
               </div>
-            </Card>
-          </div>
+            </>
+          )}
           {editingDocument ? (
             <Card size="small" title="История документа" style={{ marginTop: 16 }}>
               <Timeline

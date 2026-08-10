@@ -330,79 +330,80 @@ enum SessionAccessType {
 }
 
 model User {
-  id              String    @id @default(uuid())
-  email           String?   @unique
-  phone           String?   @unique @db.VarChar(32)
-  phoneNormalized String?   @db.VarChar(16)
-  passwordHash    String
-  mustChangePassword Boolean @default(false)
-  employee        Employee?
-  sessions        Session[]
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id                 String    @id @default(uuid())
+  email              String?   @unique
+  phone              String?   @unique @db.VarChar(32)
+  phoneNormalized    String?   @db.VarChar(16)
+  passwordHash       String
+  mustChangePassword Boolean   @default(false)
+  employee           Employee?
+  sessions           Session[]
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   @@index([phoneNormalized])
 }
 
 model Employee {
-  id                        String                       @id @default(uuid())
-  userId                    String?                      @unique
-  user                      User?                        @relation(fields: [userId], references: [id], onDelete: SetNull)
-  fullName                  String
-  phone                     String?                      @db.VarChar(32)
-  position                  String?
-  defaultRoute              String?
-  restrictLoginToShifts     Boolean                      @default(false)
-  status                    EmployeeStatus               @default(ACTIVE)
-  roles                     EmployeeRole[]
-  permissionOverrides       EmployeePermissionOverride[]
-  warehouseAccesses         EmployeeWarehouseAccess[]
-  shifts                    EmployeeShift[]
-  queueEntries              QueueEntry[]
-  appointments              Appointment[]
-  visits                    Visit[]
-  hospitalStays             HospitalStay[]
-  hospitalRecords           HospitalRecord[]             @relation("HospitalRecordAuthor")
-  hospitalPlans             HospitalTreatmentPlan[]      @relation("HospitalTreatmentPlanAuthor")
-  assignedTasks             Task[]                       @relation("TaskAssignee")
-  createdTasks              Task[]                       @relation("TaskCreator")
-  createdNotifications      NotificationOutbox[]         @relation("NotificationCreator")
-  createdNewsPosts          NewsPost[]                   @relation("NewsPostCreator")
-  newsReads                 NewsPostRead[]
-  staffAlertReads           StaffAlertRead[]
-  visitOverdueAlerts        VisitOverdueAlert[]          @relation("VisitOverdueAlertEmployee")
-  sentInternalMessages      InternalMessage[]            @relation("InternalMessageSender")
-  receivedInternalMessages  InternalMessage[]            @relation("InternalMessageRecipient")
-  auditLogs                 AuditLog[]                   @relation("AuditActor")
-  payments                  Payment[]
-  createdSales              Sale[]                       @relation("SaleEmployee")
-  payrollProfile            PayrollProfile?
-  payrollEntries            PayrollEntry[]
-  payrollAdjustments        PayrollAdjustment[]          @relation("PayrollAdjustmentEmployee")
-  createdPayrollPeriods     PayrollPeriod[]              @relation("PayrollPeriodCreator")
-  approvedPayrollPeriods    PayrollPeriod[]              @relation("PayrollPeriodApprover")
-  createdPayrollAdjustments PayrollAdjustment[]          @relation("PayrollAdjustmentCreator")
-  createdStockDocuments     StockDocument[]              @relation("StockDocumentCreator")
-  postedStockDocuments      StockDocument[]              @relation("StockDocumentPoster")
-  supplierPayments          SupplierPayment[]            @relation("SupplierPaymentCreator")
-  createdBusinessEntries    BusinessEntry[]              @relation("BusinessEntryCreator")
-  voidedBusinessEntries     BusinessEntry[]              @relation("BusinessEntryVoider")
-  resolvedBusinessEntries   BusinessEntry[]              @relation("BusinessEntryResolver")
-  createdBusinessCloses     BusinessDailyClose[]         @relation("BusinessDailyCloseCreator")
-  submittedBusinessCloses   BusinessDailyClose[]         @relation("BusinessDailyCloseSubmitter")
-  approvedBusinessCloses    BusinessDailyClose[]         @relation("BusinessDailyCloseApprover")
-  medicalPhrases            MedicalPhrase[]
-  dataTransferBatches       DataTransferBatch[]          @relation("DataTransferCreator")
-  createdSupportRequests    SupportRequest[]             @relation("SupportRequestCreator")
-  handledSupportRequests    SupportRequest[]             @relation("SupportRequestHandler")
-  preparedAcceptances       ServerAcceptance[]           @relation("ServerAcceptancePreparer")
-  acceptedAcceptances       ServerAcceptance[]           @relation("ServerAcceptanceAcceptor")
-  uploadedFiles             FileObject[]                 @relation("FileUploader")
-  remoteAccessInvitations   RemoteAccessInvitation[]     @relation("RemoteAccessInvitationEmployee")
-  createdRemoteInvitations  RemoteAccessInvitation[]     @relation("RemoteAccessInvitationCreator")
-  remoteAccessDevices       RemoteAccessDevice[]
-  createdAt                 DateTime                     @default(now())
-  updatedAt                 DateTime                     @updatedAt
+  id                            String                       @id @default(uuid())
+  userId                        String?                      @unique
+  user                          User?                        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  fullName                      String
+  phone                         String?                      @db.VarChar(32)
+  position                      String?
+  defaultRoute                  String?
+  medicalPhraseAssistantEnabled Boolean                      @default(true)
+  restrictLoginToShifts         Boolean                      @default(false)
+  status                        EmployeeStatus               @default(ACTIVE)
+  roles                         EmployeeRole[]
+  permissionOverrides           EmployeePermissionOverride[]
+  warehouseAccesses             EmployeeWarehouseAccess[]
+  shifts                        EmployeeShift[]
+  queueEntries                  QueueEntry[]
+  appointments                  Appointment[]
+  visits                        Visit[]
+  hospitalStays                 HospitalStay[]
+  hospitalRecords               HospitalRecord[]             @relation("HospitalRecordAuthor")
+  hospitalPlans                 HospitalTreatmentPlan[]      @relation("HospitalTreatmentPlanAuthor")
+  assignedTasks                 Task[]                       @relation("TaskAssignee")
+  createdTasks                  Task[]                       @relation("TaskCreator")
+  createdNotifications          NotificationOutbox[]         @relation("NotificationCreator")
+  createdNewsPosts              NewsPost[]                   @relation("NewsPostCreator")
+  newsReads                     NewsPostRead[]
+  staffAlertReads               StaffAlertRead[]
+  visitOverdueAlerts            VisitOverdueAlert[]          @relation("VisitOverdueAlertEmployee")
+  sentInternalMessages          InternalMessage[]            @relation("InternalMessageSender")
+  receivedInternalMessages      InternalMessage[]            @relation("InternalMessageRecipient")
+  auditLogs                     AuditLog[]                   @relation("AuditActor")
+  payments                      Payment[]
+  createdSales                  Sale[]                       @relation("SaleEmployee")
+  payrollProfile                PayrollProfile?
+  payrollEntries                PayrollEntry[]
+  payrollAdjustments            PayrollAdjustment[]          @relation("PayrollAdjustmentEmployee")
+  createdPayrollPeriods         PayrollPeriod[]              @relation("PayrollPeriodCreator")
+  approvedPayrollPeriods        PayrollPeriod[]              @relation("PayrollPeriodApprover")
+  createdPayrollAdjustments     PayrollAdjustment[]          @relation("PayrollAdjustmentCreator")
+  createdStockDocuments         StockDocument[]              @relation("StockDocumentCreator")
+  postedStockDocuments          StockDocument[]              @relation("StockDocumentPoster")
+  supplierPayments              SupplierPayment[]            @relation("SupplierPaymentCreator")
+  createdBusinessEntries        BusinessEntry[]              @relation("BusinessEntryCreator")
+  voidedBusinessEntries         BusinessEntry[]              @relation("BusinessEntryVoider")
+  resolvedBusinessEntries       BusinessEntry[]              @relation("BusinessEntryResolver")
+  createdBusinessCloses         BusinessDailyClose[]         @relation("BusinessDailyCloseCreator")
+  submittedBusinessCloses       BusinessDailyClose[]         @relation("BusinessDailyCloseSubmitter")
+  approvedBusinessCloses        BusinessDailyClose[]         @relation("BusinessDailyCloseApprover")
+  medicalPhrases                MedicalPhrase[]
+  dataTransferBatches           DataTransferBatch[]          @relation("DataTransferCreator")
+  createdSupportRequests        SupportRequest[]             @relation("SupportRequestCreator")
+  handledSupportRequests        SupportRequest[]             @relation("SupportRequestHandler")
+  preparedAcceptances           ServerAcceptance[]           @relation("ServerAcceptancePreparer")
+  acceptedAcceptances           ServerAcceptance[]           @relation("ServerAcceptanceAcceptor")
+  uploadedFiles                 FileObject[]                 @relation("FileUploader")
+  remoteAccessInvitations       RemoteAccessInvitation[]     @relation("RemoteAccessInvitationEmployee")
+  createdRemoteInvitations      RemoteAccessInvitation[]     @relation("RemoteAccessInvitationCreator")
+  remoteAccessDevices           RemoteAccessDevice[]
+  createdAt                     DateTime                     @default(now())
+  updatedAt                     DateTime                     @updatedAt
 
   @@index([fullName])
   @@index([phone])
@@ -1214,23 +1215,26 @@ model VisitRecommendation {
 }
 
 model MedicalPhrase {
-  id         String              @id @default(uuid())
-  field      String
-  category   String?
-  title      String
-  text       String
-  textHash   String
-  species    String?
-  diagnosis  String?
-  source     MedicalPhraseSource @default(SYSTEM)
-  scopeKey   String              @default("system")
-  employeeId String?
-  employee   Employee?           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  isActive   Boolean             @default(true)
-  usageCount Int                 @default(0)
-  lastUsedAt DateTime?
-  createdAt  DateTime            @default(now())
-  updatedAt  DateTime            @updatedAt
+  id          String              @id @default(uuid())
+  field       String
+  category    String?
+  title       String
+  text        String
+  textHash    String
+  species     String?
+  diagnosis   String?
+  source      MedicalPhraseSource @default(SYSTEM)
+  scopeKey    String              @default("system")
+  employeeId  String?
+  employee    Employee?           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  isActive    Boolean             @default(true)
+  isAccepted  Boolean             @default(false)
+  isPinned    Boolean             @default(false)
+  dismissedAt DateTime?
+  usageCount  Int                 @default(0)
+  lastUsedAt  DateTime?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
 
   @@unique([field, scopeKey, textHash])
   @@index([field, isActive])
@@ -1250,6 +1254,7 @@ model VisitDocument {
   templateVersion   DocumentTemplateVersion? @relation(fields: [templateVersionId], references: [id], onDelete: SetNull)
   title             String
   body              String?
+  layout            Json?
   status            DocumentStatus           @default(DRAFT)
   generatedDocument GeneratedDocument?
   events            DocumentEvent[]
@@ -1305,15 +1310,15 @@ model StaffAlertRead {
 }
 
 model VisitOverdueAlert {
-  id               String      @id @default(uuid())
-  visitId          String      @unique
-  visit            Visit       @relation(fields: [visitId], references: [id], onDelete: Restrict)
+  id               String    @id @default(uuid())
+  visitId          String    @unique
+  visit            Visit     @relation(fields: [visitId], references: [id], onDelete: Restrict)
   employeeId       String?
-  employee         Employee?   @relation("VisitOverdueAlertEmployee", fields: [employeeId], references: [id], onDelete: SetNull)
+  employee         Employee? @relation("VisitOverdueAlertEmployee", fields: [employeeId], references: [id], onDelete: SetNull)
   startedAt        DateTime
   overdueAt        DateTime
-  thresholdMinutes Int         @default(60)
-  createdAt        DateTime    @default(now())
+  thresholdMinutes Int       @default(60)
+  createdAt        DateTime  @default(now())
 
   @@index([overdueAt])
   @@index([employeeId, overdueAt])
@@ -2168,6 +2173,7 @@ model DocumentTemplate {
   category           DocumentTemplateCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   title              String
   body               String?
+  layout             Json?
   variables          Json?
   requiresSignature  Boolean                   @default(false)
   currentVersion     Int                       @default(1)
@@ -2188,6 +2194,7 @@ model DocumentTemplateVersion {
   categoryTitle      String?
   title              String
   body               String?
+  layout             Json?
   variables          Json?
   requiresSignature  Boolean             @default(false)
   createdById        String?
@@ -2295,6 +2302,10 @@ model FileObject {
   mimeType              String?
   sizeBytes             Int?
   checksumSha256        String?
+  archiveCategory       String?
+  documentDate          DateTime?
+  sourceLabel           String?
+  note                  String?
   visibility            FileVisibility       @default(PRIVATE)
   deletedAt             DateTime?
   generatedDocuments    GeneratedDocument[]
@@ -2310,6 +2321,7 @@ model FileObject {
   @@index([supplyInvoiceId])
   @@index([uploadedById])
   @@index([purpose, createdAt])
+  @@index([animalId, archiveCategory, documentDate])
   @@index([deletedAt])
 }
 

@@ -10,6 +10,10 @@ export type MedicalPhrase = {
   diagnosis: string | null;
   source: MedicalPhraseSource;
   isActive: boolean;
+  isAccepted: boolean;
+  isPinned: boolean;
+  isSuggested: boolean;
+  dismissedAt: string | null;
   employee: {
     id: string;
     fullName: string;
@@ -20,6 +24,28 @@ export type MedicalPhrase = {
   createdAt: string;
   updatedAt: string;
 };
+
+export type MedicalPhrasesListResponse = {
+  items: MedicalPhrase[];
+  assistantEnabled: boolean;
+  suggestionThreshold: number;
+};
+
+export type MedicalPhraseAssistantSettings = {
+  enabled: boolean;
+  suggestionThreshold: number;
+};
+
+export type SavePersonalMedicalPhrasePayload = {
+  field: string;
+  title?: string;
+  text: string;
+  species?: string;
+  diagnosis?: string;
+  isPinned?: boolean;
+};
+
+export type PersonalMedicalPhraseAction = 'ACCEPT' | 'REJECT' | 'PIN' | 'UNPIN';
 
 export type ListMedicalPhrasesQuery = {
   field?: string;

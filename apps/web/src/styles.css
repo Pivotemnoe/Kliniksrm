@@ -2070,6 +2070,134 @@ body {
   margin-bottom: 16px;
 }
 
+.document-visual-editor {
+  display: grid;
+  gap: 14px;
+}
+
+.document-page-settings .ant-card-body {
+  display: grid;
+  gap: 12px;
+}
+
+.document-page-toggles {
+  padding-top: 8px;
+  border-top: 1px solid #edf0f3;
+}
+
+.document-visual-workspace {
+  display: grid;
+  grid-template-columns: minmax(430px, 1fr) minmax(360px, 520px);
+  gap: 18px;
+  align-items: start;
+}
+
+.document-blocks-panel,
+.document-a4-preview-column {
+  display: grid;
+  gap: 10px;
+}
+
+.document-block-toolbar {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  padding: 8px;
+  border: 1px solid #dfe5ea;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.document-layout-block {
+  border-color: #dfe5ea;
+  cursor: pointer;
+}
+
+.document-layout-block.is-selected {
+  border-color: #1677ff;
+  box-shadow: 0 0 0 2px rgb(22 119 255 / 10%);
+}
+
+.document-a4-preview-column {
+  position: sticky;
+  top: 12px;
+  max-height: 72vh;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.document-a4-page {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-height: 720px;
+  padding: 38px 42px 48px;
+  border: 1px solid #cbd5df;
+  background: #fff;
+  box-shadow: 0 8px 24px rgb(23 50 77 / 10%);
+  color: #17202a;
+}
+
+.document-a4-page h2 {
+  margin: 8px 0 14px;
+  color: #17324d;
+}
+
+.document-a4-page > small {
+  position: absolute;
+  right: 34px;
+  bottom: 20px;
+  color: #7b8794;
+}
+
+.document-a4-clinic {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #1f7880;
+  color: #17324d;
+}
+
+.document-a4-clinic span,
+.document-a4-meta {
+  color: #66788a;
+  font-size: 11px;
+}
+
+.document-a4-page table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.document-a4-page th,
+.document-a4-page td {
+  padding: 5px;
+  border: 1px solid #9aabb8;
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.document-a4-page th {
+  background: #eef5f6;
+}
+
+.document-a4-signatures {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-top: 48px;
+}
+
+.document-a4-signatures span {
+  padding-top: 6px;
+  border-top: 1px solid #66788a;
+  color: #66788a;
+  font-size: 10px;
+}
+
 .work-area {
   min-width: 0;
   min-height: 0;
@@ -2217,6 +2345,46 @@ body {
 
 .medical-snippet-select {
   min-width: min(260px, 100%);
+}
+
+.medical-assistant-overlay .ant-popover-inner {
+  padding: 14px;
+}
+
+.medical-assistant-popover {
+  width: min(520px, calc(100vw - 48px));
+  max-height: min(680px, calc(100vh - 140px));
+  overflow-y: auto;
+}
+
+.medical-assistant-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  margin-bottom: 12px;
+}
+
+.medical-assistant-item .ant-list-item-action {
+  margin-inline-start: 10px;
+}
+
+.medical-assistant-text.ant-typography {
+  margin-bottom: 0;
+  white-space: pre-wrap;
+}
+
+.medical-assistant-pin {
+  color: #1677ff;
+}
+
+.medical-assistant-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-left: 5px;
+  border-radius: 50%;
+  background: #fa8c16;
 }
 
 .visit-exam-vitals-grid {
@@ -3485,6 +3653,15 @@ body {
 
   .document-editor-grid {
     grid-template-columns: 1fr;
+  }
+
+  .document-visual-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .document-a4-preview-column {
+    position: static;
+    max-height: none;
   }
 
   .search-input,

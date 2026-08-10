@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { DocumentStatus } from '@prisma/client';
-import { IsEnum, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
+import { IsEnum, IsObject, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
 
 export class CreateVisitDocumentDto {
   @ApiPropertyOptional()
@@ -20,6 +20,11 @@ export class CreateVisitDocumentDto {
   @IsString()
   @MaxLength(20000)
   body?: string | null;
+
+  @ApiPropertyOptional({ description: 'Визуальный макет A4, сохранённый вместе с черновиком.' })
+  @IsOptional()
+  @IsObject()
+  layout?: Record<string, unknown> | null;
 
   @ApiPropertyOptional({ enum: DocumentStatus })
   @IsOptional()

@@ -32,33 +32,35 @@ test('предпросмотр документов подставляет да�
     read('apps/web/src/features/visits/VisitDocumentsTab.tsx'),
   ]);
 
-  assert.match(templates, /renderDocumentPreview\(previewBody/);
+  assert.match(templates, /renderText=\{renderDocumentPreview\}/);
   assert.match(templates, /'owner\.fullName': 'Иванова Анна Сергеевна'/);
-  assert.match(templates, /Предпросмотр на примере/);
+  assert.match(templates, /DocumentVisualEditor/);
   assert.match(visitDocuments, /renderVisitDocumentPreview\(previewBody/);
   assert.match(visitDocuments, /'owner\.fullName': visit\.owner\.fullName/);
   assert.match(visitDocuments, /title="Предпросмотр"/);
 });
 
-test('редактор шаблона вставляет поля в позицию курсора и предлагает готовые разделы', async () => {
-  const [templates, palette, editor] = await Promise.all([
+test('визуальный редактор шаблона собирает блоки A4 и вставляет служебные поля', async () => {
+  const [templates, palette, editor, layout] = await Promise.all([
     read('apps/web/src/features/documents/DocumentTemplatesPage.tsx'),
     read('apps/web/src/features/documents/DocumentVariablePalette.tsx'),
-    read('apps/web/src/features/documents/documentTemplateEditor.ts'),
+    read('apps/web/src/features/documents/DocumentVisualEditor.tsx'),
+    read('apps/web/src/features/documents/documentLayout.ts'),
   ]);
 
-  assert.match(templates, /bodySelectionRef/);
-  assert.match(templates, /setSelectionRange\(result\.cursor, result\.cursor\)/);
-  assert.match(templates, /onBlur=\{\(event\) => \{/);
-  assert.match(templates, /onKeyUp=\{\(event\) => \{/);
-  assert.match(templates, /onInsertBlock=\{insertBlock\}/);
-  assert.match(templates, /Поставьте курсор в нужное место/);
-  assert.match(palette, /Вставить блок/);
+  assert.match(templates, /DocumentVisualEditor/);
+  assert.match(templates, /exportDocumentDocx/);
+  assert.match(editor, /Предпросмотр A4/);
+  assert.match(editor, /createTableBlock/);
+  assert.match(editor, /createPageBreakBlock/);
+  assert.match(editor, /insertVariable/);
+  assert.match(palette, /Название клиники/);
   assert.match(palette, /КЛИНИКА[\s\S]*Адрес: \{clinic\.address\}/);
   assert.match(palette, /ВЛАДЕЛЕЦ[\s\S]*ФИО: \{owner\.fullName\}/);
   assert.match(palette, /ПАЦИЕНТ[\s\S]*Кличка: \{animal\.nickname\}/);
-  assert.match(editor, /body\.slice\(0, start\)/);
-  assert.match(editor, /body\.slice\(end\)/);
+  assert.match(layout, /documentLayoutPresets/);
+  assert.match(layout, /Лист первичного приёма/);
+  assert.match(layout, /Информированное согласие/);
 });
 
 test('Документы 2.0 добавляют версии, неизменяемый снимок и журнал без удаления старых данных', async () => {
@@ -138,7 +140,7 @@ test('печатная форма документа не выводит тел�
 
   assert.doesNotMatch(pdfService, /ownerPhone|['"]Телефон['"]/);
   assert.doesNotMatch(documentsService, /ownerPhone:/);
-  assert.match(documentsService, /schemaVersion: 2/);
+  assert.match(documentsService, /schemaVersion: 3/);
   assert.match(filesService, /decodeMojibakeFileName/);
   assert.match(filesService, /Buffer\.from\(value, 'latin1'\)\.toString\('utf8'\)/);
   assert.match(filesService, /normalizedOriginalName\(file\.originalName\)/);
@@ -159,20 +161,25 @@ test('отправка сформированного документа свя�
   assert.match(ui, /Документ готов и сохранён в истории/);
 });
 
-test('файл загружается прямо в общий архив пациента без фиктивного приёма', async () => {
-  const [schema, controller, service, ui] = await Promise.all([
+test('файлы загружаются пакетно прямо в общий архив пациента без фиктивного приёма', async () => {
+  const [schema, controller, service, animalCard, archive] = await Promise.all([
     read('prisma/schema.prisma'),
     read('apps/api/src/modules/files/files.controller.ts'),
     read('apps/api/src/modules/files/files.service.ts'),
     read('apps/web/src/features/animals/AnimalCardPage.tsx'),
+    read('apps/web/src/features/files/PatientDocumentArchive.tsx'),
   ]);
 
   assert.match(schema, /animalId\s+String\?/);
   assert.match(controller, /@Post\('animals\/:animalId'\)/);
+  assert.match(controller, /@Post\('animals\/:animalId\/batch'\)/);
   assert.match(service, /OR: \[\{ animalId \}, \{ visit: \{ animalId \} \}\]/);
   assert.match(service, /kind: 'animal'/);
-  assert.match(ui, /label: 'Архив документов'/);
-  assert.match(ui, /uploadAnimalFile\(animal\.id, file\)/);
+  assert.match(service, /checksumSha256/);
+  assert.match(animalCard, /label: 'Архив документов'/);
+  assert.match(animalCard, /PatientDocumentArchive/);
+  assert.match(archive, /Пакетная загрузка до 20 файлов/);
+  assert.match(archive, /uploadAnimalFilesBatch/);
 });
 
 test('переносной комплект добавляет данные только отдельным ручным импортом', async () => {

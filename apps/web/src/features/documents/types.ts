@@ -1,3 +1,5 @@
+import type { DocumentLayout } from './documentLayout';
+
 export type DocumentStatus = 'DRAFT' | 'GENERATED' | 'SIGNED' | 'CANCELLED';
 
 export type DocumentTemplateCategory = {
@@ -13,6 +15,7 @@ export type DocumentTemplate = {
   category?: DocumentTemplateCategory | null;
   title: string;
   body: string | null;
+  layout: DocumentLayout | null;
   variables: Record<string, unknown> | null;
   requiresSignature: boolean;
   currentVersion: number;
@@ -22,6 +25,7 @@ export type DocumentTemplate = {
     publishedAt: string;
     createdByName: string | null;
     requiresSignature: boolean;
+    layout?: DocumentLayout | null;
   }>;
   createdAt: string;
   updatedAt: string;
@@ -44,6 +48,7 @@ export type VisitDocument = {
   } | null;
   title: string;
   body: string | null;
+  layout: DocumentLayout | null;
   status: DocumentStatus;
   generatedDocument?: {
     id: string;
@@ -63,6 +68,7 @@ export type VisitDocument = {
       ownerName: string;
       animalName: string;
       animalDescription: string;
+      layout?: DocumentLayout | null;
     } | null;
     contentSha256: string | null;
     pdfSha256: string | null;
@@ -102,6 +108,7 @@ export type CreateVisitDocumentInput = {
   templateId?: string;
   title?: string;
   body?: string;
+  layout?: DocumentLayout | null;
   status?: DocumentStatus;
 };
 
@@ -111,6 +118,7 @@ export type CreateDocumentTemplateInput = {
   title: string;
   categoryTitle?: string;
   body?: string;
+  layout?: DocumentLayout | null;
   variables?: Record<string, unknown>;
   requiresSignature?: boolean;
 };

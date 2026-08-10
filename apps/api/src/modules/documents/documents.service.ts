@@ -11,6 +11,12 @@ import { AuditService } from '../audit/audit.service';
 import { ObjectStorageService } from '../files/object-storage.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DocumentPdfLogo, DocumentPdfService, DocumentPdfSnapshot } from './document-pdf.service';
+import {
+  documentLayoutToPlainText,
+  normalizeDocumentLayout,
+  renderDocumentLayout,
+  tryNormalizeDocumentLayout,
+} from './document-layout';
 import { CreateDocumentTemplateDto } from './dto/create-document-template.dto';
 import { CreateVisitDocumentDto } from './dto/create-visit-document.dto';
 import { UpdateDocumentTemplateDto } from './dto/update-document-template.dto';
@@ -44,6 +50,8 @@ export class DocumentsService {
     const variables =
       dto.variables === undefined ? undefined : dto.variables === null ? Prisma.JsonNull : (dto.variables as Prisma.InputJsonObject);
     const actor = await this.getActor(actorId);
+    const layout = dto.layout === undefined ? undefined : normalizeDocumentLayout(dto.layout);
+    const body = emptyToNull(dto.body) ?? (layout ? documentLayoutToPlainText(layout) : null);
 
     const template = await this.prisma.$transaction(async (tx) => {
       const category = categoryTitle
@@ -57,9 +65,12 @@ export class DocumentsService {
         data: {
           ...(category ? { category: { connect: { id: category.id } } } : {}),
           title: dto.title.trim(),
-          body: emptyToNull(dto.body),
+          body,
           requiresSignature: dto.requiresSignature ?? false,
           ...(variables !== undefined ? { variables } : {}),
+          ...(layout !== undefined
+            ? { layout: layout === null ? Prisma.JsonNull : (layout as Prisma.InputJsonObject) }
+            : {}),
         },
       });
 
@@ -70,6 +81,7 @@ export class DocumentsService {
           categoryTitle,
           title: created.title,
           body: created.body,
+          ...(created.layout !== null ? { layout: created.layout as Prisma.InputJsonValue } : {}),
           requiresSignature: created.requiresSignature,
           ...(created.variables !== null ? { variables: created.variables as Prisma.InputJsonValue } : {}),
           createdById: actor.id,
@@ -99,6 +111,7 @@ export class DocumentsService {
     const variables =
       dto.variables === undefined ? undefined : dto.variables === null ? Prisma.JsonNull : (dto.variables as Prisma.InputJsonObject);
     const actor = await this.getActor(actorId);
+    const layout = dto.layout === undefined ? undefined : normalizeDocumentLayout(dto.layout);
 
     const template = await this.prisma.$transaction(async (tx) => {
       const current = await tx.documentTemplate.findUnique({
@@ -124,10 +137,17 @@ export class DocumentsService {
         where: { id: templateId },
         data: {
           ...(dto.title !== undefined ? { title: dto.title.trim() } : {}),
-          ...(dto.body !== undefined ? { body: emptyToNull(dto.body) } : {}),
+          ...(dto.body !== undefined
+            ? { body: emptyToNull(dto.body) }
+            : layout !== undefined
+              ? { body: layout ? emptyToNull(documentLayoutToPlainText(layout)) : current.body }
+              : {}),
           ...(dto.requiresSignature !== undefined ? { requiresSignature: dto.requiresSignature } : {}),
           ...(category !== undefined ? { categoryId: category?.id ?? null } : {}),
           ...(variables !== undefined ? { variables } : {}),
+          ...(layout !== undefined
+            ? { layout: layout === null ? Prisma.JsonNull : (layout as Prisma.InputJsonObject) }
+            : {}),
           currentVersion: { increment: 1 },
         },
         include: { category: true },
@@ -140,6 +160,7 @@ export class DocumentsService {
           categoryTitle: updated.category?.title ?? null,
           title: updated.title,
           body: updated.body,
+          ...(updated.layout !== null ? { layout: updated.layout as Prisma.InputJsonValue } : {}),
           requiresSignature: updated.requiresSignature,
           ...(updated.variables !== null ? { variables: updated.variables as Prisma.InputJsonValue } : {}),
           createdById: actor.id,
@@ -178,8 +199,14 @@ export class DocumentsService {
     const visit = await this.getVisitTemplateContext(visitId);
     const template = dto.templateId ? await this.getTemplate(dto.templateId) : null;
     const templateVersion = template?.versions[0] ?? null;
+    const rawLayout = dto.layout !== undefined ? dto.layout : templateVersion?.layout ?? template?.layout ?? null;
+    const layout = normalizeDocumentLayout(rawLayout);
+    const renderedLayout = renderDocumentLayout(layout, (value) => renderTemplateText(value, visit) ?? '');
     const title = renderTemplateText(emptyToNull(dto.title) ?? templateVersion?.title ?? template?.title, visit);
-    const rawBody = dto.body !== undefined ? emptyToNull(dto.body) : templateVersion?.body ?? template?.body ?? null;
+    const rawBody =
+      dto.body !== undefined
+        ? emptyToNull(dto.body)
+        : templateVersion?.body ?? template?.body ?? (layout ? documentLayoutToPlainText(layout) : null);
 
     if (!title) {
       throw new BadRequestException('Укажите название документа или выберите шаблон');
@@ -195,6 +222,7 @@ export class DocumentsService {
           templateVersionId: templateVersion?.id,
           title,
           body: renderTemplateText(rawBody, visit),
+          ...(renderedLayout ? { layout: renderedLayout as Prisma.InputJsonObject } : {}),
           status: DocumentStatus.DRAFT,
           events: {
             create: {
@@ -237,7 +265,8 @@ export class DocumentsService {
       throw new NotFoundException('Документ приёма не найден');
     }
 
-    const changesContent = dto.templateId !== undefined || dto.title !== undefined || dto.body !== undefined;
+    const changesContent =
+      dto.templateId !== undefined || dto.title !== undefined || dto.body !== undefined || dto.layout !== undefined;
     const frozen = current.status !== DocumentStatus.DRAFT || Boolean(current.generatedDocument);
     if (frozen && changesContent) {
       throw new BadRequestException(
@@ -251,6 +280,7 @@ export class DocumentsService {
       throw new BadRequestException('Название документа не может быть пустым');
     }
     const actor = await this.getActor(actorId);
+    const visit = changesContent ? await this.getVisitTemplateContext(visitId) : null;
 
     const document = await this.prisma.$transaction(async (tx) => {
       let statusBeforeTransition = current.status;
@@ -262,8 +292,24 @@ export class DocumentsService {
           data.templateId = template?.id ?? null;
           data.templateVersionId = templateVersion?.id ?? null;
         }
-        if (title) data.title = title;
-        if (dto.body !== undefined) data.body = emptyToNull(dto.body);
+        if (title) data.title = visit ? (renderTemplateText(title, visit) ?? title) : title;
+        const rawLayout =
+          dto.layout !== undefined
+            ? dto.layout
+            : dto.templateId !== undefined
+              ? templateVersion?.layout ?? template?.layout ?? null
+              : undefined;
+        if (rawLayout !== undefined) {
+          const normalizedLayout = normalizeDocumentLayout(rawLayout);
+          const renderedLayout = visit
+            ? renderDocumentLayout(normalizedLayout, (value) => renderTemplateText(value, visit) ?? '')
+            : normalizedLayout;
+          data.layout = renderedLayout ? (renderedLayout as Prisma.InputJsonObject) : Prisma.JsonNull;
+          if (dto.body === undefined && normalizedLayout) {
+            data.body = emptyToNull(documentLayoutToPlainText(renderedLayout));
+          }
+        }
+        if (dto.body !== undefined) data.body = visit ? renderTemplateText(emptyToNull(dto.body), visit) : emptyToNull(dto.body);
         const updated = await tx.visitDocument.update({
           where: { id: documentId },
           data,
@@ -598,6 +644,7 @@ export class DocumentsService {
         templateVersionId: true,
         title: true,
         body: true,
+        layout: true,
         generatedDocument: { select: { id: true, generatedAt: true, generatedById: true, generatedByName: true } },
         visit: {
           select: {
@@ -688,11 +735,12 @@ export class DocumentsService {
       ]
         .filter(Boolean)
         .join(', '),
+      layout: tryNormalizeDocumentLayout(document.layout),
     };
     const clinicLogo = await this.loadPdfLogo(organization?.logoStorageKey, organization?.logoMimeType);
     const clinicLogoSha256 = clinicLogo ? createHash('sha256').update(clinicLogo.data).digest('hex') : null;
     const snapshot = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       visitDocumentId: document.id,
       visitId: document.visitId,
       templateId: document.templateId,
@@ -780,6 +828,7 @@ const visitDocumentInclude = {
       version: true,
       categoryTitle: true,
       title: true,
+      layout: true,
       requiresSignature: true,
       publishedAt: true,
       createdByName: true,
@@ -826,7 +875,7 @@ const templateInclude = {
   versions: {
     orderBy: { version: 'desc' },
     take: 1,
-    select: { id: true, version: true, publishedAt: true, createdByName: true, requiresSignature: true },
+    select: { id: true, version: true, publishedAt: true, createdByName: true, requiresSignature: true, layout: true },
   },
 } satisfies Prisma.DocumentTemplateInclude;
 

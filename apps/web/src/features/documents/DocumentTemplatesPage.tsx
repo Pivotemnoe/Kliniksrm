@@ -3,6 +3,7 @@ import {
   DeleteOutlined,
   EditOutlined,
   FileTextOutlined,
+  FileWordOutlined,
   MessageOutlined,
   PlusOutlined,
   PrinterOutlined,
@@ -12,8 +13,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Alert, Button, Card, Checkbox, Form, Input, Modal, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography } from 'antd';
 import { ColumnsType } from 'antd/es/table';
-import type { TextAreaRef } from 'antd/es/input/TextArea';
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
@@ -33,8 +33,9 @@ import { MedicalPhrase, MedicalPhraseSource, UpsertMedicalPhrasePayload } from '
 import { listNotificationTemplates, upsertNotificationTemplate } from '../notifications/notifications.api';
 import { notificationChannelLabels, NotificationTemplate, UpsertNotificationTemplateInput } from '../notifications/types';
 import { createDocumentTemplate, listDocumentTemplates, updateDocumentTemplate } from './documents.api';
-import { DocumentVariablePalette } from './DocumentVariablePalette';
-import { insertDocumentTemplateContent } from './documentTemplateEditor';
+import { DocumentVisualEditor } from './DocumentVisualEditor';
+import { createDefaultDocumentLayout, documentLayoutToPlainText, DocumentLayout } from './documentLayout';
+import { exportDocumentDocx } from './documentDocx';
 import { DocumentTemplate } from './types';
 
 const documentTemplateSchema = z.object({
@@ -506,17 +507,17 @@ function DocumentTemplatesPanel({ canManage }: { canManage: boolean }) {
   const templatesQuery = useQuery({ queryKey: ['document-templates'], queryFn: listDocumentTemplates });
   const [modalOpen, setModalOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<DocumentTemplate | null>(null);
-  const bodyEditorRef = useRef<TextAreaRef | null>(null);
-  const bodySelectionRef = useRef({ start: 0, end: 0 });
-  const { control, getValues, handleSubmit, reset, setValue, watch } = useForm<DocumentTemplateFormValues>({
+  const [visualLayout, setVisualLayout] = useState<DocumentLayout>(() => createDefaultDocumentLayout());
+  const { control, getValues, handleSubmit, reset, watch } = useForm<DocumentTemplateFormValues>({
     resolver: zodResolver(documentTemplateSchema),
     defaultValues: { title: '', categoryTitle: '', body: '', requiresSignature: false },
   });
   const previewTitle = watch('title');
-  const previewBody = watch('body');
   const saveMutation = useMutation({
-    mutationFn: (values: DocumentTemplateFormValues) =>
-      editingTemplate ? updateDocumentTemplate(editingTemplate.id, values) : createDocumentTemplate(values),
+    mutationFn: (values: DocumentTemplateFormValues) => {
+      const input = { ...values, body: documentLayoutToPlainText(visualLayout), layout: visualLayout };
+      return editingTemplate ? updateDocumentTemplate(editingTemplate.id, input) : createDocumentTemplate(input);
+    },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['document-templates'] });
       message.success(editingTemplate ? 'Шаблон обновлён' : 'Шаблон создан');
@@ -560,11 +561,18 @@ function DocumentTemplatesPanel({ canManage }: { canManage: boolean }) {
       {
         title: '',
         key: 'actions',
-        width: 230,
+        width: 340,
         render: (_, record) => (
           <Space wrap>
             <Button size="small" icon={<PrinterOutlined />} onClick={() => printTemplate(record.title, renderDocumentPreview(record.body ?? ''), record.category?.title)}>
               Печать
+            </Button>
+            <Button
+              size="small"
+              icon={<FileWordOutlined />}
+              onClick={() => exportDocumentDocx({ title: record.title, body: record.body, layout: record.layout, renderText: renderDocumentPreview })}
+            >
+              DOCX
             </Button>
             {canManage ? (
               <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(record)}>
@@ -581,7 +589,7 @@ function DocumentTemplatesPanel({ canManage }: { canManage: boolean }) {
   function openCreate() {
     setEditingTemplate(null);
     reset({ title: '', categoryTitle: '', body: '', requiresSignature: false });
-    bodySelectionRef.current = { start: 0, end: 0 };
+    setVisualLayout(createDefaultDocumentLayout());
     setModalOpen(true);
   }
 
@@ -593,8 +601,7 @@ function DocumentTemplatesPanel({ canManage }: { canManage: boolean }) {
       body: template.body ?? '',
       requiresSignature: template.requiresSignature,
     });
-    const bodyLength = template.body?.length ?? 0;
-    bodySelectionRef.current = { start: bodyLength, end: bodyLength };
+    setVisualLayout(template.layout ?? createDefaultDocumentLayout(template.body ?? ''));
     setModalOpen(true);
   }
 
@@ -602,28 +609,7 @@ function DocumentTemplatesPanel({ canManage }: { canManage: boolean }) {
     setModalOpen(false);
     setEditingTemplate(null);
     reset({ title: '', categoryTitle: '', body: '', requiresSignature: false });
-    bodySelectionRef.current = { start: 0, end: 0 };
-  }
-
-  function insertVariable(variable: string) {
-    insertBodyContent(`{${variable}}`, 'inline');
-  }
-
-  function insertBlock(block: string) {
-    insertBodyContent(block, 'block');
-  }
-
-  function insertBodyContent(content: string, kind: 'inline' | 'block') {
-    const result = insertDocumentTemplateContent(getValues('body') ?? '', content, bodySelectionRef.current, kind);
-    setValue('body', result.value, { shouldDirty: true, shouldValidate: true });
-    bodySelectionRef.current = { start: result.cursor, end: result.cursor };
-
-    window.requestAnimationFrame(() => {
-      const textarea = bodyEditorRef.current?.resizableTextArea?.textArea;
-      if (!textarea) return;
-      textarea.focus();
-      textarea.setSelectionRange(result.cursor, result.cursor);
-    });
+    setVisualLayout(createDefaultDocumentLayout());
   }
 
   return (
@@ -658,12 +644,15 @@ function DocumentTemplatesPanel({ canManage }: { canManage: boolean }) {
         title={editingTemplate ? 'Редактирование документа' : 'Новый документ'}
         open={modalOpen}
         onCancel={closeModal}
-        width={1040}
+        width={1440}
         destroyOnHidden
         footer={
           <Space>
-            <Button icon={<PrinterOutlined />} onClick={() => printTemplate(previewTitle || 'Без названия', renderDocumentPreview(previewBody ?? ''), getValues('categoryTitle'))}>
+            <Button icon={<PrinterOutlined />} onClick={() => printTemplate(previewTitle || 'Без названия', renderDocumentPreview(documentLayoutToPlainText(visualLayout)), getValues('categoryTitle'))}>
               Печать образца
+            </Button>
+            <Button icon={<FileWordOutlined />} onClick={() => exportDocumentDocx({ title: previewTitle || 'Без названия', layout: visualLayout, renderText: renderDocumentPreview })}>
+              Скачать DOCX
             </Button>
             <Button onClick={closeModal}>Отмена</Button>
             <Button type="primary" loading={saveMutation.isPending} onClick={handleSubmit((values) => saveMutation.mutate(values))}>
@@ -716,74 +705,12 @@ function DocumentTemplatesPanel({ canManage }: { canManage: boolean }) {
               </Form.Item>
             )}
           />
-          <Controller
-            control={control}
-            name="body"
-            render={({ field, fieldState }) => (
-              <Form.Item
-                label="Текст документа"
-                validateStatus={fieldState.error ? 'error' : undefined}
-                help={fieldState.error?.message}
-                extra="Поставьте курсор в нужное место, затем выберите отдельное поле или готовый блок. Выделенный текст будет заменён."
-              >
-                <Input.TextArea
-                  {...field}
-                  ref={(instance) => {
-                    bodyEditorRef.current = instance;
-                    field.ref(instance?.resizableTextArea?.textArea ?? null);
-                  }}
-                  rows={16}
-                  showCount
-                  maxLength={20000}
-                  placeholder="Напишите основной текст документа и вставьте нужные данные в выбранные места"
-                  onChange={(event) => {
-                    field.onChange(event);
-                    bodySelectionRef.current = {
-                      start: event.currentTarget.selectionStart,
-                      end: event.currentTarget.selectionEnd,
-                    };
-                  }}
-                  onSelect={(event) => {
-                    bodySelectionRef.current = {
-                      start: event.currentTarget.selectionStart,
-                      end: event.currentTarget.selectionEnd,
-                    };
-                  }}
-                  onClick={(event) => {
-                    bodySelectionRef.current = {
-                      start: event.currentTarget.selectionStart,
-                      end: event.currentTarget.selectionEnd,
-                    };
-                  }}
-                  onKeyUp={(event) => {
-                    bodySelectionRef.current = {
-                      start: event.currentTarget.selectionStart,
-                      end: event.currentTarget.selectionEnd,
-                    };
-                  }}
-                  onBlur={(event) => {
-                    field.onBlur();
-                    bodySelectionRef.current = {
-                      start: event.currentTarget.selectionStart,
-                      end: event.currentTarget.selectionEnd,
-                    };
-                  }}
-                />
-              </Form.Item>
-            )}
+          <DocumentVisualEditor
+            value={visualLayout}
+            title={previewTitle}
+            renderText={renderDocumentPreview}
+            onChange={setVisualLayout}
           />
-          <div className="document-editor-grid">
-            <Card size="small" title="Переменные">
-              <DocumentVariablePalette onInsert={insertVariable} onInsertBlock={insertBlock} />
-            </Card>
-            <Card size="small" title="Предпросмотр на примере">
-              <div className="document-preview">
-                <h3>{previewTitle || 'Без названия'}</h3>
-                <div>{renderDocumentPreview(previewBody ?? '') || 'Текст шаблона пока пустой'}</div>
-              </div>
-              <Typography.Text type="secondary">В карточке приёма примерные данные заменятся на данные выбранного владельца, пациента и врача.</Typography.Text>
-            </Card>
-          </div>
         </Form>
       </Modal>
     </>
