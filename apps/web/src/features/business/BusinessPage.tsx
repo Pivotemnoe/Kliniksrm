@@ -1,4 +1,4 @@
-import { CheckOutlined, DownloadOutlined, PlusOutlined, PrinterOutlined, StopOutlined } from '@ant-design/icons';
+import { CheckOutlined, DownloadOutlined, EditOutlined, PlusOutlined, PrinterOutlined, SettingOutlined, StopOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, App, Button, Card, DatePicker, Descriptions, Input, Select, Space, Statistic, Table, Tabs, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
@@ -12,6 +12,8 @@ import { ProgressiveTable } from '../../shared/ui/InfiniteTable';
 import { formatDate, formatDateTime } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
 import { BusinessEntryModal } from './BusinessEntryModal';
+import { BusinessEntryCorrectionModal } from './BusinessEntryCorrectionModal';
+import { BusinessCategoriesModal } from './BusinessCategoriesModal';
 import { getBusinessResources, getBusinessSummary, listBusinessEntries, resolveBusinessEntry, voidBusinessEntry } from './business.api';
 import { BusinessDailyClose, BusinessEntry, BusinessCategoryType, BusinessSummary } from './types';
 
@@ -25,6 +27,8 @@ export function BusinessPage() {
   const [range, setRange] = useState<[Dayjs, Dayjs]>([dayjs().startOf('month'), dayjs()]);
   const [officeId, setOfficeId] = useState<string>();
   const [entryType, setEntryType] = useState<BusinessCategoryType | null>(null);
+  const [editingEntry, setEditingEntry] = useState<BusinessEntry | null>(null);
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('profit');
   const query = { from: range[0].format('YYYY-MM-DD'), to: range[1].format('YYYY-MM-DD'), officeId };
   const resourcesQuery = useQuery({ queryKey: ['business', 'resources'], queryFn: getBusinessResources });
@@ -43,12 +47,12 @@ export function BusinessPage() {
   function askResolve(entry: BusinessEntry) {
     let reason = '';
     modal.confirm({
-      title: 'Подтвердить разбор операции?',
-      content: <><Typography.Paragraph>{entry.category.title} · {formatMoney(entry.amount)}</Typography.Paragraph><Input.TextArea rows={3} placeholder="Например: счёт создан и оплата связана" onChange={(event) => { reason = event.target.value; }} /></>,
-      okText: 'Отметить проверенной', cancelText: 'Отмена',
+      title: 'Утвердить операцию?',
+      content: <><Typography.Paragraph>{entry.category.title} · {formatMoney(entry.amount)}</Typography.Paragraph><Input.TextArea rows={3} placeholder="Комментарий директора" onChange={(event) => { reason = event.target.value; }} /></>,
+      okText: 'Утвердить', cancelText: 'Отмена',
       onOk: async () => {
-        if (reason.trim().length < 2) { message.error('Укажите результат проверки'); return Promise.reject(); }
-        await resolveBusinessEntry(entry.id, reason); await refresh(); message.success('Операция отмечена проверенной');
+        if (reason.trim().length < 2) { message.error('Укажите комментарий к утверждению'); return Promise.reject(); }
+        await resolveBusinessEntry(entry.id, reason); await refresh(); message.success('Операция утверждена директором');
       },
     });
   }
@@ -69,10 +73,10 @@ export function BusinessPage() {
   const operationColumns = useMemo<ColumnsType<BusinessEntry>>(() => [
     { title: 'Дата', dataIndex: 'occurredAt', key: 'occurredAt', render: formatDateTime },
     { title: 'Статья', key: 'category', render: (_, row) => <><div>{row.category.title}</div><Typography.Text type="secondary">{row.office?.name ?? 'Вся организация'}</Typography.Text></> },
-    { title: 'Комментарий', key: 'comment', render: (_, row) => row.comment || row.counterparty || '—' },
+    { title: 'Описание', key: 'comment', render: (_, row) => <><div>{row.comment || row.category.title}</div>{row.counterparty ? <Typography.Text type="secondary" style={{ display: 'block' }}>Получатель / источник: {row.counterparty}</Typography.Text> : null}{row.documentNumber ? <Typography.Text type="secondary" style={{ display: 'block' }}>Документ: {row.documentNumber}</Typography.Text> : null}{row.correctionOfId ? <Tag color="blue">Исправление</Tag> : null}{row.voidReason ? <Typography.Text type="secondary" style={{ display: 'block' }}>Причина отмены: {row.voidReason}</Typography.Text> : null}</> },
     { title: 'Сумма', dataIndex: 'amount', key: 'amount', align: 'right', render: (value, row) => <Typography.Text type={row.type === 'INCOME' ? 'success' : undefined}>{row.type === 'INCOME' ? '+' : '−'}{formatMoney(value)}</Typography.Text> },
     { title: 'Статус', key: 'status', render: (_, row) => row.status === 'VOIDED' ? <Tag>Отменена</Tag> : row.requiresResolution ? <Tag color="orange">Нужно проверить</Tag> : <Tag color="green">Учтена</Tag> },
-    ...(canManage ? [{ title: '', key: 'action', width: 230, render: (_: unknown, row: BusinessEntry) => row.status === 'ACTIVE' ? <Space>{row.requiresResolution ? <Button size="small" icon={<CheckOutlined />} onClick={() => askResolve(row)}>Проверено</Button> : null}<Button size="small" danger icon={<StopOutlined />} onClick={() => askVoid(row)}>Отменить</Button></Space> : null }] : []),
+    ...(canManage ? [{ title: 'Действия', key: 'action', width: 300, render: (_: unknown, row: BusinessEntry) => row.status === 'ACTIVE' ? <Space wrap>{row.requiresResolution ? <Button size="small" icon={<CheckOutlined />} onClick={() => askResolve(row)}>Утвердить</Button> : null}<Button size="small" icon={<EditOutlined />} onClick={() => setEditingEntry(row)}>Исправить</Button><Button size="small" danger icon={<StopOutlined />} onClick={() => askVoid(row)}>Отменить</Button></Space> : null }] : []),
   ], [canManage]);
 
   return (
@@ -88,20 +92,22 @@ export function BusinessPage() {
           <Card><Statistic title="Долги клиентов" value={summary.balances.debtorsAmount} precision={2} suffix="₽" /></Card>
           <Card><Statistic title="Долг поставщикам" value={summary.balances.supplierPayable} precision={2} suffix="₽" /></Card>
         </div>
-        {summary.control.unresolvedEntries || summary.control.submittedDays ? <Alert type="warning" showIcon message="Есть операции, требующие внимания" description={`Непроверенная выручка: ${summary.control.unresolvedEntries}. Закрытий дня на проверке: ${summary.control.submittedDays}. Неучтённая выручка автоматически подтверждается директором вместе с закрытием дня.`} action={summary.control.unresolvedEntries ? <Button size="small" onClick={() => setActiveTab('operations')}>Открыть операции</Button> : undefined} /> : null}
+        {summary.control.unresolvedEntries || summary.control.submittedDays ? <Alert type="warning" showIcon message="Есть операции, требующие внимания" description={`Операций на утверждении: ${summary.control.unresolvedEntries}. Закрытий дня на проверке: ${summary.control.submittedDays}. Операции, внесённые администратором, подтверждаются директором отдельно или вместе с закрытием дня.`} action={summary.control.unresolvedEntries ? <Button size="small" onClick={() => setActiveTab('operations')}>Открыть операции</Button> : undefined} /> : null}
         <div className="list-panel">
           <Tabs activeKey={activeTab} onChange={setActiveTab} items={[
             { key: 'profit', label: 'Прибыль', children: <ProfitTab summary={summary} /> },
             { key: 'cash', label: 'Деньги', children: <CashTab summary={summary} /> },
             { key: 'daily', label: 'По дням', children: <DailyTab summary={summary} /> },
             { key: 'categories', label: 'Статьи', children: <CategoriesTab summary={summary} /> },
-            { key: 'operations', label: `Операции · ${entriesQuery.data?.length ?? 0}`, children: <><div className="list-panel-header"><Typography.Text type="secondary">Внесённые вручную доходы и расходы. Неучтённая выручка подтверждается автоматически при утверждении закрытия дня; до этого директор может проверить её здесь кнопкой «Проверено». Ошибочную операцию можно только отменить с указанием причины.</Typography.Text>{canManage ? <Space><Button icon={<PlusOutlined />} onClick={() => setEntryType('INCOME')}>Доход</Button><Button icon={<PlusOutlined />} onClick={() => setEntryType('EXPENSE')}>Расход</Button></Space> : null}</div><ProgressiveTable rowKey="id" columns={operationColumns} dataSource={entriesQuery.data ?? []} loading={entriesQuery.isLoading} scroll={{ x: 960 }} locale={{ emptyText: 'Ручных операций за период нет' }} /></> },
+            { key: 'operations', label: `Операции · ${entriesQuery.data?.length ?? 0}`, children: <><div className="list-panel-header"><Typography.Text type="secondary">Внесённые вручную доходы и расходы. Статья обязательна. Ошибочную запись можно исправить или отменить: исходная операция и причина сохраняются в аудите.</Typography.Text>{canManage ? <Space wrap><Button icon={<SettingOutlined />} onClick={() => setCategoriesOpen(true)}>Статьи</Button><Button icon={<PlusOutlined />} onClick={() => setEntryType('INCOME')}>Доход</Button><Button icon={<PlusOutlined />} onClick={() => setEntryType('EXPENSE')}>Расход</Button></Space> : null}</div><ProgressiveTable rowKey="id" columns={operationColumns} dataSource={entriesQuery.data ?? []} loading={entriesQuery.isLoading} scroll={{ x: 1080 }} locale={{ emptyText: 'Ручных операций за период нет' }} /></> },
             { key: 'control', label: 'Контроль', children: <ControlTab summary={summary} /> },
           ]} />
         </div>
         <Alert type="info" showIcon message="Это управленческая отчётность" description={summary.current.note} />
       </> : null}
       <BusinessEntryModal type={entryType} resources={resourcesQuery.data} officeId={officeId ?? resourcesQuery.data?.offices[0]?.id} defaultDate={dayjs().toISOString()} onClose={() => setEntryType(null)} onSaved={refresh} />
+      <BusinessEntryCorrectionModal entry={editingEntry} resources={resourcesQuery.data} onClose={() => setEditingEntry(null)} onSaved={refresh} />
+      <BusinessCategoriesModal open={categoriesOpen} onClose={() => setCategoriesOpen(false)} onSaved={async () => { await queryClient.invalidateQueries({ queryKey: ['business', 'resources'] }); await refresh(); }} />
     </div>
   );
 }
@@ -117,8 +123,9 @@ function ProfitTab({ summary }: { summary: BusinessSummary }) {
     { key: 'revenue', label: 'Выручка', children: formatMoney(current.accruedRevenue) },
     { key: 'cogs', label: 'Себестоимость использованных товаров', children: `− ${formatMoney(current.costOfGoods)}` },
     { key: 'gross', label: 'Валовая прибыль', children: <strong>{formatMoney(current.grossProfit)}</strong> },
-    { key: 'payroll', label: 'Начисленная зарплата', children: `− ${formatMoney(current.payrollExpense)}` },
-    { key: 'opex', label: 'Операционные расходы', children: `− ${formatMoney(current.operatingExpenses)}` },
+    { key: 'payroll', label: 'Начислено в разделе «Зарплата»', children: `− ${formatMoney(current.payrollExpense)}` },
+    { key: 'dailySalary', label: 'Фактически выдано через закрытие дня', children: `− ${formatMoney(current.dailySalaryExpense)}` },
+    { key: 'opex', label: 'Остальные операционные расходы', children: `− ${formatMoney(current.operatingExpenses)}` },
     { key: 'profit', label: 'Операционная прибыль', children: <Typography.Text strong type={current.operatingProfit >= 0 ? 'success' : 'danger'}>{formatMoney(current.operatingProfit)}</Typography.Text> },
   ]} /></Card><Card title="Показатели"><Descriptions column={1} size="small" bordered items={[
     { key: 'bills', label: 'Счетов', children: current.billsCount },
@@ -131,12 +138,14 @@ function ProfitTab({ summary }: { summary: BusinessSummary }) {
 
 function CashTab({ summary }: { summary: BusinessSummary }) {
   const current = summary.current;
+  const otherManualExpenses = current.manualExpense - current.dailySalaryExpense;
   return <Card title="Движение денег"><Descriptions column={{ xs: 1, sm: 2, lg: 3 }} bordered items={[
     { key: 'cash', label: 'Оплаты клиентов', children: formatMoney(current.cashIncome) },
     { key: 'refunds', label: 'Возвраты клиентам', children: `− ${formatMoney(current.refunds)}` },
     { key: 'manualIncome', label: 'Другие поступления', children: formatMoney(current.manualIncome) },
     { key: 'supplier', label: 'Оплаты поставщикам', children: `− ${formatMoney(current.supplierOutflow)}` },
-    { key: 'manualExpense', label: 'Другие выплаты', children: `− ${formatMoney(current.manualExpense)}` },
+    { key: 'dailySalary', label: 'Зарплата, выданная через закрытие дня', children: `− ${formatMoney(current.dailySalaryExpense)}` },
+    { key: 'manualExpense', label: 'Остальные ручные выплаты', children: `− ${formatMoney(otherManualExpenses)}` },
     { key: 'net', label: 'Чистый денежный поток', children: <Typography.Text strong type={current.cashNet >= 0 ? 'success' : 'danger'}>{formatMoney(current.cashNet)}</Typography.Text> },
   ]} /></Card>;
 }
@@ -146,8 +155,9 @@ function DailyTab({ summary }: { summary: BusinessSummary }) {
     { title: 'Дата', dataIndex: 'date', render: formatDate },
     { title: 'Выручка', dataIndex: 'accruedRevenue', align: 'right', render: formatMoney },
     { title: 'Себестоимость', dataIndex: 'costOfGoods', align: 'right', render: formatMoney },
+    { title: 'Зарплата через закрытие дня', dataIndex: 'salaryExpense', align: 'right', render: formatMoney },
     { title: 'Прочие расходы', dataIndex: 'profitExpense', align: 'right', render: formatMoney },
-    { title: 'Прибыль до зарплаты', dataIndex: 'operatingProfitBeforePayroll', align: 'right', render: formatMoney },
+    { title: 'Прибыль после ручных расходов', dataIndex: 'operatingProfitAfterManualExpenses', align: 'right', render: formatMoney },
     { title: 'Денежный поток', dataIndex: 'cashNet', align: 'right', render: formatMoney },
   ]} />;
 }
@@ -171,7 +181,7 @@ function ControlTab({ summary }: { summary: BusinessSummary }) {
 function exportSummary(summary: BusinessSummary) {
   const rows = [
     ['Период', `${summary.range.from} — ${summary.range.to}`], ['Выручка', summary.current.accruedRevenue], ['Себестоимость', summary.current.costOfGoods],
-    ['Валовая прибыль', summary.current.grossProfit], ['Зарплата', summary.current.payrollExpense], ['Операционные расходы', summary.current.operatingExpenses],
+    ['Валовая прибыль', summary.current.grossProfit], ['Начислено в разделе «Зарплата»', summary.current.payrollExpense], ['Зарплата, выданная через закрытие дня', summary.current.dailySalaryExpense], ['Остальные операционные расходы', summary.current.operatingExpenses],
     ['Операционная прибыль', summary.current.operatingProfit], ['Маржа, %', summary.current.marginPercent], ['Денежный поток', summary.current.cashNet],
     ['Долги клиентов', summary.balances.debtorsAmount], ['Долг поставщикам', summary.balances.supplierPayable],
   ];

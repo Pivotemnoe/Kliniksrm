@@ -1,4 +1,4 @@
-import { CheckOutlined, CloseCircleOutlined, PlusOutlined, ReloadOutlined, SaveOutlined, SendOutlined } from '@ant-design/icons';
+import { CheckOutlined, CloseCircleOutlined, EditOutlined, PlusOutlined, ReloadOutlined, SaveOutlined, SendOutlined, SettingOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, App, Button, Card, DatePicker, Input, InputNumber, Select, Space, Statistic, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
@@ -11,6 +11,8 @@ import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDateTime } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
 import { BusinessEntryModal } from './BusinessEntryModal';
+import { BusinessEntryCorrectionModal } from './BusinessEntryCorrectionModal';
+import { BusinessCategoriesModal } from './BusinessCategoriesModal';
 import {
   approveDailyClose,
   getBusinessResources,
@@ -18,6 +20,7 @@ import {
   listBusinessEntries,
   prepareDailyClose,
   returnDailyClose,
+  resolveBusinessEntry,
   submitDailyClose,
   voidBusinessEntry,
 } from './business.api';
@@ -36,9 +39,12 @@ export function DailyFinancePage() {
   const canManage = hasPermission(auth?.employee, 'daily_finance.manage') || hasPermission(auth?.employee, 'business.manage');
   const canSubmit = hasPermission(auth?.employee, 'daily_finance.submit') || hasPermission(auth?.employee, 'business.approve');
   const canApprove = hasPermission(auth?.employee, 'business.approve');
+  const canManageCategories = hasPermission(auth?.employee, 'business.manage');
   const [businessDate, setBusinessDate] = useState(dayjs().format('YYYY-MM-DD'));
   const [officeId, setOfficeId] = useState<string>();
   const [entryType, setEntryType] = useState<BusinessCategoryType | null>(null);
+  const [editingEntry, setEditingEntry] = useState<BusinessEntry | null>(null);
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [actualAmounts, setActualAmounts] = useState<Record<string, number>>({});
   const [lineComments, setLineComments] = useState<Record<string, string>>({});
   const [comment, setComment] = useState('');
@@ -137,9 +143,23 @@ export function DailyFinancePage() {
       onOk: async () => {
         if (reason.trim().length < 2) { message.error('Укажите причину отмены'); return Promise.reject(); }
         await voidBusinessEntry(entry.id, reason);
-        if (close) await prepareDailyClose(payload(close.lines));
         await refresh();
         message.success('Операция отменена; запись сохранена в журнале');
+      },
+    });
+  }
+
+  function askResolve(entry: BusinessEntry) {
+    let reason = '';
+    modal.confirm({
+      title: 'Утвердить операцию?',
+      content: <><Typography.Paragraph>{entry.category.title} · {formatMoney(entry.amount)}</Typography.Paragraph><Input.TextArea rows={3} placeholder="Комментарий директора" onChange={(event) => { reason = event.target.value; }} /></>,
+      okText: 'Утвердить', cancelText: 'Отмена',
+      onOk: async () => {
+        if (reason.trim().length < 2) { message.error('Укажите комментарий к утверждению'); return Promise.reject(); }
+        await resolveBusinessEntry(entry.id, reason);
+        await refresh();
+        message.success('Операция утверждена директором');
       },
     });
   }
@@ -172,16 +192,16 @@ export function DailyFinancePage() {
 
   const entryColumns = useMemo<ColumnsType<BusinessEntry>>(() => [
     { title: 'Время', dataIndex: 'occurredAt', key: 'occurredAt', render: formatDateTime },
-    { title: 'Операция', key: 'operation', render: (_, entry) => <><div>{entry.comment || entry.category.title}</div><Typography.Text type="secondary" style={{ display: 'block' }}>Статья: {entry.category.title}</Typography.Text>{entry.counterparty ? <Typography.Text type="secondary" style={{ display: 'block' }}>Получатель / источник: {entry.counterparty}</Typography.Text> : null}{entry.documentNumber ? <Typography.Text type="secondary" style={{ display: 'block' }}>Документ: {entry.documentNumber}</Typography.Text> : null}</> },
+    { title: 'Операция', key: 'operation', render: (_, entry) => <><div>{entry.comment || entry.category.title}</div><Typography.Text type="secondary" style={{ display: 'block' }}>Статья: {entry.category.title}</Typography.Text>{entry.counterparty ? <Typography.Text type="secondary" style={{ display: 'block' }}>Получатель / источник: {entry.counterparty}</Typography.Text> : null}{entry.documentNumber ? <Typography.Text type="secondary" style={{ display: 'block' }}>Документ: {entry.documentNumber}</Typography.Text> : null}{entry.correctionOfId ? <Tag color="blue">Исправление</Tag> : null}{entry.voidReason ? <Typography.Text type="secondary" style={{ display: 'block' }}>Причина отмены: {entry.voidReason}</Typography.Text> : null}</> },
     { title: 'Сумма', dataIndex: 'amount', key: 'amount', align: 'right', render: (value, entry) => <Typography.Text type={entry.type === 'INCOME' ? 'success' : undefined}>{entry.type === 'INCOME' ? '+' : '−'}{formatMoney(value)}</Typography.Text> },
     { title: 'Касса', key: 'cashbox', render: (_, entry) => [entry.paymentMethod?.title, entry.cashbox?.title].filter(Boolean).join(' · ') || <Tag color="orange">Касса/способ не указаны</Tag> },
     { title: 'Статус', key: 'status', render: (_, entry) => entry.status === 'VOIDED' ? <Tag>Отменена</Tag> : entry.requiresResolution ? <Tag color="orange">Учтена · ждёт утверждения</Tag> : <Tag color="green">Учтена</Tag> },
-    ...(editable ? [{ title: '', key: 'action', width: 120, render: (_: unknown, entry: BusinessEntry) => entry.status === 'ACTIVE' ? <Button danger size="small" icon={<CloseCircleOutlined />} onClick={() => askVoid(entry)}>Отменить</Button> : null }] : []),
-  ], [editable]);
+    ...((editable || canApprove) ? [{ title: 'Действия', key: 'action', width: 290, render: (_: unknown, entry: BusinessEntry) => entry.status === 'ACTIVE' ? <Space wrap>{entry.requiresResolution && canApprove ? <Button size="small" icon={<CheckOutlined />} onClick={() => askResolve(entry)}>Утвердить</Button> : null}<Button size="small" icon={<EditOutlined />} onClick={() => setEditingEntry(entry)}>Исправить</Button><Button danger size="small" icon={<CloseCircleOutlined />} onClick={() => askVoid(entry)}>Отменить</Button></Space> : null }] : []),
+  ], [canApprove, editable]);
 
   return (
     <div className="page">
-      <PageHeader title="Закрытие дня" description="Администратор сверяет деньги по кассам, фиксирует непробитую выручку и небольшие расходы. Итог подтверждает директор." extra={<Space wrap><DatePicker value={dayjs(businessDate)} format="DD.MM.YYYY" onChange={(value) => value && setBusinessDate(value.format('YYYY-MM-DD'))} /><Select value={officeId} loading={resourcesQuery.isLoading} placeholder="Филиал" style={{ minWidth: 220 }} onChange={setOfficeId} options={resourcesQuery.data?.offices.map((item) => ({ value: item.id, label: item.name }))} /></Space>} />
+      <PageHeader title="Закрытие дня" description="Администратор сверяет деньги по кассам и фиксирует дополнительные поступления и выплаты по обязательным статьям. Итог подтверждает директор." extra={<Space wrap><DatePicker value={dayjs(businessDate)} format="DD.MM.YYYY" onChange={(value) => value && setBusinessDate(value.format('YYYY-MM-DD'))} /><Select value={officeId} loading={resourcesQuery.isLoading} placeholder="Филиал" style={{ minWidth: 220 }} onChange={setOfficeId} options={resourcesQuery.data?.offices.map((item) => ({ value: item.id, label: item.name }))} /></Space>} />
       {closeQuery.error ? <Alert type="error" showIcon message="Не удалось открыть закрытие дня" description={getErrorMessage(closeQuery.error)} /> : null}
       {!close && !closeQuery.isLoading ? <Card><Typography.Title level={4}>Сверка ещё не сформирована</Typography.Title><Typography.Paragraph type="secondary">CRM соберёт оплаты, возвраты, расходы поставщикам и внесённые вручную операции за выбранный день.</Typography.Paragraph>{canManage ? <Button type="primary" icon={<ReloadOutlined />} loading={saveMutation.isPending} disabled={!officeId} onClick={() => saveMutation.mutate()}>Сформировать сверку</Button> : null}</Card> : null}
       {close ? <>
@@ -206,18 +226,20 @@ export function DailyFinancePage() {
         </div>
       </> : null}
       <div className="list-panel">
-        <div className="list-panel-header"><div><Typography.Title level={4}>Дополнительные операции</Typography.Title><Typography.Text type="secondary">Непробитая выручка, ручные расходы и другие движения, которых нет в счетах CRM.</Typography.Text></div>{editable && close ? <Space wrap><Button icon={<PlusOutlined />} onClick={() => setEntryType('INCOME')}>Добавить поступление</Button><Button icon={<PlusOutlined />} onClick={() => setEntryType('EXPENSE')}>Добавить расход</Button></Space> : null}</div>
+        <div className="list-panel-header"><div><Typography.Title level={4}>Дополнительные операции</Typography.Title><Typography.Text type="secondary">Непробитая выручка, фактически выданная зарплата и другие движения, которых нет в счетах CRM. Статья обязательна, комментарий только уточняет назначение.</Typography.Text></div><Space wrap>{canManageCategories ? <Button icon={<SettingOutlined />} onClick={() => setCategoriesOpen(true)}>Статьи доходов и расходов</Button> : null}{editable && close ? <><Button icon={<PlusOutlined />} onClick={() => setEntryType('INCOME')}>Добавить поступление</Button><Button icon={<PlusOutlined />} onClick={() => setEntryType('EXPENSE')}>Добавить расход</Button></> : null}</Space></div>
         <Alert
           type="info"
           showIcon
           message="Что означает «ждёт утверждения»"
-          description="Неучтённая выручка сразу входит в поступления и чистое движение. Метка означает только контроль: после утверждения закрытия дня директором она автоматически станет подтверждённой."
+          description="Операция уже входит в сверку денег, но требует контроля директора. При утверждении закрытия дня она подтверждается автоматически. Зарплата, внесённая здесь, является самостоятельной фактической выплатой и не зависит от заполнения отдельного расчёта зарплаты."
           className="form-alert"
         />
         <Table rowKey="id" columns={entryColumns} dataSource={entriesQuery.data ?? []} loading={entriesQuery.isLoading} pagination={false} scroll={{ x: 900 }} locale={{ emptyText: 'Дополнительных операций нет' }} />
       </div>
       <Alert type="info" showIcon message="Управленческий учёт" description="Закрытие дня помогает контролировать выручку и расходы клиники, но не заменяет бухгалтерскую или налоговую отчётность." />
       <BusinessEntryModal type={entryType} resources={resourcesQuery.data} officeId={officeId} dailyCloseId={close?.id} defaultDate={`${businessDate}T12:00:00`} lockOffice onClose={() => setEntryType(null)} onSaved={async () => { if (close) await prepareDailyClose(payload(close.lines)); await refresh(); }} />
+      <BusinessEntryCorrectionModal entry={editingEntry} resources={resourcesQuery.data} onClose={() => setEditingEntry(null)} onSaved={refresh} />
+      <BusinessCategoriesModal open={categoriesOpen} onClose={() => setCategoriesOpen(false)} onSaved={async () => { await queryClient.invalidateQueries({ queryKey: ['business', 'resources'] }); await refresh(); }} />
     </div>
   );
 }

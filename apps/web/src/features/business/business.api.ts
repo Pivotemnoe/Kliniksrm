@@ -1,6 +1,6 @@
 import { apiRequest } from '../../api/client';
 import { buildQuery } from '../../shared/utils/query';
-import { BusinessDailyClose, BusinessEntry, BusinessEntryInput, BusinessResources, BusinessSummary } from './types';
+import { BusinessCategory, BusinessCategoryInput, BusinessDailyClose, BusinessEntry, BusinessEntryCorrectionInput, BusinessEntryInput, BusinessResources, BusinessSummary } from './types';
 
 type RangeQuery = { from?: string; to?: string; officeId?: string };
 
@@ -24,8 +24,23 @@ export function voidBusinessEntry(entryId: string, reason: string) {
   return apiRequest<BusinessEntry>(`/v1/business/entries/${entryId}/void`, { method: 'POST', body: { reason } });
 }
 
+export function correctBusinessEntry(entryId: string, input: BusinessEntryCorrectionInput) {
+  return apiRequest<BusinessEntry>(`/v1/business/entries/${entryId}/correct`, { method: 'PUT', body: input });
+}
+
 export function resolveBusinessEntry(entryId: string, reason: string) {
   return apiRequest<BusinessEntry>(`/v1/business/entries/${entryId}/resolve`, { method: 'POST', body: { reason } });
+}
+
+export function listBusinessCategories() {
+  return apiRequest<BusinessCategory[]>('/v1/business/categories');
+}
+
+export function saveBusinessCategory(categoryId: string | null, input: BusinessCategoryInput) {
+  return apiRequest<BusinessCategory>(categoryId ? `/v1/business/categories/${categoryId}` : '/v1/business/categories', {
+    method: categoryId ? 'PUT' : 'POST',
+    body: input,
+  });
 }
 
 export function getDailyClose(officeId: string, businessDate: string) {

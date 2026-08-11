@@ -17,6 +17,7 @@ test('управленческий результат разделяет при�
     profitIncome: 5_000,
     costOfGoods: 20_000,
     payrollExpense: 30_000,
+    dailySalaryExpense: 5_000,
     operatingExpenses: 10_000,
     cashIncome: 80_000,
     refunds: 2_000,
@@ -26,9 +27,9 @@ test('управленческий результат разделяет при�
   });
   assert.equal(result.accruedRevenue, 105_000);
   assert.equal(result.grossProfit, 85_000);
-  assert.equal(result.operatingProfit, 45_000);
+  assert.equal(result.operatingProfit, 40_000);
   assert.equal(result.cashNet, 67_000);
-  assert.equal(result.marginPercent, 45_000 / 105_000 * 100);
+  assert.equal(result.marginPercent, 40_000 / 105_000 * 100);
 });
 
 test('миграция этапа 3.5 добавочная и не меняет клинические данные', async () => {
@@ -87,7 +88,7 @@ test('интерфейс этапа 3.5 показывает понятные р
   assert.match(stock, /Касса и способ оплаты нужны, чтобы расход автоматически попал в закрытие дня/);
 });
 
-test('закрытие дня принимает свободные причины и сохраняет несколько операций одной транзакцией', async () => {
+test('закрытие дня требует статью, принимает свободное пояснение и сохраняет несколько операций одной транзакцией', async () => {
   const [modal, api, controller, service, batchDto, daily] = await Promise.all([
     read('apps/web/src/features/business/BusinessEntryModal.tsx'),
     read('apps/web/src/features/business/business.api.ts'),
@@ -107,6 +108,8 @@ test('закрытие дня принимает свободные причин
   assert.match(modal, /Получатель \/ источник/);
   assert.match(modal, /Оплату поставщику не дублируйте здесь/);
   assert.match(modal, /Утверждённый расчёт зарплаты/);
+  assert.match(modal, /самостоятельная фактическая выплата за день/);
+  assert.match(modal, /не будет автоматически связываться или сверяться с разделом «Зарплата»/);
   assert.match(modal, /comment: item\.reason\.trim\(\)/);
   assert.match(api, /\/v1\/business\/entries\/batch/);
   assert.match(controller, /createEntriesBatch/);
@@ -134,11 +137,42 @@ test('утверждение закрытия дня подтверждает с
   assert.match(service, /businessEntry\.updateMany/);
   assert.match(service, /business\.entry\.resolve\.daily_close/);
   assert.match(service, /resolvedEntries: unresolvedEntries\.length/);
-  assert.match(page, /автоматически подтверждается директором вместе с закрытием дня/);
+  assert.match(page, /подтверждаются директором отдельно или вместе с закрытием дня/);
   assert.match(page, /Открыть операции/);
   assert.match(migration, /close\."status" = 'APPROVED'/);
   assert.match(migration, /business\.entry\.resolve\.daily_close\.backfill/);
   assert.match(migration, /"requiresResolution" = false/);
   assert.doesNotMatch(migration, /UPDATE "BusinessEntry"[\s\S]*?"amount"\s*=/);
+  assert.doesNotMatch(migration, /\b(?:DROP|TRUNCATE|DELETE\s+FROM)\b/i);
+});
+
+test('зарплата закрытия дня независима от расчётного периода, а исправления сохраняют историю', async () => {
+  const [schema, migration, seed, service, controller, daily, business, correctionModal, categoriesModal] = await Promise.all([
+    read('prisma/schema.prisma'),
+    read('prisma/migrations/20260811000100_business_entry_corrections_and_expense_categories/migration.sql'),
+    read('prisma/seed.cjs'),
+    read('apps/api/src/modules/business/business.service.ts'),
+    read('apps/api/src/modules/business/business.controller.ts'),
+    read('apps/web/src/features/business/DailyFinancePage.tsx'),
+    read('apps/web/src/features/business/BusinessPage.tsx'),
+    read('apps/web/src/features/business/BusinessEntryCorrectionModal.tsx'),
+    read('apps/web/src/features/business/BusinessCategoriesModal.tsx'),
+  ]);
+
+  assert.match(seed, /'daily_salary', 'Зарплата, выданная за день'/);
+  assert.match(service, /category\.code === 'daily_salary'[\s\S]*?укажите сотрудника или получателя/);
+  assert.match(service, /const dailySalaryExpense/);
+  assert.match(service, /grossProfit - input\.payrollExpense - input\.dailySalaryExpense - input\.operatingExpenses/);
+  assert.match(business, /Начислено в разделе «Зарплата»/);
+  assert.match(business, /Фактически выдано через закрытие дня/);
+  assert.match(daily, /самостоятельной фактической выплатой/);
+  assert.match(schema, /correctionOfId\s+String\?/);
+  assert.match(service, /business\.entry\.correct/);
+  assert.match(controller, /entries\/:entryId\/correct/);
+  assert.match(correctionModal, /Исходная запись не удаляется/);
+  assert.match(categoriesModal, /Статьи доходов и расходов/);
+  assert.match(categoriesModal, /исторические расходы и аудит сохранятся/);
+  assert.match(migration, /ADD COLUMN "correctionOfId" TEXT/);
+  assert.match(migration, /ON CONFLICT \("code"\) DO NOTHING/);
   assert.doesNotMatch(migration, /\b(?:DROP|TRUNCATE|DELETE\s+FROM)\b/i);
 });

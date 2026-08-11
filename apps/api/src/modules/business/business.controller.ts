@@ -8,6 +8,7 @@ import { BusinessActionDto } from './dto/business-action.dto';
 import { BusinessReportQueryDto } from './dto/business-report-query.dto';
 import { CreateBusinessEntriesBatchDto } from './dto/create-business-entries-batch.dto';
 import { CreateBusinessEntryDto } from './dto/create-business-entry.dto';
+import { CorrectBusinessEntryDto } from './dto/correct-business-entry.dto';
 import { DailyCloseQueryDto } from './dto/daily-close-query.dto';
 import { ListBusinessEntriesQueryDto } from './dto/list-business-entries-query.dto';
 import { SaveDailyCloseDto } from './dto/save-daily-close.dto';
@@ -51,6 +52,12 @@ export class BusinessController {
     return this.businessService.voidEntry(entryId, dto, actor);
   }
 
+  @Put('entries/:entryId/correct')
+  @RequireAnyPermissions('daily_finance.manage', 'business.manage')
+  correctEntry(@Param('entryId') entryId: string, @Body() dto: CorrectBusinessEntryDto, @CurrentEmployee() actor: AuthEmployee) {
+    return this.businessService.correctEntry(entryId, dto, actor);
+  }
+
   @Post('entries/:entryId/resolve')
   @RequirePermissions('business.manage')
   resolveEntry(@Param('entryId') entryId: string, @Body() dto: BusinessActionDto, @CurrentEmployee() actor: AuthEmployee) {
@@ -61,6 +68,12 @@ export class BusinessController {
   @RequirePermissions('business.manage')
   createCategory(@Body() dto: UpsertBusinessCategoryDto, @CurrentEmployee() actor: AuthEmployee) {
     return this.businessService.saveCategory(null, dto, actor.id);
+  }
+
+  @Get('categories')
+  @RequirePermissions('business.manage')
+  listCategories() {
+    return this.businessService.listCategories();
   }
 
   @Put('categories/:categoryId')

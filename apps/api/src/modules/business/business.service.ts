@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import {
   BusinessCategoryType,
   BusinessDailyCloseStatus,
@@ -18,6 +19,7 @@ import { clinicDateKey, resolveReportRange } from '../reports/report-range';
 import { BusinessActionDto } from './dto/business-action.dto';
 import { BusinessReportQueryDto } from './dto/business-report-query.dto';
 import { CreateBusinessEntryDto } from './dto/create-business-entry.dto';
+import { CorrectBusinessEntryDto } from './dto/correct-business-entry.dto';
 import { DailyCloseQueryDto } from './dto/daily-close-query.dto';
 import { ListBusinessEntriesQueryDto } from './dto/list-business-entries-query.dto';
 import { SaveDailyCloseDto } from './dto/save-daily-close.dto';
@@ -34,6 +36,7 @@ const entryInclude = {
   createdBy: { select: { id: true, fullName: true } },
   voidedBy: { select: { id: true, fullName: true } },
   resolvedBy: { select: { id: true, fullName: true } },
+  correctionOf: { select: { id: true, amount: true, comment: true, occurredAt: true } },
 } satisfies Prisma.BusinessEntryInclude;
 
 const closeInclude = {
@@ -148,6 +151,9 @@ export class BusinessService {
     if ((source === BusinessEntrySource.UNRECORDED_REVENUE || source === BusinessEntrySource.DAILY_DIFFERENCE) && !comment) {
       throw new BadRequestException('Для неучтённой выручки или расхождения укажите пояснение');
     }
+    if (category.code === 'daily_salary' && !clean(dto.counterparty)) {
+      throw new BadRequestException('Для выданной зарплаты укажите сотрудника или получателя');
+    }
 
     const occurredAt = new Date(dto.occurredAt);
     await this.validateEntryLinks(dto);
@@ -173,44 +179,168 @@ export class BusinessService {
         counterparty: clean(dto.counterparty),
         documentNumber: clean(dto.documentNumber),
         comment,
-        requiresResolution: source === BusinessEntrySource.UNRECORDED_REVENUE || dto.requiresResolution === true,
+        requiresResolution: source === BusinessEntrySource.UNRECORDED_REVENUE || dto.requiresResolution === true || !directorAccess,
         createdById: actor.id,
       },
     };
   }
 
   async voidEntry(entryId: string, dto: BusinessActionDto, actor: BusinessActor) {
-    const entry = await this.prisma.businessEntry.findUnique({ where: { id: entryId }, include: { category: true } });
+    const entry = await this.prisma.businessEntry.findUnique({ where: { id: entryId }, include: { category: true, dailyClose: { select: { id: true, status: true, comment: true } } } });
     if (!entry) throw new NotFoundException('Операция не найдена');
     if (entry.status !== BusinessEntryStatus.ACTIVE) throw new BadRequestException('Операция уже отменена');
-    if (!has(actor, 'business.manage') && !entry.category.administratorAllowed) throw new ForbiddenException('Эта операция доступна только директору');
-    if (entry.officeId) await this.ensureDayEditable(entry.officeId, entry.occurredAt);
-    const updated = await this.prisma.businessEntry.update({
-      where: { id: entryId },
-      data: { status: BusinessEntryStatus.VOIDED, voidedAt: new Date(), voidedById: actor.id, voidReason: dto.reason.trim() },
-      include: entryInclude,
+    const directorAccess = has(actor, 'business.manage');
+    if (!directorAccess && !entry.category.administratorAllowed) throw new ForbiddenException('Эта операция доступна только директору');
+    const close = entry.dailyClose ?? await this.findCloseForEntry(entry.officeId, entry.occurredAt);
+    if (close && close.status !== BusinessDailyCloseStatus.DRAFT && !directorAccess) {
+      throw new BadRequestException('День уже отправлен директору. Исправить его может только директор либо после возврата в черновик');
+    }
+    const reason = dto.reason.trim();
+    if (reason.length < 2) throw new BadRequestException('Укажите причину отмены');
+    const updated = await this.prisma.$transaction(async (tx) => {
+      if (close && close.status !== BusinessDailyCloseStatus.DRAFT) {
+        await tx.businessDailyClose.update({ where: { id: close.id }, data: reopenCloseData(close.comment, `Отмена операции: ${reason}`) });
+        await tx.auditLog.create({ data: { actorId: actor.id, action: 'business.daily_close.reopen_for_entry_void', entityType: 'BusinessDailyClose', entityId: close.id, metadata: { entryId, previousStatus: close.status, reason } } });
+      }
+      const voided = await tx.businessEntry.update({
+        where: { id: entryId },
+        data: { status: BusinessEntryStatus.VOIDED, voidedAt: new Date(), voidedById: actor.id, voidReason: reason },
+        include: entryInclude,
+      });
+      await tx.auditLog.create({ data: { actorId: actor.id, action: 'business.entry.void', entityType: 'BusinessEntry', entityId: entryId, metadata: { reason, amount: Number(entry.amount), categoryId: entry.categoryId } } });
+      return voided;
     });
-    await this.auditService.log({ actorId: actor.id, action: 'business.entry.void', entityType: 'BusinessEntry', entityId: entryId, metadata: { reason: dto.reason.trim() } });
+    if (close) await this.syncDailyClose(close.id);
     return updated;
   }
 
+  async correctEntry(entryId: string, dto: CorrectBusinessEntryDto, actor: BusinessActor) {
+    const entry = await this.prisma.businessEntry.findUnique({
+      where: { id: entryId },
+      include: { category: true, dailyClose: { select: { id: true, status: true, comment: true } } },
+    });
+    if (!entry) throw new NotFoundException('Операция не найдена');
+    if (entry.status !== BusinessEntryStatus.ACTIVE) throw new BadRequestException('Исправить можно только действующую операцию');
+
+    const category = await this.prisma.businessCategory.findUnique({ where: { id: dto.categoryId } });
+    if (!category || !category.isActive) throw new NotFoundException('Активная статья расходов или доходов не найдена');
+    const directorAccess = has(actor, 'business.manage');
+    if (!directorAccess && (!entry.category.administratorAllowed || !category.administratorAllowed)) {
+      throw new ForbiddenException('Эта операция доступна только директору');
+    }
+    if (category.type !== entry.type) throw new BadRequestException('Исправление не может менять доход на расход или расход на доход');
+    if (entry.source === BusinessEntrySource.PAYROLL_PAYOUT && category.code !== 'payroll') {
+      throw new BadRequestException('Связанную выплату расчётной зарплаты можно оставить только в статье расчётной зарплаты');
+    }
+    if (entry.source !== BusinessEntrySource.PAYROLL_PAYOUT && category.code === 'payroll') {
+      throw new BadRequestException('Для независимой выплаты за день выберите статью «Зарплата, выданная за день»');
+    }
+    if (category.code === 'daily_salary' && !clean(dto.counterparty)) {
+      throw new BadRequestException('Для выданной зарплаты укажите сотрудника или получателя');
+    }
+
+    await this.validateEntryLinks({
+      officeId: entry.officeId ?? undefined,
+      cashboxId: dto.cashboxId,
+      paymentMethodId: dto.paymentMethodId,
+      payrollPeriodId: entry.payrollPeriodId ?? undefined,
+    });
+    const close = entry.dailyClose ?? await this.findCloseForEntry(entry.officeId, entry.occurredAt);
+    if (close && close.status !== BusinessDailyCloseStatus.DRAFT && !directorAccess) {
+      throw new BadRequestException('День уже отправлен директору. Исправить его может только директор либо после возврата в черновик');
+    }
+
+    const reason = dto.reason.trim();
+    if (reason.length < 2) throw new BadRequestException('Укажите причину исправления');
+    const corrected = await this.prisma.$transaction(async (tx) => {
+      if (close && close.status !== BusinessDailyCloseStatus.DRAFT) {
+        await tx.businessDailyClose.update({ where: { id: close.id }, data: reopenCloseData(close.comment, `Исправление операции: ${reason}`) });
+        await tx.auditLog.create({ data: { actorId: actor.id, action: 'business.daily_close.reopen_for_entry_correction', entityType: 'BusinessDailyClose', entityId: close.id, metadata: { entryId, previousStatus: close.status, reason } } });
+      }
+
+      await tx.businessEntry.update({
+        where: { id: entryId },
+        data: { status: BusinessEntryStatus.VOIDED, voidedAt: new Date(), voidedById: actor.id, voidReason: `Исправлено: ${reason}` },
+      });
+      const replacement = await tx.businessEntry.create({
+        data: {
+          type: entry.type,
+          source: entry.source,
+          categoryId: category.id,
+          officeId: entry.officeId,
+          cashboxId: dto.cashboxId ?? null,
+          paymentMethodId: dto.paymentMethodId ?? null,
+          payrollPeriodId: entry.payrollPeriodId,
+          dailyCloseId: entry.dailyCloseId ?? close?.id ?? null,
+          correctionOfId: entry.id,
+          amount: dto.amount,
+          occurredAt: entry.occurredAt,
+          counterparty: clean(dto.counterparty),
+          documentNumber: clean(dto.documentNumber),
+          comment: clean(dto.comment),
+          requiresResolution: entry.requiresResolution || !directorAccess,
+          createdById: actor.id,
+        },
+        include: entryInclude,
+      });
+      await tx.auditLog.create({
+        data: {
+          actorId: actor.id,
+          action: 'business.entry.correct',
+          entityType: 'BusinessEntry',
+          entityId: replacement.id,
+          metadata: {
+            originalEntryId: entry.id,
+            reason,
+            before: { categoryId: entry.categoryId, amount: Number(entry.amount), counterparty: entry.counterparty, documentNumber: entry.documentNumber, comment: entry.comment },
+            after: { categoryId: category.id, amount: dto.amount, counterparty: clean(dto.counterparty), documentNumber: clean(dto.documentNumber), comment: clean(dto.comment) },
+          },
+        },
+      });
+      return replacement;
+    });
+    if (close) await this.syncDailyClose(close.id);
+    return corrected;
+  }
+
   async resolveEntry(entryId: string, dto: BusinessActionDto, actorId: string) {
+    const reason = dto.reason.trim();
+    if (reason.length < 2) throw new BadRequestException('Укажите комментарий к утверждению');
     const result = await this.prisma.businessEntry.updateMany({
       where: { id: entryId, status: BusinessEntryStatus.ACTIVE, requiresResolution: true },
-      data: { requiresResolution: false, resolvedAt: new Date(), resolvedById: actorId, resolutionNote: dto.reason.trim() },
+      data: { requiresResolution: false, resolvedAt: new Date(), resolvedById: actorId, resolutionNote: reason },
     });
     if (!result.count) throw new BadRequestException('Неучтённая операция не найдена или уже разобрана');
-    await this.auditService.log({ actorId, action: 'business.entry.resolve', entityType: 'BusinessEntry', entityId: entryId, metadata: { reason: dto.reason.trim() } });
+    await this.auditService.log({ actorId, action: 'business.entry.resolve', entityType: 'BusinessEntry', entityId: entryId, metadata: { reason } });
     return this.prisma.businessEntry.findUniqueOrThrow({ where: { id: entryId }, include: entryInclude });
   }
 
+  listCategories() {
+    return this.prisma.businessCategory.findMany({
+      orderBy: [{ type: 'asc' }, { sortOrder: 'asc' }, { title: 'asc' }],
+    });
+  }
+
   async saveCategory(categoryId: string | null, dto: UpsertBusinessCategoryDto, actorId: string) {
+    const existing = categoryId ? await this.prisma.businessCategory.findUnique({ where: { id: categoryId } }) : null;
+    if (categoryId && !existing) throw new NotFoundException('Статья доходов или расходов не найдена');
+    if (existing && existing.type !== dto.type) throw new BadRequestException('Тип существующей статьи менять нельзя; создайте новую статью');
+    const title = dto.title.trim();
+    if (title.length < 2) throw new BadRequestException('Укажите название статьи');
+    const code = existing?.code ?? dto.code?.trim() ?? `custom_${randomUUID().replaceAll('-', '')}`;
+    const groupCode = dto.groupCode?.trim() ?? existing?.groupCode ?? (dto.type === BusinessCategoryType.INCOME ? 'REVENUE' : 'OPERATING');
     const data = {
-      code: dto.code.trim(), title: dto.title.trim(), type: dto.type, groupCode: dto.groupCode.trim(), affectsProfit: dto.affectsProfit,
-      administratorAllowed: dto.administratorAllowed ?? false, isActive: dto.isActive ?? true, sortOrder: dto.sortOrder ?? 0,
+      code,
+      title,
+      type: dto.type,
+      groupCode,
+      affectsProfit: dto.affectsProfit,
+      administratorAllowed: dto.administratorAllowed ?? existing?.administratorAllowed ?? false,
+      isActive: dto.isActive ?? existing?.isActive ?? true,
+      sortOrder: dto.sortOrder ?? existing?.sortOrder ?? 0,
     };
-    const category = categoryId
-      ? await this.prisma.businessCategory.update({ where: { id: categoryId }, data })
+    const category = existing
+      ? await this.prisma.businessCategory.update({ where: { id: existing.id }, data })
       : await this.prisma.businessCategory.create({ data });
     await this.auditService.log({ actorId, action: categoryId ? 'business.category.update' : 'business.category.create', entityType: 'BusinessCategory', entityId: category.id, metadata: { code: category.code } });
     return category;
@@ -497,7 +627,12 @@ export class BusinessService {
     const manualIncome = entries.filter((item) => item.type === BusinessCategoryType.INCOME).reduce((value, item) => value + number(item.amount), 0);
     const manualExpense = entries.filter((item) => item.type === BusinessCategoryType.EXPENSE).reduce((value, item) => value + number(item.amount), 0);
     const profitIncome = entries.filter((item) => item.type === BusinessCategoryType.INCOME && item.category.affectsProfit).reduce((value, item) => value + number(item.amount), 0);
-    const operatingExpenses = entries.filter((item) => item.type === BusinessCategoryType.EXPENSE && item.category.affectsProfit).reduce((value, item) => value + number(item.amount), 0);
+    const dailySalaryExpense = entries
+      .filter((item) => item.type === BusinessCategoryType.EXPENSE && item.category.code === 'daily_salary')
+      .reduce((value, item) => value + number(item.amount), 0);
+    const operatingExpenses = entries
+      .filter((item) => item.type === BusinessCategoryType.EXPENSE && item.category.affectsProfit && item.category.code !== 'daily_salary')
+      .reduce((value, item) => value + number(item.amount), 0);
     const supplierOutflow = total(supplierPayments, (item) => item.amount);
     const payrollExpense = total(payroll, (item) => item.totalAmount);
     const costOfGoods = Math.max(movements.reduce((value, movement) => {
@@ -506,7 +641,7 @@ export class BusinessService {
       return value - number(movement.quantity) * number(movement.unitCost ?? movement.stockBatch?.purchasePrice);
     }, 0), 0);
     const result = calculateManagementResult({
-      accruedSystemRevenue, profitIncome, costOfGoods, payrollExpense, operatingExpenses,
+      accruedSystemRevenue, profitIncome, costOfGoods, payrollExpense, dailySalaryExpense, operatingExpenses,
       cashIncome, refunds, manualIncome, manualExpense, supplierOutflow,
     });
     const daily = aggregateBusinessDaily({ bills, payments, movements, entries, supplierPayments }, offsetMinutes);
@@ -514,11 +649,13 @@ export class BusinessService {
     const categoryIncome = aggregateCategories(entries.filter((item) => item.type === BusinessCategoryType.INCOME));
     return {
       accruedSystemRevenue, ...result, cashIncome, refunds, manualIncome, manualExpense, supplierOutflow,
-      costOfGoods, payrollExpense, operatingExpenses,
+      costOfGoods, payrollExpense, dailySalaryExpense, operatingExpenses,
       billsCount: bills.length, averageBill: bills.length ? accruedSystemRevenue / bills.length : 0,
       visits: visits.length, uniqueOwners: new Set(visits.map((item) => item.ownerId)).size, newOwners,
       daily, categoryExpenses, categoryIncome,
-      note: officeId ? 'Зарплата отражена по всей организации: сотрудники пока не закреплены за филиалами.' : 'Прибыль управленческая и не заменяет бухгалтерскую или налоговую отчётность.',
+      note: officeId
+        ? 'Расчётная зарплата отражена по всей организации. Зарплата, внесённая при закрытии дня, учитывается отдельно по выбранному филиалу и автоматически с расчётными периодами не сверяется.'
+        : 'Расчётная зарплата и фактические выплаты, внесённые при закрытии дня, показаны раздельно и автоматически не сверяются. Прибыль управленческая и не заменяет бухгалтерскую или налоговую отчётность.',
     };
   }
 
@@ -532,7 +669,7 @@ export class BusinessService {
     return Math.max(number(supplies._sum.totalAmount) - number(payments._sum.amount) - returned, 0);
   }
 
-  private async validateEntryLinks(dto: CreateBusinessEntryDto) {
+  private async validateEntryLinks(dto: Pick<CreateBusinessEntryDto, 'officeId' | 'cashboxId' | 'paymentMethodId' | 'payrollPeriodId'>) {
     if (dto.officeId) {
       const office = await this.prisma.clinicOffice.findUnique({ where: { id: dto.officeId }, select: { id: true } });
       if (!office) throw new NotFoundException('Филиал не найден');
@@ -555,6 +692,14 @@ export class BusinessService {
   private async ensureDayEditable(officeId: string, occurredAt: Date) {
     const close = await this.prisma.businessDailyClose.findUnique({ where: { officeId_businessDate: { officeId, businessDate: dateOnly(clinicDateKey(occurredAt)) } }, select: { status: true } });
     if (close && close.status !== BusinessDailyCloseStatus.DRAFT) throw new BadRequestException('День уже отправлен или утверждён. Верните его в черновик перед изменениями');
+  }
+
+  private async findCloseForEntry(officeId: string | null, occurredAt: Date) {
+    if (!officeId) return null;
+    return this.prisma.businessDailyClose.findUnique({
+      where: { officeId_businessDate: { officeId, businessDate: dateOnly(clinicDateKey(occurredAt)) } },
+      select: { id: true, status: true, comment: true },
+    });
   }
 
   private getCloseById(closeId: string) {
@@ -619,15 +764,15 @@ function aggregateBusinessDaily(
     bills: Array<{ createdAt: Date; totalAmount: Prisma.Decimal }>;
     payments: Array<{ paidAt: Date; amount: Prisma.Decimal }>;
     movements: Array<{ createdAt: Date; type: StockMovementType; quantity: Prisma.Decimal; unitCost: Prisma.Decimal | null; stockBatch: { purchasePrice: Prisma.Decimal } | null; billItemId: string | null; visitId: string | null; saleId: string | null }>;
-    entries: Array<{ occurredAt: Date; type: BusinessCategoryType; amount: Prisma.Decimal; category: { affectsProfit: boolean } }>;
+    entries: Array<{ occurredAt: Date; type: BusinessCategoryType; amount: Prisma.Decimal; category: { affectsProfit: boolean; code: string } }>;
     supplierPayments: Array<{ paidAt: Date; amount: Prisma.Decimal }>;
   },
   offsetMinutes: number,
 ) {
-  const rows = new Map<string, { date: string; accruedRevenue: number; cashIncome: number; cashExpense: number; profitExpense: number; costOfGoods: number }>();
+  const rows = new Map<string, { date: string; accruedRevenue: number; cashIncome: number; cashExpense: number; profitExpense: number; salaryExpense: number; costOfGoods: number }>();
   const row = (date: Date) => {
     const key = clinicDateKey(date, offsetMinutes);
-    const value = rows.get(key) ?? { date: key, accruedRevenue: 0, cashIncome: 0, cashExpense: 0, profitExpense: 0, costOfGoods: 0 };
+    const value = rows.get(key) ?? { date: key, accruedRevenue: 0, cashIncome: 0, cashExpense: 0, profitExpense: 0, salaryExpense: 0, costOfGoods: 0 };
     rows.set(key, value);
     return value;
   };
@@ -641,7 +786,8 @@ function aggregateBusinessDaily(
       if (item.category.affectsProfit) row(item.occurredAt).accruedRevenue += value;
     } else {
       row(item.occurredAt).cashExpense += value;
-      if (item.category.affectsProfit) row(item.occurredAt).profitExpense += value;
+      if (item.category.code === 'daily_salary') row(item.occurredAt).salaryExpense += value;
+      else if (item.category.affectsProfit) row(item.occurredAt).profitExpense += value;
     }
   });
   input.movements.forEach((item) => {
@@ -651,7 +797,7 @@ function aggregateBusinessDaily(
   });
   return [...rows.values()].sort((left, right) => left.date.localeCompare(right.date)).map((item) => ({
     ...item,
-    operatingProfitBeforePayroll: item.accruedRevenue - item.costOfGoods - item.profitExpense,
+    operatingProfitAfterManualExpenses: item.accruedRevenue - item.costOfGoods - item.profitExpense - item.salaryExpense,
     cashNet: item.cashIncome - item.cashExpense,
   }));
 }
@@ -681,6 +827,17 @@ function clean(value?: string | null) {
 
 function appendComment(existing: string | null, reason: string) {
   return [existing?.trim(), `Возвращено директором: ${reason.trim()}`].filter(Boolean).join('\n');
+}
+
+function reopenCloseData(existingComment: string | null, reason: string) {
+  return {
+    status: BusinessDailyCloseStatus.DRAFT,
+    submittedById: null,
+    submittedAt: null,
+    approvedById: null,
+    approvedAt: null,
+    comment: [existingComment?.trim(), `Автоматически возвращено в черновик: ${reason.trim()}`].filter(Boolean).join('\n'),
+  } satisfies Prisma.BusinessDailyCloseUncheckedUpdateInput;
 }
 
 function decimal(value: Prisma.Decimal.Value | null | undefined) {
@@ -715,6 +872,7 @@ export function calculateManagementResult(input: {
   profitIncome: number;
   costOfGoods: number;
   payrollExpense: number;
+  dailySalaryExpense: number;
   operatingExpenses: number;
   cashIncome: number;
   refunds: number;
@@ -724,7 +882,7 @@ export function calculateManagementResult(input: {
 }) {
   const accruedRevenue = input.accruedSystemRevenue + input.profitIncome;
   const grossProfit = accruedRevenue - input.costOfGoods;
-  const operatingProfit = grossProfit - input.payrollExpense - input.operatingExpenses;
+  const operatingProfit = grossProfit - input.payrollExpense - input.dailySalaryExpense - input.operatingExpenses;
   const cashNet = input.cashIncome - input.refunds + input.manualIncome - input.manualExpense - input.supplierOutflow;
   return {
     accruedRevenue,

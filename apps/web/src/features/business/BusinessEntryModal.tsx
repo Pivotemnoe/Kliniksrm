@@ -43,11 +43,12 @@ export function BusinessEntryModal({ type, resources, officeId, dailyCloseId, de
   const dailyEntryMode = Boolean(dailyCloseId);
   const categoryId = Form.useWatch('categoryId', form);
   const selectedOfficeId = Form.useWatch('officeId', form);
-  const categories = resources?.categories.filter((item) => item.type === type) ?? [];
+  const categories = resources?.categories.filter((item) => item.type === type && (!dailyEntryMode || item.code !== 'payroll')) ?? [];
   const dailyCategory = dailyEntryMode ? findDailyCategory(categories, type) : undefined;
   const category = resources?.categories.find((item) => item.id === categoryId);
   const source = inferSource(category?.code);
   const requiresExplanation = source === 'UNRECORDED_REVENUE' || source === 'DAILY_DIFFERENCE';
+  const dailySalary = category?.code === 'daily_salary';
 
   useEffect(() => {
     if (type) {
@@ -172,6 +173,7 @@ export function BusinessEntryModal({ type, resources, officeId, dailyCloseId, de
                           const itemCategoryId = form.getFieldValue(['items', field.name, 'categoryId']);
                           const itemCategory = categories.find((candidate) => candidate.id === itemCategoryId);
                           const payroll = itemCategory?.code === 'payroll';
+                          const dailySalary = itemCategory?.code === 'daily_salary';
                           return (
                             <>
                               {payroll ? (
@@ -187,8 +189,12 @@ export function BusinessEntryModal({ type, resources, officeId, dailyCloseId, de
                                 </Form.Item>
                               ) : null}
                               <Space wrap align="start">
-                                <Form.Item name={[field.name, 'counterparty']} label={payroll ? 'Сотрудник / получатель' : 'Получатель / источник'}>
-                                  <Input style={{ width: 240 }} placeholder={payroll ? 'ФИО сотрудника' : 'Кому или от кого'} />
+                                <Form.Item
+                                  name={[field.name, 'counterparty']}
+                                  label={payroll || dailySalary ? 'Сотрудник / получатель' : 'Получатель / источник'}
+                                  rules={dailySalary ? [{ required: true, min: 2, message: 'Укажите, кому выдана зарплата' }] : undefined}
+                                >
+                                  <Input style={{ width: 240 }} placeholder={payroll || dailySalary ? 'ФИО сотрудника' : 'Кому или от кого'} />
                                 </Form.Item>
                                 <Form.Item name={[field.name, 'documentNumber']} label="Номер документа">
                                   <Input style={{ width: 220 }} placeholder="Необязательно" />
@@ -197,6 +203,11 @@ export function BusinessEntryModal({ type, resources, officeId, dailyCloseId, de
                               {payroll ? (
                                 <Typography.Paragraph type="secondary">
                                   Выплата уменьшит деньги в кассе. Прибыль уже уменьшается утверждённым расчётом зарплаты, поэтому повторного расхода в прибыли не будет.
+                                </Typography.Paragraph>
+                              ) : null}
+                              {dailySalary ? (
+                                <Typography.Paragraph type="secondary">
+                                  Это самостоятельная фактическая выплата за день. Она попадёт в закрытие дня и не будет автоматически связываться или сверяться с разделом «Зарплата».
                                 </Typography.Paragraph>
                               ) : null}
                             </>
@@ -237,10 +248,11 @@ export function BusinessEntryModal({ type, resources, officeId, dailyCloseId, de
         </Space>
         {!dailyEntryMode && source === 'PAYROLL_PAYOUT' ? <Form.Item name="payrollPeriodId" label="Утверждённый расчёт зарплаты" rules={[{ required: true }]}><Select options={resources?.payrollPeriods.map((item) => ({ value: item.id, label: item.title }))} /></Form.Item> : null}
         {!dailyEntryMode ? <Space wrap align="start">
-          <Form.Item name="counterparty" label="Получатель / источник"><Input style={{ width: 220 }} /></Form.Item>
+          <Form.Item name="counterparty" label={dailySalary ? 'Сотрудник / получатель' : 'Получатель / источник'} rules={dailySalary ? [{ required: true, min: 2, message: 'Укажите, кому выдана зарплата' }] : undefined}><Input style={{ width: 220 }} placeholder={dailySalary ? 'ФИО сотрудника' : undefined} /></Form.Item>
           <Form.Item name="documentNumber" label="Номер документа"><Input style={{ width: 220 }} /></Form.Item>
         </Space> : null}
         {!dailyEntryMode ? <Form.Item name="comment" label={requiresExplanation ? 'Пояснение' : 'Комментарий'} rules={requiresExplanation ? [{ required: true, min: 2, message: 'Обязательно объясните операцию' }] : undefined}><Input.TextArea rows={3} /></Form.Item> : null}
+        {!dailyEntryMode && dailySalary ? <Typography.Paragraph type="secondary">Это самостоятельная фактическая выплата. Она не требует заполненного расчётного периода и автоматически с разделом «Зарплата» не сверяется.</Typography.Paragraph> : null}
         {source === 'UNRECORDED_REVENUE' ? <Typography.Paragraph type="warning">Операция будет отмечена для проверки директором: её нужно связать со счётом или отдельно подтвердить.</Typography.Paragraph> : null}
       </Form>
     </Modal>

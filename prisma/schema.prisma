@@ -2022,6 +2022,9 @@ model BusinessEntry {
   payrollPeriod      PayrollPeriod?       @relation(fields: [payrollPeriodId], references: [id], onDelete: SetNull)
   dailyCloseId       String?
   dailyClose         BusinessDailyClose?  @relation(fields: [dailyCloseId], references: [id], onDelete: SetNull)
+  correctionOfId     String?
+  correctionOf       BusinessEntry?       @relation("BusinessEntryCorrections", fields: [correctionOfId], references: [id], onDelete: SetNull)
+  corrections        BusinessEntry[]      @relation("BusinessEntryCorrections")
   amount             Decimal              @db.Decimal(12, 2)
   occurredAt         DateTime
   counterparty       String?
@@ -2047,6 +2050,7 @@ model BusinessEntry {
   @@index([cashboxId, occurredAt])
   @@index([payrollPeriodId])
   @@index([dailyCloseId])
+  @@index([correctionOfId])
   @@index([requiresResolution, status])
 }
 

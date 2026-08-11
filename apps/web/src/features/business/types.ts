@@ -36,6 +36,7 @@ export type BusinessEntry = {
   paymentMethodId: string | null;
   payrollPeriodId: string | null;
   dailyCloseId: string | null;
+  correctionOfId: string | null;
   amount: DecimalValue;
   occurredAt: string;
   counterparty: string | null;
@@ -49,6 +50,7 @@ export type BusinessEntry = {
   cashbox?: { id: string; title: string } | null;
   paymentMethod?: { id: string; title: string; type: string } | null;
   payrollPeriod?: { id: string; title: string; totalAmount: DecimalValue; status: string } | null;
+  correctionOf?: { id: string; amount: DecimalValue; comment: string | null; occurredAt: string } | null;
   createdBy?: { id: string; fullName: string } | null;
 };
 
@@ -104,6 +106,7 @@ export type BusinessMetricSet = {
   costOfGoods: number;
   grossProfit: number;
   payrollExpense: number;
+  dailySalaryExpense: number;
   operatingExpenses: number;
   operatingProfit: number;
   marginPercent: number;
@@ -114,7 +117,7 @@ export type BusinessMetricSet = {
   uniqueOwners: number;
   newOwners: number;
   note: string;
-  daily: Array<{ date: string; accruedRevenue: number; cashIncome: number; cashExpense: number; profitExpense: number; costOfGoods: number; operatingProfitBeforePayroll: number; cashNet: number }>;
+  daily: Array<{ date: string; accruedRevenue: number; cashIncome: number; cashExpense: number; profitExpense: number; salaryExpense: number; costOfGoods: number; operatingProfitAfterManualExpenses: number; cashNet: number }>;
   categoryExpenses: Array<{ categoryId: string; title: string; groupCode: string; affectsProfit: boolean; amount: number }>;
   categoryIncome: Array<{ categoryId: string; title: string; groupCode: string; affectsProfit: boolean; amount: number }>;
 };
@@ -144,4 +147,26 @@ export type BusinessEntryInput = {
   counterparty?: string;
   documentNumber?: string;
   comment?: string;
+};
+
+export type BusinessEntryCorrectionInput = {
+  categoryId: string;
+  amount: number;
+  cashboxId?: string;
+  paymentMethodId?: string;
+  counterparty?: string;
+  documentNumber?: string;
+  comment?: string;
+  reason: string;
+};
+
+export type BusinessCategoryInput = {
+  code?: string;
+  title: string;
+  type: BusinessCategoryType;
+  groupCode?: string;
+  affectsProfit: boolean;
+  administratorAllowed?: boolean;
+  isActive?: boolean;
+  sortOrder?: number;
 };
