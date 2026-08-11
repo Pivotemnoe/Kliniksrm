@@ -60,9 +60,13 @@ export type BusinessDailyCloseLine = {
   cashboxId: string | null;
   paymentMethodId: string | null;
   systemAmount: DecimalValue;
+  inflowAmount?: DecimalValue;
+  outflowAmount?: DecimalValue;
   actualAmount: DecimalValue;
   difference: DecimalValue;
   comment: string | null;
+  cashbox?: { id: string; title: string } | null;
+  paymentMethod?: { id: string; title: string; type: string } | null;
 };
 
 export type BusinessDailyClose = {

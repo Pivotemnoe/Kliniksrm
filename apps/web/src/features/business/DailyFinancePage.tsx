@@ -109,7 +109,7 @@ export function DailyFinancePage() {
   function acceptSystemAmounts() {
     if (!close) return;
     setActualAmounts(Object.fromEntries(close.lines.map((line) => [line.lineKey, Number(line.systemAmount)])));
-    message.info('Фактические суммы заполнены по данным CRM. Проверьте их и сохраните.');
+    message.info('Фактическое чистое движение заполнено по расчёту CRM. Проверьте строки и сохраните.');
   }
 
   function askReturn() {
@@ -148,10 +148,22 @@ export function DailyFinancePage() {
   const expectedTotal = Number(close?.expectedAmount ?? 0);
   const currentDifference = actualTotal - expectedTotal;
   const lineColumns = useMemo<ColumnsType<BusinessDailyCloseLine>>(() => [
-    { title: 'Касса и способ оплаты', dataIndex: 'titleSnapshot', key: 'titleSnapshot' },
-    { title: 'По данным CRM', dataIndex: 'systemAmount', key: 'systemAmount', align: 'right', render: formatMoney },
-    { title: 'Фактически', key: 'actualAmount', width: 180, render: (_, line) => editable ? <InputNumber value={actualAmounts[line.lineKey] ?? 0} precision={2} addonAfter="₽" onChange={(value) => setActualAmounts((current) => ({ ...current, [line.lineKey]: Number(value ?? 0) }))} /> : formatMoney(line.actualAmount) },
-    { title: 'Разница', key: 'difference', align: 'right', render: (_, line) => {
+    { title: 'Способ оплаты и касса', key: 'titleSnapshot', width: 230, render: (_, line) => formatDailyLineTitle(line) },
+    { title: 'Расчёт CRM', key: 'systemAmount', width: 235, align: 'right', render: (_, line) => {
+      const systemAmount = Number(line.systemAmount);
+      const inflow = Number(line.inflowAmount ?? (systemAmount >= 0 ? systemAmount : 0));
+      const outflow = Number(line.outflowAmount ?? (systemAmount < 0 ? Math.abs(systemAmount) : 0));
+      return (
+        <div>
+          <Typography.Text strong type={systemAmount < 0 ? 'danger' : undefined}>{formatSignedMoney(systemAmount)}</Typography.Text>
+          <Typography.Text type="secondary" style={{ display: 'block' }}>
+            Поступило {formatMoney(inflow)} · выбыло {formatMoney(outflow)}
+          </Typography.Text>
+        </div>
+      );
+    } },
+    { title: 'Фактическое чистое движение', key: 'actualAmount', width: 210, render: (_, line) => editable ? <InputNumber value={actualAmounts[line.lineKey] ?? 0} precision={2} addonAfter="₽" onChange={(value) => setActualAmounts((current) => ({ ...current, [line.lineKey]: Number(value ?? 0) }))} /> : formatSignedMoney(Number(line.actualAmount)) },
+    { title: 'Отклонение', key: 'difference', align: 'right', width: 140, render: (_, line) => {
       const value = (actualAmounts[line.lineKey] ?? Number(line.actualAmount)) - Number(line.systemAmount);
       return <Typography.Text type={value === 0 ? 'secondary' : 'danger'}>{formatMoney(value)}</Typography.Text>;
     } },
@@ -160,10 +172,10 @@ export function DailyFinancePage() {
 
   const entryColumns = useMemo<ColumnsType<BusinessEntry>>(() => [
     { title: 'Время', dataIndex: 'occurredAt', key: 'occurredAt', render: formatDateTime },
-    { title: 'Операция', key: 'operation', render: (_, entry) => <><div>{entry.comment || entry.category.title}</div><Typography.Text type="secondary">{entry.comment ? entry.category.title : entry.counterparty || 'Без пояснения'}</Typography.Text></> },
+    { title: 'Операция', key: 'operation', render: (_, entry) => <><div>{entry.comment || entry.category.title}</div><Typography.Text type="secondary" style={{ display: 'block' }}>Статья: {entry.category.title}</Typography.Text>{entry.counterparty ? <Typography.Text type="secondary" style={{ display: 'block' }}>Получатель / источник: {entry.counterparty}</Typography.Text> : null}{entry.documentNumber ? <Typography.Text type="secondary" style={{ display: 'block' }}>Документ: {entry.documentNumber}</Typography.Text> : null}</> },
     { title: 'Сумма', dataIndex: 'amount', key: 'amount', align: 'right', render: (value, entry) => <Typography.Text type={entry.type === 'INCOME' ? 'success' : undefined}>{entry.type === 'INCOME' ? '+' : '−'}{formatMoney(value)}</Typography.Text> },
-    { title: 'Касса', key: 'cashbox', render: (_, entry) => [entry.paymentMethod?.title, entry.cashbox?.title].filter(Boolean).join(' · ') || 'Не указана' },
-    { title: 'Статус', key: 'status', render: (_, entry) => entry.status === 'VOIDED' ? <Tag>Отменена</Tag> : entry.requiresResolution ? <Tag color="orange">Требует проверки</Tag> : <Tag color="green">Учтена</Tag> },
+    { title: 'Касса', key: 'cashbox', render: (_, entry) => [entry.paymentMethod?.title, entry.cashbox?.title].filter(Boolean).join(' · ') || <Tag color="orange">Касса/способ не указаны</Tag> },
+    { title: 'Статус', key: 'status', render: (_, entry) => entry.status === 'VOIDED' ? <Tag>Отменена</Tag> : entry.requiresResolution ? <Tag color="orange">Учтена · ждёт утверждения</Tag> : <Tag color="green">Учтена</Tag> },
     ...(editable ? [{ title: '', key: 'action', width: 120, render: (_: unknown, entry: BusinessEntry) => entry.status === 'ACTIVE' ? <Button danger size="small" icon={<CloseCircleOutlined />} onClick={() => askVoid(entry)}>Отменить</Button> : null }] : []),
   ], [editable]);
 
@@ -174,24 +186,58 @@ export function DailyFinancePage() {
       {!close && !closeQuery.isLoading ? <Card><Typography.Title level={4}>Сверка ещё не сформирована</Typography.Title><Typography.Paragraph type="secondary">CRM соберёт оплаты, возвраты, расходы поставщикам и внесённые вручную операции за выбранный день.</Typography.Paragraph>{canManage ? <Button type="primary" icon={<ReloadOutlined />} loading={saveMutation.isPending} disabled={!officeId} onClick={() => saveMutation.mutate()}>Сформировать сверку</Button> : null}</Card> : null}
       {close ? <>
         <div className="report-metrics-grid">
-          <Card><Statistic title="Поступления по CRM" value={Number(close.systemIncome) + Number(close.manualIncome)} precision={2} suffix="₽" /></Card>
-          <Card><Statistic title="Возвраты и расходы" value={Number(close.systemRefunds) + Number(close.systemExpense) + Number(close.manualExpense)} precision={2} suffix="₽" /></Card>
-          <Card><Statistic title="Ожидается в кассах" value={expectedTotal} precision={2} suffix="₽" /></Card>
-          <Card><Statistic title="Фактически" value={actualTotal} precision={2} suffix="₽" /></Card>
-          <Card><Statistic title="Расхождение" value={currentDifference} precision={2} suffix="₽" valueStyle={{ color: currentDifference === 0 ? '#237804' : '#cf1322' }} /></Card>
+          <Card><Statistic title="Всего поступило" value={Number(close.systemIncome) + Number(close.manualIncome)} precision={2} suffix="₽" /></Card>
+          <Card><Statistic title="Всего выбыло" value={Number(close.systemRefunds) + Number(close.systemExpense) + Number(close.manualExpense)} precision={2} suffix="₽" /></Card>
+          <Card><Statistic title="Чистое движение CRM" value={expectedTotal} precision={2} suffix="₽" /></Card>
+          <Card><Statistic title="Фактическое движение" value={actualTotal} precision={2} suffix="₽" /></Card>
+          <Card><Statistic title="Отклонение" value={currentDifference} precision={2} suffix="₽" valueStyle={{ color: currentDifference === 0 ? '#237804' : '#cf1322' }} /></Card>
         </div>
         <div className="list-panel">
-          <div className="list-panel-header"><div><Typography.Title level={4}>Сверка касс</Typography.Title><Space wrap><Tag color={statusMeta[close.status].color}>{statusMeta[close.status].label}</Tag>{close.submittedBy ? <Typography.Text type="secondary">Отправил: {close.submittedBy.fullName}</Typography.Text> : null}{close.approvedBy ? <Typography.Text type="secondary">Утвердил: {close.approvedBy.fullName}</Typography.Text> : null}</Space></div><Space wrap>{editable ? <><Button onClick={acceptSystemAmounts}>Принять суммы CRM</Button><Button icon={<SaveOutlined />} loading={saveMutation.isPending} onClick={() => saveMutation.mutate()}>Сохранить</Button></> : null}{close.status === 'DRAFT' && canSubmit ? <Button type="primary" icon={<SendOutlined />} loading={submitMutation.isPending} onClick={() => submitMutation.mutate()}>Отправить директору</Button> : null}{close.status === 'SUBMITTED' && canApprove ? <><Button onClick={askReturn}>Вернуть</Button><Button type="primary" icon={<CheckOutlined />} loading={approveMutation.isPending} onClick={() => modal.confirm({ title: 'Утвердить закрытие дня?', content: currentDifference === 0 ? 'Сверка с CRM совпадает.' : `Расхождение: ${formatMoney(currentDifference)}. Пояснение останется в журнале.`, okText: 'Утвердить', cancelText: 'Отмена', onOk: () => approveMutation.mutateAsync(close.id) })}>Утвердить</Button></> : null}</Space></div>
+          <div className="list-panel-header"><div><Typography.Title level={4}>Сверка касс</Typography.Title><Space wrap><Tag color={statusMeta[close.status].color}>{statusMeta[close.status].label}</Tag>{close.submittedBy ? <Typography.Text type="secondary">Отправил: {close.submittedBy.fullName}</Typography.Text> : null}{close.approvedBy ? <Typography.Text type="secondary">Утвердил: {close.approvedBy.fullName}</Typography.Text> : null}</Space></div><Space wrap>{editable ? <><Button onClick={acceptSystemAmounts}>Заполнить фактическое по CRM</Button><Button icon={<SaveOutlined />} loading={saveMutation.isPending} onClick={() => saveMutation.mutate()}>Сохранить</Button></> : null}{close.status === 'DRAFT' && canSubmit ? <Button type="primary" icon={<SendOutlined />} loading={submitMutation.isPending} onClick={() => submitMutation.mutate()}>Отправить директору</Button> : null}{close.status === 'SUBMITTED' && canApprove ? <><Button onClick={askReturn}>Вернуть</Button><Button type="primary" icon={<CheckOutlined />} loading={approveMutation.isPending} onClick={() => modal.confirm({ title: 'Утвердить закрытие дня?', content: currentDifference === 0 ? 'Сверка с CRM совпадает.' : `Отклонение: ${formatMoney(currentDifference)}. Пояснение останется в журнале.`, okText: 'Утвердить', cancelText: 'Отмена', onOk: () => approveMutation.mutateAsync(close.id) })}>Утвердить</Button></> : null}</Space></div>
+          <Alert
+            type="info"
+            showIcon
+            message="CRM показывает чистое движение денег"
+            description="В каждой строке отдельно указано, сколько поступило и сколько выбыло. Чистое движение = поступления минус расходы. Отрицательное значение означает расход из этой кассы, а не долг и не ошибку."
+            className="form-alert"
+          />
           <Table rowKey="id" columns={lineColumns} dataSource={close.lines} loading={closeQuery.isLoading} pagination={false} scroll={{ x: 980 }} locale={{ emptyText: 'За день нет движений по кассам' }} />
           <div className="list-panel-body"><Typography.Text strong>Комментарий к закрытию</Typography.Text><Input.TextArea value={comment} disabled={!editable} rows={2} placeholder="Обязателен, если есть расхождение" onChange={(event) => setComment(event.target.value)} /></div>
         </div>
       </> : null}
       <div className="list-panel">
-        <div className="list-panel-header"><div><Typography.Title level={4}>Дополнительные операции</Typography.Title><Typography.Text type="secondary">Непробитая выручка, мелкие расходы и другие движения, которых нет в счетах CRM.</Typography.Text></div>{editable && close ? <Space wrap><Button icon={<PlusOutlined />} onClick={() => setEntryType('INCOME')}>Добавить поступление</Button><Button icon={<PlusOutlined />} onClick={() => setEntryType('EXPENSE')}>Добавить расход</Button></Space> : null}</div>
+        <div className="list-panel-header"><div><Typography.Title level={4}>Дополнительные операции</Typography.Title><Typography.Text type="secondary">Непробитая выручка, ручные расходы и другие движения, которых нет в счетах CRM.</Typography.Text></div>{editable && close ? <Space wrap><Button icon={<PlusOutlined />} onClick={() => setEntryType('INCOME')}>Добавить поступление</Button><Button icon={<PlusOutlined />} onClick={() => setEntryType('EXPENSE')}>Добавить расход</Button></Space> : null}</div>
+        <Alert
+          type="info"
+          showIcon
+          message="Что означает «ждёт утверждения»"
+          description="Неучтённая выручка сразу входит в поступления и чистое движение. Метка означает только контроль: после утверждения закрытия дня директором она автоматически станет подтверждённой."
+          className="form-alert"
+        />
         <Table rowKey="id" columns={entryColumns} dataSource={entriesQuery.data ?? []} loading={entriesQuery.isLoading} pagination={false} scroll={{ x: 900 }} locale={{ emptyText: 'Дополнительных операций нет' }} />
       </div>
       <Alert type="info" showIcon message="Управленческий учёт" description="Закрытие дня помогает контролировать выручку и расходы клиники, но не заменяет бухгалтерскую или налоговую отчётность." />
       <BusinessEntryModal type={entryType} resources={resourcesQuery.data} officeId={officeId} dailyCloseId={close?.id} defaultDate={`${businessDate}T12:00:00`} lockOffice onClose={() => setEntryType(null)} onSaved={async () => { if (close) await prepareDailyClose(payload(close.lines)); await refresh(); }} />
     </div>
   );
+}
+
+function formatDailyLineTitle(line: BusinessDailyCloseLine) {
+  const methodTitle = line.paymentMethod?.title ?? paymentTypeLabel(line.paymentType);
+  return `${methodTitle} · ${line.cashbox?.title ?? 'касса не указана'}`;
+}
+
+function paymentTypeLabel(type: string) {
+  return ({
+    CASH: 'Наличные',
+    CARD: 'Банковская карта',
+    BANK_TRANSFER: 'Перевод на счёт',
+    DEPOSIT: 'Депозит владельца',
+    OTHER: 'Способ не указан',
+  } as Record<string, string>)[type] ?? 'Способ не указан';
+}
+
+function formatSignedMoney(value: number) {
+  if (value === 0) return formatMoney(0);
+  return `${value > 0 ? '+' : '−'}${formatMoney(Math.abs(value))}`;
 }

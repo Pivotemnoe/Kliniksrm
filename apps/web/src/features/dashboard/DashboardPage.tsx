@@ -12,7 +12,7 @@ import {
   WalletOutlined,
 } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Button, Descriptions, Drawer, List, Space, Table, Tag, Typography } from 'antd';
+import { Alert, Button, Descriptions, Drawer, Input, List, Select, Space, Table, Tag, Typography } from 'antd';
 import { type ReactNode, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';
@@ -39,6 +39,11 @@ const portalStatusLabels = {
   DISABLED: 'Доступ выключен',
 } as const;
 const portalStatusColors = { ACTIVATED: 'green', INVITED: 'gold', ENABLED: 'blue', BLOCKED: 'red', DISABLED: 'default' } as const;
+
+type PortalStatusFilter = 'ALL' | 'NOT_ACTIVATED' | DirectorPortalOwnerItem['status'];
+type PortalActivityFilter = 'ALL' | 'SEEN' | 'NEVER_SEEN' | 'ACTIVE_30_DAYS' | 'INACTIVE_30_DAYS';
+type PortalChannelFilter = 'ALL' | 'TELEGRAM' | 'MAX' | 'NO_MESSENGER';
+type PortalSort = 'LAST_SEEN_DESC' | 'LAST_SEEN_ASC' | 'INVITED_DESC' | 'INVITED_ASC' | 'NAME_ASC';
 
 export function DashboardPage() {
   const navigate = useNavigate();
@@ -460,6 +465,45 @@ function PortalStatisticsDrawer({
   onClose: () => void;
   onOpenOwner: (ownerId: string) => void;
 }) {
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<PortalStatusFilter>('ALL');
+  const [activityFilter, setActivityFilter] = useState<PortalActivityFilter>('ALL');
+  const [channelFilter, setChannelFilter] = useState<PortalChannelFilter>('ALL');
+  const [sort, setSort] = useState<PortalSort>('LAST_SEEN_DESC');
+  const listedItems = statistics?.items ?? [];
+  const filteredItems = useMemo(() => {
+    const normalizedSearch = search.trim().toLocaleLowerCase('ru');
+    const activeSince = Date.now() - 30 * 86_400_000;
+    const matches = listedItems.filter((owner) => {
+      const searchDigits = normalizedSearch.replace(/\D/g, '');
+      const matchesSearch = !normalizedSearch
+        || owner.fullName.toLocaleLowerCase('ru').includes(normalizedSearch)
+        || (searchDigits.length > 0 && (owner.phone ?? '').replace(/\D/g, '').includes(searchDigits));
+      const matchesStatus = statusFilter === 'ALL'
+        || (statusFilter === 'NOT_ACTIVATED' ? !owner.registered : owner.status === statusFilter);
+      const lastSeenAt = owner.lastSeenAt ? new Date(owner.lastSeenAt).getTime() : null;
+      const matchesActivity = activityFilter === 'ALL'
+        || (activityFilter === 'SEEN' && lastSeenAt !== null)
+        || (activityFilter === 'NEVER_SEEN' && lastSeenAt === null)
+        || (activityFilter === 'ACTIVE_30_DAYS' && lastSeenAt !== null && lastSeenAt >= activeSince)
+        || (activityFilter === 'INACTIVE_30_DAYS' && (lastSeenAt === null || lastSeenAt < activeSince));
+      const matchesChannel = channelFilter === 'ALL'
+        || (channelFilter === 'TELEGRAM' && owner.telegramLinked)
+        || (channelFilter === 'MAX' && owner.maxLinked)
+        || (channelFilter === 'NO_MESSENGER' && !owner.telegramLinked && !owner.maxLinked);
+      return matchesSearch && matchesStatus && matchesActivity && matchesChannel;
+    });
+
+    return matches.sort((left, right) => {
+      if (sort === 'NAME_ASC') return left.fullName.localeCompare(right.fullName, 'ru');
+      const field = sort.startsWith('INVITED') ? 'invitedAt' : 'lastSeenAt';
+      const leftDate = left[field] ?? '';
+      const rightDate = right[field] ?? '';
+      const direction = sort.endsWith('ASC') ? 1 : -1;
+      return direction * leftDate.localeCompare(rightDate) || left.fullName.localeCompare(right.fullName, 'ru');
+    });
+  }, [activityFilter, channelFilter, listedItems, search, sort, statusFilter]);
+
   return (
     <Drawer
       title="Личные кабинеты владельцев"
@@ -497,12 +541,70 @@ function PortalStatisticsDrawer({
       <Typography.Paragraph type="secondary" className="portal-statistics-note">
         Активированным считается кабинет, в который владелец хотя бы один раз успешно вошёл. Одного созданного приглашения или QR-кода недостаточно.
       </Typography.Paragraph>
+      <Space wrap align="start" className="portal-statistics-filters">
+        <Input.Search
+          allowClear
+          value={search}
+          placeholder="Владелец или телефон"
+          onChange={(event) => setSearch(event.target.value)}
+          style={{ width: 250 }}
+        />
+        <Select<PortalStatusFilter>
+          value={statusFilter}
+          onChange={setStatusFilter}
+          style={{ width: 210 }}
+          options={[
+            { value: 'ALL', label: 'Все состояния' },
+            { value: 'ACTIVATED', label: 'Активирован' },
+            { value: 'NOT_ACTIVATED', label: 'Не активирован' },
+            { value: 'INVITED', label: 'Приглашён, не вошёл' },
+            { value: 'ENABLED', label: 'Доступ включён' },
+            { value: 'BLOCKED', label: 'Заблокирован' },
+            { value: 'DISABLED', label: 'Доступ выключен' },
+          ]}
+        />
+        <Select<PortalActivityFilter>
+          value={activityFilter}
+          onChange={setActivityFilter}
+          style={{ width: 205 }}
+          options={[
+            { value: 'ALL', label: 'Любой последний вход' },
+            { value: 'SEEN', label: 'Хотя бы раз входил' },
+            { value: 'NEVER_SEEN', label: 'Ни разу не входил' },
+            { value: 'ACTIVE_30_DAYS', label: 'Заходил за 30 дней' },
+            { value: 'INACTIVE_30_DAYS', label: 'Не заходил 30 дней' },
+          ]}
+        />
+        <Select<PortalChannelFilter>
+          value={channelFilter}
+          onChange={setChannelFilter}
+          style={{ width: 185 }}
+          options={[
+            { value: 'ALL', label: 'Все каналы' },
+            { value: 'TELEGRAM', label: 'Telegram подключён' },
+            { value: 'MAX', label: 'MAX подключён' },
+            { value: 'NO_MESSENGER', label: 'Без мессенджера' },
+          ]}
+        />
+        <Select<PortalSort>
+          value={sort}
+          onChange={setSort}
+          style={{ width: 230 }}
+          options={[
+            { value: 'LAST_SEEN_DESC', label: 'Последний вход: новые' },
+            { value: 'LAST_SEEN_ASC', label: 'Последний вход: старые' },
+            { value: 'INVITED_DESC', label: 'Приглашение: новые' },
+            { value: 'INVITED_ASC', label: 'Приглашение: старые' },
+            { value: 'NAME_ASC', label: 'Владелец: А–Я' },
+          ]}
+        />
+      </Space>
       <ProgressiveTable<DirectorPortalOwnerItem>
         rowKey="ownerId"
         loading={loading}
-        dataSource={statistics?.items ?? []}
+        dataSource={filteredItems}
         scroll={{ x: 760 }}
-        locale={{ emptyText: 'Активаций и приглашений пока нет' }}
+        locale={{ emptyText: 'По выбранным условиям владельцев нет' }}
         columns={[
           {
             title: 'Владелец',
@@ -549,6 +651,9 @@ function PortalStatisticsDrawer({
           },
         ]}
       />
+      <Typography.Text type="secondary">
+        Показано {filteredItems.length} из {listedItems.length} загруженных кабинетов.
+      </Typography.Text>
       {statistics && statistics.listedOwners > statistics.items.length ? (
         <Typography.Text type="secondary">
           Показаны последние {statistics.items.length} из {statistics.listedOwners} владельцев с личным кабинетом.

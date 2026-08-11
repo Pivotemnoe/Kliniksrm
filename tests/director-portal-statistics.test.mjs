@@ -125,6 +125,10 @@ test('карточка личных кабинетов находится тол
   assert.match(dashboard, /Приглашений создано сегодня/);
   assert.match(dashboard, /Активировали сегодня/);
   assert.match(dashboard, /Заходили сегодня/);
+  assert.match(dashboard, /placeholder="Владелец или телефон"/);
+  assert.match(dashboard, /Не активирован/);
+  assert.match(dashboard, /Последний вход: новые/);
+  assert.match(dashboard, /Telegram подключён/);
 });
 
 test('карточка владельца отличает созданное приглашение от фактического входа', async () => {

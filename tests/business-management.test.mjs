@@ -76,7 +76,7 @@ test('интерфейс этапа 3.5 показывает понятные р
     read('apps/web/src/layouts/menu.tsx'),
     read('apps/web/src/features/stock/StockOperationsPage.tsx'),
   ]);
-  assert.match(daily, /Принять суммы CRM/);
+  assert.match(daily, /Заполнить фактическое по CRM/);
   assert.match(daily, /Отправить директору/);
   assert.match(daily, /не заменяет бухгалтерскую или налоговую отчётность/);
   assert.match(business, /Операционная прибыль/);
@@ -102,6 +102,11 @@ test('закрытие дня принимает свободные причин
   assert.match(modal, /Причина расхода/);
   assert.match(modal, /Добавить ещё доход/);
   assert.match(modal, /Добавить ещё расход/);
+  assert.match(modal, /categoryId: itemCategory\.id/);
+  assert.match(modal, /payrollPeriodId: item\.payrollPeriodId/);
+  assert.match(modal, /Получатель \/ источник/);
+  assert.match(modal, /Оплату поставщику не дублируйте здесь/);
+  assert.match(modal, /Утверждённый расчёт зарплаты/);
   assert.match(modal, /comment: item\.reason\.trim\(\)/);
   assert.match(api, /\/v1\/business\/entries\/batch/);
   assert.match(controller, /createEntriesBatch/);
@@ -109,7 +114,12 @@ test('закрытие дня принимает свободные причин
   assert.match(batchDto, /ArrayMaxSize\(50\)/);
   assert.match(service, /createEntriesBatch[\s\S]*?this\.prisma\.\$transaction/);
   assert.match(service, /tx\.auditLog\.create/);
+  assert.match(service, /inflowAmount/);
+  assert.match(service, /outflowAmount/);
+  assert.match(service, /PAYROLL_PAYOUT[\s\S]*?category\.code !== 'payroll'/);
   assert.match(daily, /entry\.comment \|\| entry\.category\.title/);
+  assert.match(daily, /Поступило \{formatMoney\(inflow\)\} · выбыло \{formatMoney\(outflow\)\}/);
+  assert.match(daily, /Учтена · ждёт утверждения/);
 });
 
 test('утверждение закрытия дня подтверждает связанную неучтённую выручку и сохраняет аудит', async () => {

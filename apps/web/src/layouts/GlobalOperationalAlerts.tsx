@@ -11,10 +11,10 @@ import type { InternalMessageConversationsResponse } from '../features/internalM
 
 export function GlobalOperationalAlerts({
   internalMessages,
-  remoteReadOnly = false,
+  remoteAccessMode = null,
 }: {
   internalMessages?: InternalMessageConversationsResponse;
-  remoteReadOnly?: boolean;
+  remoteAccessMode?: 'read-only' | 'director' | null;
 }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -55,7 +55,7 @@ export function GlobalOperationalAlerts({
 
   const alertsUnavailable = alertsQuery.isError && !alertsQuery.data;
 
-  if (!alertsUnavailable && !remoteReadOnly && !latestUnreadConversation && !overdueVisits.length && !vaccinationAlerts.length && !otherUnreadAlerts.length) return null;
+  if (!alertsUnavailable && !remoteAccessMode && !latestUnreadConversation && !overdueVisits.length && !vaccinationAlerts.length && !otherUnreadAlerts.length) return null;
 
   return (
     <div className="global-operational-alerts" aria-label="Рабочие предупреждения клиники">
@@ -75,12 +75,14 @@ export function GlobalOperationalAlerts({
           </button>
         </div>
       ) : null}
-      {remoteReadOnly ? (
+      {remoteAccessMode ? (
         <div className="dashboard-overdue-banner remote-read-only-banner" role="status">
           <span className="dashboard-overdue-banner-copy">
             <EyeOutlined />
-            <strong>Удалённый просмотр</strong>
-            <span>Разделы доступны по вашей роли; изменение рабочих данных заблокировано</span>
+            <strong>{remoteAccessMode === 'director' ? 'Удалённая работа директора' : 'Удалённый просмотр'}</strong>
+            <span>{remoteAccessMode === 'director'
+              ? 'Изменения разрешены по вашим правам и сохраняются в аудите'
+              : 'Разделы доступны по вашей роли; изменение рабочих данных заблокировано'}</span>
           </span>
         </div>
       ) : null}

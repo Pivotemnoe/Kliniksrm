@@ -10,7 +10,14 @@ import { BusinessCategoryType, BusinessEntryInput, BusinessEntrySource, Business
 type FormValues = {
   categoryId?: string;
   amount?: number;
-  items?: Array<{ reason: string; amount: number }>;
+  items?: Array<{
+    categoryId?: string;
+    reason: string;
+    amount: number;
+    counterparty?: string;
+    documentNumber?: string;
+    payrollPeriodId?: string;
+  }>;
   occurredAt: Dayjs;
   officeId?: string;
   cashboxId?: string;
@@ -38,7 +45,7 @@ export function BusinessEntryModal({ type, resources, officeId, dailyCloseId, de
   const selectedOfficeId = Form.useWatch('officeId', form);
   const categories = resources?.categories.filter((item) => item.type === type) ?? [];
   const dailyCategory = dailyEntryMode ? findDailyCategory(categories, type) : undefined;
-  const category = dailyCategory ?? resources?.categories.find((item) => item.id === categoryId);
+  const category = resources?.categories.find((item) => item.id === categoryId);
   const source = inferSource(category?.code);
   const requiresExplanation = source === 'UNRECORDED_REVENUE' || source === 'DAILY_DIFFERENCE';
 
@@ -48,7 +55,7 @@ export function BusinessEntryModal({ type, resources, officeId, dailyCloseId, de
       form.setFieldsValue({
         occurredAt: dayjs(defaultDate ?? undefined),
         officeId,
-        ...(dailyEntryMode ? { categoryId: dailyCategory?.id, items: [{ reason: '', amount: undefined }] } : {}),
+        ...(dailyEntryMode ? { items: [{ categoryId: dailyCategory?.id, reason: '', amount: undefined }] } : {}),
       });
     }
   }, [dailyCategory?.id, dailyEntryMode, defaultDate, form, officeId, type]);
@@ -56,20 +63,25 @@ export function BusinessEntryModal({ type, resources, officeId, dailyCloseId, de
   const mutation = useMutation({
     mutationFn: (values: FormValues) => {
       if (dailyEntryMode) {
-        const inputs: BusinessEntryInput[] = (values.items ?? []).map((item) => ({
-          type: type!,
-          categoryId: dailyCategory!.id,
-          amount: item.amount,
-          occurredAt: values.occurredAt.toISOString(),
-          source,
-          officeId: values.officeId,
-          cashboxId: values.cashboxId,
-          paymentMethodId: values.paymentMethodId,
-          dailyCloseId,
-          counterparty: values.counterparty,
-          documentNumber: values.documentNumber,
-          comment: item.reason.trim(),
-        }));
+        const inputs: BusinessEntryInput[] = (values.items ?? []).map((item) => {
+          const itemCategory = categories.find((candidate) => candidate.id === item.categoryId);
+          if (!itemCategory) throw new Error('Для каждой операции выберите статью');
+          return {
+            type: type!,
+            categoryId: itemCategory.id,
+            amount: item.amount,
+            occurredAt: values.occurredAt.toISOString(),
+            source: inferSource(itemCategory.code),
+            officeId: values.officeId,
+            cashboxId: values.cashboxId,
+            paymentMethodId: values.paymentMethodId,
+            payrollPeriodId: item.payrollPeriodId,
+            dailyCloseId,
+            counterparty: item.counterparty,
+            documentNumber: item.documentNumber,
+            comment: item.reason.trim(),
+          };
+        });
         return createBusinessEntries(inputs);
       }
 
@@ -99,7 +111,7 @@ export function BusinessEntryModal({ type, resources, officeId, dailyCloseId, de
       title={type === 'INCOME' ? 'Добавить поступление' : 'Добавить расход'}
       onCancel={onClose}
       okText={dailyEntryMode ? 'Сохранить все операции' : 'Сохранить операцию'}
-      okButtonProps={{ disabled: dailyEntryMode && !dailyCategory }}
+      okButtonProps={{ disabled: dailyEntryMode && categories.length === 0 }}
       cancelText="Отмена"
       confirmLoading={mutation.isPending}
       onOk={() => form.submit()}
@@ -109,7 +121,16 @@ export function BusinessEntryModal({ type, resources, officeId, dailyCloseId, de
       <Form form={form} layout="vertical" onFinish={(values) => mutation.mutate(values)}>
         {dailyEntryMode ? (
           <>
-            {!dailyCategory ? <Alert type="error" showIcon message="Не найдена служебная статья для ручной операции" description="Обратитесь к директору: справочник доходов и расходов нужно восстановить." /> : null}
+            {!categories.length ? <Alert type="error" showIcon message="Не найдены доступные статьи для ручной операции" description="Обратитесь к директору: справочник доходов и расходов нужно восстановить." /> : null}
+            {type === 'EXPENSE' ? (
+              <Alert
+                type="warning"
+                showIcon
+                message="Оплату поставщику не дублируйте здесь"
+                description="Оплачивайте накладную в разделе «Склад → Накладные → Оплатить»: тогда расход и долг поставщику свяжутся автоматически."
+                style={{ marginBottom: 12 }}
+              />
+            ) : null}
             <Form.List name="items">
               {(fields, { add, remove }) => (
                 <Space direction="vertical" size={12} style={{ width: '100%' }}>
@@ -122,6 +143,19 @@ export function BusinessEntryModal({ type, resources, officeId, dailyCloseId, de
                     >
                       <Space wrap align="start" style={{ width: '100%' }}>
                         <Form.Item
+                          name={[field.name, 'categoryId']}
+                          label="Статья"
+                          rules={[{ required: true, message: 'Выберите статью' }]}
+                          style={{ minWidth: 260, flex: 1 }}
+                        >
+                          <Select
+                            showSearch
+                            optionFilterProp="label"
+                            placeholder="Что это за операция"
+                            options={categories.map((item) => ({ value: item.id, label: item.title }))}
+                          />
+                        </Form.Item>
+                        <Form.Item
                           name={[field.name, 'reason']}
                           label={type === 'INCOME' ? 'Причина дохода' : 'Причина расхода'}
                           rules={[{ required: true, min: 2, message: 'Напишите причину' }, { max: 500, message: 'Не более 500 символов' }]}
@@ -133,10 +167,46 @@ export function BusinessEntryModal({ type, resources, officeId, dailyCloseId, de
                           <InputNumber min={0.01} precision={2} addonAfter="₽" style={{ width: 190 }} />
                         </Form.Item>
                       </Space>
+                      <Form.Item noStyle shouldUpdate={(previous, current) => previous.items?.[field.name]?.categoryId !== current.items?.[field.name]?.categoryId}>
+                        {() => {
+                          const itemCategoryId = form.getFieldValue(['items', field.name, 'categoryId']);
+                          const itemCategory = categories.find((candidate) => candidate.id === itemCategoryId);
+                          const payroll = itemCategory?.code === 'payroll';
+                          return (
+                            <>
+                              {payroll ? (
+                                <Form.Item
+                                  name={[field.name, 'payrollPeriodId']}
+                                  label="Утверждённый расчёт зарплаты"
+                                  rules={[{ required: true, message: 'Выберите утверждённый расчёт' }]}
+                                >
+                                  <Select
+                                    placeholder="Выберите расчёт"
+                                    options={resources?.payrollPeriods.map((item) => ({ value: item.id, label: item.title }))}
+                                  />
+                                </Form.Item>
+                              ) : null}
+                              <Space wrap align="start">
+                                <Form.Item name={[field.name, 'counterparty']} label={payroll ? 'Сотрудник / получатель' : 'Получатель / источник'}>
+                                  <Input style={{ width: 240 }} placeholder={payroll ? 'ФИО сотрудника' : 'Кому или от кого'} />
+                                </Form.Item>
+                                <Form.Item name={[field.name, 'documentNumber']} label="Номер документа">
+                                  <Input style={{ width: 220 }} placeholder="Необязательно" />
+                                </Form.Item>
+                              </Space>
+                              {payroll ? (
+                                <Typography.Paragraph type="secondary">
+                                  Выплата уменьшит деньги в кассе. Прибыль уже уменьшается утверждённым расчётом зарплаты, поэтому повторного расхода в прибыли не будет.
+                                </Typography.Paragraph>
+                              ) : null}
+                            </>
+                          );
+                        }}
+                      </Form.Item>
                     </Card>
                   ))}
                   {fields.length < 50 ? (
-                    <Button type="dashed" block icon={<PlusOutlined />} onClick={() => add({ reason: '', amount: undefined })}>
+                    <Button type="dashed" block icon={<PlusOutlined />} onClick={() => add({ categoryId: dailyCategory?.id, reason: '', amount: undefined })}>
                       {type === 'INCOME' ? 'Добавить ещё доход' : 'Добавить ещё расход'}
                     </Button>
                   ) : null}
@@ -144,7 +214,7 @@ export function BusinessEntryModal({ type, resources, officeId, dailyCloseId, de
               )}
             </Form.List>
             <Typography.Paragraph type="secondary" style={{ marginTop: 12 }}>
-              Каждая причина сохранится отдельной операцией. Дата, филиал, касса и способ оплаты ниже применяются ко всем строкам.
+              Каждая строка сохранится отдельной операцией со своей статьёй и получателем. Дата, филиал, касса и способ оплаты ниже применяются ко всем строкам.
             </Typography.Paragraph>
           </>
         ) : (
@@ -166,10 +236,10 @@ export function BusinessEntryModal({ type, resources, officeId, dailyCloseId, de
           <Form.Item name="paymentMethodId" label="Способ оплаты"><Select allowClear style={{ width: 220 }} options={resources?.paymentMethods.map((item) => ({ value: item.id, label: item.title }))} /></Form.Item>
         </Space>
         {!dailyEntryMode && source === 'PAYROLL_PAYOUT' ? <Form.Item name="payrollPeriodId" label="Утверждённый расчёт зарплаты" rules={[{ required: true }]}><Select options={resources?.payrollPeriods.map((item) => ({ value: item.id, label: item.title }))} /></Form.Item> : null}
-        <Space wrap align="start">
+        {!dailyEntryMode ? <Space wrap align="start">
           <Form.Item name="counterparty" label="Получатель / источник"><Input style={{ width: 220 }} /></Form.Item>
           <Form.Item name="documentNumber" label="Номер документа"><Input style={{ width: 220 }} /></Form.Item>
-        </Space>
+        </Space> : null}
         {!dailyEntryMode ? <Form.Item name="comment" label={requiresExplanation ? 'Пояснение' : 'Комментарий'} rules={requiresExplanation ? [{ required: true, min: 2, message: 'Обязательно объясните операцию' }] : undefined}><Input.TextArea rows={3} /></Form.Item> : null}
         {source === 'UNRECORDED_REVENUE' ? <Typography.Paragraph type="warning">Операция будет отмечена для проверки директором: её нужно связать со счётом или отдельно подтвердить.</Typography.Paragraph> : null}
       </Form>

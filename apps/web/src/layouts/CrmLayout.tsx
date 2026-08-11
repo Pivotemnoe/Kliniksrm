@@ -210,7 +210,9 @@ export function CrmLayout() {
         <Content className="crm-content">
           <GlobalOperationalAlerts
             internalMessages={internalMessagesQuery.data}
-            remoteReadOnly={data?.accessType === 'REMOTE'}
+            remoteAccessMode={data?.accessType === 'REMOTE'
+              ? employee?.roles.includes('director') ? 'director' : 'read-only'
+              : null}
           />
           <RouteLoadBoundary resetKey={location.pathname}>
             <Outlet />

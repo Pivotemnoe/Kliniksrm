@@ -138,6 +138,12 @@ export class BusinessService {
     if (source === BusinessEntrySource.UNRECORDED_REVENUE && dto.type !== BusinessCategoryType.INCOME) {
       throw new BadRequestException('Неучтённая выручка должна быть доходом');
     }
+    if (category.code === 'payroll' && source !== BusinessEntrySource.PAYROLL_PAYOUT) {
+      throw new BadRequestException('Выплата зарплаты должна быть связана с утверждённым расчётом');
+    }
+    if (source === BusinessEntrySource.PAYROLL_PAYOUT && (category.code !== 'payroll' || !dto.payrollPeriodId)) {
+      throw new BadRequestException('Для выплаты зарплаты выберите статью зарплаты и утверждённый расчёт');
+    }
     const comment = clean(dto.comment);
     if ((source === BusinessEntrySource.UNRECORDED_REVENUE || source === BusinessEntrySource.DAILY_DIFFERENCE) && !comment) {
       throw new BadRequestException('Для неучтённой выручки или расхождения укажите пояснение');
@@ -211,10 +217,13 @@ export class BusinessService {
   }
 
   async getDailyClose(query: DailyCloseQueryDto) {
-    return this.prisma.businessDailyClose.findUnique({
+    const close = await this.prisma.businessDailyClose.findUnique({
       where: { officeId_businessDate: { officeId: query.officeId, businessDate: dateOnly(query.businessDate) } },
       include: closeInclude,
     });
+    if (!close) return null;
+    const snapshot = await this.calculateDailySnapshot(query.officeId, query.businessDate);
+    return attachDailyLineBreakdown(close, snapshot.lines);
   }
 
   async prepareDailyClose(dto: SaveDailyCloseDto, actor: BusinessActor) {
@@ -369,11 +378,20 @@ export class BusinessService {
     const allLines = new Map(snapshot.lines.map((line) => [line.lineKey, line]));
     for (const line of existing.lines) {
       if (!allLines.has(line.lineKey) && !decimal(line.actualAmount).equals(0)) {
-        allLines.set(line.lineKey, { lineKey: line.lineKey, titleSnapshot: line.titleSnapshot, paymentType: line.paymentType, cashboxId: line.cashboxId, paymentMethodId: line.paymentMethodId, systemAmount: decimal(0) });
+        allLines.set(line.lineKey, {
+          lineKey: line.lineKey,
+          titleSnapshot: line.titleSnapshot,
+          paymentType: line.paymentType,
+          cashboxId: line.cashboxId,
+          paymentMethodId: line.paymentMethodId,
+          systemAmount: decimal(0),
+          inflowAmount: decimal(0),
+          outflowAmount: decimal(0),
+        });
       }
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const saved = await this.prisma.$transaction(async (tx) => {
       const keepKeys = [...allLines.keys()];
       await tx.businessDailyCloseLine.deleteMany({ where: { dailyCloseId: closeId, ...(keepKeys.length ? { lineKey: { notIn: keepKeys } } : {}) } });
       for (const line of allLines.values()) {
@@ -403,6 +421,7 @@ export class BusinessService {
       });
       return tx.businessDailyClose.findUniqueOrThrow({ where: { id: closeId }, include: closeInclude });
     });
+    return attachDailyLineBreakdown(saved, snapshot.lines);
   }
 
   private async calculateDailySnapshot(officeId: string, businessDate: string) {
@@ -550,6 +569,8 @@ type DailyLine = {
   cashboxId: string | null;
   paymentMethodId: string | null;
   systemAmount: Prisma.Decimal;
+  inflowAmount: Prisma.Decimal;
+  outflowAmount: Prisma.Decimal;
 };
 
 function addDailyLine(
@@ -558,11 +579,39 @@ function addDailyLine(
   amount: Prisma.Decimal,
 ) {
   const lineKey = `${item.cashboxId ?? 'no-cashbox'}:${item.paymentMethodId ?? `type-${item.type}`}`;
-  const methodTitle = item.paymentMethod?.title ?? paymentTypeTitle(item.type);
-  const titleSnapshot = item.cashbox?.title ? `${methodTitle} · ${item.cashbox.title}` : methodTitle;
-  const row = rows.get(lineKey) ?? { lineKey, titleSnapshot, paymentType: item.type, cashboxId: item.cashboxId, paymentMethodId: item.paymentMethodId, systemAmount: decimal(0) };
+  const methodTitle = item.paymentMethod?.title ?? (item.type === PaymentType.OTHER ? 'Способ не указан' : paymentTypeTitle(item.type));
+  const titleSnapshot = `${methodTitle} · ${item.cashbox?.title ?? 'касса не указана'}`;
+  const row = rows.get(lineKey) ?? {
+    lineKey,
+    titleSnapshot,
+    paymentType: item.type,
+    cashboxId: item.cashboxId,
+    paymentMethodId: item.paymentMethodId,
+    systemAmount: decimal(0),
+    inflowAmount: decimal(0),
+    outflowAmount: decimal(0),
+  };
   row.systemAmount = row.systemAmount.plus(amount);
+  if (amount.greaterThanOrEqualTo(0)) row.inflowAmount = row.inflowAmount.plus(amount);
+  else row.outflowAmount = row.outflowAmount.plus(amount.abs());
   rows.set(lineKey, row);
+}
+
+function attachDailyLineBreakdown<T extends { lines: Array<{ lineKey: string; systemAmount: Prisma.Decimal }> }>(close: T, snapshotLines: DailyLine[]) {
+  const snapshotMap = new Map(snapshotLines.map((line) => [line.lineKey, line]));
+  return {
+    ...close,
+    lines: close.lines.map((line) => {
+      const snapshot = snapshotMap.get(line.lineKey);
+      const snapshotMatches = snapshot?.systemAmount.equals(line.systemAmount) ?? false;
+      const amount = decimal(line.systemAmount);
+      return {
+        ...line,
+        inflowAmount: snapshotMatches ? snapshot!.inflowAmount : amount.greaterThanOrEqualTo(0) ? amount : decimal(0),
+        outflowAmount: snapshotMatches ? snapshot!.outflowAmount : amount.lessThan(0) ? amount.abs() : decimal(0),
+      };
+    }),
+  };
 }
 
 function aggregateBusinessDaily(

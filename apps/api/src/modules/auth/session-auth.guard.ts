@@ -113,7 +113,10 @@ export class SessionAuthGuard implements CanActivate {
       context.getHandler(),
       context.getClass(),
     ]) ?? false;
-    if (session.accessType === 'REMOTE' && isMutationMethod(request.method) && !allowRemoteMutation) {
+    const remoteDirectorMutation = session.accessType === 'REMOTE'
+      && isMutationMethod(request.method)
+      && request.auth.employee.roles.includes('director');
+    if (session.accessType === 'REMOTE' && isMutationMethod(request.method) && !allowRemoteMutation && !remoteDirectorMutation) {
       await this.auditService.log({
         actorId: session.user.employee.id,
         action: 'remote_access.write_blocked',
@@ -126,6 +129,19 @@ export class SessionAuthGuard implements CanActivate {
         ipAddress: getIpAddress(request),
       });
       throw new ForbiddenException('Удалённый доступ работает только в режиме просмотра. Изменения можно внести только в локальной сети клиники.');
+    }
+    if (remoteDirectorMutation && !allowRemoteMutation) {
+      await this.auditService.log({
+        actorId: session.user.employee.id,
+        action: 'remote_access.director_write',
+        entityType: 'RemoteAccessDevice',
+        entityId: session.remoteDeviceId ?? session.id,
+        metadata: {
+          method: request.method?.toUpperCase() ?? 'UNKNOWN',
+          path: request.originalUrl ?? request.url ?? null,
+        },
+        ipAddress: getIpAddress(request),
+      });
     }
 
     const idleTimeoutMinutes = session.accessType === 'REMOTE'

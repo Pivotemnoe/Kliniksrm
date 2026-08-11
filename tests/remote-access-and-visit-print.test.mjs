@@ -170,7 +170,7 @@ test('удалённый просмотр вне смены не открыва�
   assert.equal(shiftChecks, 1);
 });
 
-test('удалённая сессия имеет серверный запрет рабочих изменений и узкие личные исключения', async () => {
+test('удалённая сессия запрещает рабочие изменения сотрудникам, но разрешает их директору с отдельным аудитом', async () => {
   const [guard, decorator, messages, alerts, audit, news, migration] = await Promise.all([
     read('apps/api/src/modules/auth/session-auth.guard.ts'),
     read('apps/api/src/modules/auth/decorators/allow-remote-mutation.decorator.ts'),
@@ -183,6 +183,8 @@ test('удалённая сессия имеет серверный запрет
 
   assert.match(guard, /session\.accessType === 'REMOTE' && isMutationMethod/);
   assert.match(guard, /remote_access\.write_blocked/);
+  assert.match(guard, /roles\.includes\('director'\)/);
+  assert.match(guard, /remote_access\.director_write/);
   assert.match(guard, /режиме просмотра/);
   assert.match(decorator, /ALLOW_REMOTE_MUTATION_KEY/);
   assert.match(messages, /@AllowRemoteMutation\(\)/);
@@ -193,11 +195,12 @@ test('удалённая сессия имеет серверный запрет
   assert.doesNotMatch(migration, /DROP TABLE|TRUNCATE|DELETE FROM "(?:Owner|Animal|Visit|Bill|Product|StockBatch)"/i);
 });
 
-test('guard реально отклоняет рабочую запись из удалённой сессии и пишет аудит', async () => {
+test('guard отклоняет удалённую запись врача, разрешает личные действия и отдельно аудирует запись директора', async () => {
   const auditEntries = [];
   let touched = 0;
   const session = remoteSessionFixture();
   let allowRemoteMutation = false;
+  let serializedRoles = ['doctor'];
   const guard = new SessionAuthGuard(
     {
       getAllAndOverride: (key) => {
@@ -213,7 +216,7 @@ test('guard реально отклоняет рабочую запись из �
     {
       hashSessionToken: () => 'session-1',
       assertEmployeeCanUseCrm: async () => undefined,
-      serializeEmployee: () => authEmployeeFixture(),
+      serializeEmployee: () => ({ ...authEmployeeFixture(), roles: serializedRoles }),
       touchSession: async () => { touched += 1; },
     },
     { log: async (entry) => { auditEntries.push(entry); } },
@@ -235,6 +238,14 @@ test('guard реально отклоняет рабочую запись из �
   request.originalUrl = '/api/v1/internal-messages';
   assert.equal(await guard.canActivate(context), true);
   assert.equal(touched, 1);
+
+  allowRemoteMutation = false;
+  serializedRoles = ['director'];
+  request.originalUrl = '/api/v1/visits/visit-1';
+  assert.equal(await guard.canActivate(context), true);
+  assert.equal(touched, 2);
+  assert.equal(auditEntries[1].action, 'remote_access.director_write');
+  assert.equal(auditEntries[1].metadata.path, '/api/v1/visits/visit-1');
 });
 
 test('директор видит отдельную историю успешных удалённых входов', async () => {

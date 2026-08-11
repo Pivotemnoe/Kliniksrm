@@ -1281,6 +1281,11 @@ body {
   margin: 0 0 14px;
 }
 
+.portal-statistics-filters {
+  width: 100%;
+  margin-bottom: 14px;
+}
+
 .portal-statistics-owner-link {
   display: block;
   height: auto;
