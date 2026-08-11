@@ -10,6 +10,7 @@ import { useCurrentEmployee } from '../../auth/useAuth';
 import type { Employee } from '../../shared/types/auth';
 import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
 import { PageHeader } from '../../shared/ui/PageHeader';
+import { formatAnimalAge } from '../../shared/utils/animalBirthDate';
 import { formatDate, formatDateTime } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
 import { AnimalStatusTag } from '../animals/animalStatus';
@@ -209,6 +210,7 @@ export function VisitCardPage() {
             <ContextRow label="Вид" value={<AnimalSpeciesLabel species={visit?.animal.species} />} />
             <ContextRow label="Порода" value={visit?.animal.breed} />
             <ContextRow label="Пол" value={visit ? sexLabel[visit.animal.sex] : undefined} />
+            <ContextRow label="Возраст" value={formatAnimalAge(visit?.animal.birthDate)} />
             <ContextRow label="Состояние" value={visit ? <AnimalStatusTag status={visit.animal.status} /> : undefined} />
           </div>
         </div>

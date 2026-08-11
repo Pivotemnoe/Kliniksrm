@@ -31,7 +31,7 @@ export type VisitListItem = {
   createdAt: string;
   updatedAt: string;
   owner?: Pick<Owner, 'id' | 'fullName' | 'phone' | 'extraPhone'> | null;
-  animal?: Pick<Animal, 'id' | 'nickname' | 'species' | 'breed' | 'sex' | 'status'> | null;
+  animal?: Pick<Animal, 'id' | 'nickname' | 'species' | 'breed' | 'sex' | 'birthDate' | 'status'> | null;
   employee?: Pick<SchedulingEmployee, 'id' | 'fullName' | 'position'> | null;
   bill?: Pick<VisitBill, 'id' | 'status' | 'totalAmount' | 'paidAmount'> | null;
   exam?: Pick<VisitExam, 'purpose' | 'weightKg' | 'temperatureC'> | null;

@@ -11,6 +11,7 @@ import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
 import { InfiniteTable, useInfiniteListQuery } from '../../shared/ui/InfiniteTable';
 import { LiveSearchInput } from '../../shared/ui/LiveSearchInput';
 import { PageHeader } from '../../shared/ui/PageHeader';
+import { formatAnimalAge } from '../../shared/utils/animalBirthDate';
 import { formatDateTime, getDayBounds } from '../../shared/utils/date';
 import { createOwner, createOwnerAnimal } from '../owners/owners.api';
 import { listEmployeeShifts } from '../scheduling/scheduling.api';
@@ -125,6 +126,7 @@ export function AppointmentsPage() {
           </Space>
         ),
       },
+      { title: 'Возраст', key: 'animalAge', render: (_, record) => formatAnimalAge(record.animal?.birthDate) },
       { title: 'Сотрудник', key: 'employee', render: (_, record) => record.employee?.fullName ?? '—' },
       { title: 'Кабинет', key: 'room', render: (_, record) => record.room?.name ?? '—' },
       {

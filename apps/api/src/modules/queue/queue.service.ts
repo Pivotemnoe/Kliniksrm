@@ -339,7 +339,7 @@ const queueEntryInclude = {
     select: { id: true, fullName: true, phone: true, extraPhone: true, address: true },
   },
   animal: {
-    select: { id: true, nickname: true, species: true, breed: true, sex: true, status: true },
+    select: { id: true, nickname: true, species: true, breed: true, sex: true, birthDate: true, status: true },
   },
   employee: {
     select: { id: true, fullName: true, position: true },

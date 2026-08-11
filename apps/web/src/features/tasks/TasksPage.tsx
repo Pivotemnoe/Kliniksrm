@@ -8,6 +8,7 @@ import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
+import { formatAnimalAge } from '../../shared/utils/animalBirthDate';
 import { LiveSearchInput } from '../../shared/ui/LiveSearchInput';
 import { InfiniteTable, useInfiniteListQuery } from '../../shared/ui/InfiniteTable';
 import { PageHeader } from '../../shared/ui/PageHeader';
@@ -136,6 +137,7 @@ export function TasksPage() {
             '—'
           ),
       },
+      { title: 'Возраст', key: 'animalAge', render: (_, record) => formatAnimalAge(record.animal?.birthDate) },
       {
         title: 'Исполнитель',
         key: 'assignee',

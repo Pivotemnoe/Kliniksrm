@@ -1350,7 +1350,7 @@ const hospitalRecordInclude = {
 
 const hospitalStayInclude = {
   owner: { select: { id: true, fullName: true, phone: true, extraPhone: true } },
-  animal: { select: { id: true, nickname: true, species: true, breed: true, sex: true, status: true } },
+  animal: { select: { id: true, nickname: true, species: true, breed: true, sex: true, birthDate: true, status: true } },
   employee: { select: { id: true, fullName: true, position: true } },
   hospitalBox: {
     select: {

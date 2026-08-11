@@ -11,6 +11,7 @@ import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
 import { InfiniteTable, useInfiniteListQuery } from '../../shared/ui/InfiniteTable';
 import { LiveSearchInput } from '../../shared/ui/LiveSearchInput';
 import { PageHeader } from '../../shared/ui/PageHeader';
+import { formatAnimalAge } from '../../shared/utils/animalBirthDate';
 import { formatDateTime } from '../../shared/utils/date';
 import { createVisit } from '../visits/visits.api';
 import { visitStatusColors, visitStatusLabels, visitTypeLabels } from '../visits/types';
@@ -149,6 +150,12 @@ export function QueuePage() {
             <Typography.Text>{record.animal?.nickname ?? record.animalNickname ?? '—'}</Typography.Text>
           </Space>
         ),
+      },
+      {
+        title: 'Возраст',
+        key: 'animalAge',
+        width: 145,
+        render: (_, record) => formatAnimalAge(record.animal?.birthDate),
       },
       {
         title: 'Действие',

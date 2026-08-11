@@ -44,6 +44,59 @@ export function formatAnimalBirthDateDisplay(value: string | null | undefined) {
   return new Date(value).toLocaleDateString('ru-RU');
 }
 
+export function formatAnimalAge(value: string | null | undefined, referenceDate = new Date()) {
+  if (!value) {
+    return '—';
+  }
+
+  const datePart = value.slice(0, 10);
+  const birthDate = new Date(value);
+  if (Number.isNaN(birthDate.getTime())) {
+    return '—';
+  }
+
+  const now = new Date(referenceDate);
+  now.setHours(0, 0, 0, 0);
+  birthDate.setHours(0, 0, 0, 0);
+
+  if (birthDate > now) {
+    return '—';
+  }
+
+  if (/^\d{4}-01-01$/.test(datePart)) {
+    const years = now.getFullYear() - birthDate.getFullYear();
+    return years > 0 ? formatAgePart(years, 'год', 'года', 'лет') : 'меньше года';
+  }
+
+  let years = now.getFullYear() - birthDate.getFullYear();
+  let months = now.getMonth() - birthDate.getMonth();
+  let days = now.getDate() - birthDate.getDate();
+
+  if (days < 0) {
+    months -= 1;
+    days += new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+  }
+
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+
+  if (years > 0) {
+    return [formatAgePart(years, 'год', 'года', 'лет'), months > 0 ? formatAgePart(months, 'месяц', 'месяца', 'месяцев') : null]
+      .filter(Boolean)
+      .join(' ');
+  }
+
+  if (months > 0) {
+    return [formatAgePart(months, 'месяц', 'месяца', 'месяцев'), days > 0 ? formatAgePart(days, 'день', 'дня', 'дней') : null]
+      .filter(Boolean)
+      .join(' ');
+  }
+
+  return formatAgePart(days, 'день', 'дня', 'дней');
+}
+
 function parseAnimalBirthDateInput(value: string) {
   if (/^\d{4}$/.test(value)) {
     return buildIsoDate(Number(value), 1, 1);
@@ -96,4 +149,11 @@ function buildIsoDate(year: number, month: number, day: number) {
   }
 
   return `${year.toString().padStart(4, '0')}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+}
+
+function formatAgePart(value: number, one: string, few: string, many: string) {
+  const lastDigit = value % 10;
+  const lastTwoDigits = value % 100;
+  const label = lastDigit === 1 && lastTwoDigits !== 11 ? one : lastDigit >= 2 && lastDigit <= 4 && (lastTwoDigits < 12 || lastTwoDigits > 14) ? few : many;
+  return `${value} ${label}`;
 }

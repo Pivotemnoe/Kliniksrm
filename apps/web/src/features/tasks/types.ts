@@ -20,7 +20,7 @@ export type Task = {
   createdAt: string;
   updatedAt: string;
   owner?: Pick<Owner, 'id' | 'fullName' | 'phone'> | null;
-  animal?: Pick<Animal, 'id' | 'nickname' | 'species' | 'breed'> & { sex: AnimalSex } | null;
+  animal?: Pick<Animal, 'id' | 'nickname' | 'species' | 'breed' | 'birthDate'> & { sex: AnimalSex } | null;
   assignee?: Pick<SchedulingEmployee, 'id' | 'fullName' | 'position'> | null;
   creator?: Pick<SchedulingEmployee, 'id' | 'fullName' | 'position'> | null;
   assigneeRole?: Pick<RoleTemplate, 'code' | 'title'> | null;

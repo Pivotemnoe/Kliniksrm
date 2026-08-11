@@ -257,7 +257,7 @@ const taskInclude = {
     select: { id: true, fullName: true, phone: true },
   },
   animal: {
-    select: { id: true, nickname: true, species: true, breed: true, sex: true },
+    select: { id: true, nickname: true, species: true, breed: true, sex: true, birthDate: true },
   },
   assignee: {
     select: { id: true, fullName: true, position: true },

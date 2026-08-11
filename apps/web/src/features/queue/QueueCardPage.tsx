@@ -16,6 +16,7 @@ import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
 import { PageHeader } from '../../shared/ui/PageHeader';
+import { formatAnimalAge } from '../../shared/utils/animalBirthDate';
 import { formatDateTime } from '../../shared/utils/date';
 import { visitTypeLabels } from '../visits/types';
 import { AnimalMutationInput } from '../animals/types';
@@ -224,6 +225,7 @@ export function QueueCardPage() {
               <AnimalSpeciesLabel species={queueEntry.animal?.species ?? queueEntry.animalSpecies} />
             </Descriptions.Item>
             <Descriptions.Item label="Порода">{queueEntry.animal?.breed ?? queueEntry.animalBreed ?? '—'}</Descriptions.Item>
+            <Descriptions.Item label="Возраст">{formatAnimalAge(queueEntry.animal?.birthDate)}</Descriptions.Item>
             <Descriptions.Item label="Срочность">
               <Tag color={queueUrgencyColors[queueEntry.urgency]}>{queueUrgencyLabels[queueEntry.urgency]}</Tag>
             </Descriptions.Item>

@@ -13,6 +13,7 @@ import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
+import { formatAnimalAge } from '../../shared/utils/animalBirthDate';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDateTime } from '../../shared/utils/date';
 import {
@@ -165,6 +166,7 @@ export function TaskCardPage() {
                   '—'
                 )}
               </Descriptions.Item>
+              <Descriptions.Item label="Возраст">{formatAnimalAge(task?.animal?.birthDate)}</Descriptions.Item>
               <Descriptions.Item label="Исполнитель">{getAssigneeLabel(task)}</Descriptions.Item>
               <Descriptions.Item label="Создал">{getEmployeeLabel(task?.creator)}</Descriptions.Item>
               <Descriptions.Item label="Создана">{formatDateTime(task?.createdAt)}</Descriptions.Item>

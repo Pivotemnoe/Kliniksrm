@@ -7,7 +7,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
-import { formatAnimalBirthDateDisplay } from '../../shared/utils/animalBirthDate';
+import { formatAnimalAge, formatAnimalBirthDateDisplay } from '../../shared/utils/animalBirthDate';
 import { formatDate as formatRuDate, formatDateTime } from '../../shared/utils/date';
 import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
 import { PageHeader } from '../../shared/ui/PageHeader';
@@ -125,7 +125,7 @@ export function AnimalCardPage() {
             <ContextRow label="Вид" value={<AnimalSpeciesLabel species={animal?.species} />} />
             <ContextRow label="Порода" value={animal?.breed} />
             <ContextRow label="Пол" value={animal ? sexLabel[animal.sex] : undefined} />
-            <ContextRow label="Возраст" value={getAgeLabel(animal?.birthDate)} />
+            <ContextRow label="Возраст" value={formatAnimalAge(animal?.birthDate)} />
             <ContextRow label="Стерилизация" value={animal?.isSterilized ? 'Да' : 'Нет'} />
             <ContextRow label="Состояние" value={animal ? <AnimalStatusTag status={animal.status} /> : undefined} />
           </div>
@@ -216,6 +216,7 @@ export function AnimalCardPage() {
                       </Descriptions.Item>
                       <Descriptions.Item label="Порода">{animal.breed || '—'}</Descriptions.Item>
                       <Descriptions.Item label="Пол">{sexLabel[animal.sex] ?? animal.sex}</Descriptions.Item>
+                      <Descriptions.Item label="Возраст">{formatAnimalAge(animal.birthDate)}</Descriptions.Item>
                       <Descriptions.Item label="Дата рождения">{formatAnimalBirthDateDisplay(animal.birthDate)}</Descriptions.Item>
                       <Descriptions.Item label="Окрас">{animal.color || '—'}</Descriptions.Item>
                       <Descriptions.Item label="Микрочип">{animal.microchip || '—'}</Descriptions.Item>
@@ -311,60 +312,6 @@ const sexLabel: Record<string, string> = {
   FEMALE: 'Самка',
   UNKNOWN: 'Не указан',
 };
-
-function getAgeLabel(value?: string | null) {
-  if (!value) {
-    return '—';
-  }
-
-  const birthDate = new Date(value);
-  if (Number.isNaN(birthDate.getTime())) {
-    return '—';
-  }
-
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
-  birthDate.setHours(0, 0, 0, 0);
-
-  if (birthDate > now) {
-    return '—';
-  }
-
-  let years = now.getFullYear() - birthDate.getFullYear();
-  let months = now.getMonth() - birthDate.getMonth();
-  let days = now.getDate() - birthDate.getDate();
-
-  if (days < 0) {
-    months -= 1;
-    days += new Date(now.getFullYear(), now.getMonth(), 0).getDate();
-  }
-
-  if (months < 0) {
-    years -= 1;
-    months += 12;
-  }
-
-  if (years > 0) {
-    return [formatAgePart(years, 'год', 'года', 'лет'), months > 0 ? formatAgePart(months, 'месяц', 'месяца', 'месяцев') : null]
-      .filter(Boolean)
-      .join(' ');
-  }
-
-  if (months > 0) {
-    return [formatAgePart(months, 'месяц', 'месяца', 'месяцев'), days > 0 ? formatAgePart(days, 'день', 'дня', 'дней') : null]
-      .filter(Boolean)
-      .join(' ');
-  }
-
-  return formatAgePart(days, 'день', 'дня', 'дней');
-}
-
-function formatAgePart(value: number, one: string, few: string, many: string) {
-  const lastDigit = value % 10;
-  const lastTwoDigits = value % 100;
-  const label = lastDigit === 1 && lastTwoDigits !== 11 ? one : lastDigit >= 2 && lastDigit <= 4 && (lastTwoDigits < 12 || lastTwoDigits > 14) ? few : many;
-  return `${value} ${label}`;
-}
 
 function getLatestVaccination(vaccinations?: Vaccination[]) {
   return [...(vaccinations ?? [])]

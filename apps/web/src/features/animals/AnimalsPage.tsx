@@ -8,6 +8,7 @@ import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
 import { InfiniteTable, useInfiniteListQuery } from '../../shared/ui/InfiniteTable';
 import { LiveSearchInput } from '../../shared/ui/LiveSearchInput';
 import { PageHeader } from '../../shared/ui/PageHeader';
+import { formatAnimalAge } from '../../shared/utils/animalBirthDate';
 import { AnimalStatusTag } from './animalStatus';
 import { listAnimals } from './animals.api';
 import { Animal } from './types';
@@ -48,6 +49,7 @@ export function AnimalsPage() {
       { title: 'Вид', dataIndex: 'species', key: 'species', render: (value: string | null) => <AnimalSpeciesLabel species={value} /> },
       { title: 'Порода', dataIndex: 'breed', key: 'breed', render: (value: string | null) => value || '—' },
       { title: 'Пол', dataIndex: 'sex', key: 'sex', render: (value: string) => sexLabel[value] ?? value },
+      { title: 'Возраст', dataIndex: 'birthDate', key: 'birthDate', render: (value: string | null) => formatAnimalAge(value) },
       {
         title: 'Владелец',
         key: 'owner',

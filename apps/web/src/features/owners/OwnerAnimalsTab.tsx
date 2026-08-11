@@ -6,6 +6,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';
 import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
+import { formatAnimalAge } from '../../shared/utils/animalBirthDate';
 import { AnimalFormDrawer } from '../animals/AnimalFormDrawer';
 import { AnimalStatusTag } from '../animals/animalStatus';
 import { Animal, AnimalMutationInput } from '../animals/types';
@@ -53,6 +54,7 @@ export function OwnerAnimalsTab({ ownerId }: OwnerAnimalsTabProps) {
       { title: 'Вид', dataIndex: 'species', key: 'species', render: (value: string | null) => <AnimalSpeciesLabel species={value} /> },
       { title: 'Порода', dataIndex: 'breed', key: 'breed', render: (value: string | null) => value || '—' },
       { title: 'Пол', dataIndex: 'sex', key: 'sex', render: (value: string) => sexLabel[value] ?? value },
+      { title: 'Возраст', dataIndex: 'birthDate', key: 'birthDate', render: (value: string | null) => formatAnimalAge(value) },
       { title: 'Состояние', dataIndex: 'status', key: 'status', render: (value: string | null) => <AnimalStatusTag status={value} /> },
     ],
     [navigate],

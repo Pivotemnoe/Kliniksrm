@@ -10,6 +10,7 @@ import { useCurrentEmployee } from '../../auth/useAuth';
 import { InfiniteTable, useInfiniteListQuery } from '../../shared/ui/InfiniteTable';
 import { LiveSearchInput } from '../../shared/ui/LiveSearchInput';
 import { PageHeader } from '../../shared/ui/PageHeader';
+import { formatAnimalAge } from '../../shared/utils/animalBirthDate';
 import { formatDateTime } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
 import { getAppointment } from '../appointments/appointments.api';
@@ -117,6 +118,7 @@ export function VisitsPage() {
       },
       { title: 'Владелец', key: 'owner', render: (_, record) => record.owner?.fullName ?? '—' },
       { title: 'Пациент', key: 'animal', render: (_, record) => record.animal?.nickname ?? '—' },
+      { title: 'Возраст', key: 'animalAge', render: (_, record) => formatAnimalAge(record.animal?.birthDate) },
       { title: 'Врач/сотрудник', key: 'employee', render: (_, record) => record.employee?.fullName ?? '—' },
       {
         title: 'Статус',

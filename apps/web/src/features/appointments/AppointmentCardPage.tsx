@@ -16,6 +16,7 @@ import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
 import { PageHeader } from '../../shared/ui/PageHeader';
+import { formatAnimalAge } from '../../shared/utils/animalBirthDate';
 import { formatDateTime } from '../../shared/utils/date';
 import {
   arriveAppointment,
@@ -168,6 +169,7 @@ export function AppointmentCardPage() {
             <Descriptions.Item label="Вид">
               <AnimalSpeciesLabel species={appointment.animal?.species} />
             </Descriptions.Item>
+            <Descriptions.Item label="Возраст">{formatAnimalAge(appointment.animal?.birthDate)}</Descriptions.Item>
             <Descriptions.Item label="Статус">
               <Tag color={appointmentStatusColors[appointment.status]}>{appointmentStatusLabels[appointment.status]}</Tag>
             </Descriptions.Item>

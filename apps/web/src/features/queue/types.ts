@@ -33,7 +33,7 @@ export type QueueEntry = {
   updatedAt: string;
   office?: Pick<SchedulingOffice, 'id' | 'name' | 'timezone'> | null;
   owner?: Pick<Owner, 'id' | 'fullName' | 'phone' | 'extraPhone' | 'address'> | null;
-  animal?: Pick<Animal, 'id' | 'nickname' | 'species' | 'breed' | 'sex' | 'status'> | null;
+  animal?: Pick<Animal, 'id' | 'nickname' | 'species' | 'breed' | 'sex' | 'birthDate' | 'status'> | null;
   employee?: Pick<SchedulingEmployee, 'id' | 'fullName' | 'position'> | null;
   room?: Pick<SchedulingRoom, 'id' | 'name'> | null;
   visit?: VisitSummary | null;

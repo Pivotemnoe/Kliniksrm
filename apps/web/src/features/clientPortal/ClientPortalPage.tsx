@@ -18,6 +18,7 @@ import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
 import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
 import { RussianPhoneInput } from '../../shared/ui/RussianPhoneInput';
+import { formatAnimalAge } from '../../shared/utils/animalBirthDate';
 import { formatDate, formatDateTime } from '../../shared/utils/date';
 import { createPortalOnlineRequest, getClientPortalSummary, requestClientPortalCode, verifyClientPortalCode } from './clientPortal.api';
 import {
@@ -516,6 +517,7 @@ function AnimalList({ animals }: { animals: PortalAnimal[] }) {
             <Tag>{animal.sex === 'MALE' ? 'Самец' : animal.sex === 'FEMALE' ? 'Самка' : 'Пол не указан'}</Tag>
           </div>
           <InfoRow label="Порода" value={animal.breed} />
+          <InfoRow label="Возраст" value={formatAnimalAge(animal.birthDate)} />
           <InfoRow label="Дата рождения" value={formatDate(animal.birthDate)} />
           <InfoRow label="Вес" value={animal.weights[0] ? `${animal.weights[0].weightKg} кг` : '—'} />
           <InfoRow label="Микрочип" value={animal.microchip} />

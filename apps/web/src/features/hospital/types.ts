@@ -54,7 +54,7 @@ export type HospitalStay = {
   timezone: string;
   totalAmount: DecimalValue;
   owner?: Pick<Owner, 'id' | 'fullName' | 'phone' | 'extraPhone'>;
-  animal?: Pick<Animal, 'id' | 'nickname' | 'species' | 'breed' | 'sex' | 'status'>;
+  animal?: Pick<Animal, 'id' | 'nickname' | 'species' | 'breed' | 'sex' | 'birthDate' | 'status'>;
   employee?: {
     id: string;
     fullName: string;

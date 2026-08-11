@@ -14,6 +14,7 @@ import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
 import { LiveSearchInput } from '../../shared/ui/LiveSearchInput';
 import { InfiniteTable, useInfiniteListQuery } from '../../shared/ui/InfiniteTable';
 import { PageHeader } from '../../shared/ui/PageHeader';
+import { formatAnimalAge } from '../../shared/utils/animalBirthDate';
 import { formatDateTime } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
 import { listAnimals } from '../animals/animals.api';
@@ -79,6 +80,7 @@ export function HospitalPage() {
         ),
       },
       { title: 'Вид', key: 'species', render: (_, record) => <AnimalSpeciesLabel species={record.animal?.species} /> },
+      { title: 'Возраст', key: 'animalAge', render: (_, record) => formatAnimalAge(record.animal?.birthDate) },
       { title: 'Владелец', key: 'owner', render: (_, record) => record.owner?.fullName ?? '—' },
       { title: 'Сотрудник', key: 'employee', render: (_, record) => record.employee?.fullName ?? '—' },
       { title: 'Поступил', dataIndex: 'startedAt', key: 'startedAt', render: formatDateTime },
