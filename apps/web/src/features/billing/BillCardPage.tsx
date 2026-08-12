@@ -24,8 +24,8 @@ import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDate, formatDateTime, fromDatetimeLocal, toDatetimeLocal } from '../../shared/utils/date';
 import { formatMoney, toMoneyNumber } from '../../shared/utils/money';
 import { getFinanceSettings } from '../finance/finance.api';
-import { listProducts, listServices } from '../stock/stock.api';
 import { formatServicePrice, getServiceDefaultPrice, getServicePriceHelp, getServicePriceRange, validateServicePrice } from '../stock/service-pricing';
+import { useProductCatalogPicker, useServiceCatalogPicker } from '../stock/useCatalogPicker';
 import {
   addBillItem,
   cancelBill,
@@ -664,18 +664,10 @@ function BillItemModal({
   const lineType = useWatch({ control, name: 'lineType' });
   const productId = useWatch({ control, name: 'productId' });
   const serviceId = useWatch({ control, name: 'serviceId' });
-  const productsQuery = useQuery({
-    queryKey: ['stock', 'products', 'bill-select'],
-    queryFn: () => listProducts({ limit: 100, offset: 0 }),
-    enabled: open,
-  });
-  const servicesQuery = useQuery({
-    queryKey: ['stock', 'services', 'bill-select'],
-    queryFn: () => listServices({ limit: 100, offset: 0 }),
-    enabled: open,
-  });
-  const selectedProduct = productsQuery.data?.items.find((product) => product.id === productId);
-  const selectedService = servicesQuery.data?.items.find((service) => service.id === serviceId) ?? item?.service ?? null;
+  const productsQuery = useProductCatalogPicker(open);
+  const servicesQuery = useServiceCatalogPicker(open);
+  const selectedProduct = productsQuery.items.find((product) => product.id === productId) ?? item?.product ?? null;
+  const selectedService = servicesQuery.items.find((service) => service.id === serviceId) ?? item?.service ?? null;
   const selectedServiceRange = getServicePriceRange(selectedService);
 
   useEffect(() => {
@@ -753,13 +745,16 @@ function BillItemModal({
                 <Select
                   {...field}
                   showSearch
+                  filterOption={false}
                   loading={servicesQuery.isLoading}
                   disabled={Boolean(item)}
-                  placeholder="Выберите услугу"
-                  options={servicesQuery.data?.items.map((service) => ({ value: service.id, label: `${service.title} · ${formatServicePrice(service)}` })) ?? []}
+                  placeholder="Начните вводить название услуги"
+                  onSearch={servicesQuery.onSearch}
+                  notFoundContent={servicesQuery.isFetching ? 'Идёт поиск…' : 'Услуга не найдена во всём каталоге'}
+                  options={servicesQuery.items.map((service) => ({ value: service.id, label: `${service.title} · ${formatServicePrice(service)}` }))}
                   onChange={(value) => {
                     field.onChange(value);
-                    const service = servicesQuery.data?.items.find((item) => item.id === value);
+                    const service = servicesQuery.items.find((item) => item.id === value);
                     setValue('title', service?.title ?? '');
                     setValue('unitPrice', getServiceDefaultPrice(service));
                   }}
@@ -777,16 +772,19 @@ function BillItemModal({
                 <Select
                   {...field}
                   showSearch
+                  filterOption={false}
                   loading={productsQuery.isLoading}
                   disabled={Boolean(item)}
-                  placeholder="Выберите товар"
-                  options={productsQuery.data?.items.map((product) => ({
+                  placeholder="Начните вводить название, SKU или штрих-код"
+                  onSearch={productsQuery.onSearch}
+                  notFoundContent={productsQuery.isFetching ? 'Идёт поиск…' : 'Товар не найден во всём каталоге'}
+                  options={productsQuery.items.map((product) => ({
                     value: product.id,
                     label: `${product.title} · ${product.writeOffUnit || product.stockUnit || 'шт'}`,
-                  })) ?? []}
+                  }))}
                   onChange={(value) => {
                     field.onChange(value);
-                    const product = productsQuery.data?.items.find((item) => item.id === value);
+                    const product = productsQuery.items.find((item) => item.id === value);
                     setValue('title', product?.title ?? '');
                     setValue('unitPrice', toMoneyNumber(product?.retailPrice));
                     setValue('quantity', 1);

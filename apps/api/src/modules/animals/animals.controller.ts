@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { AuthEmployee } from '../auth/auth.types';
 import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
@@ -42,6 +42,13 @@ export class AnimalsController {
   @ApiOkResponse({ description: 'Patient updated.' })
   updateAnimal(@Param('animalId') animalId: string, @Body() dto: UpdateAnimalDto, @CurrentEmployee() actor: AuthEmployee) {
     return this.animalsService.updateAnimal(animalId, dto, actor.id);
+  }
+
+  @Delete(':animalId')
+  @RequirePermissions('animals.manage')
+  @ApiOkResponse({ description: 'Empty patient card deleted.' })
+  deleteAnimal(@Param('animalId') animalId: string, @CurrentEmployee() actor: AuthEmployee) {
+    return this.animalsService.deleteAnimal(animalId, actor.id);
   }
 
   @Get(':animalId/weights')

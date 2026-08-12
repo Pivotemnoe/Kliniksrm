@@ -4,6 +4,7 @@ import {
   DeleteOutlined,
   FontSizeOutlined,
   InsertRowBelowOutlined,
+  PlusOutlined,
   ScissorOutlined,
   TableOutlined,
 } from '@ant-design/icons';
@@ -186,12 +187,13 @@ function BlockEditor({
   if (block.type === 'table') {
     return (
       <Space direction="vertical" className="full-width" size={8}>
-        <Typography.Text type="secondary">Одна строка таблицы — одна строка текста; столбцы разделяются символом |.</Typography.Text>
-        <Input.TextArea
-          value={tableToText(block)}
+        <Typography.Text type="secondary">
+          Нажмите нужную ячейку и введите значение. Результат сразу появится в печатном бланке справа.
+        </Typography.Text>
+        <DocumentTableGridEditor
+          block={block}
           disabled={disabled}
-          autoSize={{ minRows: 3, maxRows: 12 }}
-          onChange={(event) => onChange({ rows: textToTable(event.target.value) } as Partial<DocumentTableBlock>)}
+          onChange={(rows) => onChange({ rows } as Partial<DocumentTableBlock>)}
         />
         <Checkbox checked={block.headerRows > 0} disabled={disabled} onChange={(event) => onChange({ headerRows: event.target.checked ? 1 : 0 } as Partial<DocumentTableBlock>)}>Первая строка — заголовок</Checkbox>
       </Space>
@@ -201,6 +203,96 @@ function BlockEditor({
     return <InputNumber min={4} max={120} value={block.height} disabled={disabled} addonAfter="pt" onChange={(height) => onChange({ height: Number(height ?? 16) })} />;
   }
   return <Typography.Text type="secondary">Следующий блок начнётся с новой страницы A4.</Typography.Text>;
+}
+
+function DocumentTableGridEditor({
+  block,
+  disabled,
+  onChange,
+}: {
+  block: DocumentTableBlock;
+  disabled?: boolean;
+  onChange: (rows: string[][]) => void;
+}) {
+  const columnCount = Math.max(1, ...block.rows.map((row) => row.length));
+  const rows = normalizeTableRows(block.rows, columnCount);
+
+  function updateCell(rowIndex: number, columnIndex: number, value: string) {
+    onChange(rows.map((row, currentRowIndex) =>
+      currentRowIndex === rowIndex
+        ? row.map((cell, currentColumnIndex) => currentColumnIndex === columnIndex ? value : cell)
+        : row,
+    ));
+  }
+
+  function addRow() {
+    if (rows.length >= 60) return;
+    onChange([...rows, Array.from({ length: columnCount }, () => '')]);
+  }
+
+  function removeRow(rowIndex: number) {
+    if (rows.length <= 1) return;
+    onChange(rows.filter((_, currentRowIndex) => currentRowIndex !== rowIndex));
+  }
+
+  function addColumn() {
+    if (columnCount >= 6) return;
+    onChange(rows.map((row) => [...row, '']));
+  }
+
+  function removeLastColumn() {
+    if (columnCount <= 1) return;
+    onChange(rows.map((row) => row.slice(0, -1)));
+  }
+
+  return (
+    <div className="document-table-grid-editor">
+      <div className="document-table-grid-scroll">
+        <table style={{ minWidth: `${columnCount * 160 + 44}px` }}>
+          <tbody>
+            {rows.map((row, rowIndex) => (
+              <tr key={rowIndex} className={rowIndex < block.headerRows ? 'is-header' : undefined}>
+                {row.map((cell, columnIndex) => (
+                  <td key={columnIndex}>
+                    <Input
+                      size="small"
+                      value={cell}
+                      disabled={disabled}
+                      aria-label={`Строка ${rowIndex + 1}, столбец ${columnIndex + 1}`}
+                      placeholder={rowIndex < block.headerRows ? 'Заголовок' : 'Введите значение'}
+                      onChange={(event) => updateCell(rowIndex, columnIndex, event.target.value)}
+                    />
+                  </td>
+                ))}
+                <td className="document-table-row-action">
+                  <Button
+                    type="text"
+                    danger
+                    size="small"
+                    icon={<DeleteOutlined />}
+                    title={`Удалить строку ${rowIndex + 1}`}
+                    disabled={disabled || rows.length <= 1}
+                    onClick={() => removeRow(rowIndex)}
+                  />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <Space wrap size={6}>
+        <Button size="small" icon={<PlusOutlined />} disabled={disabled || rows.length >= 60} onClick={addRow}>
+          Добавить строку
+        </Button>
+        <Button size="small" disabled={disabled || columnCount >= 6} onClick={addColumn}>
+          Добавить столбец
+        </Button>
+        <Button size="small" danger disabled={disabled || columnCount <= 1} onClick={removeLastColumn}>
+          Убрать последний столбец
+        </Button>
+      </Space>
+    </div>
+  );
 }
 
 function DocumentA4Preview({ layout, title, renderText }: { layout: DocumentLayout; title: string; renderText: (text: string) => string }) {
@@ -238,14 +330,11 @@ function getBlockTitle(block: DocumentLayoutBlock, index: number) {
   return `${index + 1}. ${label}`;
 }
 
-function tableToText(block: DocumentTableBlock) {
-  return block.rows.map((row) => row.join(' | ')).join('\n');
-}
-
-function textToTable(value: string) {
-  const rows = value.split('\n').map((line) => line.split('|').map((cell) => cell.trim()));
-  const width = Math.max(1, ...rows.map((row) => row.length));
-  return rows.map((row) => [...row, ...Array.from({ length: width - row.length }, () => '')].slice(0, 6)).slice(0, 60);
+function normalizeTableRows(rows: string[][], width: number) {
+  const sourceRows = rows.length ? rows : [[]];
+  return sourceRows
+    .map((row) => [...row, ...Array.from({ length: Math.max(0, width - row.length) }, () => '')].slice(0, 6))
+    .slice(0, 60);
 }
 
 function splitIntoPreviewPages(blocks: DocumentLayoutBlock[]) {

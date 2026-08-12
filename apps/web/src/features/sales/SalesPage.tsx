@@ -14,8 +14,8 @@ import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDateTime } from '../../shared/utils/date';
 import { formatMoney, toMoneyNumber } from '../../shared/utils/money';
 import { listOwnerAnimals, listOwners } from '../owners/owners.api';
-import { listProducts, listServices } from '../stock/stock.api';
 import { formatServicePrice, getServiceDefaultPrice, getServicePriceHelp, getServicePriceRange, validateServicePrice } from '../stock/service-pricing';
+import { useProductCatalogPicker, useServiceCatalogPicker } from '../stock/useCatalogPicker';
 import { paymentStatusColors, paymentStatusLabels } from '../billing/types';
 import { createSale, listSales } from './sales.api';
 import { CreateSaleInput, SaleListItem } from './types';
@@ -241,16 +241,8 @@ function SaleCreateModal({ open, onClose }: { open: boolean; onClose: () => void
     queryFn: () => listOwnerAnimals(ownerId!),
     enabled: open && Boolean(ownerId),
   });
-  const productsQuery = useQuery({
-    queryKey: ['stock', 'products', 'sale-select'],
-    queryFn: () => listProducts({ limit: 100, offset: 0 }),
-    enabled: open,
-  });
-  const servicesQuery = useQuery({
-    queryKey: ['stock', 'services', 'sale-select'],
-    queryFn: () => listServices({ limit: 100, offset: 0 }),
-    enabled: open,
-  });
+  const productsQuery = useProductCatalogPicker(open);
+  const servicesQuery = useServiceCatalogPicker(open);
   const mutation = useMutation({
     mutationFn: (input: CreateSaleInput) => createSale(input),
     onSuccess: async (sale) => {
@@ -283,7 +275,7 @@ function SaleCreateModal({ open, onClose }: { open: boolean; onClose: () => void
   function submit() {
     for (const line of lines) {
       if (line.lineType !== 'SERVICE') continue;
-      const service = servicesQuery.data?.items.find((item) => item.id === line.serviceId);
+      const service = servicesQuery.items.find((item) => item.id === line.serviceId);
       const priceError = validateServicePrice(service, line.unitPrice);
       if (priceError) {
         message.error(`${line.title || 'Услуга'}: ${priceError}`);
@@ -376,15 +368,18 @@ function SaleCreateModal({ open, onClose }: { open: boolean; onClose: () => void
               {line.lineType === 'PRODUCT' ? (
                 <Select
                   showSearch
+                  filterOption={false}
                   loading={productsQuery.isLoading}
                   value={line.productId}
-                  placeholder="Товар"
-                  options={productsQuery.data?.items.map((product) => ({
+                  placeholder="Название, SKU или штрих-код"
+                  onSearch={productsQuery.onSearch}
+                  notFoundContent={productsQuery.isFetching ? 'Идёт поиск…' : 'Товар не найден во всём каталоге'}
+                  options={productsQuery.items.map((product) => ({
                     value: product.id,
                     label: `${product.title} · ${product.writeOffUnit || product.stockUnit || 'шт'}`,
-                  })) ?? []}
+                  }))}
                   onChange={(value) => {
-                    const product = productsQuery.data?.items.find((item) => item.id === value);
+                    const product = productsQuery.items.find((item) => item.id === value);
                     updateLine(line.id, { productId: value, title: product?.title ?? '', unitPrice: toMoneyNumber(product?.retailPrice) });
                   }}
                 />
@@ -392,12 +387,15 @@ function SaleCreateModal({ open, onClose }: { open: boolean; onClose: () => void
               {line.lineType === 'SERVICE' ? (
                 <Select
                   showSearch
+                  filterOption={false}
                   loading={servicesQuery.isLoading}
                   value={line.serviceId}
-                  placeholder="Услуга"
-                  options={servicesQuery.data?.items.map((service) => ({ value: service.id, label: `${service.title} · ${formatServicePrice(service)}` })) ?? []}
+                  placeholder="Название услуги"
+                  onSearch={servicesQuery.onSearch}
+                  notFoundContent={servicesQuery.isFetching ? 'Идёт поиск…' : 'Услуга не найдена во всём каталоге'}
+                  options={servicesQuery.items.map((service) => ({ value: service.id, label: `${service.title} · ${formatServicePrice(service)}` }))}
                   onChange={(value) => {
-                    const service = servicesQuery.data?.items.find((item) => item.id === value);
+                    const service = servicesQuery.items.find((item) => item.id === value);
                     updateLine(line.id, { serviceId: value, title: service?.title ?? '', unitPrice: getServiceDefaultPrice(service) });
                   }}
                 />
@@ -410,21 +408,21 @@ function SaleCreateModal({ open, onClose }: { open: boolean; onClose: () => void
                 step={0.01}
                 value={line.quantity}
                 addonAfter={line.lineType === 'PRODUCT'
-                  ? productsQuery.data?.items.find((product) => product.id === line.productId)?.writeOffUnit
-                    || productsQuery.data?.items.find((product) => product.id === line.productId)?.stockUnit
+                  ? productsQuery.items.find((product) => product.id === line.productId)?.writeOffUnit
+                    || productsQuery.items.find((product) => product.id === line.productId)?.stockUnit
                     || 'ед.'
                   : undefined}
                 onChange={(value) => updateLine(line.id, { quantity: value ?? 1 })}
               />
               <InputNumber
                 min={line.lineType === 'SERVICE'
-                  ? getServicePriceRange(servicesQuery.data?.items.find((service) => service.id === line.serviceId))?.minimum ?? 0
+                  ? getServicePriceRange(servicesQuery.items.find((service) => service.id === line.serviceId))?.minimum ?? 0
                   : 0}
                 max={line.lineType === 'SERVICE'
-                  ? getServicePriceRange(servicesQuery.data?.items.find((service) => service.id === line.serviceId))?.maximum
+                  ? getServicePriceRange(servicesQuery.items.find((service) => service.id === line.serviceId))?.maximum
                   : undefined}
                 title={line.lineType === 'SERVICE'
-                  ? getServicePriceHelp(servicesQuery.data?.items.find((service) => service.id === line.serviceId))
+                  ? getServicePriceHelp(servicesQuery.items.find((service) => service.id === line.serviceId))
                   : undefined}
                 value={line.unitPrice}
                 onChange={(value) => updateLine(line.id, { unitPrice: value ?? 0 })}

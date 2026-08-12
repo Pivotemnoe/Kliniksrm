@@ -1,4 +1,4 @@
-import { EditOutlined, LeftOutlined, PlusOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined, LeftOutlined, PlusOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Button, Card, Descriptions, Input, Modal, Tabs, Tag, Typography } from 'antd';
 import type { ReactNode } from 'react';
@@ -19,7 +19,7 @@ import { AnimalVisitsTab } from './AnimalVisitsTab';
 import { AnimalVaccinationsTab } from './AnimalVaccinationsTab';
 import { AnimalWeightsTab } from './AnimalWeightsTab';
 import { AnimalStatusTag, getAnimalStatusLabel } from './animalStatus';
-import { getAnimal, updateAnimal } from './animals.api';
+import { deleteAnimal, getAnimal, updateAnimal } from './animals.api';
 import { AnimalMutationInput, Vaccination } from './types';
 import { PatientDocumentArchive } from '../files/PatientDocumentArchive';
 
@@ -27,7 +27,7 @@ export function AnimalCardPage() {
   const { animalId } = useParams<{ animalId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const { data: auth } = useCurrentEmployee();
   const canManage = hasPermission(auth?.employee, 'animals.manage');
   const [editOpen, setEditOpen] = useState(false);
@@ -70,6 +70,19 @@ export function AnimalCardPage() {
     },
     onError: (error) => message.error(getErrorMessage(error)),
   });
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteAnimal(animalId!),
+    onSuccess: async (deleted) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['animals'] }),
+        queryClient.invalidateQueries({ queryKey: ['owners', deleted.ownerId] }),
+        queryClient.invalidateQueries({ queryKey: ['owners', deleted.ownerId, 'animals'] }),
+      ]);
+      message.success(`Пустая карточка пациента «${deleted.nickname}» удалена`);
+      navigate(`/owners/${deleted.ownerId}`, { replace: true });
+    },
+    onError: (error) => message.error(getErrorMessage(error), 8),
+  });
   const animal = animalQuery.data;
   const visits = visitsSummaryQuery.data?.items ?? [];
   const latestVisit = visits[0];
@@ -77,6 +90,18 @@ export function AnimalCardPage() {
   const latestWeight = animal?.weights?.[0];
   const latestVaccination = getLatestVaccination(animal?.vaccinations);
   const nextRevaccination = getNextRevaccination(animal?.vaccinations);
+
+  function confirmDeletion() {
+    if (!animal) return;
+    modal.confirm({
+      title: `Удалить пациента «${animal.nickname}» полностью?`,
+      content: 'Полностью удалить можно только пустую ошибочно созданную карточку. Если уже есть приёмы, счета, вакцинации, стационар, задачи, файлы или другая история, CRM остановит удаление и перечислит связанные данные.',
+      okText: 'Удалить пустую карточку',
+      okButtonProps: { danger: true },
+      cancelText: 'Отмена',
+      onOk: () => deleteMutation.mutateAsync(),
+    });
+  }
 
   if (animalQuery.isError) {
     return (
@@ -185,6 +210,27 @@ export function AnimalCardPage() {
             <ContextRow label="Ревакцинация" value={<RevaccinationValue vaccination={nextRevaccination} />} />
           </div>
         </div>
+        {animal && canManage ? (
+          <div className="context-section">
+            <div className="context-section-header">
+              <strong>Действия</strong>
+            </div>
+            <div className="context-section-body">
+              <Button
+                danger
+                size="small"
+                icon={<DeleteOutlined />}
+                loading={deleteMutation.isPending}
+                onClick={confirmDeletion}
+              >
+                Удалить пациента
+              </Button>
+              <Typography.Paragraph type="secondary" style={{ margin: '8px 0 0' }}>
+                Только для пустой ошибочной карточки. История лечения и оплат не удаляется.
+              </Typography.Paragraph>
+            </div>
+          </div>
+        ) : null}
       </aside>
       <main className="work-area">
         <div className="work-surface">

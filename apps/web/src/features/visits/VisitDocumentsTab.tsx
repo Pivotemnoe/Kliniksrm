@@ -464,7 +464,7 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
       </Card>
       <Drawer
         title={editingDocument ? 'Документ приёма' : 'Новый документ приёма'}
-        width={760}
+        width="min(1280px, calc(100vw - 24px))"
         open={drawerOpen}
         onClose={closeDrawer}
         destroyOnHidden

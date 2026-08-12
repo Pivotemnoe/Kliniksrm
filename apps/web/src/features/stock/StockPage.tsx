@@ -92,7 +92,6 @@ export function StockPage() {
 
   useEffect(() => {
     const value = deferredSearchInput.trim();
-    if (value.length > 0 && value.length < 3) return;
     setSearch(value);
   }, [deferredSearchInput]);
 
@@ -161,7 +160,7 @@ export function StockPage() {
               <Input
                 allowClear
                 value={searchInput}
-                placeholder="Введите минимум 3 буквы, SKU или штрих-код"
+                placeholder="Название, SKU или штрих-код"
                 className="search-input"
                 onChange={(event) => setSearchInput(event.target.value)}
               />
@@ -1236,8 +1235,8 @@ function SupplyInvoiceModal({ open, invoice, resources, onClose }: { open: boole
   const normalizedProductSearch = deferredProductSearch.trim();
   const productsQuery = useQuery({
     queryKey: ['stock', 'products', 'supply-select', normalizedProductSearch],
-    queryFn: () => listProducts({ search: normalizedProductSearch, limit: 50, offset: 0 }),
-    enabled: open && normalizedProductSearch.length >= 3,
+    queryFn: () => listProducts({ search: normalizedProductSearch || undefined, limit: 50, offset: 0 }),
+    enabled: open,
   });
   const defaultWarehouseId = resources?.warehouses[0]?.id ?? '';
   const { control, handleSubmit, reset, setValue } = useForm<SupplyFormValues>({
@@ -1343,7 +1342,7 @@ function SupplyInvoiceModal({ open, invoice, resources, onClose }: { open: boole
                       filterOption={false}
                       loading={productsQuery.isFetching}
                       onSearch={setProductSearch}
-                      notFoundContent={normalizedProductSearch.length < 3 ? 'Введите минимум 3 символа' : 'Товар не найден'}
+                      notFoundContent={productsQuery.isFetching ? 'Идёт поиск…' : 'Товар не найден во всём каталоге'}
                       onChange={(value) => {
                         productField.onChange(value);
                         const product = value ? knownProducts[value] ?? productsQuery.data?.items.find((item) => item.id === value) : undefined;

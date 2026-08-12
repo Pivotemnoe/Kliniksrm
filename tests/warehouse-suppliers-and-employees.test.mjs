@@ -25,8 +25,8 @@ test('manual supply invoice supports supplier directory, compact lines and recei
   assert.match(controller, /@Post\('suppliers'\)/);
   assert.match(service, /stock\.supplier\.create/);
   assert.match(supplierModal, /Название поставщика/);
-  assert.match(page, /normalizedProductSearch\.length >= 3/);
-  assert.match(page, /listProducts\(\{ search: normalizedProductSearch/);
+  assert.doesNotMatch(page, /normalizedProductSearch\.length >= 3/);
+  assert.match(page, /listProducts\(\{ search: normalizedProductSearch \|\| undefined/);
   assert.match(page, /Цена по накладной/);
   assert.match(page, /Цена продажи/);
   assert.match(page, /Единица по накладной/);

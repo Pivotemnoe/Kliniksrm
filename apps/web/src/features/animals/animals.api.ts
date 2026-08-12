@@ -34,6 +34,12 @@ export function updateAnimal(animalId: string, input: Partial<AnimalMutationInpu
   });
 }
 
+export function deleteAnimal(animalId: string) {
+  return apiRequest<{ id: string; ownerId: string; nickname: string; deleted: true }>(`/v1/animals/${animalId}`, {
+    method: 'DELETE',
+  });
+}
+
 export function listWeightRecords(animalId: string) {
   return apiRequest<AnimalWeightRecord[]>(`/v1/animals/${animalId}/weights`);
 }

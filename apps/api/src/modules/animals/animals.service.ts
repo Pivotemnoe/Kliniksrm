@@ -100,6 +100,13 @@ export class AnimalsService {
             tasks: true,
             bills: true,
             vaccinations: true,
+            weights: true,
+            queueEntries: true,
+            hospitalStays: true,
+            sales: true,
+            notifications: true,
+            onlineRequests: true,
+            files: true,
           },
         },
       },
@@ -110,6 +117,67 @@ export class AnimalsService {
     }
 
     return animal;
+  }
+
+  async deleteAnimal(animalId: string, actorId: string) {
+    const deleted = await this.prisma.$transaction(async (tx) => {
+      const animal = await tx.animal.findUnique({
+        where: { id: animalId },
+        select: {
+          id: true,
+          ownerId: true,
+          nickname: true,
+          _count: {
+            select: {
+              appointments: true,
+              visits: true,
+              tasks: true,
+              bills: true,
+              vaccinations: true,
+              weights: true,
+              queueEntries: true,
+              hospitalStays: true,
+              sales: true,
+              notifications: true,
+              onlineRequests: true,
+              files: true,
+            },
+          },
+        },
+      });
+
+      if (!animal) {
+        throw new NotFoundException('Animal not found');
+      }
+
+      const linkedData = animalDeletionBlockers
+        .filter(({ key }) => animal._count[key] > 0)
+        .map(({ key, label }) => `${label}: ${animal._count[key]}`);
+      if (linkedData.length > 0) {
+        throw new BadRequestException(
+          `Удалить пациента нельзя: в карточке уже есть связанные данные (${linkedData.join(', ')}). `
+          + 'Медицинская, финансовая и складская история должна сохраниться; исправьте профиль или кличку вместо удаления.',
+        );
+      }
+
+      await tx.animal.delete({ where: { id: animal.id } });
+      await tx.auditLog.create({
+        data: {
+          actorId,
+          action: 'animal.delete',
+          entityType: 'Animal',
+          entityId: animal.id,
+          metadata: {
+            ownerId: animal.ownerId,
+            nickname: animal.nickname,
+            emptyCard: true,
+          },
+        },
+      });
+      return { id: animal.id, ownerId: animal.ownerId, nickname: animal.nickname, deleted: true as const };
+    });
+
+    return deleted;
   }
 
   async updateAnimal(animalId: string, dto: UpdateAnimalDto, actorId: string) {
@@ -591,6 +659,21 @@ type TaskAudit = {
   taskId: string;
   metadata: Prisma.InputJsonObject;
 };
+
+const animalDeletionBlockers = [
+  { key: 'visits', label: 'приёмы' },
+  { key: 'appointments', label: 'записи' },
+  { key: 'queueEntries', label: 'очередь' },
+  { key: 'hospitalStays', label: 'стационар' },
+  { key: 'bills', label: 'счета' },
+  { key: 'sales', label: 'продажи' },
+  { key: 'vaccinations', label: 'вакцинации' },
+  { key: 'weights', label: 'измерения веса' },
+  { key: 'tasks', label: 'задачи' },
+  { key: 'files', label: 'файлы' },
+  { key: 'notifications', label: 'оповещения' },
+  { key: 'onlineRequests', label: 'онлайн-заявки' },
+] as const;
 
 const OWNER_VACCINATION_REMINDER_OFFSETS = [7, 1] as const;
 

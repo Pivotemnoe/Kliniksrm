@@ -29,6 +29,13 @@ export type Animal = {
     tasks: number;
     bills?: number;
     vaccinations: number;
+    weights?: number;
+    queueEntries?: number;
+    hospitalStays?: number;
+    sales?: number;
+    notifications?: number;
+    onlineRequests?: number;
+    files?: number;
   };
   createdAt: string;
   updatedAt: string;

@@ -1,6 +1,6 @@
 import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Alert, Button, Drawer, Form, Input, Popconfirm, Select, Space, Statistic, Table, Tag, Typography } from 'antd';
 import { ColumnsType } from 'antd/es/table';
 import { useMemo, useState } from 'react';
@@ -8,8 +8,8 @@ import { Controller, useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
 import { formatMoney, toMoneyNumber } from '../../shared/utils/money';
-import { listProducts, listServices } from '../stock/stock.api';
 import { formatServicePrice, getServiceDefaultPrice, getServicePriceHelp, validateServicePrice } from '../stock/service-pricing';
+import { useProductCatalogPicker, useServiceCatalogPicker } from '../stock/useCatalogPicker';
 import { Visit, VisitBillItem, VisitServiceLineInput } from './types';
 import { addVisitService, deleteVisitService, updateVisitService } from './visits.api';
 
@@ -200,19 +200,11 @@ function ServiceLineDrawer({
   const unitPrice = useWatch({ control, name: 'unitPrice' });
   const discount = useWatch({ control, name: 'discount' });
   const calculatedTotal = Math.max(toMoneyNumber(quantity) * toMoneyNumber(unitPrice) - toMoneyNumber(discount), 0);
-  const productsQuery = useQuery({
-    queryKey: ['stock', 'products', 'visit-line-select'],
-    queryFn: () => listProducts({ limit: 100, offset: 0 }),
-    enabled: open && !isEdit,
-  });
-  const servicesQuery = useQuery({
-    queryKey: ['stock', 'services', 'visit-line-select'],
-    queryFn: () => listServices({ limit: 100, offset: 0 }),
-    enabled: open && !isEdit,
-  });
-  const selectedProduct = productsQuery.data?.items.find((product) => product.id === productId);
+  const productsQuery = useProductCatalogPicker(open && !isEdit);
+  const servicesQuery = useServiceCatalogPicker(open && !isEdit);
+  const selectedProduct = productsQuery.items.find((product) => product.id === productId);
   const activeProduct = selectedProduct ?? line?.product ?? null;
-  const selectedService = servicesQuery.data?.items.find((service) => service.id === serviceId);
+  const selectedService = servicesQuery.items.find((service) => service.id === serviceId);
   const activeService = selectedService ?? line?.service ?? null;
 
   function handleOpenChange(nextOpen: boolean) {
@@ -287,16 +279,19 @@ function ServiceLineDrawer({
                 <Select
                   {...field}
                   showSearch
+                  filterOption={false}
                   disabled={isEdit}
                   loading={productsQuery.isLoading}
-                  options={productsQuery.data?.items.map((product) => ({
+                  onSearch={productsQuery.onSearch}
+                  notFoundContent={productsQuery.isFetching ? 'Идёт поиск…' : 'Товар не найден во всём каталоге'}
+                  options={productsQuery.items.map((product) => ({
                     value: product.id,
                     label: `${product.title} · ${product.writeOffUnit || product.stockUnit || 'шт'}`,
-                  })) ?? []}
-                  placeholder="Выберите товар"
+                  }))}
+                  placeholder="Начните вводить название, SKU или штрих-код"
                   onChange={(value) => {
                     field.onChange(value);
-                    const product = productsQuery.data?.items.find((item) => item.id === value);
+                    const product = productsQuery.items.find((item) => item.id === value);
                     if (product) {
                       reset({
                         ...getDefaultValues(line),
@@ -324,13 +319,16 @@ function ServiceLineDrawer({
                 <Select
                   {...field}
                   showSearch
+                  filterOption={false}
                   disabled={isEdit}
                   loading={servicesQuery.isLoading}
-                  options={servicesQuery.data?.items.map((service) => ({ value: service.id, label: `${service.title} · ${formatServicePrice(service)}` })) ?? []}
-                  placeholder="Выберите услугу"
+                  onSearch={servicesQuery.onSearch}
+                  notFoundContent={servicesQuery.isFetching ? 'Идёт поиск…' : 'Услуга не найдена во всём каталоге'}
+                  options={servicesQuery.items.map((service) => ({ value: service.id, label: `${service.title} · ${formatServicePrice(service)}` }))}
+                  placeholder="Начните вводить название услуги"
                   onChange={(value) => {
                     field.onChange(value);
-                    const service = servicesQuery.data?.items.find((item) => item.id === value);
+                    const service = servicesQuery.items.find((item) => item.id === value);
                     if (service) {
                       reset({
                         ...getDefaultValues(line),
