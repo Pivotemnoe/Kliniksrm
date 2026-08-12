@@ -37,13 +37,25 @@ WITH green_profiles AS (
   WHERE lower("title") LIKE '%биохим%'
     AND (lower("title") LIKE '%зелен%' OR lower("title") LIKE '%зелён%')
     AND lower("title") LIKE '%16%'
+), placeholder_links AS (
+  SELECT link."profileId", link."testId"
+  FROM "LaboratoryProfileTest" link
+  JOIN green_profiles profile ON profile."id" = link."profileId"
+  JOIN "LaboratoryTest" test ON test."id" = link."testId"
+  WHERE test."code" IS NULL
+    AND lower(test."title") LIKE '%16 показател%'
 )
-DELETE FROM "LaboratoryProfileTest" link
-USING green_profiles profile, "LaboratoryTest" test
-WHERE link."profileId" = profile."id"
-  AND link."testId" = test."id"
-  AND test."code" IS NULL
-  AND lower(test."title") LIKE '%16 показател%';
+UPDATE "LaboratoryProfileTest" link
+SET "testId" = '7b8a6101-7b61-4c20-9101-000000000001', "sortOrder" = 0
+FROM placeholder_links placeholder
+WHERE link."profileId" = placeholder."profileId"
+  AND link."testId" = placeholder."testId"
+  AND NOT EXISTS (
+    SELECT 1
+    FROM "LaboratoryProfileTest" existing
+    WHERE existing."profileId" = link."profileId"
+      AND existing."testId" = '7b8a6101-7b61-4c20-9101-000000000001'
+  );
 
 WITH green_profiles AS (
   SELECT "id"
