@@ -14,10 +14,9 @@ test('директорская статистика считает только 
       date: '2026-08-06',
       start: new Date('2026-08-05T21:00:00.000Z'),
       end: new Date('2026-08-06T20:59:59.999Z'),
-      invitationsCreated: 4,
     },
     localOwners: [
-      portalOwner('owner-1', { status: 'INVITED' }),
+      portalOwner('owner-1', { status: 'INVITED', invitedAt: '2026-08-06T07:00:00.000Z' }),
       portalOwner('owner-2', { status: 'INVITED', invitedAt: '2026-08-05T10:00:00.000Z' }),
       portalOwner('owner-3', { status: 'BLOCKED', lastLoginAt: '2026-06-01T10:00:00.000Z', maxLinked: true }),
       portalOwner('owner-4', { status: 'DISABLED' }),
@@ -51,7 +50,7 @@ test('директорская статистика считает только 
   assert.equal(statistics.gatewayAvailable, true);
   assert.deepEqual(statistics.today, {
     date: '2026-08-06',
-    invitationsCreated: 2,
+    invitationsCreated: 1,
     activated: 1,
     activeOwners: 1,
   });
@@ -76,7 +75,6 @@ test('без публичного шлюза сохраняются локаль
       date: '2026-08-06',
       start: new Date('2026-08-05T21:00:00.000Z'),
       end: new Date('2026-08-06T20:59:59.999Z'),
-      invitationsCreated: 2,
     },
     localOwners: [portalOwner('owner-1', { status: 'ENABLED', lastLoginAt: '2026-08-06T09:00:00.000Z' })],
     gateway: null,
@@ -86,34 +84,40 @@ test('без публичного шлюза сохраняются локаль
   assert.equal(statistics.gatewayUpdatedAt, null);
   assert.equal(statistics.totals.registered, 1);
   assert.equal(statistics.totals.active30Days, 1);
-  assert.equal(statistics.today.invitationsCreated, 2);
+  assert.equal(statistics.today.invitationsCreated, 0);
   assert.equal(statistics.today.activated, 1);
   assert.equal(statistics.today.activeOwners, 1);
 });
 
-test('при доступном шлюзе приглашения за день считаются по уникальным владельцам, а не по повторным ссылкам', () => {
+test('счётчик приглашённых сегодня совпадает с текущими карточками CRM и не включает историю шлюза', () => {
   const statistics = buildDirectorPortalStatistics({
-    totalOwners: 1,
+    totalOwners: 3,
     now: new Date('2026-08-07T10:00:00.000Z'),
     today: {
       date: '2026-08-07',
       start: new Date('2026-08-06T21:00:00.000Z'),
       end: new Date('2026-08-07T20:59:59.999Z'),
-      invitationsCreated: 9,
     },
-    localOwners: [portalOwner('owner-1', { status: 'INVITED' })],
+    localOwners: [
+      portalOwner('owner-1', { status: 'INVITED', invitedAt: '2026-08-07T05:30:00.000Z' }),
+      portalOwner('owner-2', { status: 'INVITED', invitedAt: '2026-08-05T10:00:00.000Z' }),
+      portalOwner('owner-3', { status: 'INVITED', invitedAt: '2026-08-07T06:30:00.000Z' }),
+    ],
     gateway: {
       generatedAt: '2026-08-07T10:00:00.000Z',
       invitations: [
         { ownerId: 'owner-1', createdAt: '2026-08-07T05:00:00.000Z' },
         { ownerId: 'owner-1', createdAt: '2026-08-07T06:00:00.000Z' },
+        { ownerId: 'deleted-owner', createdAt: '2026-08-07T07:00:00.000Z' },
+        { ownerId: 'owner-2', createdAt: '2026-08-07T08:00:00.000Z' },
         { ownerId: 'owner-1', createdAt: '2026-08-06T20:59:59.000Z' },
       ],
       owners: [],
     },
   });
 
-  assert.equal(statistics.today.invitationsCreated, 1);
+  assert.equal(statistics.today.invitationsCreated, 2);
+  assert.equal(statistics.items.filter((item) => item.invitedAt?.startsWith('2026-08-07')).length, 2);
 });
 
 test('карточка личных кабинетов находится только в директорской сводке и объясняет методику подсчёта', async () => {
@@ -131,6 +135,7 @@ test('карточка личных кабинетов находится тол
   assert.match(dashboard, /Telegram подключён/);
   assert.match(dashboard, /Приглашены сегодня/);
   assert.match(dashboard, /Первый вход/);
+  assert.match(dashboard, /Приглашённые сегодня считаются по текущим карточкам владельцев CRM/);
 });
 
 test('карточка владельца отличает созданное приглашение от фактического входа', async () => {

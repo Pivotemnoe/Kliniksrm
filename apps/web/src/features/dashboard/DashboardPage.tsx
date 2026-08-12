@@ -546,7 +546,7 @@ function PortalStatisticsDrawer({
         </Descriptions.Item>
       </Descriptions>
       <Typography.Paragraph type="secondary" className="portal-statistics-note">
-        Приглашённые считаются по уникальным владельцам, а не по числу повторно созданных ссылок или QR-кодов. Активированным считается кабинет, в который владелец впервые успешно вошёл.
+        Приглашённые сегодня считаются по текущим карточкам владельцев CRM и совпадают со списком ниже. Повторные или автоматические ссылки шлюза и удалённые дубли не увеличивают этот счётчик. Активированным считается кабинет, в который владелец впервые успешно вошёл.
       </Typography.Paragraph>
       <Space wrap align="start" className="portal-statistics-filters">
         <Input.Search

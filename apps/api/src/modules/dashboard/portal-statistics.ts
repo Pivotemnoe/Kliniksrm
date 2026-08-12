@@ -56,7 +56,6 @@ export function buildDirectorPortalStatistics(input: {
     date: string;
     start: Date;
     end: Date;
-    invitationsCreated: number;
   };
   listLimit?: number;
 }): DirectorPortalStatistics {
@@ -95,18 +94,19 @@ export function buildDirectorPortalStatistics(input: {
     }];
   });
 
-  const sortedItems = items.sort((left, right) => {
+  const sortedItems = [...items].sort((left, right) => {
     const leftDate = left.lastSeenAt ?? left.invitedAt ?? '';
     const rightDate = right.lastSeenAt ?? right.invitedAt ?? '';
     return rightDate.localeCompare(leftDate) || left.fullName.localeCompare(right.fullName, 'ru');
   });
   const limit = Math.max(1, Math.min(input.listLimit ?? 100, 500));
   const today = input.today;
-  const gatewayInvitationsCreated = today && Array.isArray(input.gateway?.invitations)
-    ? new Set(input.gateway.invitations
-      .filter((invitation) => isWithin(invitation.createdAt, today.start, today.end))
-      .map((invitation) => invitation.ownerId)).size
-    : null;
+  // The summary and the "Invited today" filter must describe the same current
+  // CRM owner cards. Gateway history may contain reissued links and orphaned
+  // snapshots of owners that were later merged or deleted in CRM.
+  const currentOwnersInvitedToday = today
+    ? items.filter((item) => isWithin(item.invitedAt, today.start, today.end)).length
+    : 0;
 
   return {
     calculatedAt: now.toISOString(),
@@ -114,7 +114,7 @@ export function buildDirectorPortalStatistics(input: {
     gatewayUpdatedAt: toIsoDate(input.gateway?.generatedAt ?? null),
     today: {
       date: today?.date ?? now.toISOString().slice(0, 10),
-      invitationsCreated: gatewayInvitationsCreated ?? today?.invitationsCreated ?? 0,
+      invitationsCreated: currentOwnersInvitedToday,
       activated: today
         ? items.filter((item) => isWithin(item.activatedAt, today.start, today.end)).length
         : 0,

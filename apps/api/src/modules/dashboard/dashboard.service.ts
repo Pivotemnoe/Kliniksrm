@@ -320,7 +320,7 @@ export class DashboardService {
     const now = new Date();
     const todayDate = clinicDateKey(now);
     const todayRange = resolveReportRange({ from: todayDate, to: todayDate }, now);
-    const [totalOwners, portalAccesses, gateway, invitationsCreatedToday] = await Promise.all([
+    const [totalOwners, portalAccesses, gateway] = await Promise.all([
       this.prisma.owner.count(),
       this.prisma.clientPortalAccess.findMany({
         select: {
@@ -339,9 +339,6 @@ export class DashboardService {
         },
       }),
       this.ownerGatewayClient.getPortalStatistics(),
-      this.prisma.clientPortalAccess.count({
-        where: { invitedAt: { gte: todayRange.start, lte: todayRange.end } },
-      }),
     ]);
 
     const accessOwnerIds = new Set(portalAccesses.map((access) => access.ownerId));
@@ -393,7 +390,6 @@ export class DashboardService {
         date: todayDate,
         start: todayRange.start,
         end: todayRange.end,
-        invitationsCreated: invitationsCreatedToday,
       },
     });
   }
