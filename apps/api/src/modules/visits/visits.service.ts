@@ -20,10 +20,12 @@ import { OwnerGatewaySnapshotSyncService } from '../notifications/owner-gateway-
 import { PrismaService } from '../../prisma/prisma.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { AddVisitServiceDto } from './dto/add-visit-service.dto';
+import { AddVisitServicesDto } from './dto/add-visit-services.dto';
 import { CreateVisitLaboratoryOrderDto } from './dto/create-visit-laboratory-order.dto';
 import { CreateVisitDiagnosisDto } from './dto/create-visit-diagnosis.dto';
 import { CreateVisitDto } from './dto/create-visit.dto';
 import { ListVisitsQueryDto } from './dto/list-visits-query.dto';
+import { ListVisitCatalogQueryDto } from './dto/list-visit-catalog-query.dto';
 import { UpdateVisitDiagnosisDto } from './dto/update-visit-diagnosis.dto';
 import { UpdateVisitLaboratoryItemDto } from './dto/update-visit-laboratory-item.dto';
 import { UpdateVisitServiceDto } from './dto/update-visit-service.dto';
@@ -94,6 +96,74 @@ export class VisitsService {
     ]);
 
     return { items, total, limit, offset };
+  }
+
+  async listClinicalCatalog(query: ListVisitCatalogQueryDto, actorId: string) {
+    const search = query.search?.trim();
+    const warehouseScope = await this.getWarehouseScope(actorId);
+    const [products, services] = await this.prisma.$transaction([
+      this.prisma.product.findMany({
+        where: {
+          isActive: true,
+          ...(search ? {
+            OR: [
+              { title: { contains: search, mode: 'insensitive' } },
+              { sku: { contains: search, mode: 'insensitive' } },
+              { gtin: { contains: search, mode: 'insensitive' } },
+              { barcode: { contains: search, mode: 'insensitive' } },
+              { barcodes: { some: { value: { contains: search, mode: 'insensitive' } } } },
+            ],
+          } : {}),
+        },
+        orderBy: { title: 'asc' },
+        take: 50,
+        select: {
+          id: true,
+          isActive: true,
+          title: true,
+          sku: true,
+          gtin: true,
+          barcode: true,
+          retailPrice: true,
+          stockUnit: true,
+          writeOffUnit: true,
+          billingUnit: true,
+          packageQuantity: true,
+          batches: {
+            where: {
+              rest: { gt: 0 },
+              ...(warehouseScope ? { warehouseId: { in: warehouseScope } } : {}),
+            },
+            select: { rest: true },
+          },
+        },
+      }),
+      this.prisma.service.findMany({
+        where: {
+          isActive: true,
+          ...(search ? { title: { contains: search, mode: 'insensitive' } } : {}),
+        },
+        orderBy: { title: 'asc' },
+        take: 50,
+        select: {
+          id: true,
+          isActive: true,
+          title: true,
+          price: true,
+          priceType: true,
+          minimumPrice: true,
+          maximumPrice: true,
+        },
+      }),
+    ]);
+
+    return {
+      products: products.map(({ batches, ...product }) => ({
+        ...product,
+        stockRest: batches.reduce((sum, batch) => sum.plus(batch.rest), decimal(0)),
+      })),
+      services,
+    };
   }
 
   async createVisit(dto: CreateVisitDto, actor: AuthEmployee) {
@@ -184,6 +254,9 @@ export class VisitsService {
     const statusData = resolveVisitStatusData(dto.status, existing);
 
     const visit = await this.prisma.$transaction(async (tx) => {
+      if (dto.status === VisitStatus.CANCELLED) {
+        await this.cancelUnpaidVisitBill(tx, visitId);
+      }
       const updatedVisit = await tx.visit.update({
         where: { id: visitId },
         data: {
@@ -418,7 +491,6 @@ export class VisitsService {
   }
 
   async addService(visitId: string, dto: AddVisitServiceDto, actor: AuthEmployee) {
-    const warehouseScope = await this.getWarehouseScope(actor.id);
     const serviceLine = await this.resolveServiceLine(dto);
 
     const billItem = await this.prisma.$transaction(async (tx) => {
@@ -439,10 +511,6 @@ export class VisitsService {
         },
       });
 
-      if (serviceLine.productId) {
-        await this.writeOffVisitProduct(tx, visitId, createdBillItem.id, serviceLine, warehouseScope);
-      }
-
       await this.recalculateVisitTotals(tx, visitId);
 
       return createdBillItem;
@@ -459,12 +527,54 @@ export class VisitsService {
     return billItem;
   }
 
+  async addServices(visitId: string, dto: AddVisitServicesDto, actor: AuthEmployee) {
+    const serviceLines = await Promise.all(dto.items.map((item) => this.resolveServiceLine(item)));
+    const billItems = await this.prisma.$transaction(async (tx) => {
+      const visit = await this.getVisitForBilling(tx, visitId);
+      ensureVisitEditable(visit, actor);
+      const bill = await this.getOrCreateVisitBill(tx, visit);
+      const created = [];
+      for (const serviceLine of serviceLines) {
+        created.push(await tx.billItem.create({
+          data: {
+            billId: bill.id,
+            serviceId: serviceLine.serviceId,
+            productId: serviceLine.productId,
+            title: serviceLine.title,
+            quantity: serviceLine.quantity,
+            stockQuantity: serviceLine.stockQuantity,
+            unitPrice: serviceLine.unitPrice,
+            discount: serviceLine.discount,
+            totalAmount: serviceLine.totalAmount,
+          },
+        }));
+      }
+      await this.recalculateVisitTotals(tx, visitId);
+      return created;
+    });
+
+    await this.auditService.log({
+      actorId: actor.id,
+      action: 'visit_service.bulk_add',
+      entityType: 'Visit',
+      entityId: visitId,
+      metadata: {
+        count: billItems.length,
+        billItemIds: billItems.map((item) => item.id),
+        titles: billItems.map((item) => item.title),
+      },
+    });
+
+    return { items: billItems, count: billItems.length };
+  }
+
   async updateService(visitId: string, billItemId: string, dto: UpdateVisitServiceDto, actor: AuthEmployee) {
-    const warehouseScope = await this.getWarehouseScope(actor.id);
     const billItem = await this.prisma.$transaction(async (tx) => {
       const visit = await this.getVisitForBilling(tx, visitId);
       ensureVisitEditable(visit, actor);
       const existingBillItem = await this.getVisitBillItem(tx, visitId, billItemId);
+      ensureVisitBillItemEditable(existingBillItem.bill);
+      await this.restoreCurrentVisitProductWriteOff(tx, visitId, existingBillItem);
       const serviceUnitPrice = existingBillItem.serviceId && dto.unitPrice !== undefined
         ? resolveServiceUnitPrice(
             await tx.service.findUniqueOrThrow({ where: { id: existingBillItem.serviceId }, select: servicePricingSelect }),
@@ -495,16 +605,6 @@ export class VisitsService {
         },
       });
 
-      if (existingBillItem.productId) {
-        const previousStockQuantity = existingBillItem.stockQuantity ?? existingBillItem.quantity;
-        const delta = (line.stockQuantity ?? line.quantity).minus(previousStockQuantity);
-        if (delta.greaterThan(0)) {
-          await this.writeOffVisitProduct(tx, visitId, billItemId, { ...line, stockQuantity: delta }, warehouseScope);
-        } else if (delta.lessThan(0)) {
-          await this.restoreVisitProduct(tx, visitId, billItemId, existingBillItem.productId, existingBillItem.title, delta.abs());
-        }
-      }
-
       await this.recalculateVisitTotals(tx, visitId);
 
       return updatedBillItem;
@@ -526,16 +626,8 @@ export class VisitsService {
       const visit = await this.getVisitForBilling(tx, visitId);
       ensureVisitEditable(visit, actor);
       const billItem = await this.getVisitBillItem(tx, visitId, billItemId);
-      if (billItem.productId) {
-        await this.restoreVisitProduct(
-          tx,
-          visitId,
-          billItemId,
-          billItem.productId,
-          billItem.title,
-          billItem.stockQuantity ?? billItem.quantity,
-        );
-      }
+      ensureVisitBillItemEditable(billItem.bill);
+      await this.restoreCurrentVisitProductWriteOff(tx, visitId, billItem);
       await tx.billItem.delete({ where: { id: billItemId } });
       await this.recalculateVisitTotals(tx, visitId);
     });
@@ -752,6 +844,9 @@ export class VisitsService {
     }
 
     const visit = await this.prisma.$transaction(async (tx) => {
+      if (status === VisitStatus.CANCELLED) {
+        await this.cancelUnpaidVisitBill(tx, visitId);
+      }
       const updatedVisit = await tx.visit.update({
         where: { id: visitId },
         data: resolveVisitStatusData(status, existing),
@@ -941,12 +1036,14 @@ export class VisitsService {
   }
 
   private async getOrCreateVisitBill(tx: Prisma.TransactionClient, visit: VisitBillingData) {
+    await tx.$queryRaw`SELECT "id" FROM "Bill" WHERE "visitId" = ${visit.id} FOR UPDATE`;
     const existingBill = await tx.bill.findFirst({
       where: { visitId: visit.id },
-      select: { id: true },
+      select: { id: true, status: true, paidAmount: true },
     });
 
     if (existingBill) {
+      ensureVisitBillItemEditable(existingBill);
       return existingBill;
     }
 
@@ -966,11 +1063,13 @@ export class VisitsService {
   }
 
   private async getVisitBillItem(tx: Prisma.TransactionClient, visitId: string, billItemId: string) {
+    await tx.$queryRaw`SELECT "id" FROM "Bill" WHERE "visitId" = ${visitId} FOR UPDATE`;
     const billItem = await tx.billItem.findFirst({
       where: {
         id: billItemId,
         bill: { visitId },
       },
+      include: { bill: { select: { id: true, status: true, paidAmount: true } } },
     });
 
     if (!billItem) {
@@ -978,6 +1077,53 @@ export class VisitsService {
     }
 
     return billItem;
+  }
+
+  private async cancelUnpaidVisitBill(tx: Prisma.TransactionClient, visitId: string) {
+    await tx.$queryRaw`SELECT "id" FROM "Bill" WHERE "visitId" = ${visitId} FOR UPDATE`;
+    const bill = await tx.bill.findUnique({
+      where: { visitId },
+      include: {
+        items: {
+          include: {
+            bill: { select: { id: true, status: true, paidAmount: true } },
+            hospitalRecord: { select: { id: true } },
+          },
+        },
+      },
+    });
+    if (!bill || bill.status === PaymentStatus.CANCELLED) return;
+    if (decimal(bill.paidAmount).greaterThan(0)) {
+      throw new BadRequestException('Сначала оформите возврат оплаты и отмените счёт, затем отменяйте приём');
+    }
+    for (const item of bill.items) {
+      if (item.hospitalRecord) continue;
+      await this.restoreCurrentVisitProductWriteOff(tx, visitId, item);
+    }
+    await tx.bill.update({ where: { id: bill.id }, data: { status: PaymentStatus.CANCELLED } });
+  }
+
+  private async restoreCurrentVisitProductWriteOff(
+    tx: Prisma.TransactionClient,
+    visitId: string,
+    item: {
+      id: string;
+      productId: string | null;
+      title: string;
+    },
+  ) {
+    if (!item.productId) return;
+    const movements = await tx.stockMovement.findMany({
+      where: {
+        billItemId: item.id,
+        productId: item.productId,
+        type: { in: [StockMovementType.VISIT_USAGE, StockMovementType.CORRECTION] },
+      },
+      select: { quantity: true },
+    });
+    const deducted = movements.reduce((sum, movement) => sum.minus(movement.quantity), decimal(0));
+    if (deducted.lessThanOrEqualTo(0)) return;
+    await this.restoreVisitProduct(tx, visitId, item.id, item.productId, item.title, deducted, true);
   }
 
   private async recalculateVisitTotals(tx: Prisma.TransactionClient, visitId: string) {
@@ -1049,71 +1195,6 @@ export class VisitsService {
     });
   }
 
-  private async writeOffVisitProduct(
-    tx: Prisma.TransactionClient,
-    visitId: string,
-    billItemId: string,
-    line: BillItemLine,
-    warehouseScope: WarehouseScope,
-  ) {
-    const productId = line.productId;
-    if (!productId) {
-      return;
-    }
-
-    const product = await tx.product.findUniqueOrThrow({
-      where: { id: productId },
-      select: { stockUnit: true, writeOffUnit: true, packageQuantity: true },
-    });
-    const stockQuantity = toStockQuantity(product, line.stockQuantity ?? line.quantity);
-
-    const batches = await tx.stockBatch.findMany({
-      where: {
-        productId,
-        rest: { gt: 0 },
-        ...(warehouseScope ? { warehouseId: { in: warehouseScope } } : {}),
-      },
-      select: { id: true, warehouseId: true, rest: true, expiresAt: true, createdAt: true },
-    });
-    const orderedBatches = batches.sort(compareStockBatches);
-    const available = orderedBatches.reduce((sum, batch) => sum.plus(batch.rest), decimal(0));
-
-    if (available.lessThan(stockQuantity)) {
-      throw new BadRequestException(`Недостаточно остатка товара "${line.title}"`);
-    }
-
-    let remaining = stockQuantity;
-
-    for (const batch of orderedBatches) {
-      if (remaining.lessThanOrEqualTo(0)) {
-        break;
-      }
-
-      const batchRest = decimal(batch.rest);
-      const quantity = batchRest.lessThan(remaining) ? batchRest : remaining;
-
-      await tx.stockBatch.update({
-        where: { id: batch.id },
-        data: { rest: { decrement: quantity } },
-      });
-
-      await tx.stockMovement.create({
-        data: {
-          productId,
-          billItemId,
-          stockBatchId: batch.id,
-          warehouseId: batch.warehouseId,
-          visitId,
-          type: StockMovementType.VISIT_USAGE,
-          quantity: quantity.negated(),
-          comment: `Списание по приёму ${visitId.slice(0, 8)}`,
-        },
-      });
-
-      remaining = remaining.minus(quantity);
-    }
-  }
-
   private async restoreVisitProduct(
     tx: Prisma.TransactionClient,
     visitId: string,
@@ -1121,12 +1202,13 @@ export class VisitsService {
     productId: string,
     title: string,
     quantityToRestore: Prisma.Decimal.Value,
+    quantityIsInStockUnits = false,
   ) {
     const product = await tx.product.findUniqueOrThrow({
       where: { id: productId },
       select: { stockUnit: true, writeOffUnit: true, packageQuantity: true },
     });
-    let remaining = toStockQuantity(product, quantityToRestore);
+    let remaining = quantityIsInStockUnits ? decimal(quantityToRestore) : toStockQuantity(product, quantityToRestore);
     const movements = await tx.stockMovement.findMany({
       where: {
         billItemId,
@@ -1254,12 +1336,12 @@ export class VisitsService {
     visit: Pick<ExistingVisit, 'id' | 'ownerId' | 'status'>,
     actorId: string,
   ) {
-    if (visit.status !== VisitStatus.COMPLETED) return;
+    if (!isPortalSnapshotStatus(visit.status)) return;
 
     await this.ownerGatewaySnapshotSyncService.enqueue({
       ownerId: visit.ownerId,
       visitId: visit.id,
-      visitStatus: VisitStatus.COMPLETED,
+      visitStatus: visit.status,
       actorId,
     });
     void this.ownerGatewaySnapshotSyncService.syncNow();
@@ -1504,27 +1586,6 @@ function resolveBillItemLine(input: {
   };
 }
 
-type BillItemLine = ReturnType<typeof resolveBillItemLine>;
-
-function compareStockBatches(
-  left: { expiresAt: Date | null; createdAt: Date },
-  right: { expiresAt: Date | null; createdAt: Date },
-) {
-  if (left.expiresAt && right.expiresAt && left.expiresAt.getTime() !== right.expiresAt.getTime()) {
-    return left.expiresAt.getTime() - right.expiresAt.getTime();
-  }
-
-  if (left.expiresAt && !right.expiresAt) {
-    return -1;
-  }
-
-  if (!left.expiresAt && right.expiresAt) {
-    return 1;
-  }
-
-  return left.createdAt.getTime() - right.createdAt.getTime();
-}
-
 async function createBillItemFromService(tx: Prisma.TransactionClient, billId: string, service: LaboratoryServiceForBilling) {
   if (!service) {
     return null;
@@ -1596,6 +1657,10 @@ function resolveLaboratoryOrderStatus(itemStatuses: LaboratoryOrderItemStatus[])
 }
 
 function ensureVisitEditable(visit: { status: VisitStatus; completedAt: Date | null }, actor: Pick<AuthEmployee, 'roles'>) {
+  if (actor.roles.includes('director')) {
+    return;
+  }
+
   if (visit.status === VisitStatus.CANCELLED) {
     throw new BadRequestException('Отменённый приём нельзя редактировать');
   }
@@ -1604,15 +1669,20 @@ function ensureVisitEditable(visit: { status: VisitStatus; completedAt: Date | n
     return;
   }
 
-  if (actor.roles.includes('director')) {
-    return;
-  }
-
   if (visit.completedAt && Date.now() - visit.completedAt.getTime() <= COMPLETED_VISIT_EDIT_GRACE_MS) {
     return;
   }
 
   throw new BadRequestException('Завершённый приём можно редактировать только директору или в течение 30 минут после завершения');
+}
+
+function ensureVisitBillItemEditable(bill: { status: PaymentStatus; paidAmount: Prisma.Decimal }) {
+  if (bill.status === PaymentStatus.CANCELLED) {
+    throw new BadRequestException('Отменённый счёт нельзя менять. Сначала откройте счёт повторно');
+  }
+  if (decimal(bill.paidAmount).greaterThan(0)) {
+    throw new BadRequestException('Оплаченные позиции нельзя менять до оформления возврата');
+  }
 }
 
 function isPortalSnapshotStatus(status: VisitStatus) {

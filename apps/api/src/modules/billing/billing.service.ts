@@ -194,6 +194,7 @@ export class BillingService {
   async bulkCancelBills(dto: BulkBillIdsDto, actorId: string) {
     const billIds = dto.billIds;
     await this.prisma.$transaction(async (tx) => {
+      await this.lockBillsForUpdate(tx, billIds);
       const bills = await tx.bill.findMany({
         where: { id: { in: billIds } },
         select: billStockContextSelect,
@@ -232,11 +233,13 @@ export class BillingService {
 
   async bulkPayBills(dto: BulkPayBillsDto, actorId: string) {
     const billIds = dto.billIds;
+    const warehouseScope = await this.getWarehouseScope(actorId);
     const paymentSettings = await this.financeService.resolvePaymentSettings(dto.paymentMethodId, dto.cashboxId);
     const paymentType = paymentSettings.type ?? dto.type;
     const paidAt = dto.paidAt ? new Date(dto.paidAt) : new Date();
 
     const result = await this.prisma.$transaction(async (tx) => {
+      await this.lockBillsForUpdate(tx, billIds);
       const bills = await tx.bill.findMany({
         where: { id: { in: billIds } },
         select: billStockContextSelect,
@@ -271,6 +274,11 @@ export class BillingService {
           select: { id: true, billId: true, amount: true },
         });
         await this.recalculateBillTotals(tx, billId);
+        const paidBill = await tx.bill.findUniqueOrThrow({
+          where: { id: billId },
+          select: billStockContextSelect,
+        });
+        await this.ensureBillProductItemsWrittenOff(tx, paidBill, warehouseScope);
         payments.push(payment);
         totalAmount = totalAmount.plus(amount);
       }
@@ -296,15 +304,12 @@ export class BillingService {
   }
 
   async reopenBill(billId: string, actorId: string) {
-    const warehouseScope = await this.getWarehouseScope(actorId);
-
     const bill = await this.prisma.$transaction(async (tx) => {
-      const currentBill = await this.getBillForUpdate(tx, billId);
+      await this.getBillForUpdate(tx, billId);
       await tx.bill.update({
         where: { id: billId },
         data: { status: PaymentStatus.UNPAID },
       });
-      await this.ensureBillProductItemsWrittenOff(tx, currentBill, warehouseScope);
       await this.recalculateBillTotals(tx, billId);
       return tx.bill.findUniqueOrThrow({ where: { id: billId }, include: billInclude });
     });
@@ -321,11 +326,10 @@ export class BillingService {
   }
 
   async addBillItem(billId: string, dto: AddBillItemDto, actorId: string) {
-    const warehouseScope = await this.getWarehouseScope(actorId);
     const line = await this.resolveBillItemLine(dto);
 
     const billItem = await this.prisma.$transaction(async (tx) => {
-      const bill = await this.ensureBillCanBeEdited(tx, billId);
+      await this.ensureBillCanBeEdited(tx, billId);
 
       const createdBillItem = await tx.billItem.create({
         data: {
@@ -340,10 +344,6 @@ export class BillingService {
           totalAmount: line.totalAmount,
         },
       });
-
-      if (line.productId) {
-        await this.writeOffBillProduct(tx, bill, createdBillItem.id, line, warehouseScope);
-      }
 
       await this.recalculateBillTotals(tx, billId);
 
@@ -362,10 +362,11 @@ export class BillingService {
   }
 
   async updateBillItem(billId: string, billItemId: string, dto: UpdateBillItemDto, actorId: string) {
-    const warehouseScope = await this.getWarehouseScope(actorId);
     const billItem = await this.prisma.$transaction(async (tx) => {
-      const bill = await this.ensureBillCanBeEdited(tx, billId);
+      await this.ensureBillCanBeEdited(tx, billId);
       const existingBillItem = await this.getBillItem(tx, billId, billItemId);
+      ensureBillItemIsNotHospitalRecord(existingBillItem);
+      await this.restoreCurrentBillItemWriteOff(tx, billItemId, existingBillItem.title);
       const serviceUnitPrice = existingBillItem.serviceId && dto.unitPrice !== undefined
         ? resolveServiceUnitPrice(
             await tx.service.findUniqueOrThrow({ where: { id: existingBillItem.serviceId }, select: servicePricingSelect }),
@@ -396,10 +397,6 @@ export class BillingService {
         },
       });
 
-      if (existingBillItem.productId) {
-        await this.syncBillProductWriteOff(tx, bill, billItemId, line, warehouseScope);
-      }
-
       await this.recalculateBillTotals(tx, billId);
 
       return updatedBillItem;
@@ -419,7 +416,8 @@ export class BillingService {
   async deleteBillItem(billId: string, billItemId: string, actorId: string) {
     await this.prisma.$transaction(async (tx) => {
       await this.ensureBillCanBeEdited(tx, billId);
-      await this.getBillItem(tx, billId, billItemId);
+      const billItem = await this.getBillItem(tx, billId, billItemId);
+      ensureBillItemIsNotHospitalRecord(billItem);
       await this.restoreCurrentBillItemWriteOff(tx, billItemId);
       await tx.billItem.delete({ where: { id: billItemId } });
       await this.recalculateBillTotals(tx, billId);
@@ -456,6 +454,7 @@ export class BillingService {
 
   async createPayment(billId: string, dto: CreatePaymentDto, actorId: string) {
     const amount = decimal(dto.amount);
+    const warehouseScope = await this.getWarehouseScope(actorId);
     const paymentSettings = await this.financeService.resolvePaymentSettings(dto.paymentMethodId, dto.cashboxId);
     const paymentType = paymentSettings.type ?? dto.type;
 
@@ -485,6 +484,14 @@ export class BillingService {
       });
 
       await this.recalculateBillTotals(tx, billId);
+
+      const updatedBill = await tx.bill.findUniqueOrThrow({
+        where: { id: billId },
+        select: billStockContextSelect,
+      });
+      if (updatedBill.status === PaymentStatus.PAID) {
+        await this.ensureBillProductItemsWrittenOff(tx, updatedBill, warehouseScope);
+      }
 
       return createdPayment;
     });
@@ -538,6 +545,14 @@ export class BillingService {
       }
 
       await this.recalculateBillTotals(tx, billId);
+
+      const updatedBill = await tx.bill.findUniqueOrThrow({
+        where: { id: billId },
+        select: billStockContextSelect,
+      });
+      if (updatedBill.status !== PaymentStatus.PAID) {
+        await this.restoreBillProductItems(tx, updatedBill);
+      }
 
       return createdRefundPayment;
     });
@@ -658,6 +673,10 @@ export class BillingService {
   private async ensureBillCanBeEdited(tx: Prisma.TransactionClient, billId: string) {
     const bill = await this.getBillForUpdate(tx, billId);
 
+    if (bill.source === BillSource.SALE) {
+      throw new BadRequestException('Позиции розничной продажи исправляются только в карточке продажи');
+    }
+
     if (bill.status === PaymentStatus.CANCELLED) {
       throw new BadRequestException('Cancelled bill cannot be edited');
     }
@@ -688,6 +707,12 @@ export class BillingService {
   }
 
   private async getBillForUpdate(tx: Prisma.TransactionClient, billId: string) {
+    const lockedBills = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT "id" FROM "Bill" WHERE "id" = ${billId} FOR UPDATE
+    `;
+    if (!lockedBills.length) {
+      throw new NotFoundException('Bill not found');
+    }
     const bill = await tx.bill.findUnique({
       where: { id: billId },
       select: {
@@ -707,6 +732,12 @@ export class BillingService {
     }
 
     return bill;
+  }
+
+  private async lockBillsForUpdate(tx: Prisma.TransactionClient, billIds: string[]) {
+    for (const billId of [...billIds].sort()) {
+      await tx.$queryRaw`SELECT "id" FROM "Bill" WHERE "id" = ${billId} FOR UPDATE`;
+    }
   }
 
   private async getExistingBill(billId: string) {
@@ -797,6 +828,7 @@ export class BillingService {
   private async getBillItem(tx: Prisma.TransactionClient, billId: string, billItemId: string) {
     const billItem = await tx.billItem.findFirst({
       where: { id: billItemId, billId },
+      include: { hospitalRecord: { select: { id: true } } },
     });
 
     if (!billItem) {
@@ -904,12 +936,30 @@ export class BillingService {
     bill: BillStockContext,
     warehouseScope: WarehouseScope,
   ) {
+    // Розничная продажа проводит склад собственным атомарным контуром при создании.
+    // Повторное проведение её счёта при оплате дублировало бы списание.
+    if (bill.source === BillSource.SALE) {
+      return;
+    }
+
     const productItems = await tx.billItem.findMany({
       where: { billId: bill.id, productId: { not: null } },
-      select: { id: true, productId: true, title: true, quantity: true, stockQuantity: true, unitPrice: true, discount: true },
+      select: {
+        id: true,
+        productId: true,
+        title: true,
+        quantity: true,
+        stockQuantity: true,
+        unitPrice: true,
+        discount: true,
+        hospitalRecord: { select: { id: true } },
+      },
     });
 
     for (const item of productItems) {
+      // Выполненная запись стационара списывает фактический расход сразу и
+      // управляется только журналом стационара, независимо от оплаты счёта.
+      if (item.hospitalRecord) continue;
       const line = calculateBillItemLine({
         productId: item.productId ?? undefined,
         title: item.title,
@@ -925,10 +975,11 @@ export class BillingService {
   private async restoreBillProductItems(tx: Prisma.TransactionClient, bill: BillStockContext) {
     const productItems = await tx.billItem.findMany({
       where: { billId: bill.id, productId: { not: null } },
-      select: { id: true, productId: true, title: true },
+      select: { id: true, productId: true, title: true, hospitalRecord: { select: { id: true } } },
     });
 
     for (const item of productItems) {
+      if (item.hospitalRecord) continue;
       await this.restoreCurrentBillItemWriteOff(tx, item.id, item.title);
     }
   }
@@ -1114,6 +1165,12 @@ function assertBillCanBePaid(
   }
   if (decimal(bill.paidAmount).greaterThanOrEqualTo(bill.totalAmount)) {
     throw new BadRequestException(`Счёт ${billId.slice(0, 8)} уже оплачен`);
+  }
+}
+
+function ensureBillItemIsNotHospitalRecord(item: { hospitalRecord: { id: string } | null }) {
+  if (item.hospitalRecord) {
+    throw new BadRequestException('Позиция проведена в стационаре и исправляется только через журнал стационара');
   }
 }
 

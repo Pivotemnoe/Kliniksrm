@@ -1,17 +1,18 @@
 import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Alert, Button, Drawer, Form, Input, Popconfirm, Select, Space, Statistic, Table, Tag, Typography } from 'antd';
+import { Alert, Button, Drawer, Form, Input, List, Popconfirm, Select, Space, Statistic, Table, Tag, Typography } from 'antd';
 import { ColumnsType } from 'antd/es/table';
 import { useMemo, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
 import { formatMoney, toMoneyNumber } from '../../shared/utils/money';
+import { getNetStockWriteOffQuantity } from '../../shared/utils/stockMovement';
 import { formatServicePrice, getServiceDefaultPrice, getServicePriceHelp, validateServicePrice } from '../stock/service-pricing';
-import { useProductCatalogPicker, useServiceCatalogPicker } from '../stock/useCatalogPicker';
+import { useVisitProductCatalogPicker, useVisitServiceCatalogPicker } from '../stock/useCatalogPicker';
 import { Visit, VisitBillItem, VisitServiceLineInput } from './types';
-import { addVisitService, deleteVisitService, updateVisitService } from './visits.api';
+import { addVisitService, addVisitServices, deleteVisitService, updateVisitService } from './visits.api';
 
 const serviceLineSchema = z.object({
   lineType: z.enum(['PRODUCT', 'SERVICE', 'MANUAL']),
@@ -49,11 +50,16 @@ export function VisitServicesTab({ visit, canManage, locked }: VisitServicesTabP
   const queryClient = useQueryClient();
   const [editingLine, setEditingLine] = useState<VisitBillItem | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const disabled = locked || !canManage;
+  const billFinanciallyLocked = Boolean(
+    visit.bill && (visit.bill.status === 'CANCELLED' || toMoneyNumber(visit.bill.paidAmount) > 0),
+  );
+  const disabled = locked || !canManage || billFinanciallyLocked;
   const items = visit.bill?.items ?? [];
-  const saveMutation = useMutation({
-    mutationFn: (values: VisitServiceLineInput) =>
-      editingLine ? updateVisitService(visit.id, editingLine.id, values) : addVisitService(visit.id, values),
+  const saveMutation = useMutation<unknown, unknown, VisitServiceLineInput[]>({
+    mutationFn: async (values) => {
+      if (editingLine) return updateVisitService(visit.id, editingLine.id, values[0]);
+      return values.length === 1 ? addVisitService(visit.id, values[0]) : addVisitServices(visit.id, values);
+    },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['visits', visit.id] });
       await queryClient.invalidateQueries({ queryKey: ['visits'] });
@@ -89,10 +95,15 @@ export function VisitServicesTab({ visit, canManage, locked }: VisitServicesTabP
           const billingUnit = record.product?.billingUnit || record.product?.writeOffUnit || record.product?.stockUnit || 'ед.';
           const writeOffUnit = record.product?.writeOffUnit || record.product?.stockUnit || 'ед.';
           const stockQuantity = Number(record.stockQuantity ?? record.quantity).toLocaleString('ru-RU');
+          const writtenOffQuantity = getNetStockWriteOffQuantity(record.stockMovements);
           return (
             <Space direction="vertical" size={0}>
               <span>{billedQuantity} {billingUnit}</span>
-              <Typography.Text type="secondary">списано {stockQuantity} {writeOffUnit}</Typography.Text>
+              <Typography.Text type="secondary">
+                {writtenOffQuantity > 0
+                  ? `списано после оплаты: ${writtenOffQuantity.toLocaleString('ru-RU')} ${writeOffUnit}`
+                  : `будет списано при полной оплате: ${stockQuantity} ${writeOffUnit}`}
+              </Typography.Text>
             </Space>
           );
         },
@@ -103,14 +114,16 @@ export function VisitServicesTab({ visit, canManage, locked }: VisitServicesTabP
       {
         title: 'Склад',
         key: 'stock',
-        render: (_, record) =>
-          record.productId ? (
-            <Typography.Text type={record.stockMovements?.length ? 'secondary' : 'danger'}>
-              {record.stockMovements?.length ? 'Списано' : 'Нет движения'}
+        render: (_, record) => {
+          const writtenOffQuantity = getNetStockWriteOffQuantity(record.stockMovements);
+          return record.productId ? (
+            <Typography.Text type={writtenOffQuantity > 0 ? 'secondary' : 'danger'}>
+              {writtenOffQuantity > 0 ? 'Списано после оплаты' : 'Ожидает полной оплаты'}
             </Typography.Text>
           ) : (
             '—'
-          ),
+          );
+        },
       },
       {
         title: '',
@@ -139,6 +152,13 @@ export function VisitServicesTab({ visit, canManage, locked }: VisitServicesTabP
   return (
     <Space direction="vertical" size={16} className="full-width">
       {locked ? <Alert type="info" showIcon message="Редактирование закрыто: отменённый приём нельзя менять, завершённый доступен директору или в течение 30 минут после завершения." /> : null}
+      {billFinanciallyLocked ? (
+        <Alert
+          type="warning"
+          showIcon
+          message="Финансовые позиции защищены: сначала откройте отменённый счёт заново или оформите возврат оплаты. Клиническую часть директор может исправлять отдельно — с записью в аудите."
+        />
+      ) : null}
       {saveMutation.isError ? <Typography.Text type="danger">{getErrorMessage(saveMutation.error)}</Typography.Text> : null}
       {deleteMutation.isError ? <Typography.Text type="danger">{getErrorMessage(deleteMutation.error)}</Typography.Text> : null}
       <div className="toolbar-row">
@@ -185,13 +205,14 @@ function ServiceLineDrawer({
   isSubmitting?: boolean;
   submitError?: unknown;
   onClose: () => void;
-  onSubmit: (values: VisitServiceLineInput) => void;
+  onSubmit: (values: VisitServiceLineInput[]) => void;
 }) {
   const { control, handleSubmit, reset, setError } = useForm<ServiceLineFormInput, unknown, ServiceLineValues>({
     resolver: zodResolver(serviceLineSchema),
     defaultValues: getDefaultValues(line),
   });
   const isEdit = Boolean(line);
+  const [pendingLines, setPendingLines] = useState<VisitServiceLineInput[]>([]);
   const lineType = useWatch({ control, name: 'lineType' });
   const productId = useWatch({ control, name: 'productId' });
   const serviceId = useWatch({ control, name: 'serviceId' });
@@ -200,8 +221,8 @@ function ServiceLineDrawer({
   const unitPrice = useWatch({ control, name: 'unitPrice' });
   const discount = useWatch({ control, name: 'discount' });
   const calculatedTotal = Math.max(toMoneyNumber(quantity) * toMoneyNumber(unitPrice) - toMoneyNumber(discount), 0);
-  const productsQuery = useProductCatalogPicker(open && !isEdit);
-  const servicesQuery = useServiceCatalogPicker(open && !isEdit);
+  const productsQuery = useVisitProductCatalogPicker(open && !isEdit);
+  const servicesQuery = useVisitServiceCatalogPicker(open && !isEdit);
   const selectedProduct = productsQuery.items.find((product) => product.id === productId);
   const activeProduct = selectedProduct ?? line?.product ?? null;
   const selectedService = servicesQuery.items.find((service) => service.id === serviceId);
@@ -210,18 +231,19 @@ function ServiceLineDrawer({
   function handleOpenChange(nextOpen: boolean) {
     if (nextOpen) {
       reset(getDefaultValues(line));
+      setPendingLines([]);
     }
   }
 
-  function submit(values: ServiceLineValues) {
+  function buildLine(values: ServiceLineValues) {
     if (values.lineType === 'SERVICE') {
       const priceError = validateServicePrice(activeService, values.unitPrice);
       if (priceError) {
         setError('unitPrice', { message: priceError });
-        return;
+        return null;
       }
     }
-    onSubmit({
+    return {
       ...(!line && values.lineType === 'PRODUCT' ? { productId: values.productId } : {}),
       ...(!line && values.lineType === 'SERVICE' ? { serviceId: values.serviceId } : {}),
       title: values.title,
@@ -229,7 +251,20 @@ function ServiceLineDrawer({
       ...(values.lineType === 'PRODUCT' && values.stockQuantity ? { stockQuantity: values.stockQuantity } : {}),
       unitPrice: values.unitPrice,
       discount: values.discount,
-    });
+    } satisfies VisitServiceLineInput;
+  }
+
+  function submit(values: ServiceLineValues) {
+    const currentLine = buildLine(values);
+    if (!currentLine) return;
+    onSubmit([currentLine]);
+  }
+
+  function stageLine(values: ServiceLineValues) {
+    const currentLine = buildLine(values);
+    if (!currentLine) return;
+    setPendingLines((current) => [...current, currentLine]);
+    reset({ ...getDefaultValues(null), lineType: values.lineType });
   }
 
   return (
@@ -243,8 +278,12 @@ function ServiceLineDrawer({
       extra={
         <Space>
           <Button onClick={onClose}>Отмена</Button>
-          <Button type="primary" loading={isSubmitting} onClick={handleSubmit(submit)}>
-            Сохранить
+          <Button
+            type="primary"
+            loading={isSubmitting}
+            onClick={pendingLines.length ? () => onSubmit(pendingLines) : handleSubmit(submit)}
+          >
+            {pendingLines.length ? `Сохранить подготовленные: ${pendingLines.length}` : 'Сохранить'}
           </Button>
         </Space>
       }
@@ -361,7 +400,7 @@ function ServiceLineDrawer({
           <Alert
             type="info"
             showIcon
-            message={`Склад и оплата считаются отдельно: спишется ${stockQuantity || 0} ${activeProduct.writeOffUnit || activeProduct.stockUnit || 'ед.'}, клиенту начислится ${quantity || 0} ${activeProduct.billingUnit || activeProduct.writeOffUnit || activeProduct.stockUnit || 'ед.'}.`}
+            message={`Склад и оплата считаются отдельно: ${stockQuantity || 0} ${activeProduct.writeOffUnit || activeProduct.stockUnit || 'ед.'} спишется только после полной оплаты счёта; клиенту начислится ${quantity || 0} ${activeProduct.billingUnit || activeProduct.writeOffUnit || activeProduct.stockUnit || 'ед.'}.`}
           />
         ) : null}
         <div className="form-grid two-columns">
@@ -421,6 +460,40 @@ function ServiceLineDrawer({
             <Input value={formatMoney(calculatedTotal)} readOnly />
           </Form.Item>
         </div>
+        {!isEdit ? (
+          <Button
+            block
+            type="dashed"
+            icon={<PlusOutlined />}
+            onClick={handleSubmit(stageLine)}
+          >
+            Добавить позицию в общий список
+          </Button>
+        ) : null}
+        {pendingLines.length ? (
+          <List
+            header={<Typography.Text strong>Подготовлено к сохранению: {pendingLines.length}</Typography.Text>}
+            dataSource={pendingLines}
+            renderItem={(item, index) => (
+              <List.Item
+                actions={[
+                  <Button
+                    key="remove"
+                    type="text"
+                    danger
+                    icon={<DeleteOutlined />}
+                    onClick={() => setPendingLines((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                  />,
+                ]}
+              >
+                <List.Item.Meta
+                  title={item.title}
+                  description={`${Number(item.quantity ?? 1).toLocaleString('ru-RU')} × ${formatMoney(item.unitPrice ?? 0)}`}
+                />
+              </List.Item>
+            )}
+          />
+        ) : null}
       </Form>
     </Drawer>
   );

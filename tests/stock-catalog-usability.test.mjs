@@ -55,14 +55,16 @@ test('единицы выбираются из справочника и пер�
   const visits = await read('apps/api/src/modules/visits/visits.service.ts');
   const billing = await read('apps/api/src/modules/billing/billing.service.ts');
   const sales = await read('apps/api/src/modules/sales/sales.service.ts');
+  const hospital = await read('apps/api/src/modules/hospital/hospital.service.ts');
 
   assert.match(page, /'флакон'.*'мл'.*'л'.*'г'.*'кг'/s);
   assert.match(page, /Храним на складе в/);
   assert.match(page, /Списываем при использовании в/);
   assert.match(units, /quantity\.div\(packageQuantity\)/);
-  assert.match(visits, /toStockQuantity\(product, line\.stockQuantity \?\? line\.quantity\)/);
+  assert.match(visits, /toStockQuantity\(product, quantityToRestore\)/);
   assert.match(billing, /toStockQuantity\(product, line\.stockQuantity \?\? line\.quantity\)/);
   assert.match(sales, /toStockQuantity\(product, line\.quantity\)/);
+  assert.match(hospital, /toStockQuantity\(product, line\.stockQuantity \?\? line\.quantity\)/);
 });
 
 test('товар хранит точную дату годности и умеет создавать внутренний EAN-13', async () => {

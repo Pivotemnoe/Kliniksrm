@@ -91,7 +91,7 @@ test('без публичного шлюза сохраняются локаль
   assert.equal(statistics.today.activeOwners, 1);
 });
 
-test('при доступном шлюзе приглашения за день считаются по фактическим PortalInvitation без двойного счёта аудита', () => {
+test('при доступном шлюзе приглашения за день считаются по уникальным владельцам, а не по повторным ссылкам', () => {
   const statistics = buildDirectorPortalStatistics({
     totalOwners: 1,
     now: new Date('2026-08-07T10:00:00.000Z'),
@@ -113,22 +113,24 @@ test('при доступном шлюзе приглашения за день 
     },
   });
 
-  assert.equal(statistics.today.invitationsCreated, 2);
+  assert.equal(statistics.today.invitationsCreated, 1);
 });
 
 test('карточка личных кабинетов находится только в директорской сводке и объясняет методику подсчёта', async () => {
   const dashboard = await readFile(new URL('../apps/web/src/features/dashboard/DashboardPage.tsx', import.meta.url), 'utf8');
   assert.match(dashboard, /summary\?\.workspace\.mode === 'director'/);
   assert.match(dashboard, /title="Личные кабинеты"/);
-  assert.match(dashboard, /Активированным считается кабинет, в который владелец хотя бы один раз успешно вошёл/);
+  assert.match(dashboard, /Активированным считается кабинет, в который владелец впервые успешно вошёл/);
   assert.match(dashboard, /Публичный шлюз сейчас недоступен/);
-  assert.match(dashboard, /Приглашений создано сегодня/);
+  assert.match(dashboard, /Владельцев приглашено сегодня/);
   assert.match(dashboard, /Активировали сегодня/);
   assert.match(dashboard, /Заходили сегодня/);
   assert.match(dashboard, /placeholder="Владелец или телефон"/);
   assert.match(dashboard, /Не активирован/);
   assert.match(dashboard, /Последний вход: новые/);
   assert.match(dashboard, /Telegram подключён/);
+  assert.match(dashboard, /Приглашены сегодня/);
+  assert.match(dashboard, /Первый вход/);
 });
 
 test('карточка владельца отличает созданное приглашение от фактического входа', async () => {

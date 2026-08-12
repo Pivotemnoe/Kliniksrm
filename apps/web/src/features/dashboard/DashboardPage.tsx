@@ -42,6 +42,7 @@ const portalStatusColors = { ACTIVATED: 'green', INVITED: 'gold', ENABLED: 'blue
 
 type PortalStatusFilter = 'ALL' | 'NOT_ACTIVATED' | DirectorPortalOwnerItem['status'];
 type PortalActivityFilter = 'ALL' | 'SEEN' | 'NEVER_SEEN' | 'ACTIVE_30_DAYS' | 'INACTIVE_30_DAYS';
+type PortalTodayFilter = 'ALL' | 'INVITED_TODAY' | 'ACTIVATED_TODAY' | 'SEEN_TODAY';
 type PortalChannelFilter = 'ALL' | 'TELEGRAM' | 'MAX' | 'NO_MESSENGER';
 type PortalSort = 'LAST_SEEN_DESC' | 'LAST_SEEN_ASC' | 'INVITED_DESC' | 'INVITED_ASC' | 'NAME_ASC';
 
@@ -468,12 +469,14 @@ function PortalStatisticsDrawer({
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<PortalStatusFilter>('ALL');
   const [activityFilter, setActivityFilter] = useState<PortalActivityFilter>('ALL');
+  const [todayFilter, setTodayFilter] = useState<PortalTodayFilter>('ALL');
   const [channelFilter, setChannelFilter] = useState<PortalChannelFilter>('ALL');
   const [sort, setSort] = useState<PortalSort>('LAST_SEEN_DESC');
   const listedItems = statistics?.items ?? [];
   const filteredItems = useMemo(() => {
     const normalizedSearch = search.trim().toLocaleLowerCase('ru');
     const activeSince = Date.now() - 30 * 86_400_000;
+    const todayKey = statistics?.today.date;
     const matches = listedItems.filter((owner) => {
       const searchDigits = normalizedSearch.replace(/\D/g, '');
       const matchesSearch = !normalizedSearch
@@ -491,7 +494,11 @@ function PortalStatisticsDrawer({
         || (channelFilter === 'TELEGRAM' && owner.telegramLinked)
         || (channelFilter === 'MAX' && owner.maxLinked)
         || (channelFilter === 'NO_MESSENGER' && !owner.telegramLinked && !owner.maxLinked);
-      return matchesSearch && matchesStatus && matchesActivity && matchesChannel;
+      const matchesToday = todayFilter === 'ALL'
+        || (todayFilter === 'INVITED_TODAY' && isClinicDate(owner.invitedAt, todayKey))
+        || (todayFilter === 'ACTIVATED_TODAY' && isClinicDate(owner.activatedAt, todayKey))
+        || (todayFilter === 'SEEN_TODAY' && isClinicDate(owner.lastSeenAt, todayKey));
+      return matchesSearch && matchesStatus && matchesActivity && matchesChannel && matchesToday;
     });
 
     return matches.sort((left, right) => {
@@ -502,7 +509,7 @@ function PortalStatisticsDrawer({
       const direction = sort.endsWith('ASC') ? 1 : -1;
       return direction * leftDate.localeCompare(rightDate) || left.fullName.localeCompare(right.fullName, 'ru');
     });
-  }, [activityFilter, channelFilter, listedItems, search, sort, statusFilter]);
+  }, [activityFilter, channelFilter, listedItems, search, sort, statistics?.today.date, statusFilter, todayFilter]);
 
   return (
     <Drawer
@@ -524,7 +531,7 @@ function PortalStatisticsDrawer({
         />
       ) : null}
       <Descriptions bordered size="small" column={{ xs: 1, sm: 2 }} className="portal-statistics-summary">
-        <Descriptions.Item label="Приглашений создано сегодня">{statistics?.today.invitationsCreated ?? '—'}</Descriptions.Item>
+        <Descriptions.Item label="Владельцев приглашено сегодня">{statistics?.today.invitationsCreated ?? '—'}</Descriptions.Item>
         <Descriptions.Item label="Активировали сегодня">{formatTodayGatewayMetric(statistics, 'activated')}</Descriptions.Item>
         <Descriptions.Item label="Заходили сегодня">{formatTodayGatewayMetric(statistics, 'activeOwners')}</Descriptions.Item>
         <Descriptions.Item label="Владельцев в CRM">{statistics?.totals.owners ?? '—'}</Descriptions.Item>
@@ -539,7 +546,7 @@ function PortalStatisticsDrawer({
         </Descriptions.Item>
       </Descriptions>
       <Typography.Paragraph type="secondary" className="portal-statistics-note">
-        Активированным считается кабинет, в который владелец хотя бы один раз успешно вошёл. Одного созданного приглашения или QR-кода недостаточно.
+        Приглашённые считаются по уникальным владельцам, а не по числу повторно созданных ссылок или QR-кодов. Активированным считается кабинет, в который владелец впервые успешно вошёл.
       </Typography.Paragraph>
       <Space wrap align="start" className="portal-statistics-filters">
         <Input.Search
@@ -561,6 +568,17 @@ function PortalStatisticsDrawer({
             { value: 'ENABLED', label: 'Доступ включён' },
             { value: 'BLOCKED', label: 'Заблокирован' },
             { value: 'DISABLED', label: 'Доступ выключен' },
+          ]}
+        />
+        <Select<PortalTodayFilter>
+          value={todayFilter}
+          onChange={setTodayFilter}
+          style={{ width: 220 }}
+          options={[
+            { value: 'ALL', label: 'Любая дата события' },
+            { value: 'INVITED_TODAY', label: 'Приглашены сегодня' },
+            { value: 'ACTIVATED_TODAY', label: 'Впервые вошли сегодня' },
+            { value: 'SEEN_TODAY', label: 'Заходили сегодня' },
           ]}
         />
         <Select<PortalActivityFilter>
@@ -626,6 +644,12 @@ function PortalStatisticsDrawer({
             render: (status: DirectorPortalOwnerItem['status']) => <Tag color={portalStatusColors[status]}>{portalStatusLabels[status]}</Tag>,
           },
           {
+            title: 'Первый вход',
+            dataIndex: 'activatedAt',
+            width: 155,
+            render: (value: string | null) => formatDateTime(value),
+          },
+          {
             title: 'Последний вход',
             dataIndex: 'lastSeenAt',
             width: 155,
@@ -661,6 +685,16 @@ function PortalStatisticsDrawer({
       ) : null}
     </Drawer>
   );
+}
+
+function isClinicDate(value: string | null, expectedDate?: string) {
+  if (!value || !expectedDate) return false;
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Moscow',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(value)) === expectedDate;
 }
 
 function EmployeeDashboard({

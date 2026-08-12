@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
-import { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useMemo, useState } from 'react';
 import { listProducts, listServices } from './stock.api';
+import { getVisitClinicalCatalog } from '../visits/visits.api';
 import { Product, ServiceItem } from './types';
 
 const CATALOG_PICKER_LIMIT = 50;
@@ -23,6 +24,24 @@ export function useServiceCatalogPicker(enabled: boolean, initialItems: Array<Se
   });
 }
 
+export function useVisitProductCatalogPicker(enabled: boolean, initialItems: Array<Product | null | undefined> = []) {
+  return useCatalogPicker<Product>({
+    enabled,
+    initialItems,
+    queryKey: 'visit-products',
+    queryFn: async (search) => ({ items: (await getVisitClinicalCatalog(search)).products }),
+  });
+}
+
+export function useVisitServiceCatalogPicker(enabled: boolean, initialItems: Array<ServiceItem | null | undefined> = []) {
+  return useCatalogPicker<ServiceItem>({
+    enabled,
+    initialItems,
+    queryKey: 'visit-services',
+    queryFn: async (search) => ({ items: (await getVisitClinicalCatalog(search)).services }),
+  });
+}
+
 function useCatalogPicker<T extends { id: string; title: string }>({
   enabled,
   initialItems,
@@ -31,11 +50,10 @@ function useCatalogPicker<T extends { id: string; title: string }>({
 }: {
   enabled: boolean;
   initialItems: Array<T | null | undefined>;
-  queryKey: 'products' | 'services';
+  queryKey: 'products' | 'services' | 'visit-products' | 'visit-services';
   queryFn: (search: string) => Promise<{ items: T[] }>;
 }) {
   const [search, setSearch] = useState('');
-  const [knownItems, setKnownItems] = useState<Record<string, T>>({});
   const deferredSearch = useDeferredValue(search.trim());
   const query = useQuery({
     queryKey: ['stock', queryKey, 'catalog-picker', deferredSearch],
@@ -43,27 +61,12 @@ function useCatalogPicker<T extends { id: string; title: string }>({
     enabled,
   });
 
-  useEffect(() => {
-    const incoming = [...initialItems, ...(query.data?.items ?? [])].filter((item): item is T => Boolean(item));
-    if (incoming.length === 0) return;
-
-    setKnownItems((current) => {
-      let changed = false;
-      const next = { ...current };
-      incoming.forEach((item) => {
-        if (next[item.id] !== item) {
-          next[item.id] = item;
-          changed = true;
-        }
-      });
-      return changed ? next : current;
-    });
+  const items = useMemo(() => {
+    const currentItems = [...initialItems, ...(query.data?.items ?? [])]
+      .filter((item): item is T => Boolean(item));
+    return [...new Map(currentItems.map((item) => [item.id, item])).values()]
+      .sort((left, right) => left.title.localeCompare(right.title, 'ru'));
   }, [initialItems, query.data?.items]);
-
-  const items = useMemo(
-    () => Object.values(knownItems).sort((left, right) => left.title.localeCompare(right.title, 'ru')),
-    [knownItems],
-  );
 
   return {
     ...query,

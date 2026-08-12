@@ -36,12 +36,18 @@ export function HospitalPage() {
   const canManage = hasPermission(auth?.employee, 'hospital.manage');
   const [search, setSearch] = useState('');
   const [boxId, setBoxId] = useState<string | undefined>();
-  const [status, setStatus] = useState<HospitalStayStatus | undefined>();
+  const [status, setStatus] = useState<HospitalStayStatus | 'ALL'>('ACTIVE');
   const [admitOpen, setAdmitOpen] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const hospitalQuery = useInfiniteListQuery({
     queryKey: ['hospital', { search, boxId, status }],
-    queryFn: ({ limit, offset }) => listHospital({ search, hospitalBoxId: boxId, status, limit, offset }),
+    queryFn: ({ limit, offset }) => listHospital({
+      search,
+      hospitalBoxId: boxId,
+      status: status === 'ALL' ? undefined : status,
+      limit,
+      offset,
+    }),
   });
   const resourcesQuery = useQuery({ queryKey: ['hospital', 'resources'], queryFn: getHospitalResources });
   const actionMutation = useMutation({
@@ -179,14 +185,18 @@ export function HospitalPage() {
             options={resourcesQuery.data?.boxes.map((box) => ({ value: box.id, label: box.name })) ?? []}
           />
           <Select
-            allowClear
-            placeholder="Все статусы"
+            placeholder="Состояние стационара"
             className="status-filter"
             value={status}
             onChange={(value) => {
               setStatus(value);
             }}
-            options={hospitalStatusOptions}
+            options={[
+              { value: 'ACTIVE', label: 'Сейчас в стационаре' },
+              { value: 'ALL', label: 'Вся история' },
+              { value: 'DISCHARGED', label: 'Архив: выписанные' },
+              { value: 'CANCELLED', label: 'Архив: отменённые' },
+            ]}
           />
         </div>
         <div className="list-panel-body">
@@ -375,12 +385,6 @@ const hospitalStatusColors: Record<HospitalStayStatus, string> = {
   DISCHARGED: 'success',
   CANCELLED: 'default',
 };
-
-const hospitalStatusOptions: Array<{ value: HospitalStayStatus; label: string }> = [
-  { value: 'ACTIVE', label: hospitalStatusLabels.ACTIVE },
-  { value: 'DISCHARGED', label: hospitalStatusLabels.DISCHARGED },
-  { value: 'CANCELLED', label: hospitalStatusLabels.CANCELLED },
-];
 
 function getStayDuration(startedAt: string, completedAt?: string | null) {
   const start = new Date(startedAt).getTime();

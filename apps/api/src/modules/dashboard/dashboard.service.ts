@@ -339,17 +339,8 @@ export class DashboardService {
         },
       }),
       this.ownerGatewayClient.getPortalStatistics(),
-      this.prisma.auditLog.count({
-        where: {
-          createdAt: { gte: todayRange.start, lte: todayRange.end },
-          OR: [
-            { action: 'client_portal.invite_create' },
-            {
-              action: 'client_portal.access_update',
-              metadata: { path: ['status'], equals: 'INVITED' },
-            },
-          ],
-        },
+      this.prisma.clientPortalAccess.count({
+        where: { invitedAt: { gte: todayRange.start, lte: todayRange.end } },
       }),
     ]);
 

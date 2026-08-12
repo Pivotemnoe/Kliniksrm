@@ -18,6 +18,7 @@ import {
   VisitRecommendationInput,
   VisitServiceLineInput,
 } from './types';
+import { Product, ServiceItem } from '../stock/types';
 
 export function listVisits(query: ListVisitsQuery) {
   return apiRequest<PaginatedResponse<VisitListItem>>(`/v1/visits${buildQuery(query)}`);
@@ -25,6 +26,12 @@ export function listVisits(query: ListVisitsQuery) {
 
 export function getVisit(visitId: string) {
   return apiRequest<Visit>(`/v1/visits/${visitId}`);
+}
+
+export function getVisitClinicalCatalog(search?: string) {
+  return apiRequest<{ products: Product[]; services: ServiceItem[] }>(
+    `/v1/visits/catalog/clinical${buildQuery({ search: search || undefined })}`,
+  );
 }
 
 export function createVisit(input: CreateVisitInput) {
@@ -89,6 +96,13 @@ export function addVisitService(visitId: string, input: VisitServiceLineInput) {
   return apiRequest<VisitBillItem>(`/v1/visits/${visitId}/services`, {
     method: 'POST',
     body: input,
+  });
+}
+
+export function addVisitServices(visitId: string, items: VisitServiceLineInput[]) {
+  return apiRequest<{ items: VisitBillItem[]; count: number }>(`/v1/visits/${visitId}/services/bulk`, {
+    method: 'POST',
+    body: { items },
   });
 }
 

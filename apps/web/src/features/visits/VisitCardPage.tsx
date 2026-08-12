@@ -498,15 +498,15 @@ function showDiagnosisWarning(modal: ReturnType<typeof App.useApp>['modal'], iss
 const completedVisitEditGraceMs = 30 * 60 * 1000;
 
 function isVisitLockedForEditing(visit: Visit, employee?: Employee) {
+  if (employee?.roles.includes('director')) {
+    return false;
+  }
+
   if (visit.status === 'CANCELLED') {
     return true;
   }
 
   if (visit.status !== 'COMPLETED') {
-    return false;
-  }
-
-  if (employee?.roles.includes('director')) {
     return false;
   }
 
@@ -518,12 +518,14 @@ function isVisitLockedForEditing(visit: Visit, employee?: Employee) {
 }
 
 function getCompletedEditNotice(visit: Visit, employee: Employee | undefined, locked: boolean) {
-  if (visit.status !== 'COMPLETED') {
+  if (visit.status !== 'COMPLETED' && visit.status !== 'CANCELLED') {
     return null;
   }
 
   if (employee?.roles.includes('director')) {
-    return 'Приём завершён, но открыт для редактирования директору.';
+    return visit.status === 'CANCELLED'
+      ? 'Приём отменён, но открыт директору для аудируемого исправления.'
+      : 'Приём завершён, но открыт директору для аудируемого исправления.';
   }
 
   if (!locked) {

@@ -109,7 +109,8 @@ test('кабинет владельца получает диагнозы и м�
     assert.match(source, /syncCompletedVisitSnapshot\(visit, actor\.id\)/);
   }
   assert.match(visitsService, /private async syncCompletedVisitSnapshot/);
-  assert.match(visitsService, /visit\.status !== VisitStatus\.COMPLETED/);
+  assert.match(visitsService, /!isPortalSnapshotStatus\(visit\.status\)/);
+  assert.match(visitsService, /visitStatus: visit\.status/);
   assert.match(visitsService, /ownerGatewaySnapshotSyncService\.enqueue/);
   assert.match(visitsService, /ownerGatewaySnapshotSyncService\.syncNow/);
 });

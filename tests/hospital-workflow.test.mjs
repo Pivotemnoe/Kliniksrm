@@ -55,14 +55,18 @@ test('пребывание в стационаре имеет независим
   assert.doesNotMatch(service, /data: \{ status: VisitStatus\.COMPLETED, completedAt: new Date\(\) \}/);
 });
 
-test('поиск стационара работает без обязательного фильтра статуса', async () => {
+test('стационар по умолчанию показывает активных пациентов и позволяет открыть архив', async () => {
   const service = await read('apps/api/src/modules/hospital/hospital.service.ts');
   const page = await read('apps/web/src/features/hospital/HospitalPage.tsx');
 
   assert.match(service, /\.\.\.\(query\.status \? \{ status: query\.status \} : \{\}\)/);
   assert.doesNotMatch(service, /query\.status \? \[query\.status\]/);
   assert.match(page, /value=\{status\}/);
-  assert.match(page, /placeholder="Все статусы"/);
+  assert.match(page, /useState<HospitalStayStatus \| 'ALL'>\('ACTIVE'\)/);
+  assert.match(page, /label: 'Сейчас в стационаре'/);
+  assert.match(page, /label: 'Вся история'/);
+  assert.match(page, /label: 'Архив: выписанные'/);
+  assert.match(page, /label: 'Архив: отменённые'/);
 });
 
 test('температура стационара передаётся числом с точностью до десятых', async () => {

@@ -103,9 +103,9 @@ export function buildDirectorPortalStatistics(input: {
   const limit = Math.max(1, Math.min(input.listLimit ?? 100, 500));
   const today = input.today;
   const gatewayInvitationsCreated = today && Array.isArray(input.gateway?.invitations)
-    ? input.gateway.invitations.filter((invitation) => (
-      isWithin(invitation.createdAt, today.start, today.end)
-    )).length
+    ? new Set(input.gateway.invitations
+      .filter((invitation) => isWithin(invitation.createdAt, today.start, today.end))
+      .map((invitation) => invitation.ownerId)).size
     : null;
 
   return {

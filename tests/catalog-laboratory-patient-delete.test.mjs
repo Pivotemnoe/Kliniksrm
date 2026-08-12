@@ -18,8 +18,14 @@ test('поиск товара и услуги идёт по полному се�
   assert.match(picker, /listProducts\(\{ search: search \|\| undefined/);
   assert.match(picker, /listServices\(\{ search: search \|\| undefined/);
   assert.match(picker, /useDeferredValue/);
-  assert.match(picker, /knownItems/);
-  for (const page of [visit, bill, sale]) {
+  assert.match(picker, /query\.data\?\.items/);
+  assert.doesNotMatch(picker, /knownItems|setKnownItems/);
+  assert.match(visit, /useVisitProductCatalogPicker/);
+  assert.match(visit, /useVisitServiceCatalogPicker/);
+  assert.match(visit, /filterOption=\{false\}/);
+  assert.match(visit, /onSearch=\{productsQuery\.onSearch\}/);
+  assert.match(picker, /getVisitClinicalCatalog/);
+  for (const page of [bill, sale]) {
     assert.match(page, /useProductCatalogPicker/);
     assert.match(page, /useServiceCatalogPicker/);
     assert.match(page, /filterOption=\{false\}/);

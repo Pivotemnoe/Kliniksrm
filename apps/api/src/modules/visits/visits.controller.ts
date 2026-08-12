@@ -4,10 +4,12 @@ import { AuthEmployee } from '../auth/auth.types';
 import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { AddVisitServiceDto } from './dto/add-visit-service.dto';
+import { AddVisitServicesDto } from './dto/add-visit-services.dto';
 import { CreateVisitLaboratoryOrderDto } from './dto/create-visit-laboratory-order.dto';
 import { CreateVisitDiagnosisDto } from './dto/create-visit-diagnosis.dto';
 import { CreateVisitDto } from './dto/create-visit.dto';
 import { ListVisitsQueryDto } from './dto/list-visits-query.dto';
+import { ListVisitCatalogQueryDto } from './dto/list-visit-catalog-query.dto';
 import { UpdateVisitDiagnosisDto } from './dto/update-visit-diagnosis.dto';
 import { UpdateVisitLaboratoryItemDto } from './dto/update-visit-laboratory-item.dto';
 import { UpdateVisitServiceDto } from './dto/update-visit-service.dto';
@@ -26,6 +28,13 @@ export class VisitsController {
   @ApiOkResponse({ description: 'Clinical visit list.' })
   listVisits(@Query() query: ListVisitsQueryDto) {
     return this.visitsService.listVisits(query);
+  }
+
+  @Get('catalog/clinical')
+  @RequirePermissions('visits.manage')
+  @ApiOkResponse({ description: 'Safe product and service catalog for adding visit bill positions.' })
+  listClinicalCatalog(@Query() query: ListVisitCatalogQueryDto, @CurrentEmployee() actor: AuthEmployee) {
+    return this.visitsService.listClinicalCatalog(query, actor.id);
   }
 
   @Post()
@@ -127,6 +136,13 @@ export class VisitsController {
   @ApiCreatedResponse({ description: 'Service added to visit bill.' })
   addService(@Param('visitId') visitId: string, @Body() dto: AddVisitServiceDto, @CurrentEmployee() actor: AuthEmployee) {
     return this.visitsService.addService(visitId, dto, actor);
+  }
+
+  @Post(':visitId/services/bulk')
+  @RequirePermissions('visits.manage')
+  @ApiCreatedResponse({ description: 'Multiple visit bill positions added atomically.' })
+  addServices(@Param('visitId') visitId: string, @Body() dto: AddVisitServicesDto, @CurrentEmployee() actor: AuthEmployee) {
+    return this.visitsService.addServices(visitId, dto, actor);
   }
 
   @Patch(':visitId/services/:billItemId')

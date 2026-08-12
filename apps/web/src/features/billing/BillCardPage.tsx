@@ -23,6 +23,7 @@ import { useCurrentEmployee } from '../../auth/useAuth';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDate, formatDateTime, fromDatetimeLocal, toDatetimeLocal } from '../../shared/utils/date';
 import { formatMoney, toMoneyNumber } from '../../shared/utils/money';
+import { getNetStockWriteOffQuantity } from '../../shared/utils/stockMovement';
 import { getFinanceSettings } from '../finance/finance.api';
 import { formatServicePrice, getServiceDefaultPrice, getServicePriceHelp, getServicePriceRange, validateServicePrice } from '../stock/service-pricing';
 import { useProductCatalogPicker, useServiceCatalogPicker } from '../stock/useCatalogPicker';
@@ -98,7 +99,13 @@ export function BillCardPage() {
   const bill = billQuery.data;
   const debt = bill ? Math.max(toMoneyNumber(bill.totalAmount) - toMoneyNumber(bill.paidAmount), 0) : 0;
   const isOverdue = Boolean(bill?.dueAt && debt > 0 && new Date(bill.dueAt) < new Date());
-  const canEditItems = Boolean(canManageBills && bill && bill.status !== 'CANCELLED' && toMoneyNumber(bill.paidAmount) <= 0);
+  const canEditItems = Boolean(
+    canManageBills
+    && bill
+    && bill.source !== 'SALE'
+    && bill.status !== 'CANCELLED'
+    && toMoneyNumber(bill.paidAmount) <= 0,
+  );
   const canPay = Boolean(canManagePayments && bill && bill.status !== 'CANCELLED' && debt > 0);
 
   if (billQuery.isError) {
@@ -354,10 +361,16 @@ function BillItemsTab({ bill, canEdit }: { bill: Bill; canEdit: boolean }) {
 
           const billingUnit = record.product?.billingUnit || record.product?.writeOffUnit || record.product?.stockUnit || 'ед.';
           const writeOffUnit = record.product?.writeOffUnit || record.product?.stockUnit || 'ед.';
+          const writtenOffQuantity = getNetStockWriteOffQuantity(record.stockMovements);
+          const saleQuantity = bill.source === 'SALE' ? Number(record.stockQuantity ?? record.quantity) : 0;
           return (
             <Space direction="vertical" size={0}>
               <span>{String(record.quantity)} {billingUnit}</span>
-              <Typography.Text type="secondary">списано {String(record.stockQuantity ?? record.quantity)} {writeOffUnit}</Typography.Text>
+              <Typography.Text type="secondary">
+                {writtenOffQuantity > 0 || saleQuantity > 0
+                  ? `списано ${(writtenOffQuantity || saleQuantity).toLocaleString('ru-RU')} ${writeOffUnit}`
+                  : `будет списано при полной оплате ${String(record.stockQuantity ?? record.quantity)} ${writeOffUnit}`}
+              </Typography.Text>
             </Space>
           );
         },
@@ -368,14 +381,16 @@ function BillItemsTab({ bill, canEdit }: { bill: Bill; canEdit: boolean }) {
       {
         title: 'Склад',
         key: 'stock',
-        render: (_, record) =>
-          record.productId ? (
-            <Typography.Text type={record.stockMovements?.length ? 'secondary' : 'danger'}>
-              {record.stockMovements?.length ? 'Списано' : 'Нет движения'}
+        render: (_, record) => {
+          const hasNetWriteOff = getNetStockWriteOffQuantity(record.stockMovements) > 0 || bill.source === 'SALE';
+          return record.productId ? (
+            <Typography.Text type={hasNetWriteOff ? 'secondary' : 'danger'}>
+              {hasNetWriteOff ? 'Списано' : 'Ожидает полной оплаты'}
             </Typography.Text>
           ) : (
             '—'
-          ),
+          );
+        },
       },
       {
         title: '',
@@ -404,7 +419,7 @@ function BillItemsTab({ bill, canEdit }: { bill: Bill; canEdit: boolean }) {
           ) : null,
       },
     ],
-    [canEdit, deleteMutation],
+    [bill.source, canEdit, deleteMutation],
   );
 
   return (
