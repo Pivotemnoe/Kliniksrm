@@ -296,6 +296,7 @@ function renderVisits(items) {
     <article class="card"><h3>${formatDateTime(item.startedAt)} · ${escapeHtml(item.animal?.nickname || 'Пациент')}</h3>
       <p><strong>Врач:</strong> ${escapeHtml(item.employee?.fullName || '—')}</p>
       <p><strong>Диагноз:</strong> ${array(item.diagnoses).length ? array(item.diagnoses).map((value) => escapeHtml(value.title)).join(', ') : '—'}</p>
+      <p><strong>Манипуляции:</strong> ${escapeHtml(item.exam?.manipulations || '—')}</p>
       <p><strong>Лечение:</strong> ${escapeHtml(item.recommendation?.treatmentPlan || '—')}</p>
       <p><strong>Уход:</strong> ${escapeHtml(item.recommendation?.careNotes || '—')}</p>
     </article>`);

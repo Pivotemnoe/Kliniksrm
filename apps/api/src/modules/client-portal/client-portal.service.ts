@@ -206,6 +206,7 @@ export class ClientPortalService {
           totalAmount: true,
           animal: { select: { id: true, nickname: true, species: true } },
           employee: { select: { id: true, fullName: true, position: true } },
+          exam: { select: { manipulations: true } },
           diagnoses: { select: { id: true, title: true, status: true } },
           recommendation: { select: { treatmentPlan: true, careNotes: true } },
           documents: {

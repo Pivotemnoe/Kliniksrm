@@ -299,6 +299,8 @@ export class VisitsService {
       actor,
     );
 
+    await this.syncCompletedVisitSnapshot(visit, actor.id);
+
     return exam;
   }
 
@@ -335,6 +337,8 @@ export class VisitsService {
       actor,
     );
 
+    await this.syncCompletedVisitSnapshot(visit, actor.id);
+
     return recommendation;
   }
 
@@ -359,6 +363,8 @@ export class VisitsService {
       entityId: diagnosis.id,
       metadata: { visitId },
     });
+
+    await this.syncCompletedVisitSnapshot(visit, actor.id);
 
     return diagnosis;
   }
@@ -386,6 +392,8 @@ export class VisitsService {
       metadata: { visitId, changedFields: Object.keys(dto) },
     });
 
+    await this.syncCompletedVisitSnapshot(visit, actor.id);
+
     return diagnosis;
   }
 
@@ -403,6 +411,8 @@ export class VisitsService {
       entityId: diagnosisId,
       metadata: { visitId },
     });
+
+    await this.syncCompletedVisitSnapshot(visit, actor.id);
 
     return { deleted: true };
   }
@@ -1238,6 +1248,21 @@ export class VisitsService {
     if (!diagnosis) {
       throw new NotFoundException('Visit diagnosis not found');
     }
+  }
+
+  private async syncCompletedVisitSnapshot(
+    visit: Pick<ExistingVisit, 'id' | 'ownerId' | 'status'>,
+    actorId: string,
+  ) {
+    if (visit.status !== VisitStatus.COMPLETED) return;
+
+    await this.ownerGatewaySnapshotSyncService.enqueue({
+      ownerId: visit.ownerId,
+      visitId: visit.id,
+      visitStatus: VisitStatus.COMPLETED,
+      actorId,
+    });
+    void this.ownerGatewaySnapshotSyncService.syncNow();
   }
 }
 

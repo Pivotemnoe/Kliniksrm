@@ -1,7 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Button, Space, Tag } from 'antd';
 import { useEffect, useRef, useState } from 'react';
-import { getErrorMessage } from '../../api/errors';
 import { AnimalSpeciesIcon } from '../../shared/ui/AnimalSpeciesIcon';
 import { getQueueScreen } from './queue.api';
 import { QueueScreenItem } from './types';
@@ -16,7 +14,6 @@ export function QueueTvPage() {
     queryFn: getQueueScreen,
     refetchInterval: 2000,
   });
-  const error = queueScreenQuery.error;
   const calledItems = queueScreenQuery.data?.called ?? [];
 
   useEffect(() => {
@@ -67,45 +64,26 @@ export function QueueTvPage() {
     }
   }
 
-  async function testSound() {
-    try {
-      await playQueueCallSound();
-      setSoundBlocked(false);
-    } catch {
-      setSoundBlocked(true);
-    }
-  }
-
   return (
-    <main className="queue-tv-screen">
-      <div className="queue-tv-sound-panel">
-        <Space size={8} wrap>
-          {soundEnabled ? <Tag color="green">Звук включён</Tag> : <Tag color={soundBlocked ? 'red' : 'gold'}>Звук выключен</Tag>}
-          {!soundEnabled ? (
-            <Button type={soundBlocked ? 'primary' : 'default'} onClick={() => void enableSound()}>
-              Включить звук
-            </Button>
-          ) : (
-            <Button onClick={() => void testSound()}>Проверить звук</Button>
-          )}
-        </Space>
-      </div>
+    <main
+      className="queue-tv-screen"
+      onClick={!soundEnabled || soundBlocked ? () => void enableSound() : undefined}
+    >
       <section className="queue-tv-column">
-        <h1 className="queue-tv-title">Очередь</h1>
-        {error ? <Alert type="error" showIcon message={getErrorMessage(error)} /> : null}
-        <QueueTvList items={queueScreenQuery.data?.waiting ?? []} emptyText="Сейчас в очереди никого нет" />
+        <h1 className="queue-tv-title">Ожидайте</h1>
+        <QueueTvList items={queueScreenQuery.data?.waiting ?? []} />
       </section>
       <section className="queue-tv-column">
-        <h1 className="queue-tv-title">Сейчас вызывают</h1>
-        <QueueTvList items={queueScreenQuery.data?.called ?? []} emptyText="Сейчас никого не вызывают" called />
+        <h1 className="queue-tv-title">Вызов в кабинет</h1>
+        <QueueTvList items={queueScreenQuery.data?.called ?? []} called />
       </section>
     </main>
   );
 }
 
-function QueueTvList({ items, emptyText, called }: { items: QueueScreenItem[]; emptyText: string; called?: boolean }) {
+function QueueTvList({ items, called }: { items: QueueScreenItem[]; called?: boolean }) {
   if (!items.length) {
-    return <div className="queue-tv-empty">{emptyText}</div>;
+    return null;
   }
 
   return (
@@ -116,7 +94,7 @@ function QueueTvList({ items, emptyText, called }: { items: QueueScreenItem[]; e
             <AnimalSpeciesIcon species={item.animalSpecies} size={42} showTooltip={false} />
             <strong>{getPublicQueueName(item)}</strong>
           </div>
-          <span>{called ? getCalledHint(item) : getWaitingHint(item)}</span>
+          {called && item.roomName ? <span>{item.roomName}</span> : null}
         </article>
       ))}
     </div>
@@ -125,16 +103,6 @@ function QueueTvList({ items, emptyText, called }: { items: QueueScreenItem[]; e
 
 function getPublicQueueName(item: QueueScreenItem) {
   return `${item.clientSurname} · ${item.animalName}`;
-}
-
-function getWaitingHint(item: QueueScreenItem) {
-  return item.urgency === 'URGENT' ? 'Срочный приём' : 'Ожидайте вызова';
-}
-
-function getCalledHint(item: QueueScreenItem) {
-  const details = [item.roomName, item.employeeName ? `врач ${item.employeeName}` : null].filter(Boolean);
-
-  return details.length ? details.join(' · ') : 'Подойдите на приём';
 }
 
 function getQueueCallKey(item: QueueScreenItem) {

@@ -69,6 +69,7 @@ export type PortalVisit = {
   totalAmount: string | number;
   animal: Pick<PortalAnimal, 'id' | 'nickname' | 'species'>;
   employee: { id: string; fullName: string; position: string | null } | null;
+  exam: { manipulations: string | null } | null;
   diagnoses: Array<{ id: string; title: string; status: string | null }>;
   recommendation: { treatmentPlan: string | null; careNotes: string | null } | null;
   documents: Array<{ id: string; title: string; body: string | null; status: string; createdAt: string }>;

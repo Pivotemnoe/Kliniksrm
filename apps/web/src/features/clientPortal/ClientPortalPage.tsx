@@ -92,6 +92,7 @@ export function ClientPortalPage() {
       { title: 'Пациент', key: 'animal', render: (_, item) => <AnimalSpeciesLabel species={item.animal.species} fallback={item.animal.nickname} /> },
       { title: 'Статус', dataIndex: 'status', key: 'status', width: 130, render: (value: string) => statusTag(value) },
       { title: 'Диагнозы', key: 'diagnoses', render: (_, item) => item.diagnoses.map((diagnosis) => diagnosis.title).join(', ') || '—' },
+      { title: 'Манипуляции', key: 'manipulations', render: (_, item) => item.exam?.manipulations || '—' },
       { title: 'Рекомендации', key: 'recommendation', render: (_, item) => item.recommendation?.treatmentPlan || item.recommendation?.careNotes || '—' },
       { title: 'Документы', key: 'documents', width: 120, render: (_, item) => item.documents.length || '—' },
       { title: 'Сумма', dataIndex: 'totalAmount', key: 'totalAmount', width: 120, render: formatMoney },

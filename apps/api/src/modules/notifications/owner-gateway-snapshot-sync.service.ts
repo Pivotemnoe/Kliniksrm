@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
-import { JobStatus, Prisma, VisitStatus } from '@prisma/client';
+import { ClientPortalStatus, JobStatus, Prisma, VisitStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { OwnerGatewayClient } from './providers/owner-gateway.client';
@@ -11,9 +11,9 @@ const STUCK_JOB_MINUTES = 10;
 
 type SnapshotSyncJobInput = {
   ownerId: string;
-  visitId: string;
-  visitStatus: VisitStatus;
-  actorId: string;
+  visitId: string | null;
+  visitStatus: VisitStatus | null;
+  actorId: string | null;
 };
 
 type SnapshotSyncPayload = SnapshotSyncJobInput & {
@@ -35,6 +35,11 @@ export class OwnerGatewaySnapshotSyncService implements OnApplicationBootstrap, 
 
   async onApplicationBootstrap() {
     await this.recoverStuckJobs();
+    try {
+      await this.enqueueActivePortalRefreshes();
+    } catch (error) {
+      this.logger.warn(`Не удалось поставить стартовое обновление личных кабинетов в очередь: ${errorMessage(error)}`);
+    }
     void this.syncNow();
     this.timer = setInterval(() => void this.syncNow(), getSyncIntervalMs());
     this.timer.unref();
@@ -214,6 +219,41 @@ export class OwnerGatewaySnapshotSyncService implements OnApplicationBootstrap, 
       },
     });
   }
+
+  private async enqueueActivePortalRefreshes() {
+    if (!hasConfiguredOwnerGateway()) return;
+
+    const [activeAccesses, outstandingJobs] = await Promise.all([
+      this.prisma.clientPortalAccess.findMany({
+        where: { status: { in: [ClientPortalStatus.INVITED, ClientPortalStatus.ENABLED] } },
+        select: { ownerId: true },
+      }),
+      this.prisma.backgroundJob.findMany({
+        where: {
+          queueName: QUEUE_NAME,
+          jobName: JOB_NAME,
+          status: { in: [JobStatus.PENDING, JobStatus.RUNNING] },
+        },
+        select: { payload: true },
+      }),
+    ]);
+
+    const queuedOwnerIds = new Set(
+      outstandingJobs
+        .map((job) => readPayload(job.payload)?.ownerId)
+        .filter((ownerId): ownerId is string => Boolean(ownerId)),
+    );
+
+    for (const access of activeAccesses) {
+      if (queuedOwnerIds.has(access.ownerId)) continue;
+      await this.enqueue({
+        ownerId: access.ownerId,
+        visitId: null,
+        visitStatus: null,
+        actorId: null,
+      });
+    }
+  }
 }
 
 function readPayload(value: Prisma.JsonValue | null): SnapshotSyncPayload | null {
@@ -221,16 +261,16 @@ function readPayload(value: Prisma.JsonValue | null): SnapshotSyncPayload | null
   const payload = value as Record<string, Prisma.JsonValue>;
   if (
     typeof payload.ownerId !== 'string'
-    || typeof payload.visitId !== 'string'
-    || typeof payload.actorId !== 'string'
-    || !isVisitStatus(payload.visitStatus)
+    || (payload.visitId !== null && payload.visitId !== undefined && typeof payload.visitId !== 'string')
+    || (payload.actorId !== null && payload.actorId !== undefined && typeof payload.actorId !== 'string')
+    || (payload.visitStatus !== null && payload.visitStatus !== undefined && !isVisitStatus(payload.visitStatus))
   ) return null;
 
   return {
     ownerId: payload.ownerId,
-    visitId: payload.visitId,
-    actorId: payload.actorId,
-    visitStatus: payload.visitStatus,
+    visitId: typeof payload.visitId === 'string' ? payload.visitId : null,
+    actorId: typeof payload.actorId === 'string' ? payload.actorId : null,
+    visitStatus: isVisitStatus(payload.visitStatus) ? payload.visitStatus : null,
     attempts: typeof payload.attempts === 'number' && Number.isFinite(payload.attempts) ? Math.max(0, Math.trunc(payload.attempts)) : 0,
     nextAttemptAt: typeof payload.nextAttemptAt === 'string' ? payload.nextAttemptAt : new Date(0).toISOString(),
   };
@@ -244,6 +284,10 @@ function getSyncIntervalMs() {
   const configured = Number(process.env.OWNER_GATEWAY_SNAPSHOT_SYNC_INTERVAL_MS);
   if (!Number.isFinite(configured)) return 5_000;
   return Math.min(Math.max(Math.trunc(configured), 1_000), 60_000);
+}
+
+function hasConfiguredOwnerGateway() {
+  return Boolean(process.env.OWNER_GATEWAY_URL?.trim() && process.env.OWNER_GATEWAY_SYNC_SECRET?.trim());
 }
 
 function errorMessage(error: unknown) {

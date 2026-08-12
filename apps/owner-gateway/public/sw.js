@@ -1,8 +1,8 @@
-const CACHE_NAME = 'temichevvet-owner-shell-v11';
+const CACHE_NAME = 'temichevvet-owner-shell-v12';
 const STATIC_ASSETS = [
   '/portal/app.css',
-  '/portal/app.css?v=20260809-compact-navigation',
-  '/portal/app.js?v=20260809-compact-navigation',
+  '/portal/app.css?v=20260812-clinical-history',
+  '/portal/app.js?v=20260812-clinical-history',
   '/manifest.webmanifest',
   '/portal/icons/lk-icon-64.png',
   '/portal/icons/lk-icon-180.png',

@@ -3095,17 +3095,6 @@ body {
   background: #000000;
 }
 
-.queue-tv-sound-panel {
-  position: fixed;
-  z-index: 20;
-  top: 16px;
-  right: 16px;
-  padding: 8px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.22);
-}
-
 .queue-tv-column {
   min-width: 0;
   padding: 36px;
@@ -3168,12 +3157,6 @@ body {
 
 .queue-tv-item span {
   font-size: clamp(18px, 1.8vw, 28px);
-}
-
-.queue-tv-empty {
-  color: inherit;
-  font-size: 20px;
-  opacity: 0.58;
 }
 
 .system-status {

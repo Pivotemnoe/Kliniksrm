@@ -74,6 +74,6 @@ test('разделы мобильного личного кабинета соб
   assert.match(portalStyles, /grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
   assert.match(portalStyles, /@media \(max-width: 360px\)[\s\S]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
   assert.doesNotMatch(portalStyles, /\.tabs[^}]*overflow-x:\s*auto/s);
-  assert.match(serviceWorker, /temichevvet-owner-shell-v11/);
-  assert.match(serviceWorker, /20260809-compact-navigation/);
+  assert.match(serviceWorker, /temichevvet-owner-shell-v12/);
+  assert.match(serviceWorker, /20260812-clinical-history/);
 });

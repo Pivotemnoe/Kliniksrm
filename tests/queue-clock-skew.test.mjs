@@ -50,11 +50,13 @@ test('клиентский экран очереди остаётся двухк
     read('apps/web/src/styles.css'),
   ]);
 
-  assert.match(page, />Очередь</);
-  assert.match(page, />Сейчас вызывают</);
-  assert.match(page, /Сейчас в очереди никого нет/);
-  assert.match(page, /Сейчас никого не вызывают/);
-  assert.doesNotMatch(page, /emptyText="Ожидание вызова"/);
+  assert.match(page, />Ожидайте</);
+  assert.match(page, />Вызов в кабинет</);
+  assert.doesNotMatch(page, /Сейчас в очереди никого нет/);
+  assert.doesNotMatch(page, /Сейчас никого не вызывают/);
+  assert.doesNotMatch(page, /Звук включён|Звук выключен|Проверить звук|Включить звук/);
+  assert.doesNotMatch(page, /Срочный приём|Ожидайте вызова|Подойдите на приём|врач /);
+  assert.match(page, /called && item\.roomName/);
   assert.match(styles, /\.queue-tv-screen\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(styles, /@media \(max-width: 600px\) and \(orientation: portrait\)[\s\S]*?\.queue-tv-screen\s*\{[\s\S]*?grid-template-columns:\s*1fr/);
 });

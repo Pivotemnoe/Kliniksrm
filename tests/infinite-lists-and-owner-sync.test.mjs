@@ -72,6 +72,10 @@ test('завершение приёма атомарно ставит обнов
   assert.match(syncService, /status: JobStatus\.PENDING/);
   assert.match(syncService, /MAX_ATTEMPTS = 96/);
   assert.match(syncService, /recoverStuckJobs/);
+  assert.match(syncService, /enqueueActivePortalRefreshes/);
+  assert.match(syncService, /ClientPortalStatus\.INVITED, ClientPortalStatus\.ENABLED/);
+  assert.match(syncService, /visitId: null/);
+  assert.match(syncService, /actorId: null/);
   assert.match(syncService, /ownerGatewayClient\.syncSnapshot/);
   assert.match(syncService, /catch \(error\)[\s\S]*scheduleRetry/);
   assert.match(syncService, /private async scheduleRetry/);
@@ -80,6 +84,34 @@ test('завершение приёма атомарно ставит обнов
   assert.match(visitsService, /VisitStatus\.COMPLETED \|\| status === VisitStatus\.CANCELLED/);
   assert.match(notificationsModule, /exports: \[OwnerGatewayClient, OwnerGatewaySnapshotSyncService\]/);
   assert.match(visitsModule, /NotificationsModule/);
+});
+
+test('кабинет владельца получает диагнозы и манипуляции и обновляется после исправления завершённого приёма', async () => {
+  const [clientPortalService, visitsService, publicPortal, localPortal, portalTypes] = await Promise.all([
+    read('apps/api/src/modules/client-portal/client-portal.service.ts'),
+    read('apps/api/src/modules/visits/visits.service.ts'),
+    read('apps/owner-gateway/public/app.js'),
+    read('apps/web/src/features/clientPortal/ClientPortalPage.tsx'),
+    read('apps/web/src/features/clientPortal/types.ts'),
+  ]);
+
+  assert.match(clientPortalService, /exam: \{ select: \{ manipulations: true \} \}/);
+  assert.match(clientPortalService, /diagnoses: \{ select: \{ id: true, title: true, status: true \} \}/);
+  assert.match(publicPortal, /<strong>Манипуляции:<\/strong> \$\{escapeHtml\(item\.exam\?\.manipulations \|\| '—'\)\}/);
+  assert.match(localPortal, /title: 'Манипуляции'[\s\S]*item\.exam\?\.manipulations \|\| '—'/);
+  assert.match(portalTypes, /exam: \{ manipulations: string \| null \} \| null/);
+
+  for (const mutation of ['upsertExam', 'upsertRecommendation', 'createDiagnosis', 'updateDiagnosis', 'deleteDiagnosis']) {
+    const start = visitsService.indexOf(`async ${mutation}`);
+    assert.notEqual(start, -1, `${mutation} должен существовать`);
+    const next = visitsService.indexOf('\n  async ', start + 8);
+    const source = visitsService.slice(start, next === -1 ? visitsService.length : next);
+    assert.match(source, /syncCompletedVisitSnapshot\(visit, actor\.id\)/);
+  }
+  assert.match(visitsService, /private async syncCompletedVisitSnapshot/);
+  assert.match(visitsService, /visit\.status !== VisitStatus\.COMPLETED/);
+  assert.match(visitsService, /ownerGatewaySnapshotSyncService\.enqueue/);
+  assert.match(visitsService, /ownerGatewaySnapshotSyncService\.syncNow/);
 });
 
 async function listFiles(directory) {
