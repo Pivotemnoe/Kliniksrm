@@ -32,9 +32,12 @@ test('поиск товара и услуги идёт по полному се�
 });
 
 test('лабораторный бланк редактируется как таблица по ячейкам', async () => {
-  const [editor, visitDocuments, styles] = await Promise.all([
+  const [organizationController, editor, visitDocuments, templatePage, laboratoryPage, styles] = await Promise.all([
+    read('apps/api/src/modules/organization/organization.controller.ts'),
     read('apps/web/src/features/documents/DocumentVisualEditor.tsx'),
     read('apps/web/src/features/visits/VisitDocumentsTab.tsx'),
+    read('apps/web/src/features/documents/DocumentTemplatesPage.tsx'),
+    read('apps/web/src/features/laboratory/LaboratoryPage.tsx'),
     read('apps/web/src/styles.css'),
   ]);
 
@@ -45,25 +48,68 @@ test('лабораторный бланк редактируется как та
   assert.match(editor, /Добавить столбец/);
   assert.doesNotMatch(editor, /столбцы разделяются символом \|/);
   assert.match(visitDocuments, /width="min\(1280px, calc\(100vw - 24px\)\)"/);
+  assert.match(templatePage, /renderPrintableLayout/);
+  assert.match(templatePage, /class="document-table"/);
+  assert.match(templatePage, /organization\?\.logoUrl/);
+  assert.match(organizationController, /@Get\('print-profile'\)/);
+  assert.match(organizationController, /@Get\('print-logo'\)/);
+  assert.match(organizationController, /@RequireAnyPermissions\('settings\.read', 'documents\.print'\)/);
+  assert.match(laboratoryPage, /Печать бланка/);
+  assert.match(laboratoryPage, /Результаты лабораторного исследования/);
+  assert.match(laboratoryPage, /order\.visit\.owner\.fullName/);
+  assert.match(laboratoryPage, /order\.visit\.animal\.nickname/);
+  assert.match(laboratoryPage, /organization\?\.logoUrl/);
   assert.match(styles, /\.document-table-grid-scroll/);
 });
 
-test('полностью удаляется только пустая карточка пациента, история блокирует удаление', async () => {
-  const [controller, service, api, card, ownerAnimals] = await Promise.all([
+test('в стационаре ручные выполнения объяснены отдельно, а блок повтора сохранён', async () => {
+  const modal = await read('apps/web/src/features/hospital/HospitalTreatmentPlanModal.tsx');
+
+  assert.match(modal, /Первое выполнение/);
+  assert.match(modal, /Дополнительное выполнение/);
+  assert.match(modal, /Добавить ещё одно выполнение вручную/);
+  assert.match(modal, /Для одинакового интервала используйте блок «Повтор» ниже/);
+  assert.match(modal, /Быстро сформировать повтор/);
+  assert.match(modal, /Сформировать даты/);
+  assert.doesNotMatch(modal, /Добавить точную дату/);
+});
+
+test('пациент архивируется с причиной без удаления истории и может быть восстановлен', async () => {
+  const [schema, migration, dto, controller, service, api, card, ownerAnimals, ownersService, scheduling] = await Promise.all([
+    read('prisma/schema.prisma'),
+    read('prisma/migrations/20260812000200_animal_archive/migration.sql'),
+    read('apps/api/src/modules/animals/dto/archive-animal.dto.ts'),
     read('apps/api/src/modules/animals/animals.controller.ts'),
     read('apps/api/src/modules/animals/animals.service.ts'),
     read('apps/web/src/features/animals/animals.api.ts'),
     read('apps/web/src/features/animals/AnimalCardPage.tsx'),
     read('apps/web/src/features/owners/OwnerAnimalsTab.tsx'),
+    read('apps/api/src/modules/owners/owners.service.ts'),
+    read('apps/api/src/modules/scheduling/scheduling.service.ts'),
   ]);
 
-  assert.match(controller, /@Delete\(':animalId'\)/);
+  assert.match(schema, /archivedAt\s+DateTime\?/);
+  assert.match(schema, /archiveReason\s+String\?/);
+  assert.match(migration, /ADD COLUMN "archivedAt"/);
+  assert.match(dto, /DECEASED = 'DECEASED'/);
+  assert.match(dto, /ERRONEOUS = 'ERRONEOUS'/);
+  assert.match(dto, /OTHER = 'OTHER'/);
+  assert.match(controller, /@Post\(':animalId\/archive'\)/);
+  assert.match(controller, /@Post\(':animalId\/restore'\)/);
   assert.match(controller, /@RequirePermissions\('animals\.manage'\)/);
-  assert.match(service, /animalDeletionBlockers/);
-  assert.match(service, /Медицинская, финансовая и складская история должна сохраниться/);
-  assert.match(service, /await tx\.animal\.delete/);
-  assert.match(service, /action: 'animal\.delete'/);
-  assert.match(api, /method: 'DELETE'/);
-  assert.match(card, /Удалить пациента/);
-  assert.match(ownerAnimals, /Удалить пустую карточку/);
+  assert.match(service, /action: 'animal\.archive'/);
+  assert.match(service, /action: 'animal\.restore'/);
+  assert.match(service, /cancelledFutureNotifications/);
+  assert.match(service, /linkedRecords/);
+  assert.doesNotMatch(service, /tx\.animal\.delete/);
+  assert.match(api, /\/archive/);
+  assert.match(api, /\/restore/);
+  assert.doesNotMatch(api, /method: 'DELETE'/);
+  assert.match(card, /Убрать из активных/);
+  assert.match(card, /История лечения, документов и оплат не удаляется/);
+  assert.match(ownerAnimals, /Показать архив/);
+  assert.match(ownerAnimals, /Восстановить/);
+  assert.match(ownersService, /includeArchived/);
+  assert.match(ownersService, /archivedAt: null/);
+  assert.match(scheduling, /Для новой операции сначала восстановите карточку/);
 });

@@ -30,6 +30,11 @@ export type OrganizationSettings = {
   updatedAt: string;
 };
 
+export type OrganizationPrintProfile = Pick<
+  OrganizationSettings,
+  'id' | 'displayName' | 'legalName' | 'legalAddress' | 'logoUrl' | 'offices'
+>;
+
 export type UpdateOrganizationPayload = {
   displayName?: string;
   legalName?: string;

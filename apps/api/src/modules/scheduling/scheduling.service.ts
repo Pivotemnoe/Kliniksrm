@@ -493,10 +493,10 @@ export class SchedulingService {
     }
   }
 
-  async resolveAnimalOwner(animalId: string, ownerId?: string) {
+  async resolveAnimalOwner(animalId: string, ownerId?: string, options?: { allowArchived?: boolean }) {
     const animal = await this.prisma.animal.findUnique({
       where: { id: animalId },
-      select: { id: true, ownerId: true },
+      select: { id: true, ownerId: true, archivedAt: true },
     });
 
     if (!animal) {
@@ -505,6 +505,9 @@ export class SchedulingService {
 
     if (ownerId && animal.ownerId !== ownerId) {
       throw new BadRequestException('Animal does not belong to owner');
+    }
+    if (animal.archivedAt && !options?.allowArchived) {
+      throw new BadRequestException('Пациент находится в архиве. Для новой операции сначала восстановите карточку');
     }
 
     return animal.ownerId;

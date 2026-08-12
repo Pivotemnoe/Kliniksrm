@@ -13,9 +13,10 @@ import { VisitListItem, VisitStatus, visitStatusColors, visitStatusLabels } from
 type AnimalVisitsTabProps = {
   ownerId: string;
   animalId: string;
+  readOnly?: boolean;
 };
 
-export function AnimalVisitsTab({ ownerId, animalId }: AnimalVisitsTabProps) {
+export function AnimalVisitsTab({ ownerId, animalId, readOnly = false }: AnimalVisitsTabProps) {
   const navigate = useNavigate();
   const visitsQuery = useQuery({
     queryKey: ['visits', { animalId, limit: 20, offset: 0 }],
@@ -49,9 +50,11 @@ export function AnimalVisitsTab({ ownerId, animalId }: AnimalVisitsTabProps) {
     <Space direction="vertical" size={16} className="full-width">
       <div className="toolbar-row">
         <Typography.Text type="secondary">История приёмов пациента</Typography.Text>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate(`/visits?ownerId=${ownerId}&animalId=${animalId}`)}>
-          Создать приём
-        </Button>
+        {!readOnly ? (
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate(`/visits?ownerId=${ownerId}&animalId=${animalId}`)}>
+            Создать приём
+          </Button>
+        ) : null}
       </div>
       {visitsQuery.isError ? <Typography.Text type="danger">{getErrorMessage(visitsQuery.error)}</Typography.Text> : null}
       <Table<VisitListItem>

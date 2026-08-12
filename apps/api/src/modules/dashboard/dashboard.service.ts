@@ -98,7 +98,7 @@ export class DashboardService {
         select: appointmentSelect,
       }),
       this.prisma.visit.count({ where: { status: { in: [VisitStatus.DRAFT, VisitStatus.IN_PROGRESS] }, hospitalBoxId: null, ...employeeWhere } }),
-      this.prisma.visit.count({ where: buildOverdueVisitWhere(now, personalEmployeeId) }),
+      this.prisma.visit.count({ where: { ...buildOverdueVisitWhere(now, personalEmployeeId), animal: { archivedAt: null } } }),
       this.prisma.visit.count({ where: { status: VisitStatus.COMPLETED, completedAt: { gte: start, lte: end }, hospitalBoxId: null, ...employeeWhere } }),
       this.prisma.visit.count({
         where: {
@@ -115,7 +115,7 @@ export class DashboardService {
         select: visitSelect,
       }),
       this.prisma.visit.findMany({
-        where: buildOverdueVisitWhere(now, personalEmployeeId),
+        where: { ...buildOverdueVisitWhere(now, personalEmployeeId), animal: { archivedAt: null } },
         orderBy: { startedAt: 'asc' },
         take: 8,
         select: visitSelect,

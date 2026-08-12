@@ -40,8 +40,8 @@ export function createOwnerBalanceOperation(ownerId: string, input: OwnerBalance
   });
 }
 
-export function listOwnerAnimals(ownerId: string) {
-  return apiRequest<Animal[]>(`/v1/owners/${ownerId}/animals`);
+export function listOwnerAnimals(ownerId: string, includeArchived = false) {
+  return apiRequest<Animal[]>(`/v1/owners/${ownerId}/animals${buildQuery({ includeArchived: includeArchived || undefined })}`);
 }
 
 export function createOwnerAnimal(ownerId: string, input: AnimalMutationInput) {

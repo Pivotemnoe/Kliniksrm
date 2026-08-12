@@ -155,6 +155,7 @@ export class ClientPortalService {
           address: true,
           balance: true,
           animals: {
+            where: { archivedAt: null },
             orderBy: { nickname: 'asc' },
             select: {
               id: true,
@@ -316,7 +317,7 @@ export class ClientPortalService {
 
     const animal = dto.animalId
       ? await this.prisma.animal.findFirst({
-          where: { id: dto.animalId, ownerId: owner.id },
+          where: { id: dto.animalId, ownerId: owner.id, archivedAt: null },
           select: { id: true, nickname: true, species: true, breed: true },
         })
       : null;

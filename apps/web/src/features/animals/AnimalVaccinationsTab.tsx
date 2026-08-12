@@ -11,9 +11,10 @@ import { VaccinationFormDrawer } from './VaccinationFormDrawer';
 
 type AnimalVaccinationsTabProps = {
   animalId: string;
+  readOnly?: boolean;
 };
 
-export function AnimalVaccinationsTab({ animalId }: AnimalVaccinationsTabProps) {
+export function AnimalVaccinationsTab({ animalId, readOnly = false }: AnimalVaccinationsTabProps) {
   const queryClient = useQueryClient();
   const { message } = App.useApp();
   const [createOpen, setCreateOpen] = useState(false);
@@ -76,25 +77,27 @@ export function AnimalVaccinationsTab({ animalId }: AnimalVaccinationsTabProps) 
         },
       },
       { title: 'Примечание', dataIndex: 'notes', key: 'notes', ellipsis: true, render: (value: string | null) => value || '—' },
-      {
+      ...(!readOnly ? [{
         title: '',
         key: 'actions',
         width: 80,
         render: (_, record) => (
           <Button icon={<EditOutlined />} onClick={() => setEditingVaccination(record)} aria-label="Редактировать вакцинацию" />
         ),
-      },
+      }] as ColumnsType<Vaccination> : []),
     ],
-    [],
+    [readOnly],
   );
 
   return (
     <Space direction="vertical" size={16} className="full-width">
       <div className="toolbar-row">
         <Typography.Text type="secondary">История вакцинаций</Typography.Text>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-          Добавить вакцинацию
-        </Button>
+        {!readOnly ? (
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+            Добавить вакцинацию
+          </Button>
+        ) : null}
       </div>
       {vaccinationsQuery.isError ? (
         <Typography.Text type="danger">{getErrorMessage(vaccinationsQuery.error)}</Typography.Text>
@@ -106,15 +109,15 @@ export function AnimalVaccinationsTab({ animalId }: AnimalVaccinationsTabProps) 
         loading={vaccinationsQuery.isLoading}
         pagination={false}
       />
-      <VaccinationFormDrawer
+      {!readOnly ? <VaccinationFormDrawer
         open={createOpen}
         title="Добавить вакцинацию"
         onClose={() => setCreateOpen(false)}
         onSubmit={(values) => createMutation.mutate(values)}
         isSubmitting={createMutation.isPending}
         submitError={createMutation.error}
-      />
-      <VaccinationFormDrawer
+      /> : null}
+      {!readOnly ? <VaccinationFormDrawer
         open={Boolean(editingVaccination)}
         title="Редактировать вакцинацию"
         initialVaccination={editingVaccination}
@@ -122,7 +125,7 @@ export function AnimalVaccinationsTab({ animalId }: AnimalVaccinationsTabProps) 
         onSubmit={(values) => updateMutation.mutate(values)}
         isSubmitting={updateMutation.isPending}
         submitError={updateMutation.error}
-      />
+      /> : null}
     </Space>
   );
 }

@@ -27,6 +27,20 @@ export class OrganizationService {
     return serializeOrganization(await this.getOrganizationRecord());
   }
 
+  async getOrganizationPrintProfile() {
+    const organization = await this.getOrganizationRecord();
+    return {
+      id: organization.id,
+      displayName: organization.displayName,
+      legalName: organization.legalName,
+      legalAddress: organization.legalAddress,
+      offices: organization.offices,
+      logoUrl: organization.logoStorageKey
+        ? `/api/v1/organization/print-logo?v=${encodeURIComponent(organization.logoUpdatedAt?.toISOString() || '1')}`
+        : null,
+    };
+  }
+
   async getOrganizationLogo() {
     const organization = await this.prisma.organization.findFirst({
       orderBy: { createdAt: 'asc' },

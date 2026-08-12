@@ -290,7 +290,12 @@ export function HospitalTreatmentPlanModal({
                       <Input placeholder="Например: после кормления" maxLength={2000} />
                     </Form.Item>
                   </div>
-                  <Typography.Text strong>Когда выполнить</Typography.Text>
+                  <Space direction="vertical" size={0} className="full-width">
+                    <Typography.Text strong>Когда выполнить</Typography.Text>
+                    <Typography.Text type="secondary">
+                      Для нерегулярного графика добавьте отдельные выполнения вручную. Для одинакового интервала используйте блок «Повтор» ниже.
+                    </Typography.Text>
+                  </Space>
                   <Form.List name={[field.name, 'dates']}>
                     {(dateFields, { add: addDate, remove: removeDate }) => (
                       <div className="hospital-treatment-dates">
@@ -298,7 +303,7 @@ export function HospitalTreatmentPlanModal({
                           <Space key={dateField.key} align="start" className="hospital-treatment-date-row">
                             <Form.Item
                               name={[dateField.name, 'at']}
-                              label={`Дата и время ${dateIndex + 1}`}
+                              label={dateIndex === 0 ? 'Первое выполнение' : `Дополнительное выполнение ${dateIndex}`}
                               rules={[{ required: true, message: 'Укажите дату и время' }]}
                             >
                               <Input type="datetime-local" />
@@ -314,7 +319,7 @@ export function HospitalTreatmentPlanModal({
                           </Space>
                         ))}
                         <Button type="dashed" icon={<PlusOutlined />} onClick={() => addDate({ at: nextSuggestedDate(form.getFieldValue(['items', field.name, 'dates'])) })}>
-                          Добавить точную дату
+                          Добавить ещё одно выполнение вручную
                         </Button>
                       </div>
                     )}

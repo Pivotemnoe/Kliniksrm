@@ -19,9 +19,10 @@ type WeightFormInput = z.input<typeof weightSchema>;
 
 type AnimalWeightsTabProps = {
   animalId: string;
+  readOnly?: boolean;
 };
 
-export function AnimalWeightsTab({ animalId }: AnimalWeightsTabProps) {
+export function AnimalWeightsTab({ animalId, readOnly = false }: AnimalWeightsTabProps) {
   const queryClient = useQueryClient();
   const { control, handleSubmit, reset } = useForm<WeightFormInput, unknown, WeightFormValues>({
     resolver: zodResolver(weightSchema),
@@ -48,7 +49,7 @@ export function AnimalWeightsTab({ animalId }: AnimalWeightsTabProps) {
 
   return (
     <Space direction="vertical" size={16} className="full-width">
-      <Form layout="inline" onFinish={handleSubmit((values) => createMutation.mutate(values))}>
+      {!readOnly ? <Form layout="inline" onFinish={handleSubmit((values) => createMutation.mutate(values))}>
         <Controller
           control={control}
           name="weightKg"
@@ -76,7 +77,7 @@ export function AnimalWeightsTab({ animalId }: AnimalWeightsTabProps) {
         <Button type="primary" htmlType="submit" loading={createMutation.isPending}>
           Добавить вес
         </Button>
-      </Form>
+      </Form> : null}
       {createMutation.isError ? <Alert type="error" showIcon message={getErrorMessage(createMutation.error)} /> : null}
       {weightsQuery.isError ? <Typography.Text type="danger">{getErrorMessage(weightsQuery.error)}</Typography.Text> : null}
       <Table<AnimalWeightRecord>

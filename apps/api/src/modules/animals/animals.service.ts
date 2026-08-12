@@ -1,9 +1,19 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { NotificationChannel, NotificationStatus, Prisma, TaskStatus } from '@prisma/client';
+import {
+  AppointmentStatus,
+  HospitalStayStatus,
+  NotificationChannel,
+  NotificationStatus,
+  Prisma,
+  QueueStatus,
+  TaskStatus,
+  VisitStatus,
+} from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
+import { AnimalArchiveReason, ArchiveAnimalDto } from './dto/archive-animal.dto';
 import { CreateVaccinationDto } from './dto/create-vaccination.dto';
 import { CreateWeightRecordDto } from './dto/create-weight-record.dto';
 import { ListAnimalsQueryDto } from './dto/list-animals-query.dto';
@@ -28,6 +38,7 @@ export class AnimalsService {
     const { limit, offset } = parsePagination(query);
     const search = query.search?.trim();
     const where: Prisma.AnimalWhereInput = {
+      ...(query.includeArchived === 'true' ? {} : { archivedAt: null }),
       ...(query.ownerId ? { ownerId: query.ownerId } : {}),
       ...(search
         ? {
@@ -119,14 +130,45 @@ export class AnimalsService {
     return animal;
   }
 
-  async deleteAnimal(animalId: string, actorId: string) {
-    const deleted = await this.prisma.$transaction(async (tx) => {
+  async archiveAnimal(animalId: string, dto: ArchiveAnimalDto, actorId: string) {
+    const comment = emptyToNull(dto.comment);
+    if (dto.reason === AnimalArchiveReason.OTHER && !comment) {
+      throw new BadRequestException('Для причины «Другое» укажите комментарий');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
       const animal = await tx.animal.findUnique({
         where: { id: animalId },
         select: {
           id: true,
           ownerId: true,
           nickname: true,
+          archivedAt: true,
+          appointments: {
+            where: {
+              OR: [
+                { status: { in: [AppointmentStatus.ARRIVED, AppointmentStatus.IN_PROGRESS] } },
+                { status: AppointmentStatus.PLANNED, startsAt: { gte: new Date() } },
+              ],
+            },
+            select: { id: true },
+            take: 1,
+          },
+          visits: {
+            where: { status: { in: [VisitStatus.DRAFT, VisitStatus.IN_PROGRESS] } },
+            select: { id: true },
+            take: 1,
+          },
+          queueEntries: {
+            where: { status: { in: [QueueStatus.WAITING, QueueStatus.IN_PROGRESS] } },
+            select: { id: true },
+            take: 1,
+          },
+          hospitalStays: {
+            where: { status: HospitalStayStatus.ACTIVE },
+            select: { id: true },
+            take: 1,
+          },
           _count: {
             select: {
               appointments: true,
@@ -150,43 +192,139 @@ export class AnimalsService {
         throw new NotFoundException('Animal not found');
       }
 
-      const linkedData = animalDeletionBlockers
-        .filter(({ key }) => animal._count[key] > 0)
-        .map(({ key, label }) => `${label}: ${animal._count[key]}`);
-      if (linkedData.length > 0) {
+      if (animal.archivedAt) {
+        throw new BadRequestException('Пациент уже находится в архиве');
+      }
+      const activeLinks = [
+        animal.visits.length ? 'незавершённый приём' : null,
+        animal.hospitalStays.length ? 'активный стационар' : null,
+        animal.queueEntries.length ? 'активная очередь' : null,
+        animal.appointments.length ? 'действующая запись на приём' : null,
+      ].filter(Boolean);
+      if (activeLinks.length) {
         throw new BadRequestException(
-          `Удалить пациента нельзя: в карточке уже есть связанные данные (${linkedData.join(', ')}). `
-          + 'Медицинская, финансовая и складская история должна сохраниться; исправьте профиль или кличку вместо удаления.',
+          `Сначала завершите или отмените текущие процессы: ${activeLinks.join(', ')}. Прошлая история архивированию не мешает.`,
         );
       }
 
-      await tx.animal.delete({ where: { id: animal.id } });
+      const archivedAt = new Date();
+      const archived = await tx.animal.update({
+        where: { id: animal.id },
+        data: {
+          archivedAt,
+          archiveReason: dto.reason,
+          archiveComment: comment,
+          archivedById: actorId,
+        },
+      });
+      const cancelledNotifications = await tx.notificationOutbox.updateMany({
+        where: {
+          animalId: animal.id,
+          status: { in: [NotificationStatus.QUEUED, NotificationStatus.FAILED] },
+          scheduledAt: { gt: archivedAt },
+        },
+        data: {
+          status: NotificationStatus.CANCELLED,
+          lastError: 'Отменено при архивировании пациента',
+        },
+      });
       await tx.auditLog.create({
         data: {
           actorId,
-          action: 'animal.delete',
+          action: 'animal.archive',
           entityType: 'Animal',
           entityId: animal.id,
           metadata: {
             ownerId: animal.ownerId,
             nickname: animal.nickname,
-            emptyCard: true,
+            reason: dto.reason,
+            comment,
+            linkedRecords: animal._count,
+            cancelledFutureNotifications: cancelledNotifications.count,
           },
         },
       });
-      return { id: animal.id, ownerId: animal.ownerId, nickname: animal.nickname, deleted: true as const };
+      return archived;
     });
+  }
 
-    return deleted;
+  async restoreAnimal(animalId: string, actorId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const animal = await tx.animal.findUnique({
+        where: { id: animalId },
+        select: {
+          id: true,
+          ownerId: true,
+          nickname: true,
+          archivedAt: true,
+          archiveReason: true,
+          archiveComment: true,
+          archivedById: true,
+        },
+      });
+
+      if (!animal) {
+        throw new NotFoundException('Animal not found');
+      }
+      if (!animal.archivedAt) {
+        throw new BadRequestException('Пациент уже находится в активных карточках');
+      }
+
+      const restored = await tx.animal.update({
+        where: { id: animal.id },
+        data: {
+          archivedAt: null,
+          archiveReason: null,
+          archiveComment: null,
+          archivedById: null,
+        },
+      });
+      const restoredNotifications = await tx.notificationOutbox.updateMany({
+        where: {
+          animalId: animal.id,
+          status: NotificationStatus.CANCELLED,
+          scheduledAt: { gt: new Date() },
+          lastError: 'Отменено при архивировании пациента',
+        },
+        data: {
+          status: NotificationStatus.QUEUED,
+          attempts: 0,
+          lastError: null,
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          actorId,
+          action: 'animal.restore',
+          entityType: 'Animal',
+          entityId: animal.id,
+          metadata: {
+            ownerId: animal.ownerId,
+            nickname: animal.nickname,
+            previousArchive: {
+              archivedAt: animal.archivedAt.toISOString(),
+              reason: animal.archiveReason,
+              comment: animal.archiveComment,
+              archivedById: animal.archivedById,
+            },
+            restoredFutureNotifications: restoredNotifications.count,
+          },
+        },
+      });
+      return restored;
+    });
   }
 
   async updateAnimal(animalId: string, dto: UpdateAnimalDto, actorId: string) {
     const currentAnimal = await this.prisma.animal.findUnique({
       where: { id: animalId },
-      select: { id: true, nickname: true },
+      select: { id: true, nickname: true, archivedAt: true },
     });
     if (!currentAnimal) {
       throw new NotFoundException('Animal not found');
+    }
+    if (currentAnimal.archivedAt) {
+      throw new BadRequestException('Пациент находится в архиве. Сначала восстановите карточку');
     }
     if (dto.species !== undefined || dto.breed !== undefined) {
       await this.animalCatalogService.validateSelection(dto.species, dto.breed);
@@ -237,7 +375,7 @@ export class AnimalsService {
   }
 
   async createWeightRecord(animalId: string, dto: CreateWeightRecordDto, actorId: string) {
-    await this.ensureAnimalExists(animalId);
+    await this.ensureActiveAnimalExists(animalId);
 
     const weightRecord = await this.prisma.animalWeightRecord.create({
       data: {
@@ -377,11 +515,15 @@ export class AnimalsService {
         nickname: true,
         species: true,
         breed: true,
+        archivedAt: true,
       },
     });
 
     if (!animal) {
       throw new NotFoundException('Animal not found');
+    }
+    if (animal.archivedAt) {
+      throw new BadRequestException('Пациент находится в архиве. Сначала восстановите карточку');
     }
 
     return animal;
@@ -635,6 +777,20 @@ export class AnimalsService {
       throw new NotFoundException('Animal not found');
     }
   }
+
+  private async ensureActiveAnimalExists(animalId: string) {
+    const animal = await this.prisma.animal.findUnique({
+      where: { id: animalId },
+      select: { id: true, archivedAt: true },
+    });
+
+    if (!animal) {
+      throw new NotFoundException('Animal not found');
+    }
+    if (animal.archivedAt) {
+      throw new BadRequestException('Пациент находится в архиве. Сначала восстановите карточку');
+    }
+  }
 }
 
 const vaccinationInclude = {
@@ -659,21 +815,6 @@ type TaskAudit = {
   taskId: string;
   metadata: Prisma.InputJsonObject;
 };
-
-const animalDeletionBlockers = [
-  { key: 'visits', label: 'приёмы' },
-  { key: 'appointments', label: 'записи' },
-  { key: 'queueEntries', label: 'очередь' },
-  { key: 'hospitalStays', label: 'стационар' },
-  { key: 'bills', label: 'счета' },
-  { key: 'sales', label: 'продажи' },
-  { key: 'vaccinations', label: 'вакцинации' },
-  { key: 'weights', label: 'измерения веса' },
-  { key: 'tasks', label: 'задачи' },
-  { key: 'files', label: 'файлы' },
-  { key: 'notifications', label: 'оповещения' },
-  { key: 'onlineRequests', label: 'онлайн-заявки' },
-] as const;
 
 const OWNER_VACCINATION_REMINDER_OFFSETS = [7, 1] as const;
 

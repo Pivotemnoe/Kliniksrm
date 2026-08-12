@@ -135,7 +135,7 @@ export class StaffAlertsService {
 
     const [visits, failedDeliveries, onlineRequests, unpaidBills, stockProducts, unreadNews, vaccinationCandidates, directorBriefings] = await Promise.all([
       this.prisma.visit.findMany({
-        where: buildOverdueVisitWhere(now),
+        where: { ...buildOverdueVisitWhere(now), animal: { archivedAt: null } },
         orderBy: { startedAt: 'asc' },
         take: 40,
         select: {
@@ -204,7 +204,7 @@ export class StaffAlertsService {
           }))
         : Promise.resolve([]),
       this.prisma.vaccination.findMany({
-        where: { expiresAt: { not: null } },
+        where: { expiresAt: { not: null }, animal: { archivedAt: null } },
         orderBy: [{ expiresAt: 'desc' }, { createdAt: 'desc' }],
         take: 2000,
         select: {

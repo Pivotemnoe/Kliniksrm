@@ -176,7 +176,7 @@ export class ReportsService {
         },
       }),
       this.prisma.vaccination.findMany({
-        where: { expiresAt: { not: null } },
+        where: { expiresAt: { not: null }, animal: { archivedAt: null } },
         orderBy: { expiresAt: 'desc' },
         select: {
           id: true,
@@ -187,7 +187,7 @@ export class ReportsService {
         },
       }),
       this.prisma.animal.findMany({
-        where: { microchip: { not: null } },
+        where: { microchip: { not: null }, archivedAt: null },
         orderBy: { nickname: 'asc' },
         select: {
           id: true,

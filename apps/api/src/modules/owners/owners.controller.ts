@@ -67,8 +67,11 @@ export class OwnersController {
   @Get(':ownerId/animals')
   @RequirePermissions('animals.read')
   @ApiOkResponse({ description: 'Owner patients.' })
-  listOwnerAnimals(@Param('ownerId') ownerId: string) {
-    return this.ownersService.listOwnerAnimals(ownerId);
+  listOwnerAnimals(
+    @Param('ownerId') ownerId: string,
+    @Query('includeArchived') includeArchived?: string,
+  ) {
+    return this.ownersService.listOwnerAnimals(ownerId, includeArchived === 'true');
   }
 
   @Post(':ownerId/animals')

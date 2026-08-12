@@ -22,6 +22,8 @@ import { useCurrentEmployee } from '../../auth/useAuth';
 import { LiveSearchInput } from '../../shared/ui/LiveSearchInput';
 import { InfiniteTable, useInfiniteListQuery } from '../../shared/ui/InfiniteTable';
 import { PageHeader } from '../../shared/ui/PageHeader';
+import { getOrganizationPrintProfile } from '../organization/organization.api';
+import type { OrganizationPrintProfile } from '../organization/types';
 import {
   cleanupLearnedMedicalPhrases,
   createMedicalPhrase,
@@ -151,6 +153,7 @@ const notificationVariableGroups = [
 export function DocumentTemplatesPage() {
   const { data: auth } = useCurrentEmployee();
   const canManageDocuments = hasPermission(auth?.employee, 'documents.manage');
+  const canPrintDocuments = hasPermission(auth?.employee, 'documents.print');
   const canManageText = hasPermission(auth?.employee, 'settings.manage');
   const canReadNotifications = hasPermission(auth?.employee, 'notifications.read');
   const canManageNotifications = hasPermission(auth?.employee, 'notifications.manage');
@@ -181,7 +184,7 @@ export function DocumentTemplatesPage() {
                 Составные / документы
               </Space>
             ),
-            children: <DocumentTemplatesPanel canManage={canManageDocuments} />,
+            children: <DocumentTemplatesPanel canManage={canManageDocuments} canPrint={canPrintDocuments} />,
           },
           {
             key: 'notifications',
@@ -503,10 +506,21 @@ function TextTemplatesPanel({ canManage }: { canManage: boolean }) {
   );
 }
 
-function DocumentTemplatesPanel({ canManage }: { canManage: boolean }) {
+function DocumentTemplatesPanel({
+  canManage,
+  canPrint,
+}: {
+  canManage: boolean;
+  canPrint: boolean;
+}) {
   const queryClient = useQueryClient();
   const { message } = App.useApp();
   const templatesQuery = useQuery({ queryKey: ['document-templates'], queryFn: listDocumentTemplates });
+  const organizationQuery = useQuery({
+    queryKey: ['organization', 'print-profile'],
+    queryFn: getOrganizationPrintProfile,
+    enabled: canPrint,
+  });
   const [modalOpen, setModalOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<DocumentTemplate | null>(null);
   const [visualLayout, setVisualLayout] = useState<DocumentLayout>(() => createDefaultDocumentLayout());
@@ -566,9 +580,11 @@ function DocumentTemplatesPanel({ canManage }: { canManage: boolean }) {
         width: 340,
         render: (_, record) => (
           <Space wrap>
-            <Button size="small" icon={<PrinterOutlined />} onClick={() => printTemplate(record.title, renderDocumentPreview(record.body ?? ''), record.category?.title)}>
-              Печать
-            </Button>
+            {canPrint ? (
+              <Button size="small" icon={<PrinterOutlined />} loading={organizationQuery.isLoading} onClick={() => printTemplate(record.title, record.layout ?? createDefaultDocumentLayout(record.body ?? ''), record.category?.title, organizationQuery.data)}>
+                Печать
+              </Button>
+            ) : null}
             <Button
               size="small"
               icon={<FileWordOutlined />}
@@ -585,7 +601,7 @@ function DocumentTemplatesPanel({ canManage }: { canManage: boolean }) {
         ),
       },
     ],
-    [canManage],
+    [canManage, canPrint, organizationQuery.data],
   );
 
   function openCreate() {
@@ -650,9 +666,11 @@ function DocumentTemplatesPanel({ canManage }: { canManage: boolean }) {
         destroyOnHidden
         footer={
           <Space>
-            <Button icon={<PrinterOutlined />} onClick={() => printTemplate(previewTitle || 'Без названия', renderDocumentPreview(documentLayoutToPlainText(visualLayout)), getValues('categoryTitle'))}>
-              Печать образца
-            </Button>
+            {canPrint ? (
+              <Button icon={<PrinterOutlined />} loading={organizationQuery.isLoading} onClick={() => printTemplate(previewTitle || 'Без названия', visualLayout, getValues('categoryTitle'), organizationQuery.data)}>
+                Печать образца
+              </Button>
+            ) : null}
             <Button icon={<FileWordOutlined />} onClick={() => exportDocumentDocx({ title: previewTitle || 'Без названия', layout: visualLayout, renderText: renderDocumentPreview })}>
               Скачать DOCX
             </Button>
@@ -1283,11 +1301,32 @@ export function renderDocumentPreview(text: string) {
   });
 }
 
-function printTemplate(title: string, body: string, category?: string | null) {
+function printTemplate(
+  title: string,
+  layout: DocumentLayout,
+  category?: string | null,
+  organization?: OrganizationPrintProfile | null,
+) {
   const printWindow = window.open('', '_blank', 'width=900,height=700');
   if (!printWindow) {
     return;
   }
+
+  const clinicName = organization?.displayName?.trim() || 'TemichevVet';
+  const logoUrl = organization?.logoUrl
+    ? new URL(organization.logoUrl, window.location.href).href
+    : new URL('/brand/temichevvet-logo.jpg', window.location.href).href;
+  const renderedBlocks = renderPrintableLayout(layout, renderDocumentPreview);
+  const isLaboratoryTemplate = category?.toLocaleLowerCase('ru-RU').includes('лаборатор') ?? false;
+  const showClinicHeader = layout.page.showClinicHeader || isLaboratoryTemplate;
+  const patientMeta = layout.page.showVisitMeta || isLaboratoryTemplate
+    ? `<section class="patient-meta">
+        <div><span>Дата</span><strong>${escapeHtml(new Date().toLocaleDateString('ru-RU'))}</strong></div>
+        <div><span>Врач</span><strong>Врач клиники</strong></div>
+        <div><span>Владелец</span><strong>Иванова Анна Сергеевна</strong></div>
+        <div><span>Пациент</span><strong>Барсик · кошка · бенгальская</strong></div>
+      </section>`
+    : '';
 
   printWindow.document.write(`<!doctype html>
 <html lang="ru">
@@ -1304,7 +1343,15 @@ function printTemplate(title: string, body: string, category?: string | null) {
     .muted { color: #6b7280; }
     h1 { margin: 26px 0 12px; font-size: 24px; line-height: 1.2; }
     .category { display: inline-block; margin-bottom: 20px; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 999px; color: #374151; font-size: 12px; }
-    .body { min-height: 360px; white-space: pre-wrap; }
+    .patient-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 28px; margin: 0 0 22px; padding: 14px 16px; border: 1px solid #d1d5db; border-radius: 8px; }
+    .patient-meta div { display: grid; gap: 2px; }
+    .patient-meta span { color: #6b7280; font-size: 12px; }
+    .body { min-height: 300px; }
+    .text-block { margin: 0 0 10px; white-space: pre-wrap; }
+    .document-table { width: 100%; margin: 0 0 14px; border-collapse: collapse; table-layout: fixed; font-size: 12px; }
+    .document-table th, .document-table td { padding: 6px 7px; border: 1px solid #9ca3af; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+    .document-table th { background: #eef4f7; font-weight: 700; }
+    .page-break { break-before: page; }
     .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 46px; }
     .signature { padding-top: 28px; border-top: 1px solid #111827; color: #374151; font-size: 13px; }
     @media print { .page { padding: 20mm 16mm; } }
@@ -1312,25 +1359,51 @@ function printTemplate(title: string, body: string, category?: string | null) {
 </head>
 <body>
   <main class="page">
-    <section class="header">
-      <img class="logo" src="/brand/temichevvet-logo.jpg" alt="TemichevVet" />
+    ${showClinicHeader ? `<section class="header">
+      <img class="logo" src="${escapeHtml(logoUrl)}" alt="${escapeHtml(clinicName)}" />
       <div>
-        <div class="brand">TemichevVet</div>
-        <div class="muted">Предпросмотр печатного документа</div>
+        <div class="brand">${escapeHtml(clinicName)}</div>
+        <div class="muted">Ветеринарная клиника</div>
       </div>
-    </section>
+    </section>` : ''}
     <h1>${escapeHtml(title)}</h1>
     ${category ? `<div class="category">${escapeHtml(category)}</div>` : ''}
-    <section class="body">${escapeHtml(body || 'Текст шаблона пока пустой')}</section>
-    <section class="signatures">
+    ${patientMeta}
+    <section class="body">${renderedBlocks || '<p>Текст шаблона пока пустой</p>'}</section>
+    ${layout.page.showSignatures ? `<section class="signatures">
       <div class="signature">Подпись владельца</div>
       <div class="signature">Подпись врача</div>
-    </section>
+    </section>` : ''}
   </main>
-  <script>window.print();</script>
+  <script>
+    const logo = document.querySelector('.logo');
+    const startPrint = () => window.setTimeout(() => window.print(), 80);
+    if (!logo || logo.complete) startPrint();
+    else { logo.addEventListener('load', startPrint, { once: true }); logo.addEventListener('error', startPrint, { once: true }); }
+  </script>
 </body>
 </html>`);
   printWindow.document.close();
+}
+
+function renderPrintableLayout(layout: DocumentLayout, renderText: (text: string) => string) {
+  return layout.blocks.map((block) => {
+    if (block.type === 'pageBreak') return '<div class="page-break"></div>';
+    if (block.type === 'spacer') return `<div style="height:${Math.max(4, block.height)}px"></div>`;
+    if (block.type === 'text') {
+      return `<div class="text-block" style="font-size:${block.fontSize}px;font-weight:${block.bold ? 700 : 400};font-style:${block.italic ? 'italic' : 'normal'};text-align:${block.align}">${escapeHtml(renderText(block.text) || ' ')}</div>`;
+    }
+    const rows = block.rows
+      .filter((row) => row.some((cell) => cell.trim()))
+      .map((row, rowIndex) => `<tr>${row.map((cell) => {
+        const tag = rowIndex < block.headerRows ? 'th' : 'td';
+        return `<${tag}>${escapeHtml(renderText(cell) || ' ')}</${tag}>`;
+      }).join('')}</tr>`)
+      .join('');
+    const columnCount = Math.max(0, ...block.rows.map((row) => row.length));
+    const fontSize = columnCount >= 5 ? 9 : 12;
+    return rows ? `<table class="document-table" style="font-size:${fontSize}px"><tbody>${rows}</tbody></table>` : '';
+  }).join('');
 }
 
 function escapeHtml(value: string) {

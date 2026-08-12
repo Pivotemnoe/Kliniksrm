@@ -3,6 +3,7 @@ import { ListQuery, PaginatedResponse } from '../../shared/types/api';
 import { buildQuery } from '../../shared/utils/query';
 import {
   Animal,
+  AnimalArchiveInput,
   AnimalCatalog,
   AnimalMutationInput,
   AnimalWeightRecord,
@@ -13,6 +14,7 @@ import {
 
 export type ListAnimalsQuery = ListQuery & {
   ownerId?: string;
+  includeArchived?: boolean;
 };
 
 export function listAnimals(query: ListAnimalsQuery) {
@@ -34,9 +36,16 @@ export function updateAnimal(animalId: string, input: Partial<AnimalMutationInpu
   });
 }
 
-export function deleteAnimal(animalId: string) {
-  return apiRequest<{ id: string; ownerId: string; nickname: string; deleted: true }>(`/v1/animals/${animalId}`, {
-    method: 'DELETE',
+export function archiveAnimal(animalId: string, input: AnimalArchiveInput) {
+  return apiRequest<Animal>(`/v1/animals/${animalId}/archive`, {
+    method: 'POST',
+    body: input,
+  });
+}
+
+export function restoreAnimal(animalId: string) {
+  return apiRequest<Animal>(`/v1/animals/${animalId}/restore`, {
+    method: 'POST',
   });
 }
 

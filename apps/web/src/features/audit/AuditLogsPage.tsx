@@ -242,6 +242,8 @@ const actionLabels: Record<string, string> = {
   'owner.balance_operation.create': 'Операция баланса владельца',
   'animal.create': 'Пациент создан',
   'animal.update': 'Пациент изменён',
+  'animal.archive': 'Пациент перемещён в архив',
+  'animal.restore': 'Пациент восстановлен из архива',
   'queue.create': 'Запись в очередь создана',
   'queue.update': 'Очередь изменена',
   'appointment.create': 'Запись на приём создана',

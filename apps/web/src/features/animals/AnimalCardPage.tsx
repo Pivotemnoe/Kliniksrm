@@ -1,4 +1,4 @@
-import { DeleteOutlined, EditOutlined, LeftOutlined, PlusOutlined } from '@ant-design/icons';
+import { EditOutlined, LeftOutlined, PlusOutlined, StopOutlined, UndoOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Button, Card, Descriptions, Input, Modal, Tabs, Tag, Typography } from 'antd';
 import type { ReactNode } from 'react';
@@ -13,14 +13,15 @@ import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { listVisits } from '../visits/visits.api';
 import { visitStatusColors, visitStatusLabels } from '../visits/types';
+import { AnimalArchiveModal, animalArchiveReasonLabels } from './AnimalArchiveModal';
 import { AnimalFormDrawer } from './AnimalFormDrawer';
 import { AnimalTasksTab } from './AnimalTasksTab';
 import { AnimalVisitsTab } from './AnimalVisitsTab';
 import { AnimalVaccinationsTab } from './AnimalVaccinationsTab';
 import { AnimalWeightsTab } from './AnimalWeightsTab';
 import { AnimalStatusTag, getAnimalStatusLabel } from './animalStatus';
-import { deleteAnimal, getAnimal, updateAnimal } from './animals.api';
-import { AnimalMutationInput, Vaccination } from './types';
+import { archiveAnimal, getAnimal, restoreAnimal, updateAnimal } from './animals.api';
+import { AnimalArchiveInput, AnimalMutationInput, Vaccination } from './types';
 import { PatientDocumentArchive } from '../files/PatientDocumentArchive';
 
 export function AnimalCardPage() {
@@ -33,6 +34,7 @@ export function AnimalCardPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [nickname, setNickname] = useState('');
+  const [archiveOpen, setArchiveOpen] = useState(false);
   const animalQuery = useQuery({
     queryKey: ['animals', animalId],
     queryFn: () => getAnimal(animalId!),
@@ -70,16 +72,31 @@ export function AnimalCardPage() {
     },
     onError: (error) => message.error(getErrorMessage(error)),
   });
-  const deleteMutation = useMutation({
-    mutationFn: () => deleteAnimal(animalId!),
-    onSuccess: async (deleted) => {
+  const archiveMutation = useMutation({
+    mutationFn: (input: AnimalArchiveInput) => archiveAnimal(animalId!, input),
+    onSuccess: async (archived) => {
       await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['animals', animalId] }),
         queryClient.invalidateQueries({ queryKey: ['animals'] }),
-        queryClient.invalidateQueries({ queryKey: ['owners', deleted.ownerId] }),
-        queryClient.invalidateQueries({ queryKey: ['owners', deleted.ownerId, 'animals'] }),
+        queryClient.invalidateQueries({ queryKey: ['owners', archived.ownerId] }),
+        queryClient.invalidateQueries({ queryKey: ['owners', archived.ownerId, 'animals'] }),
       ]);
-      message.success(`Пустая карточка пациента «${deleted.nickname}» удалена`);
-      navigate(`/owners/${deleted.ownerId}`, { replace: true });
+      setArchiveOpen(false);
+      message.success(`Пациент «${archived.nickname}» перемещён в архив. История сохранена`);
+      navigate(`/owners/${archived.ownerId}`, { replace: true });
+    },
+    onError: (error) => message.error(getErrorMessage(error), 8),
+  });
+  const restoreMutation = useMutation({
+    mutationFn: () => restoreAnimal(animalId!),
+    onSuccess: async (restored) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['animals', animalId] }),
+        queryClient.invalidateQueries({ queryKey: ['animals'] }),
+        queryClient.invalidateQueries({ queryKey: ['owners', restored.ownerId] }),
+        queryClient.invalidateQueries({ queryKey: ['owners', restored.ownerId, 'animals'] }),
+      ]);
+      message.success(`Пациент «${restored.nickname}» восстановлен`);
     },
     onError: (error) => message.error(getErrorMessage(error), 8),
   });
@@ -91,15 +108,14 @@ export function AnimalCardPage() {
   const latestVaccination = getLatestVaccination(animal?.vaccinations);
   const nextRevaccination = getNextRevaccination(animal?.vaccinations);
 
-  function confirmDeletion() {
+  function confirmRestore() {
     if (!animal) return;
     modal.confirm({
-      title: `Удалить пациента «${animal.nickname}» полностью?`,
-      content: 'Полностью удалить можно только пустую ошибочно созданную карточку. Если уже есть приёмы, счета, вакцинации, стационар, задачи, файлы или другая история, CRM остановит удаление и перечислит связанные данные.',
-      okText: 'Удалить пустую карточку',
-      okButtonProps: { danger: true },
+      title: `Восстановить пациента «${animal.nickname}»?`,
+      content: 'Карточка снова появится в активном списке и станет доступна для новых записей, очереди и приёмов.',
+      okText: 'Восстановить',
       cancelText: 'Отмена',
-      onOk: () => deleteMutation.mutateAsync(),
+      onOk: () => restoreMutation.mutateAsync(),
     });
   }
 
@@ -125,7 +141,8 @@ export function AnimalCardPage() {
           </div>
           <div className="context-section-body">
             <h2 className="context-title">{animal?.nickname ?? 'Пациент'}</h2>
-            {animal && canManage ? (
+            {animal?.archivedAt ? <Tag color="default">В архиве</Tag> : null}
+            {animal && canManage && !animal.archivedAt ? (
               <Button
                 size="small"
                 icon={<EditOutlined />}
@@ -142,7 +159,7 @@ export function AnimalCardPage() {
         <div className="context-section">
           <div className="context-section-header">
             <strong>Профиль</strong>
-            <Button size="small" type="link" icon={<EditOutlined />} onClick={() => setEditOpen(true)} disabled={!animal || !canManage}>
+            <Button size="small" type="link" icon={<EditOutlined />} onClick={() => setEditOpen(true)} disabled={!animal || !canManage || Boolean(animal.archivedAt)}>
               Редактировать профиль
             </Button>
           </div>
@@ -176,6 +193,7 @@ export function AnimalCardPage() {
                 type="link"
                 icon={<PlusOutlined />}
                 onClick={() => navigate(`/visits?ownerId=${animal.ownerId}&animalId=${animal.id}`)}
+                disabled={Boolean(animal.archivedAt)}
               >
                 приём
               </Button>
@@ -216,17 +234,19 @@ export function AnimalCardPage() {
               <strong>Действия</strong>
             </div>
             <div className="context-section-body">
-              <Button
-                danger
-                size="small"
-                icon={<DeleteOutlined />}
-                loading={deleteMutation.isPending}
-                onClick={confirmDeletion}
-              >
-                Удалить пациента
-              </Button>
+              {animal.archivedAt ? (
+                <Button size="small" icon={<UndoOutlined />} loading={restoreMutation.isPending} onClick={confirmRestore}>
+                  Восстановить пациента
+                </Button>
+              ) : (
+                <Button danger size="small" icon={<StopOutlined />} onClick={() => setArchiveOpen(true)}>
+                  Убрать из активных
+                </Button>
+              )}
               <Typography.Paragraph type="secondary" style={{ margin: '8px 0 0' }}>
-                Только для пустой ошибочной карточки. История лечения и оплат не удаляется.
+                {animal.archivedAt
+                  ? `Причина: ${animal.archiveReason ? animalArchiveReasonLabels[animal.archiveReason] : 'не указана'}${animal.archiveComment ? `. ${animal.archiveComment}` : ''}`
+                  : 'Карточка будет архивирована. История лечения, документов и оплат не удаляется.'}
               </Typography.Paragraph>
             </div>
           </div>
@@ -240,7 +260,7 @@ export function AnimalCardPage() {
                 {
                   key: 'visits',
                   label: 'Приёмы',
-                  children: <AnimalVisitsTab ownerId={animal.ownerId} animalId={animal.id} />,
+                  children: <AnimalVisitsTab ownerId={animal.ownerId} animalId={animal.id} readOnly={Boolean(animal.archivedAt)} />,
                 },
                 {
                   key: 'profile',
@@ -273,23 +293,28 @@ export function AnimalCardPage() {
                       <Descriptions.Item label="Комментарий" span={2}>
                         {animal.comment || '—'}
                       </Descriptions.Item>
+                      <Descriptions.Item label="Архив" span={2}>
+                        {animal.archivedAt
+                          ? `${formatDateTime(animal.archivedAt)} · ${animal.archiveReason ? animalArchiveReasonLabels[animal.archiveReason] : 'причина не указана'}${animal.archiveComment ? ` · ${animal.archiveComment}` : ''}`
+                          : 'Активная карточка'}
+                      </Descriptions.Item>
                     </Descriptions>
                   ),
                 },
                 {
                   key: 'weights',
                   label: 'Вес',
-                  children: <AnimalWeightsTab animalId={animal.id} />,
+                  children: <AnimalWeightsTab animalId={animal.id} readOnly={Boolean(animal.archivedAt)} />,
                 },
                 {
                   key: 'vaccinations',
                   label: 'Вакцинации',
-                  children: <AnimalVaccinationsTab animalId={animal.id} />,
+                  children: <AnimalVaccinationsTab animalId={animal.id} readOnly={Boolean(animal.archivedAt)} />,
                 },
                 {
                   key: 'tasks',
                   label: 'Задачи',
-                  children: <AnimalTasksTab ownerId={animal.ownerId} animalId={animal.id} />,
+                  children: <AnimalTasksTab ownerId={animal.ownerId} animalId={animal.id} readOnly={Boolean(animal.archivedAt)} />,
                 },
                 {
                   key: 'archive',
@@ -297,7 +322,7 @@ export function AnimalCardPage() {
                   children: (
                     <PatientDocumentArchive
                       animalId={animal.id}
-                      canManage={hasPermission(auth?.employee, 'documents.manage')}
+                      canManage={!animal.archivedAt && hasPermission(auth?.employee, 'documents.manage')}
                     />
                   ),
                 },
@@ -314,6 +339,13 @@ export function AnimalCardPage() {
         onSubmit={(values) => updateMutation.mutate(values)}
         isSubmitting={updateMutation.isPending}
         submitError={updateMutation.error}
+      />
+      <AnimalArchiveModal
+        open={archiveOpen}
+        animal={animal ?? null}
+        loading={archiveMutation.isPending}
+        onCancel={() => setArchiveOpen(false)}
+        onConfirm={(input) => archiveMutation.mutate(input)}
       />
       <Modal
         title="Изменить кличку пациента"

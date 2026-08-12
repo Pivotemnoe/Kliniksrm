@@ -902,6 +902,10 @@ model Animal {
   isSterilized   Boolean                    @default(false)
   isFavorite     Boolean                    @default(false)
   status         String?
+  archivedAt     DateTime?
+  archiveReason  String?
+  archiveComment String?
+  archivedById   String?
   weights        AnimalWeightRecord[]
   vaccinations   Vaccination[]
   queueEntries   QueueEntry[]
@@ -918,6 +922,8 @@ model Animal {
   updatedAt      DateTime                   @updatedAt
 
   @@index([ownerId])
+  @@index([ownerId, archivedAt])
+  @@index([archivedAt])
   @@index([nickname])
   @@index([microchip])
 }

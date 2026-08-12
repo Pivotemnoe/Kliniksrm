@@ -1,8 +1,12 @@
 import { apiRequest, apiUpload } from '../../api/client';
-import { OrganizationSettings, UpdateOrganizationPayload } from './types';
+import { OrganizationPrintProfile, OrganizationSettings, UpdateOrganizationPayload } from './types';
 
 export function getOrganizationSettings() {
   return apiRequest<OrganizationSettings>('/v1/organization');
+}
+
+export function getOrganizationPrintProfile() {
+  return apiRequest<OrganizationPrintProfile>('/v1/organization/print-profile');
 }
 
 export function updateOrganizationSettings(payload: UpdateOrganizationPayload) {

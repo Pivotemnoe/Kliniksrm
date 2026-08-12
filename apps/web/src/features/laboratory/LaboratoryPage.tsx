@@ -1,4 +1,4 @@
-import { CheckCircleOutlined, EditOutlined, ExperimentOutlined, PlayCircleOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
+import { CheckCircleOutlined, EditOutlined, ExperimentOutlined, PlayCircleOutlined, PlusOutlined, PrinterOutlined, SearchOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Alert, Button, Card, Drawer, Form, Input, Select, Space, Switch, Table, Tabs, Tag, Typography } from 'antd';
@@ -15,6 +15,8 @@ import { InfiniteTable, useInfiniteListQuery } from '../../shared/ui/InfiniteTab
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { AttachmentsPanel } from '../files/AttachmentsPanel';
 import { listLaboratoryFiles, listLaboratoryOrderFiles, uploadLaboratoryFile, uploadLaboratoryOrderFile } from '../files/files.api';
+import { getOrganizationPrintProfile } from '../organization/organization.api';
+import type { OrganizationPrintProfile } from '../organization/types';
 import { formatDateTime } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
 import { formatServicePrice } from '../stock/service-pricing';
@@ -84,6 +86,7 @@ export function LaboratoryPage() {
   const { data: auth } = useCurrentEmployee();
   const [searchParams] = useSearchParams();
   const canManage = hasPermission(auth?.employee, 'laboratory.manage');
+  const canPrintDocuments = hasPermission(auth?.employee, 'documents.print');
   const [activeTab, setActiveTab] = useState(() => getInitialTab(searchParams.get('tab')));
   const [search, setSearch] = useState('');
   const [species, setSpecies] = useState<string | undefined>();
@@ -97,6 +100,11 @@ export function LaboratoryPage() {
   const [testOpen, setTestOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const resourcesQuery = useQuery({ queryKey: ['laboratory', 'resources'], queryFn: getLaboratoryResources });
+  const organizationQuery = useQuery({
+    queryKey: ['organization', 'print-profile'],
+    queryFn: getOrganizationPrintProfile,
+    enabled: canPrintDocuments,
+  });
 
   function handleSearch(value: string) {
     setSearch(value.trim());
@@ -266,6 +274,8 @@ export function LaboratoryPage() {
       <OrderDrawer
         order={selectedOrder}
         canManage={canManage}
+        canPrint={canPrintDocuments}
+        organization={organizationQuery.data}
         onClose={() => setSelectedOrder(null)}
         onEditItem={(order, item) => setEditingItem({ order, item })}
       />
@@ -498,11 +508,15 @@ function OrdersTable({
 function OrderDrawer({
   order,
   canManage,
+  canPrint,
+  organization,
   onClose,
   onEditItem,
 }: {
   order: LaboratoryOrder | null;
   canManage: boolean;
+  canPrint: boolean;
+  organization?: OrganizationPrintProfile;
   onClose: () => void;
   onEditItem: (order: LaboratoryOrder, item: LaboratoryOrderItem) => void;
 }) {
@@ -564,9 +578,16 @@ function OrderDrawer({
                 <Typography.Text type="secondary">{order.visit.employee?.fullName ?? 'Врач не указан'}</Typography.Text>
               </Space>
               {order.comment ? <Typography.Paragraph>{order.comment}</Typography.Paragraph> : null}
-              <Button size="small" onClick={() => navigate(`/visits/${order.visit.id}`)}>
-                Открыть приём
-              </Button>
+              <Space wrap>
+                <Button size="small" onClick={() => navigate(`/visits/${order.visit.id}`)}>
+                  Открыть приём
+                </Button>
+                {canPrint ? (
+                  <Button size="small" icon={<PrinterOutlined />} onClick={() => printLaboratoryOrder(order, organization)}>
+                    Печать бланка
+                  </Button>
+                ) : null}
+              </Space>
               {canManage && order.status !== 'CANCELLED' ? <LaboratoryResultsImporter order={order} /> : null}
             </Space>
           </Card>
@@ -1109,4 +1130,115 @@ function toDateInput(value: Date) {
   const month = String(value.getMonth() + 1).padStart(2, '0');
   const day = String(value.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+function printLaboratoryOrder(order: LaboratoryOrder, organization?: OrganizationPrintProfile) {
+  const printWindow = window.open('', '_blank', 'width=1000,height=760');
+  if (!printWindow) {
+    return;
+  }
+
+  const clinicName = organization?.displayName?.trim() || 'TemichevVet';
+  const clinicAddress = organization?.offices?.[0]?.address || organization?.legalAddress || '';
+  const clinicPhone = organization?.offices?.[0]?.phone || '';
+  const logoUrl = organization?.logoUrl
+    ? new URL(organization.logoUrl, window.location.href).href
+    : new URL('/brand/temichevvet-logo.jpg', window.location.href).href;
+  const patientDescription = [order.visit.animal.species, order.visit.animal.breed].filter(Boolean).join(', ') || 'Вид и порода не указаны';
+  const rows = order.items
+    .map((item) => {
+      const result = item.resultValue || item.resultText || '';
+      return `<tr>
+        <td><strong>${escapeLaboratoryPrintHtml(item.title)}</strong>${item.code ? `<br><small>${escapeLaboratoryPrintHtml(item.code)}</small>` : ''}</td>
+        <td>${escapeLaboratoryPrintHtml(result || '—')}</td>
+        <td>${escapeLaboratoryPrintHtml(item.unit || '—')}</td>
+        <td>${escapeLaboratoryPrintHtml(item.referenceRange || '—')}</td>
+        <td>${escapeLaboratoryPrintHtml(item.comment || '—')}</td>
+      </tr>`;
+    })
+    .join('');
+
+  printWindow.document.write(`<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>${escapeLaboratoryPrintHtml(`Лабораторный бланк — ${order.visit.animal.nickname}`)}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #142033; background: #fff; font: 14px/1.45 Arial, sans-serif; }
+    .page { width: 100%; max-width: 900px; margin: 0 auto; padding: 30px 36px 42px; }
+    .header { display: grid; grid-template-columns: 78px 1fr; gap: 18px; align-items: center; padding-bottom: 16px; border-bottom: 2px solid #21848d; }
+    .logo { width: 74px; height: 74px; object-fit: contain; }
+    .brand { font-size: 23px; font-weight: 700; color: #153958; }
+    .contacts { color: #637184; font-size: 12px; }
+    h1 { margin: 24px 0 16px; color: #153958; font-size: 24px; line-height: 1.2; }
+    .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 28px; margin-bottom: 20px; padding: 14px 16px; border: 1px solid #ccd7df; border-radius: 8px; }
+    .meta div { display: grid; grid-template-columns: 100px 1fr; gap: 8px; }
+    .meta span { color: #6b7888; }
+    .comment { margin: 0 0 18px; padding: 10px 12px; border-left: 3px solid #21848d; background: #f4f8fa; white-space: pre-wrap; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12px; }
+    th, td { padding: 7px 8px; border: 1px solid #9eabb7; text-align: left; vertical-align: top; overflow-wrap: anywhere; white-space: pre-wrap; }
+    th { background: #eaf3f5; color: #153958; font-weight: 700; }
+    th:nth-child(1) { width: 27%; }
+    th:nth-child(2) { width: 22%; }
+    th:nth-child(3) { width: 10%; }
+    th:nth-child(4) { width: 20%; }
+    th:nth-child(5) { width: 21%; }
+    small { color: #6b7888; }
+    .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 46px; }
+    .signature { padding-top: 26px; border-top: 1px solid #64748b; color: #64748b; font-size: 12px; }
+    @page { size: A4 portrait; margin: 14mm; }
+    @media print { .page { max-width: none; padding: 0; } tr { break-inside: avoid; } }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="header">
+      <img class="logo" src="${escapeLaboratoryPrintHtml(logoUrl)}" alt="${escapeLaboratoryPrintHtml(clinicName)}" />
+      <div>
+        <div class="brand">${escapeLaboratoryPrintHtml(clinicName)}</div>
+        <div>Ветеринарная клиника</div>
+        ${clinicAddress ? `<div class="contacts">${escapeLaboratoryPrintHtml(clinicAddress)}</div>` : ''}
+        ${clinicPhone ? `<div class="contacts">${escapeLaboratoryPrintHtml(clinicPhone)}</div>` : ''}
+      </div>
+    </header>
+    <h1>Результаты лабораторного исследования</h1>
+    <section class="meta">
+      <div><span>Заказ</span><strong>${escapeLaboratoryPrintHtml(formatDateTime(order.createdAt))}</strong></div>
+      <div><span>Статус</span><strong>${escapeLaboratoryPrintHtml(laboratoryOrderStatusLabels[order.status])}</strong></div>
+      <div><span>Пациент</span><strong>${escapeLaboratoryPrintHtml(order.visit.animal.nickname)}</strong></div>
+      <div><span>Вид / порода</span><strong>${escapeLaboratoryPrintHtml(patientDescription)}</strong></div>
+      <div><span>Владелец</span><strong>${escapeLaboratoryPrintHtml(order.visit.owner.fullName)}</strong></div>
+      <div><span>Телефон</span><strong>${escapeLaboratoryPrintHtml(order.visit.owner.phone || '—')}</strong></div>
+      <div><span>Врач</span><strong>${escapeLaboratoryPrintHtml(order.visit.employee?.fullName || '—')}</strong></div>
+      <div><span>Завершён</span><strong>${escapeLaboratoryPrintHtml(order.completedAt ? formatDateTime(order.completedAt) : '—')}</strong></div>
+    </section>
+    ${order.comment ? `<div class="comment"><strong>Комментарий к заказу</strong><br>${escapeLaboratoryPrintHtml(order.comment)}</div>` : ''}
+    <table>
+      <thead><tr><th>Исследование</th><th>Результат</th><th>Ед.</th><th>Референс</th><th>Комментарий</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="5">Исследования не добавлены</td></tr>'}</tbody>
+    </table>
+    <section class="signatures">
+      <div class="signature">Подпись сотрудника лаборатории</div>
+      <div class="signature">Подпись врача</div>
+    </section>
+  </main>
+  <script>
+    const logo = document.querySelector('.logo');
+    const startPrint = () => window.setTimeout(() => window.print(), 80);
+    if (!logo || logo.complete) startPrint();
+    else { logo.addEventListener('load', startPrint, { once: true }); logo.addEventListener('error', startPrint, { once: true }); }
+  </script>
+</body>
+</html>`);
+  printWindow.document.close();
+}
+
+function escapeLaboratoryPrintHtml(value: string) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
 }

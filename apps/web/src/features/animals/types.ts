@@ -1,4 +1,5 @@
 export type AnimalSex = 'MALE' | 'FEMALE' | 'UNKNOWN';
+export type AnimalArchiveReason = 'DECEASED' | 'ERRONEOUS' | 'OTHER';
 
 export type Animal = {
   id: string;
@@ -15,6 +16,10 @@ export type Animal = {
   isSterilized: boolean;
   isFavorite: boolean;
   status: string | null;
+  archivedAt: string | null;
+  archiveReason: AnimalArchiveReason | null;
+  archiveComment: string | null;
+  archivedById: string | null;
   owner?: {
     id: string;
     fullName: string;
@@ -39,6 +44,11 @@ export type Animal = {
   };
   createdAt: string;
   updatedAt: string;
+};
+
+export type AnimalArchiveInput = {
+  reason: AnimalArchiveReason;
+  comment?: string;
 };
 
 export type AnimalMutationInput = {

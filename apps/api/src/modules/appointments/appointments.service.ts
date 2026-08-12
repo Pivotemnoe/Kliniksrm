@@ -179,7 +179,9 @@ export class AppointmentsService {
     }
 
     await this.schedulingService.ensureOwnerExists(ownerId);
-    const resolvedOwnerId = await this.schedulingService.resolveAnimalOwner(animalId, ownerId);
+    const resolvedOwnerId = await this.schedulingService.resolveAnimalOwner(animalId, ownerId, {
+      allowArchived: Boolean(existing && animalId === existing.animalId),
+    });
 
     const room = dto.roomId ? await this.schedulingService.ensureRoomExists(dto.roomId) : undefined;
     const officeId = dto.officeId ?? room?.officeId ?? (existing ? undefined : await this.schedulingService.getDefaultOfficeId());

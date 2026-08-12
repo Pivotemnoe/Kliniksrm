@@ -37,6 +37,7 @@ export class VisitOverdueAlertTrackerService implements OnApplicationBootstrap, 
       const visits = await this.prisma.visit.findMany({
         where: {
           ...buildOverdueVisitWhere(now),
+          animal: { archivedAt: null },
           overdueAlert: null,
         },
         orderBy: { startedAt: 'asc' },

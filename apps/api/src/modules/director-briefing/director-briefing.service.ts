@@ -135,7 +135,7 @@ export class DirectorBriefingService implements OnApplicationBootstrap, OnModule
       this.prisma.businessEntry.findMany({ where: { occurredAt: { gte: range.start, lte: range.end }, status: BusinessEntryStatus.ACTIVE }, select: { type: true, source: true, amount: true, category: { select: { code: true } } } }),
       this.prisma.businessEntry.count({ where: { status: BusinessEntryStatus.ACTIVE, requiresResolution: true } }),
       this.prisma.businessDailyClose.count({ where: { status: BusinessDailyCloseStatus.SUBMITTED } }),
-      this.prisma.vaccination.findMany({ where: { expiresAt: { not: null } }, orderBy: { expiresAt: 'desc' }, select: { id: true, title: true, expiresAt: true, animal: { select: { id: true, nickname: true, owner: { select: { id: true, fullName: true, phone: true } } } } } }),
+      this.prisma.vaccination.findMany({ where: { expiresAt: { not: null }, animal: { archivedAt: null } }, orderBy: { expiresAt: 'desc' }, select: { id: true, title: true, expiresAt: true, animal: { select: { id: true, nickname: true, owner: { select: { id: true, fullName: true, phone: true } } } } } }),
       this.prisma.product.findMany({ where: { isActive: true, minStock: { not: null } }, select: { minStock: true, batches: { where: { rest: { gt: 0 } }, select: { rest: true } } } }),
       this.prisma.employee.findMany({ where: { status: EmployeeStatus.ACTIVE, roles: { some: { role: { code: 'director' } } } }, select: { id: true } }),
       this.prisma.bill.findMany({ where: { status: { in: [PaymentStatus.UNPAID, PaymentStatus.PARTIAL] } }, select: { totalAmount: true, paidAmount: true } }),
@@ -154,7 +154,7 @@ export class DirectorBriefingService implements OnApplicationBootstrap, OnModule
     const paid = sum(payments.filter((item) => Number(item.amount) > 0), (item) => item.amount);
     const refunds = -sum(payments.filter((item) => Number(item.amount) < 0), (item) => item.amount);
     const vaccinationDues = resolveVaccinationDues(vaccinations, now);
-    const unfinishedVisits = await this.prisma.visit.count({ where: buildOverdueVisitWhere(now) });
+    const unfinishedVisits = await this.prisma.visit.count({ where: { ...buildOverdueVisitWhere(now), animal: { archivedAt: null } } });
     const lowStockCount = lowStock.filter((product) => product.batches.reduce((total, batch) => total + Number(batch.rest), 0) <= Number(product.minStock)).length;
     const debtorsAmount = debtBills.reduce((total, bill) => total + Math.max(Number(bill.totalAmount) - Number(bill.paidAmount), 0), 0);
     const returnedToSuppliers = supplierReturns.reduce((total, document) => total + document.items.reduce((subtotal, item) => subtotal + Number(item.quantity) * Number(item.unitCost), 0), 0);

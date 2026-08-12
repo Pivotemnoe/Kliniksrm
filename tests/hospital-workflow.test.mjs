@@ -298,7 +298,7 @@ test('план лечения создаёт несколько действий
   assert.match(service, /writeOffHospitalProduct\(tx, stay\.sourceVisitId, billItem\.id, postedLine, warehouseScope\)/);
   assert.match(service, /lockedRecord\.recordStatus === HospitalRecordStatus\.COMPLETED && lockedRecord\.billItemId/);
   assert.match(modal, /Добавить препарат, процедуру или другое действие/);
-  assert.match(modal, /Добавить точную дату/);
+  assert.match(modal, /Добавить ещё одно выполнение вручную/);
   assert.match(modal, /Сформировать даты/);
   assert.match(modal, /Списать при каждом выполнении/);
   assert.match(modal, /Списание и начисление произойдут только после отметки «Выполнено»/);

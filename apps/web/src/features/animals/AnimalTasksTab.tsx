@@ -14,9 +14,10 @@ import { CreateTaskInput, getTaskTypeLabel, Task, TaskMutationInput, TaskStatus,
 type AnimalTasksTabProps = {
   ownerId: string;
   animalId: string;
+  readOnly?: boolean;
 };
 
-export function AnimalTasksTab({ ownerId, animalId }: AnimalTasksTabProps) {
+export function AnimalTasksTab({ ownerId, animalId, readOnly = false }: AnimalTasksTabProps) {
   const queryClient = useQueryClient();
   const { message } = App.useApp();
   const { data: auth } = useCurrentEmployee();
@@ -88,7 +89,7 @@ export function AnimalTasksTab({ ownerId, animalId }: AnimalTasksTabProps) {
         title: 'Действия',
         key: 'actions',
         render: (_, record) =>
-          canManage ? (
+          canManage && !readOnly ? (
             <Space wrap>
               <Button size="small" icon={<EditOutlined />} onClick={() => setEditingTask(record)}>
                 Изменить
@@ -111,7 +112,7 @@ export function AnimalTasksTab({ ownerId, animalId }: AnimalTasksTabProps) {
           ) : null,
       },
     ],
-    [canManage, completeMutation, statusMutation],
+    [canManage, completeMutation, readOnly, statusMutation],
   );
 
   function submit(values: TaskMutationInput) {
@@ -136,7 +137,7 @@ export function AnimalTasksTab({ ownerId, animalId }: AnimalTasksTabProps) {
     <Space direction="vertical" size={16} className="full-width">
       <Space className="toolbar-row">
         <Typography.Text type="secondary">Задачи и напоминания по пациенту.</Typography.Text>
-        {canManage ? (
+        {canManage && !readOnly ? (
           <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
             Создать задачу
           </Button>
@@ -151,7 +152,7 @@ export function AnimalTasksTab({ ownerId, animalId }: AnimalTasksTabProps) {
         pagination={false}
         className="dense-table"
       />
-      <TaskFormDrawer
+      {!readOnly ? <TaskFormDrawer
         open={createOpen || Boolean(editingTask)}
         title={editingTask ? 'Редактировать задачу пациента' : 'Создать задачу пациенту'}
         initialTask={editingTask}
@@ -166,7 +167,7 @@ export function AnimalTasksTab({ ownerId, animalId }: AnimalTasksTabProps) {
         onSubmit={submit}
         isSubmitting={createMutation.isPending || updateMutation.isPending}
         submitError={editingTask ? updateMutation.error : createMutation.error}
-      />
+      /> : null}
     </Space>
   );
 }

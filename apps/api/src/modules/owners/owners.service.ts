@@ -41,8 +41,8 @@ export class OwnersService {
             ...(phoneSearch ? [{ phoneNormalized: { contains: phoneSearch } }] : []),
             { extraPhone: { contains: search, mode: 'insensitive' } },
             { email: { contains: search, mode: 'insensitive' } },
-            { animals: { some: { nickname: { contains: search, mode: 'insensitive' } } } },
-            { animals: { some: { microchip: { contains: search, mode: 'insensitive' } } } },
+            { animals: { some: { archivedAt: null, nickname: { contains: search, mode: 'insensitive' } } } },
+            { animals: { some: { archivedAt: null, microchip: { contains: search, mode: 'insensitive' } } } },
           ],
         }
       : {};
@@ -53,9 +53,10 @@ export class OwnersService {
         orderBy: { createdAt: 'desc' },
         include: {
           _count: {
-            select: { animals: true, visits: true, bills: true },
+            select: { animals: { where: { archivedAt: null } }, visits: true, bills: true },
           },
           animals: {
+            where: { archivedAt: null },
             orderBy: { createdAt: 'desc' },
             take: 3,
             select: {
@@ -122,11 +123,11 @@ export class OwnersService {
     const owner = await this.prisma.owner.findUnique({
       where: { id: ownerId },
       include: {
-        animals: true,
+        animals: { where: { archivedAt: null } },
         trustedPeople: true,
         _count: {
           select: {
-            animals: true,
+            animals: { where: { archivedAt: null } },
             appointments: true,
             visits: true,
             bills: true,
@@ -359,12 +360,12 @@ export class OwnersService {
     return this.getOwner(owner.id);
   }
 
-  async listOwnerAnimals(ownerId: string) {
+  async listOwnerAnimals(ownerId: string, includeArchived = false) {
     await this.ensureOwnerExists(ownerId);
 
     return this.prisma.animal.findMany({
-      where: { ownerId },
-      orderBy: { createdAt: 'desc' },
+      where: { ownerId, ...(includeArchived ? {} : { archivedAt: null }) },
+      orderBy: [{ archivedAt: 'asc' }, { createdAt: 'desc' }],
     });
   }
 

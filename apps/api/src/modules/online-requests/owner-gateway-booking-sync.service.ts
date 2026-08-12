@@ -80,7 +80,7 @@ export class OwnerGatewayBookingSyncService implements OnApplicationBootstrap, O
 
     const animal = input.animalId
       ? await this.prisma.animal.findFirst({
-          where: { id: input.animalId, ownerId: owner.id },
+          where: { id: input.animalId, ownerId: owner.id, archivedAt: null },
           select: { id: true, nickname: true, species: true, breed: true },
         })
       : null;

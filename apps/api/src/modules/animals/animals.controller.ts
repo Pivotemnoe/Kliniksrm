@@ -1,10 +1,11 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { AuthEmployee } from '../auth/auth.types';
 import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { AnimalsService } from './animals.service';
+import { ArchiveAnimalDto } from './dto/archive-animal.dto';
 import { CreateVaccinationDto } from './dto/create-vaccination.dto';
 import { CreateWeightRecordDto } from './dto/create-weight-record.dto';
 import { ListAnimalsQueryDto } from './dto/list-animals-query.dto';
@@ -44,11 +45,22 @@ export class AnimalsController {
     return this.animalsService.updateAnimal(animalId, dto, actor.id);
   }
 
-  @Delete(':animalId')
+  @Post(':animalId/archive')
   @RequirePermissions('animals.manage')
-  @ApiOkResponse({ description: 'Empty patient card deleted.' })
-  deleteAnimal(@Param('animalId') animalId: string, @CurrentEmployee() actor: AuthEmployee) {
-    return this.animalsService.deleteAnimal(animalId, actor.id);
+  @ApiOkResponse({ description: 'Patient archived with all history preserved.' })
+  archiveAnimal(
+    @Param('animalId') animalId: string,
+    @Body() dto: ArchiveAnimalDto,
+    @CurrentEmployee() actor: AuthEmployee,
+  ) {
+    return this.animalsService.archiveAnimal(animalId, dto, actor.id);
+  }
+
+  @Post(':animalId/restore')
+  @RequirePermissions('animals.manage')
+  @ApiOkResponse({ description: 'Patient restored to active records.' })
+  restoreAnimal(@Param('animalId') animalId: string, @CurrentEmployee() actor: AuthEmployee) {
+    return this.animalsService.restoreAnimal(animalId, actor.id);
   }
 
   @Get(':animalId/weights')
