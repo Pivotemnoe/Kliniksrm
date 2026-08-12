@@ -7,6 +7,7 @@ import {
   LaboratoryOrderInput,
   LaboratoryOrderItem,
   LaboratoryOrderItemInput,
+  LaboratoryOrderResultRowInput,
   LaboratoryOrdersQuery,
   LaboratoryProfile,
   LaboratoryProfileInput,
@@ -31,6 +32,13 @@ export function updateLaboratoryOrder(orderId: string, input: LaboratoryOrderInp
 
 export function updateLaboratoryOrderItem(orderId: string, itemId: string, input: LaboratoryOrderItemInput) {
   return apiRequest<LaboratoryOrderItem>(`/v1/laboratory/orders/${orderId}/items/${itemId}`, { method: 'PATCH', body: input });
+}
+
+export function updateLaboratoryOrderResults(orderId: string, items: LaboratoryOrderResultRowInput[]) {
+  return apiRequest<LaboratoryOrder>(`/v1/laboratory/orders/${orderId}/results`, {
+    method: 'PATCH',
+    body: { items },
+  });
 }
 
 export function importLaboratoryResults(orderId: string, mode: 'PREVIEW' | 'APPLY', rows: LaboratoryResultImportRow[]) {

@@ -14,6 +14,7 @@ const examSchema = z.object({
   weightKg: optionalNumber(0, 300),
   temperatureC: optionalNumber(30, 45),
   visitType: z.enum(['PRIMARY', 'FOLLOW_UP']).optional(),
+  purpose: optionalString(1000),
   anamnesis: optionalString(4000),
   examination: optionalString(4000),
   symptoms: optionalString(4000),
@@ -45,7 +46,7 @@ export function VisitExamTab({ visit, canManage, locked }: VisitExamTabProps) {
         await updateVisit(visit.id, { visitType });
       }
 
-      return upsertVisitExam(visit.id, { ...examValues, purpose: '' });
+      return upsertVisitExam(visit.id, examValues);
     },
     onSuccess: async () => {
       await Promise.all([
@@ -119,6 +120,20 @@ export function VisitExamTab({ visit, canManage, locked }: VisitExamTabProps) {
           />
         )}
       </div>
+      <Controller
+        control={control}
+        name="purpose"
+        render={({ field, fieldState }) => (
+          <Form.Item
+            label="Причина обращения"
+            extra="Кратко: с чем владелец обратился в клинику. Это поле отображается в истории болезни."
+            validateStatus={fieldState.error ? 'error' : undefined}
+            help={fieldState.error?.message}
+          >
+            <Input.TextArea rows={2} placeholder="Например: отказ от корма, хромота, вакцинация" {...field} />
+          </Form.Item>
+        )}
+      />
       <Controller
         control={control}
         name="anamnesis"
@@ -271,19 +286,13 @@ function getDefaultValues(visit: Visit): ExamInput {
     weightKg: nullToEmpty(visit.exam?.weightKg ? String(visit.exam.weightKg) : undefined),
     temperatureC: nullToEmpty(visit.exam?.temperatureC ? String(visit.exam.temperatureC) : undefined),
     visitType: visit.hospitalStay ? undefined : visit.visitType ?? 'PRIMARY',
-    anamnesis: mergeText(visit.exam?.purpose, visit.exam?.anamnesis),
+    purpose: nullToEmpty(visit.exam?.purpose),
+    anamnesis: nullToEmpty(visit.exam?.anamnesis),
     examination: nullToEmpty(visit.exam?.examination),
     symptoms: nullToEmpty(visit.exam?.symptoms),
     manipulations: nullToEmpty(visit.exam?.manipulations),
     comment: nullToEmpty(visit.exam?.comment),
   };
-}
-
-function mergeText(...values: Array<string | null | undefined>) {
-  return values
-    .map((value) => value?.trim())
-    .filter(Boolean)
-    .join('\n');
 }
 
 function optionalNumber(min: number, max: number) {

@@ -8,6 +8,7 @@ import { ListLaboratoryOrdersQueryDto } from './dto/list-laboratory-orders-query
 import { ListLaboratoryQueryDto } from './dto/list-laboratory-query.dto';
 import { UpdateLaboratoryOrderDto } from './dto/update-laboratory-order.dto';
 import { UpdateLaboratoryOrderItemDto } from './dto/update-laboratory-order-item.dto';
+import { UpdateLaboratoryOrderResultsDto } from './dto/update-laboratory-order-results.dto';
 import { UpdateLaboratoryProfileDto, UpsertLaboratoryProfileDto } from './dto/upsert-laboratory-profile.dto';
 import { UpdateLaboratoryTestDto, UpsertLaboratoryTestDto } from './dto/upsert-laboratory-test.dto';
 import { LaboratoryService } from './laboratory.service';
@@ -48,6 +49,17 @@ export class LaboratoryController {
     @CurrentEmployee() actor: AuthEmployee,
   ) {
     return this.laboratoryService.updateOrderItem(orderId, itemId, dto, actor.id);
+  }
+
+  @Patch('orders/:orderId/results')
+  @RequirePermissions('laboratory.manage')
+  @ApiOkResponse({ description: 'Laboratory result table updated atomically.' })
+  updateOrderResults(
+    @Param('orderId') orderId: string,
+    @Body() dto: UpdateLaboratoryOrderResultsDto,
+    @CurrentEmployee() actor: AuthEmployee,
+  ) {
+    return this.laboratoryService.updateOrderResults(orderId, dto, actor.id);
   }
 
   @Post('orders/:orderId/results/import')

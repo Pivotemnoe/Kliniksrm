@@ -74,11 +74,19 @@ test('директор может аудируемо исправлять кли
   ]);
 
   const editable = methodBody(visits, 'function ensureVisitEditable(', 'function ensureVisitBillItemEditable(');
+  const operational = methodBody(visits, 'function ensureVisitOperational(', 'function ensureVisitBillItemEditable(');
+  const restore = methodBody(visits, 'async restoreVisit(', 'async upsertExam(');
   const visitBill = methodBody(visits, 'private async getOrCreateVisitBill(', 'private async getVisitBillItem(');
   assert.ok(editable.indexOf("actor.roles.includes('director')") < editable.indexOf('VisitStatus.CANCELLED'));
+  assert.match(operational, /VisitStatus\.CANCELLED[\s\S]*Сначала верните приём в работу/);
+  assert.match(restore, /roles\.includes\('director'\)/);
+  assert.match(restore, /reopenCancelledVisitBill/);
+  assert.match(restore, /action: 'visit\.restore'/);
+  assert.match(restore, /reason/);
   assert.match(visitBill, /FOR UPDATE[\s\S]*ensureVisitBillItemEditable\(existingBill\)/);
   assert.match(visitPage, /employee\?\.roles\.includes\('director'\)[\s\S]*return false/);
-  assert.match(visitPage, /Приём отменён, но открыт директору для аудируемого исправления/);
+  assert.match(visitPage, /Вернуть в работу/);
+  assert.match(visitPage, /Клиническая карта доступна директору для аудируемого исправления/);
   assert.match(authGuard, /remoteDirectorMutation[\s\S]*remote_access\.director_write/);
 });
 

@@ -26,6 +26,7 @@ import { CreateVisitDiagnosisDto } from './dto/create-visit-diagnosis.dto';
 import { CreateVisitDto } from './dto/create-visit.dto';
 import { ListVisitsQueryDto } from './dto/list-visits-query.dto';
 import { ListVisitCatalogQueryDto } from './dto/list-visit-catalog-query.dto';
+import { RestoreVisitDto } from './dto/restore-visit.dto';
 import { UpdateVisitDiagnosisDto } from './dto/update-visit-diagnosis.dto';
 import { UpdateVisitLaboratoryItemDto } from './dto/update-visit-laboratory-item.dto';
 import { UpdateVisitServiceDto } from './dto/update-visit-service.dto';
@@ -236,6 +237,10 @@ export class VisitsService {
     const existing = await this.getExistingVisit(visitId);
     ensureVisitEditable(existing, actor);
 
+    if (existing.status === VisitStatus.CANCELLED && dto.status && dto.status !== VisitStatus.CANCELLED) {
+      throw new BadRequestException('Сначала верните отменённый приём в работу и укажите причину');
+    }
+
     if (dto.status === VisitStatus.COMPLETED) {
       await this.ensurePrimaryVisitDiagnosesReady({
         ...existing,
@@ -309,6 +314,39 @@ export class VisitsService {
     return this.setStatus(visitId, VisitStatus.CANCELLED, actor, 'visit.cancel');
   }
 
+  async restoreVisit(visitId: string, dto: RestoreVisitDto, actor: AuthEmployee) {
+    if (!actor.roles.includes('director')) {
+      throw new BadRequestException('Вернуть отменённый приём в работу может только директор');
+    }
+
+    const existing = await this.getExistingVisit(visitId);
+    if (existing.status !== VisitStatus.CANCELLED) {
+      throw new BadRequestException('В работу можно вернуть только отменённый приём');
+    }
+
+    const reason = dto.reason.trim();
+    const visit = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "Visit" WHERE "id" = ${visitId} FOR UPDATE`;
+      await this.reopenCancelledVisitBill(tx, visitId);
+      const updatedVisit = await tx.visit.update({
+        where: { id: visitId },
+        data: resolveVisitStatusData(VisitStatus.IN_PROGRESS, existing),
+      });
+      await this.syncVisitSourceStatus(tx, updatedVisit, VisitStatus.IN_PROGRESS);
+      return updatedVisit;
+    });
+
+    await this.auditService.log({
+      actorId: actor.id,
+      action: 'visit.restore',
+      entityType: 'Visit',
+      entityId: visit.id,
+      metadata: { previousStatus: VisitStatus.CANCELLED, status: VisitStatus.IN_PROGRESS, reason },
+    });
+
+    return this.getVisit(visit.id);
+  }
+
   async upsertExam(visitId: string, dto: UpsertVisitExamDto, actor: AuthEmployee) {
     const visit = await this.getExistingVisit(visitId);
     ensureVisitEditable(visit, actor);
@@ -363,6 +401,7 @@ export class VisitsService {
 
     await this.medicalPhrasesService.learnFromText(
       {
+        'visit.exam.purpose': dto.purpose,
         'visit.exam.anamnesis': dto.anamnesis,
         'visit.exam.examination': dto.examination,
         'visit.exam.symptoms': dto.symptoms,
@@ -496,6 +535,7 @@ export class VisitsService {
     const billItem = await this.prisma.$transaction(async (tx) => {
       const visit = await this.getVisitForBilling(tx, visitId);
       ensureVisitEditable(visit, actor);
+      ensureVisitOperational(visit);
       const bill = await this.getOrCreateVisitBill(tx, visit);
       const createdBillItem = await tx.billItem.create({
         data: {
@@ -532,6 +572,7 @@ export class VisitsService {
     const billItems = await this.prisma.$transaction(async (tx) => {
       const visit = await this.getVisitForBilling(tx, visitId);
       ensureVisitEditable(visit, actor);
+      ensureVisitOperational(visit);
       const bill = await this.getOrCreateVisitBill(tx, visit);
       const created = [];
       for (const serviceLine of serviceLines) {
@@ -572,6 +613,7 @@ export class VisitsService {
     const billItem = await this.prisma.$transaction(async (tx) => {
       const visit = await this.getVisitForBilling(tx, visitId);
       ensureVisitEditable(visit, actor);
+      ensureVisitOperational(visit);
       const existingBillItem = await this.getVisitBillItem(tx, visitId, billItemId);
       ensureVisitBillItemEditable(existingBillItem.bill);
       await this.restoreCurrentVisitProductWriteOff(tx, visitId, existingBillItem);
@@ -625,6 +667,7 @@ export class VisitsService {
     await this.prisma.$transaction(async (tx) => {
       const visit = await this.getVisitForBilling(tx, visitId);
       ensureVisitEditable(visit, actor);
+      ensureVisitOperational(visit);
       const billItem = await this.getVisitBillItem(tx, visitId, billItemId);
       ensureVisitBillItemEditable(billItem.bill);
       await this.restoreCurrentVisitProductWriteOff(tx, visitId, billItem);
@@ -679,6 +722,7 @@ export class VisitsService {
     const order = await this.prisma.$transaction(async (tx) => {
       const visit = await this.getVisitForBilling(tx, visitId);
       ensureVisitEditable(visit, actor);
+      ensureVisitOperational(visit);
       const bill = await this.getOrCreateVisitBill(tx, visit);
       const createdOrder = await tx.laboratoryOrder.create({
         data: {
@@ -759,6 +803,7 @@ export class VisitsService {
       }
 
       ensureVisitEditable(existingItem.order.visit, actor);
+      ensureVisitOperational(existingItem.order.visit);
 
       const updatedItem = await tx.laboratoryOrderItem.update({
         where: { id: itemId },
@@ -838,6 +883,10 @@ export class VisitsService {
   private async setStatus(visitId: string, status: VisitStatus, actor: AuthEmployee, action: string) {
     const existing = await this.getExistingVisit(visitId);
     ensureVisitEditable(existing, actor);
+
+    if (existing.status === VisitStatus.CANCELLED && status !== VisitStatus.CANCELLED) {
+      throw new BadRequestException('Сначала верните отменённый приём в работу и укажите причину');
+    }
 
     if (status === VisitStatus.COMPLETED) {
       await this.ensurePrimaryVisitDiagnosesReady(existing);
@@ -1101,6 +1150,22 @@ export class VisitsService {
       await this.restoreCurrentVisitProductWriteOff(tx, visitId, item);
     }
     await tx.bill.update({ where: { id: bill.id }, data: { status: PaymentStatus.CANCELLED } });
+  }
+
+  private async reopenCancelledVisitBill(tx: Prisma.TransactionClient, visitId: string) {
+    await tx.$queryRaw`SELECT "id" FROM "Bill" WHERE "visitId" = ${visitId} FOR UPDATE`;
+    const bill = await tx.bill.findUnique({
+      where: { visitId },
+      select: { id: true, status: true, totalAmount: true, paidAmount: true },
+    });
+    if (!bill || bill.status !== PaymentStatus.CANCELLED) return;
+    if (decimal(bill.paidAmount).greaterThan(0)) {
+      throw new BadRequestException('Сначала оформите возврат оплаты, затем возвращайте приём в работу');
+    }
+    await tx.bill.update({
+      where: { id: bill.id },
+      data: { status: resolvePaymentStatus(decimal(bill.totalAmount), decimal(bill.paidAmount)) },
+    });
   }
 
   private async restoreCurrentVisitProductWriteOff(
@@ -1674,6 +1739,12 @@ function ensureVisitEditable(visit: { status: VisitStatus; completedAt: Date | n
   }
 
   throw new BadRequestException('Завершённый приём можно редактировать только директору или в течение 30 минут после завершения');
+}
+
+function ensureVisitOperational(visit: { status: VisitStatus }) {
+  if (visit.status === VisitStatus.CANCELLED) {
+    throw new BadRequestException('Отменённый приём не создаёт начислений. Сначала верните приём в работу');
+  }
 }
 
 function ensureVisitBillItemEditable(bill: { status: PaymentStatus; paidAmount: Prisma.Decimal }) {

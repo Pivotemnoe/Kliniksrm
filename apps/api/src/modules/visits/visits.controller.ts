@@ -10,6 +10,7 @@ import { CreateVisitDiagnosisDto } from './dto/create-visit-diagnosis.dto';
 import { CreateVisitDto } from './dto/create-visit.dto';
 import { ListVisitsQueryDto } from './dto/list-visits-query.dto';
 import { ListVisitCatalogQueryDto } from './dto/list-visit-catalog-query.dto';
+import { RestoreVisitDto } from './dto/restore-visit.dto';
 import { UpdateVisitDiagnosisDto } from './dto/update-visit-diagnosis.dto';
 import { UpdateVisitLaboratoryItemDto } from './dto/update-visit-laboratory-item.dto';
 import { UpdateVisitServiceDto } from './dto/update-visit-service.dto';
@@ -77,6 +78,13 @@ export class VisitsController {
   @ApiOkResponse({ description: 'Clinical visit cancelled.' })
   cancelVisit(@Param('visitId') visitId: string, @CurrentEmployee() actor: AuthEmployee) {
     return this.visitsService.cancelVisit(visitId, actor);
+  }
+
+  @Post(':visitId/restore')
+  @RequirePermissions('visits.manage')
+  @ApiOkResponse({ description: 'Cancelled clinical visit restored to in-progress by a director.' })
+  restoreVisit(@Param('visitId') visitId: string, @Body() dto: RestoreVisitDto, @CurrentEmployee() actor: AuthEmployee) {
+    return this.visitsService.restoreVisit(visitId, dto, actor);
   }
 
   @Put(':visitId/exam')

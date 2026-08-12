@@ -1,7 +1,7 @@
-import { CheckCircleOutlined, EditOutlined, ExperimentOutlined, PlayCircleOutlined, PlusOutlined, PrinterOutlined, SearchOutlined } from '@ant-design/icons';
+import { CloseCircleOutlined, EditOutlined, ExperimentOutlined, PlayCircleOutlined, PlusOutlined, PrinterOutlined, SearchOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Alert, Button, Card, Drawer, Form, Input, Select, Space, Switch, Table, Tabs, Tag, Typography } from 'antd';
+import { App, Alert, Button, Card, Drawer, Form, Input, Popconfirm, Select, Space, Switch, Table, Tabs, Tag, Typography } from 'antd';
 import { ColumnsType } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
@@ -20,6 +20,7 @@ import type { OrganizationPrintProfile } from '../organization/types';
 import { formatDateTime } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
 import { formatServicePrice } from '../stock/service-pricing';
+import { cancelVisitLaboratoryOrder } from '../visits/visits.api';
 import {
   laboratoryOrderItemStatusLabels,
   laboratoryOrderStatusColors,
@@ -36,10 +37,11 @@ import {
   listLaboratoryTests,
   updateLaboratoryOrder,
   updateLaboratoryOrderItem,
+  updateLaboratoryOrderResults,
   updateLaboratoryProfile,
   updateLaboratoryTest,
 } from './laboratory.api';
-import { LaboratoryOrder, LaboratoryOrderInput, LaboratoryOrderItem, LaboratoryOrderItemInput, LaboratoryProfile, LaboratoryResources, LaboratoryTest } from './types';
+import { LaboratoryOrder, LaboratoryOrderInput, LaboratoryOrderItem, LaboratoryOrderItemInput, LaboratoryOrderResultRowInput, LaboratoryProfile, LaboratoryResources, LaboratoryTest } from './types';
 import { LaboratoryResultsImporter } from './LaboratoryResultsImporter';
 
 type OrderStatusFilter = VisitLaboratoryOrderStatus | 'ACTIVE';
@@ -94,6 +96,7 @@ export function LaboratoryPage() {
   const [fromDate, setFromDate] = useState(searchParams.get('from') ?? '');
   const [toDate, setToDate] = useState(searchParams.get('to') ?? '');
   const [selectedOrder, setSelectedOrder] = useState<LaboratoryOrder | null>(null);
+  const [tableOrder, setTableOrder] = useState<LaboratoryOrder | null>(null);
   const [editingItem, setEditingItem] = useState<{ order: LaboratoryOrder; item: LaboratoryOrderItem } | null>(null);
   const [editingTest, setEditingTest] = useState<LaboratoryTest | null>(null);
   const [editingProfile, setEditingProfile] = useState<LaboratoryProfile | null>(null);
@@ -224,6 +227,7 @@ export function LaboratoryPage() {
                   toDate={toDate}
                   canManage={canManage}
                   onOpenOrder={setSelectedOrder}
+                  onEditResults={setTableOrder}
                   onEditItem={(order, item) => setEditingItem({ order, item })}
                 />
               ),
@@ -277,8 +281,10 @@ export function LaboratoryPage() {
         canPrint={canPrintDocuments}
         organization={organizationQuery.data}
         onClose={() => setSelectedOrder(null)}
+        onEditResults={setTableOrder}
         onEditItem={(order, item) => setEditingItem({ order, item })}
       />
+      <ResultsTableDrawer order={tableOrder} canManage={canManage} onClose={() => setTableOrder(null)} />
       <ResultDrawer target={editingItem} canManage={canManage} onClose={() => setEditingItem(null)} />
     </div>
   );
@@ -362,6 +368,7 @@ function OrdersTable({
   toDate,
   canManage,
   onOpenOrder,
+  onEditResults,
   onEditItem,
 }: {
   search: string;
@@ -370,6 +377,7 @@ function OrdersTable({
   toDate?: string;
   canManage: boolean;
   onOpenOrder: (order: LaboratoryOrder) => void;
+  onEditResults: (order: LaboratoryOrder) => void;
   onEditItem: (order: LaboratoryOrder, item: LaboratoryOrderItem) => void;
 }) {
   const navigate = useNavigate();
@@ -396,6 +404,19 @@ function OrdersTable({
         queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
       ]);
       message.success('Статус лабораторного заказа обновлён');
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
+  const cancelMutation = useMutation({
+    mutationFn: (order: LaboratoryOrder) => cancelVisitLaboratoryOrder(order.visit.id, order.id),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['laboratory', 'orders'] }),
+        queryClient.invalidateQueries({ queryKey: ['visits'] }),
+        queryClient.invalidateQueries({ queryKey: ['bills'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+      ]);
+      message.success('Лабораторный заказ отменён, счёт пересчитан');
     },
     onError: (error) => message.error(getErrorMessage(error)),
   });
@@ -466,27 +487,35 @@ function OrdersTable({
                 В работу
               </Button>
             ) : null}
-            {canManage && order.status === 'IN_PROGRESS' ? (
-              <Button size="small" icon={<CheckCircleOutlined />} loading={statusMutation.isPending} onClick={() => statusMutation.mutate({ order, input: { status: 'COMPLETED' } })}>
-                Готово
-              </Button>
-            ) : null}
             <Button size="small" icon={<ExperimentOutlined />} onClick={() => onOpenOrder(order)}>
               Открыть
             </Button>
             <Button size="small" onClick={() => navigate(`/visits/${order.visit.id}`)}>
               Приём
             </Button>
-            {canManage && order.items.length === 1 ? (
-              <Button size="small" icon={<EditOutlined />} onClick={() => onEditItem(order, order.items[0])}>
-                Результат
+            {canManage && order.status !== 'CANCELLED' ? (
+              <Button size="small" icon={<EditOutlined />} onClick={() => onEditResults(order)}>
+                Заполнить таблицу
               </Button>
+            ) : null}
+            {canManage && order.status !== 'CANCELLED' ? (
+              <Popconfirm
+                title="Отменить лабораторный заказ?"
+                description="Связанное начисление будет отменено, счёт пересчитается."
+                okText="Отменить заказ"
+                cancelText="Назад"
+                onConfirm={() => cancelMutation.mutate(order)}
+              >
+                <Button danger size="small" icon={<CloseCircleOutlined />} loading={cancelMutation.isPending}>
+                  Отменить
+                </Button>
+              </Popconfirm>
             ) : null}
           </Space>
         ),
       },
     ],
-    [canManage, navigate, onEditItem, onOpenOrder, statusMutation],
+    [canManage, cancelMutation, navigate, onEditResults, onOpenOrder, statusMutation],
   );
 
   return (
@@ -511,6 +540,7 @@ function OrderDrawer({
   canPrint,
   organization,
   onClose,
+  onEditResults,
   onEditItem,
 }: {
   order: LaboratoryOrder | null;
@@ -518,9 +548,26 @@ function OrderDrawer({
   canPrint: boolean;
   organization?: OrganizationPrintProfile;
   onClose: () => void;
+  onEditResults: (order: LaboratoryOrder) => void;
   onEditItem: (order: LaboratoryOrder, item: LaboratoryOrderItem) => void;
 }) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { message } = App.useApp();
+  const cancelMutation = useMutation({
+    mutationFn: (currentOrder: LaboratoryOrder) => cancelVisitLaboratoryOrder(currentOrder.visit.id, currentOrder.id),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['laboratory', 'orders'] }),
+        queryClient.invalidateQueries({ queryKey: ['visits'] }),
+        queryClient.invalidateQueries({ queryKey: ['bills'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+      ]);
+      message.success('Лабораторный заказ отменён');
+      onClose();
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
   const columns = useMemo<ColumnsType<LaboratoryOrderItem>>(
     () => [
       {
@@ -584,8 +631,26 @@ function OrderDrawer({
                 </Button>
                 {canPrint ? (
                   <Button size="small" icon={<PrinterOutlined />} onClick={() => printLaboratoryOrder(order, organization)}>
-                    Печать бланка
+                    Печать A5
                   </Button>
+                ) : null}
+                {canManage && order.status !== 'CANCELLED' ? (
+                  <Button type="primary" size="small" icon={<EditOutlined />} onClick={() => onEditResults(order)}>
+                    Заполнить таблицу
+                  </Button>
+                ) : null}
+                {canManage && order.status !== 'CANCELLED' ? (
+                  <Popconfirm
+                    title="Отменить лабораторный заказ?"
+                    description="Связанное начисление будет отменено, счёт пересчитается."
+                    okText="Отменить заказ"
+                    cancelText="Назад"
+                    onConfirm={() => cancelMutation.mutate(order)}
+                  >
+                    <Button danger size="small" icon={<CloseCircleOutlined />} loading={cancelMutation.isPending}>
+                      Отменить
+                    </Button>
+                  </Popconfirm>
                 ) : null}
               </Space>
               {canManage && order.status !== 'CANCELLED' ? <LaboratoryResultsImporter order={order} /> : null}
@@ -679,6 +744,171 @@ function ResultDrawer({
           />
         </Card>
       ) : null}
+    </Drawer>
+  );
+}
+
+type ResultTableRow = LaboratoryOrderResultRowInput & {
+  title: string;
+  code: string | null;
+  disabled: boolean;
+};
+
+function ResultsTableDrawer({
+  order,
+  canManage,
+  onClose,
+}: {
+  order: LaboratoryOrder | null;
+  canManage: boolean;
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const { message } = App.useApp();
+  const [rows, setRows] = useState<ResultTableRow[]>([]);
+  const mutation = useMutation({
+    mutationFn: (items: LaboratoryOrderResultRowInput[]) => updateLaboratoryOrderResults(order!.id, items),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['laboratory', 'orders'] }),
+        queryClient.invalidateQueries({ queryKey: ['visits'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+      ]);
+      message.success('Таблица результатов сохранена');
+      onClose();
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
+
+  useEffect(() => {
+    setRows(
+      order?.items.map((item) => ({
+        itemId: item.id,
+        title: item.title,
+        code: item.code,
+        status: item.status,
+        resultValue: item.resultValue ?? '',
+        resultText: item.resultText ?? '',
+        unit: item.unit ?? '',
+        referenceRange: item.referenceRange ?? '',
+        comment: item.comment ?? '',
+        disabled: item.status === 'CANCELLED',
+      })) ?? [],
+    );
+  }, [order]);
+
+  function updateRow(itemId: string, patch: Partial<ResultTableRow>) {
+    setRows((current) => current.map((row) => (row.itemId === itemId ? { ...row, ...patch } : row)));
+  }
+
+  const columns = useMemo<ColumnsType<ResultTableRow>>(
+    () => [
+      {
+        title: 'Показатель',
+        key: 'indicator',
+        width: 220,
+        render: (_, row) => (
+          <Space direction="vertical" size={0}>
+            <Typography.Text strong>{row.title}</Typography.Text>
+            {row.code ? <Typography.Text type="secondary">{row.code}</Typography.Text> : null}
+          </Space>
+        ),
+      },
+      {
+        title: 'Значение',
+        dataIndex: 'resultValue',
+        key: 'resultValue',
+        width: 145,
+        render: (value, row) => (
+          <Input
+            value={value ?? ''}
+            disabled={row.disabled}
+            aria-label={`Значение ${row.title}`}
+            onChange={(event) =>
+              updateRow(row.itemId, {
+                resultValue: event.target.value,
+                ...(event.target.value.trim() && row.status === 'ORDERED' ? { status: 'COMPLETED' } : {}),
+              })
+            }
+          />
+        ),
+      },
+      {
+        title: 'Ед.',
+        dataIndex: 'unit',
+        key: 'unit',
+        width: 110,
+        render: (value, row) => <Input value={value ?? ''} disabled={row.disabled} onChange={(event) => updateRow(row.itemId, { unit: event.target.value })} />,
+      },
+      {
+        title: 'Референс',
+        dataIndex: 'referenceRange',
+        key: 'referenceRange',
+        width: 230,
+        render: (value, row) => <Input value={value ?? ''} disabled={row.disabled} onChange={(event) => updateRow(row.itemId, { referenceRange: event.target.value })} />,
+      },
+      {
+        title: 'Комментарий',
+        dataIndex: 'comment',
+        key: 'comment',
+        width: 210,
+        render: (value, row) => <Input value={value ?? ''} disabled={row.disabled} onChange={(event) => updateRow(row.itemId, { comment: event.target.value })} />,
+      },
+      {
+        title: 'Статус',
+        dataIndex: 'status',
+        key: 'status',
+        width: 155,
+        render: (value, row) => (
+          <Select
+            value={value}
+            disabled={row.disabled}
+            className="full-width"
+            onChange={(status) => updateRow(row.itemId, { status })}
+            options={Object.entries(laboratoryOrderItemStatusLabels)
+              .filter(([status]) => status !== 'CANCELLED')
+              .map(([status, label]) => ({ value: status, label }))}
+          />
+        ),
+      },
+    ],
+    [],
+  );
+
+  return (
+    <Drawer
+      title={order ? `Результаты: ${order.visit.animal.nickname}` : 'Таблица результатов'}
+      open={Boolean(order)}
+      onClose={onClose}
+      width="min(1280px, 96vw)"
+      destroyOnHidden
+      extra={
+        <Button
+          type="primary"
+          loading={mutation.isPending}
+          disabled={!canManage || !rows.some((row) => !row.disabled)}
+          onClick={() => mutation.mutate(rows.map(({ title: _title, code: _code, disabled: _disabled, ...row }) => row))}
+        >
+          Сохранить всю таблицу
+        </Button>
+      }
+    >
+      <Alert
+        type="info"
+        showIcon
+        className="form-alert"
+        message="Введите результаты прямо в строки показателей"
+        description="При вводе значения строка автоматически становится готовой. Можно скорректировать единицы, референс и статус до общего сохранения. Вся таблица сохраняется одной операцией."
+      />
+      {mutation.isError ? <Alert type="error" showIcon message={getErrorMessage(mutation.error)} className="form-alert" /> : null}
+      <Table<ResultTableRow>
+        rowKey="itemId"
+        columns={columns}
+        dataSource={rows}
+        pagination={false}
+        className="dense-table laboratory-result-grid"
+        scroll={{ x: 1070, y: 'calc(100vh - 250px)' }}
+      />
     </Drawer>
   );
 }
@@ -1133,7 +1363,7 @@ function toDateInput(value: Date) {
 }
 
 function printLaboratoryOrder(order: LaboratoryOrder, organization?: OrganizationPrintProfile) {
-  const printWindow = window.open('', '_blank', 'width=1000,height=760');
+  const printWindow = window.open('', '_blank', 'width=760,height=900');
   if (!printWindow) {
     return;
   }
@@ -1165,29 +1395,29 @@ function printLaboratoryOrder(order: LaboratoryOrder, organization?: Organizatio
   <title>${escapeLaboratoryPrintHtml(`Лабораторный бланк — ${order.visit.animal.nickname}`)}</title>
   <style>
     * { box-sizing: border-box; }
-    body { margin: 0; color: #142033; background: #fff; font: 14px/1.45 Arial, sans-serif; }
-    .page { width: 100%; max-width: 900px; margin: 0 auto; padding: 30px 36px 42px; }
-    .header { display: grid; grid-template-columns: 78px 1fr; gap: 18px; align-items: center; padding-bottom: 16px; border-bottom: 2px solid #21848d; }
-    .logo { width: 74px; height: 74px; object-fit: contain; }
-    .brand { font-size: 23px; font-weight: 700; color: #153958; }
-    .contacts { color: #637184; font-size: 12px; }
-    h1 { margin: 24px 0 16px; color: #153958; font-size: 24px; line-height: 1.2; }
-    .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 28px; margin-bottom: 20px; padding: 14px 16px; border: 1px solid #ccd7df; border-radius: 8px; }
-    .meta div { display: grid; grid-template-columns: 100px 1fr; gap: 8px; }
+    body { margin: 0; color: #142033; background: #fff; font: 9px/1.28 Arial, sans-serif; }
+    .page { width: 148mm; min-height: 210mm; margin: 0 auto; padding: 7mm; }
+    .header { display: grid; grid-template-columns: 16mm 1fr; gap: 4mm; align-items: center; padding-bottom: 3mm; border-bottom: 1.5px solid #21848d; }
+    .logo { width: 15mm; height: 15mm; object-fit: contain; }
+    .brand { font-size: 15px; font-weight: 700; color: #153958; }
+    .contacts { color: #637184; font-size: 8px; }
+    h1 { margin: 4mm 0 3mm; color: #153958; font-size: 15px; line-height: 1.15; }
+    .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5mm 4mm; margin-bottom: 3mm; padding: 2.5mm; border: 1px solid #ccd7df; border-radius: 2mm; }
+    .meta div { display: grid; grid-template-columns: 20mm 1fr; gap: 1mm; }
     .meta span { color: #6b7888; }
-    .comment { margin: 0 0 18px; padding: 10px 12px; border-left: 3px solid #21848d; background: #f4f8fa; white-space: pre-wrap; }
-    table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12px; }
-    th, td { padding: 7px 8px; border: 1px solid #9eabb7; text-align: left; vertical-align: top; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .comment { margin: 0 0 3mm; padding: 2mm; border-left: 2px solid #21848d; background: #f4f8fa; white-space: pre-wrap; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 7.4px; line-height: 1.18; }
+    th, td { padding: 1.2mm 1mm; border: .6px solid #9eabb7; text-align: left; vertical-align: top; overflow-wrap: anywhere; white-space: pre-wrap; }
     th { background: #eaf3f5; color: #153958; font-weight: 700; }
     th:nth-child(1) { width: 27%; }
     th:nth-child(2) { width: 22%; }
     th:nth-child(3) { width: 10%; }
     th:nth-child(4) { width: 20%; }
     th:nth-child(5) { width: 21%; }
-    small { color: #6b7888; }
-    .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 46px; }
-    .signature { padding-top: 26px; border-top: 1px solid #64748b; color: #64748b; font-size: 12px; }
-    @page { size: A4 portrait; margin: 14mm; }
+    small { color: #6b7888; font-size: 6.8px; }
+    .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 10mm; margin-top: 8mm; }
+    .signature { padding-top: 5mm; border-top: 1px solid #64748b; color: #64748b; font-size: 7.5px; }
+    @page { size: A5 portrait; margin: 0; }
     @media print { .page { max-width: none; padding: 0; } tr { break-inside: avoid; } }
   </style>
 </head>

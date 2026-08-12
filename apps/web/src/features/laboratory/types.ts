@@ -149,6 +149,10 @@ export type LaboratoryOrderItemInput = {
   comment?: string | null;
 };
 
+export type LaboratoryOrderResultRowInput = LaboratoryOrderItemInput & {
+  itemId: string;
+};
+
 export type LaboratoryOrderInput = {
   status?: VisitLaboratoryOrderStatus;
   comment?: string | null;

@@ -51,6 +51,28 @@ test('лабораторные результаты проходят предп�
   assert.match(page, /LaboratoryResultsImporter/);
 });
 
+test('лабораторный журнал поддерживает атомарную таблицу, отмену и структурный профиль из 16 показателей', async () => {
+  const [controller, service, page, api, migration] = await Promise.all([
+    read('apps/api/src/modules/laboratory/laboratory.controller.ts'),
+    read('apps/api/src/modules/laboratory/laboratory.service.ts'),
+    read('apps/web/src/features/laboratory/LaboratoryPage.tsx'),
+    read('apps/web/src/features/laboratory/laboratory.api.ts'),
+    read('prisma/migrations/20260812000400_laboratory_green_disk_results/migration.sql'),
+  ]);
+
+  assert.match(controller, /@Patch\('orders\/:orderId\/results'\)/);
+  assert.match(service, /laboratory\.results_table\.update/);
+  assert.match(service, /Сначала заполните результаты всех показателей/);
+  assert.match(service, /Отменённый приём не принимает результаты/);
+  assert.match(api, /updateLaboratoryOrderResults/);
+  assert.match(page, /Заполнить таблицу/);
+  assert.match(page, /cancelVisitLaboratoryOrder/);
+  assert.match(page, /Сохранить всю таблицу/);
+  assert.match(page, /@page \{ size: A5 portrait; margin: 0; \}/);
+  assert.equal((migration.match(/'7b8a6101-7b61-4c20-9101-0000000000\d{2}'/g) ?? []).length >= 32, true);
+  assert.doesNotMatch(migration, /DELETE FROM "LaboratoryOrder|TRUNCATE|DROP TABLE/i);
+});
+
 test('загрузчик накладной автоматически сопоставляет товары и не проводит проблемные строки', async () => {
   const [importer, page, stockService] = await Promise.all([
     read('apps/web/src/features/stock/SupplyInvoiceImporter.tsx'),

@@ -51,7 +51,8 @@ export function VisitLaboratoryTab({ visit, canManage, locked }: { visit: Visit;
   const queryClient = useQueryClient();
   const [orderOpen, setOrderOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<{ order: VisitLaboratoryOrder; item: VisitLaboratoryOrderItem } | null>(null);
-  const disabled = locked || !canManage;
+  const visitCancelled = visit.status === 'CANCELLED';
+  const disabled = locked || !canManage || visitCancelled;
   const cancelMutation = useMutation({
     mutationFn: (orderId: string) => cancelVisitLaboratoryOrder(visit.id, orderId),
     onSuccess: async () => invalidateVisit(queryClient, visit.id),
@@ -100,6 +101,9 @@ export function VisitLaboratoryTab({ visit, canManage, locked }: { visit: Visit;
   return (
     <Space direction="vertical" size={16} className="full-width">
       {locked ? <Alert type="info" showIcon message="Редактирование закрыто: отменённый приём нельзя менять, завершённый доступен директору или в течение 30 минут после завершения." /> : null}
+      {visitCancelled ? (
+        <Alert type="warning" showIcon message="Лаборатория отменённого приёма защищена. Директор должен сначала нажать «Вернуть в работу» и указать причину." />
+      ) : null}
       {cancelMutation.isError ? <Alert type="error" showIcon message={getErrorMessage(cancelMutation.error)} /> : null}
       <div className="toolbar-row">
         <Space direction="vertical" size={0}>

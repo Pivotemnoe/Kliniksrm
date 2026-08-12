@@ -149,7 +149,7 @@ function HistoryDetails({ visit }: { visit: Visit }) {
     <Space direction="vertical" size={18} className="full-width">
       <HistorySection title="Лист осмотра">
         <Descriptions bordered column={1}>
-          <Descriptions.Item label="Цель визита">{visit.exam?.purpose || '—'}</Descriptions.Item>
+          <Descriptions.Item label="Причина обращения">{visit.exam?.purpose || '—'}</Descriptions.Item>
           <Descriptions.Item label="Анамнез">{visit.exam?.anamnesis || '—'}</Descriptions.Item>
           <Descriptions.Item label="Осмотр">{visit.exam?.examination || '—'}</Descriptions.Item>
           <Descriptions.Item label="Симптомы">{visit.exam?.symptoms || '—'}</Descriptions.Item>

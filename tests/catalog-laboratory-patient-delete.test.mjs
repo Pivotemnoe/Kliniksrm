@@ -60,7 +60,9 @@ test('лабораторный бланк редактируется как та
   assert.match(organizationController, /@Get\('print-profile'\)/);
   assert.match(organizationController, /@Get\('print-logo'\)/);
   assert.match(organizationController, /@RequireAnyPermissions\('settings\.read', 'documents\.print'\)/);
-  assert.match(laboratoryPage, /Печать бланка/);
+  assert.match(laboratoryPage, /Печать A5/);
+  assert.match(laboratoryPage, /@page \{ size: A5 portrait; margin: 0; \}/);
+  assert.match(laboratoryPage, /Сохранить всю таблицу/);
   assert.match(laboratoryPage, /Результаты лабораторного исследования/);
   assert.match(laboratoryPage, /order\.visit\.owner\.fullName/);
   assert.match(laboratoryPage, /order\.visit\.animal\.nickname/);

@@ -1,6 +1,6 @@
-import { CheckOutlined, CloseOutlined, FileTextOutlined, HomeOutlined, LeftOutlined, PlayCircleOutlined, PrinterOutlined } from '@ant-design/icons';
+import { CheckOutlined, CloseOutlined, FileTextOutlined, HomeOutlined, LeftOutlined, PlayCircleOutlined, PrinterOutlined, UndoOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Card, Descriptions, Modal, Select, Space, Tabs, Tag, Typography } from 'antd';
+import { Alert, App, Button, Card, Descriptions, Input, Modal, Select, Space, Tabs, Tag, Typography } from 'antd';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -22,7 +22,7 @@ import { VisitHistoryTab } from './VisitHistoryTab';
 import { VisitLaboratoryTab } from './VisitLaboratoryTab';
 import { VisitRecommendationTab } from './VisitRecommendationTab';
 import { VisitServicesTab } from './VisitServicesTab';
-import { cancelVisit, completeVisit, getVisit, startVisit } from './visits.api';
+import { cancelVisit, completeVisit, getVisit, restoreVisit, startVisit } from './visits.api';
 import { Visit, visitStatusColors, visitStatusLabels, visitTypeLabels } from './types';
 import { printVisitRecommendation, printVisitSheet } from './visitPrint';
 
@@ -36,8 +36,11 @@ export function VisitCardPage() {
   const canReadBilling = hasPermission(auth?.employee, 'billing.read');
   const canReadHospital = hasPermission(auth?.employee, 'hospital.read');
   const canManageHospital = hasPermission(auth?.employee, 'hospital.manage');
+  const isDirector = Boolean(auth?.employee.roles.includes('director'));
   const [hospitalModalOpen, setHospitalModalOpen] = useState(false);
   const [hospitalBoxId, setHospitalBoxId] = useState<string>();
+  const [restoreModalOpen, setRestoreModalOpen] = useState(false);
+  const [restoreReason, setRestoreReason] = useState('');
   const visitQuery = useQuery({
     queryKey: ['visits', visitId],
     queryFn: () => getVisit(visitId!),
@@ -84,6 +87,22 @@ export function VisitCardPage() {
         queryClient.invalidateQueries({ queryKey: ['queue'] }),
       ]);
       message.success('Статус приёма обновлён');
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
+  const restoreMutation = useMutation({
+    mutationFn: () => restoreVisit(visitId!, restoreReason.trim()),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['visits', visitId] }),
+        queryClient.invalidateQueries({ queryKey: ['visits'] }),
+        queryClient.invalidateQueries({ queryKey: ['bills'] }),
+        queryClient.invalidateQueries({ queryKey: ['laboratory', 'orders'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+      ]);
+      setRestoreModalOpen(false);
+      setRestoreReason('');
+      message.success('Приём возвращён в работу');
     },
     onError: (error) => message.error(getErrorMessage(error)),
   });
@@ -156,6 +175,11 @@ export function VisitCardPage() {
             {visit.status === 'DRAFT' || visit.status === 'IN_PROGRESS' ? (
               <Button danger icon={<CloseOutlined />} loading={actionMutation.isPending} onClick={() => actionMutation.mutate('cancel')}>
                 Отменить
+              </Button>
+            ) : null}
+            {visit.status === 'CANCELLED' && isDirector ? (
+              <Button icon={<UndoOutlined />} onClick={() => setRestoreModalOpen(true)}>
+                Вернуть в работу
               </Button>
             ) : null}
           </Space>
@@ -345,6 +369,11 @@ export function VisitCardPage() {
                     Отменить
                   </Button>
                 ) : null}
+                {visit.status === 'CANCELLED' && isDirector ? (
+                  <Button icon={<UndoOutlined />} onClick={() => setRestoreModalOpen(true)}>
+                    Вернуть в работу
+                  </Button>
+                ) : null}
               </Space>
             </div>
           </div>
@@ -422,6 +451,36 @@ export function VisitCardPage() {
           ) : null}
         </div>
       </main>
+      <Modal
+        title="Вернуть отменённый приём в работу"
+        open={restoreModalOpen}
+        okText="Вернуть в работу"
+        cancelText="Отмена"
+        confirmLoading={restoreMutation.isPending}
+        okButtonProps={{ disabled: restoreReason.trim().length < 3 }}
+        onCancel={() => {
+          setRestoreModalOpen(false);
+          setRestoreReason('');
+        }}
+        onOk={() => restoreMutation.mutate()}
+      >
+        <Alert
+          type="warning"
+          showIcon
+          className="form-alert"
+          message="После восстановления снова можно менять финансовые позиции и лабораторные назначения"
+          description="Действие и указанная причина сохранятся в аудите. Существующий отменённый счёт будет открыт повторно только если по нему не было оплаты."
+        />
+        <Typography.Paragraph>Укажите причину восстановления:</Typography.Paragraph>
+        <Input.TextArea
+          rows={3}
+          value={restoreReason}
+          maxLength={500}
+          showCount
+          placeholder="Например: приём отменили ошибочно"
+          onChange={(event) => setRestoreReason(event.target.value)}
+        />
+      </Modal>
       <Modal
         title="Поместить пациента в стационар"
         open={hospitalModalOpen}
@@ -524,7 +583,7 @@ function getCompletedEditNotice(visit: Visit, employee: Employee | undefined, lo
 
   if (employee?.roles.includes('director')) {
     return visit.status === 'CANCELLED'
-      ? 'Приём отменён, но открыт директору для аудируемого исправления.'
+      ? 'Приём отменён. Клиническая карта доступна директору для аудируемого исправления; товары, услуги и лаборатория — только после действия «Вернуть в работу».'
       : 'Приём завершён, но открыт директору для аудируемого исправления.';
   }
 

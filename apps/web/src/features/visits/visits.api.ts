@@ -60,6 +60,13 @@ export function cancelVisit(visitId: string) {
   return apiRequest<Visit>(`/v1/visits/${visitId}/cancel`, { method: 'POST' });
 }
 
+export function restoreVisit(visitId: string, reason: string) {
+  return apiRequest<Visit>(`/v1/visits/${visitId}/restore`, {
+    method: 'POST',
+    body: { reason },
+  });
+}
+
 export function upsertVisitExam(visitId: string, input: VisitExamInput) {
   return apiRequest<VisitExam>(`/v1/visits/${visitId}/exam`, {
     method: 'PUT',

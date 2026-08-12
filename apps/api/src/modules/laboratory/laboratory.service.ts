@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { LaboratoryOrderItemStatus, LaboratoryOrderStatus, Prisma } from '@prisma/client';
+import { LaboratoryOrderItemStatus, LaboratoryOrderStatus, Prisma, VisitStatus } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
 import { PrismaService } from '../../prisma/prisma.service';
 import { servicePricingSelect } from '../stock/service-pricing';
@@ -9,6 +9,7 @@ import { ListLaboratoryOrdersQueryDto } from './dto/list-laboratory-orders-query
 import { ListLaboratoryQueryDto } from './dto/list-laboratory-query.dto';
 import { UpdateLaboratoryOrderDto } from './dto/update-laboratory-order.dto';
 import { UpdateLaboratoryOrderItemDto } from './dto/update-laboratory-order-item.dto';
+import { UpdateLaboratoryOrderResultsDto, UpdateLaboratoryOrderResultRowDto } from './dto/update-laboratory-order-results.dto';
 import { UpdateLaboratoryProfileDto, UpsertLaboratoryProfileDto } from './dto/upsert-laboratory-profile.dto';
 import { UpdateLaboratoryTestDto, UpsertLaboratoryTestDto } from './dto/upsert-laboratory-test.dto';
 
@@ -53,7 +54,10 @@ export class LaboratoryService {
   async updateOrder(orderId: string, dto: UpdateLaboratoryOrderDto, actorId: string) {
     const existingOrder = await this.prisma.laboratoryOrder.findUnique({
       where: { id: orderId },
-      include: { items: { select: { id: true, status: true } } },
+      include: {
+        visit: { select: { status: true } },
+        items: { select: { id: true, status: true, resultValue: true, resultText: true, _count: { select: { files: true } } } },
+      },
     });
 
     if (!existingOrder) {
@@ -63,9 +67,16 @@ export class LaboratoryService {
     if (existingOrder.status === LaboratoryOrderStatus.CANCELLED) {
       throw new BadRequestException('Отменённый лабораторный заказ нельзя менять');
     }
+    ensureLaboratoryVisitOperational(existingOrder.visit);
 
     if (dto.status === LaboratoryOrderStatus.CANCELLED) {
       throw new BadRequestException('Отменяйте лабораторный заказ из карточки приёма, чтобы корректно пересчитать счёт');
+    }
+    if (
+      dto.status === LaboratoryOrderStatus.COMPLETED &&
+      existingOrder.items.some((item) => !clean(item.resultValue) && !clean(item.resultText) && item._count.files === 0)
+    ) {
+      throw new BadRequestException('Сначала заполните результаты всех показателей или приложите бланк');
     }
 
     const updatedOrder = await this.prisma.$transaction(async (tx) => {
@@ -106,7 +117,7 @@ export class LaboratoryService {
   async updateOrderItem(orderId: string, itemId: string, dto: UpdateLaboratoryOrderItemDto, actorId: string) {
     const existingItem = await this.prisma.laboratoryOrderItem.findFirst({
       where: { id: itemId, orderId },
-      include: { order: { select: { id: true, status: true } } },
+      include: { order: { select: { id: true, status: true, visit: { select: { status: true } } } }, files: { select: { id: true } } },
     });
 
     if (!existingItem) {
@@ -116,6 +127,8 @@ export class LaboratoryService {
     if (existingItem.order.status === LaboratoryOrderStatus.CANCELLED) {
       throw new BadRequestException('Отменённый лабораторный заказ нельзя менять');
     }
+    ensureLaboratoryVisitOperational(existingItem.order.visit);
+    assertCompletedLaboratoryResult(dto, existingItem, existingItem.files.length > 0);
 
     const updatedItem = await this.prisma.$transaction(async (tx) => {
       const item = await tx.laboratoryOrderItem.update({
@@ -149,12 +162,60 @@ export class LaboratoryService {
     return updatedItem;
   }
 
+  async updateOrderResults(orderId: string, dto: UpdateLaboratoryOrderResultsDto, actorId: string) {
+    const uniqueItemIds = [...new Set(dto.items.map((item) => item.itemId))];
+    if (uniqueItemIds.length !== dto.items.length) {
+      throw new BadRequestException('Каждый показатель должен встречаться в таблице один раз');
+    }
+
+    const order = await this.prisma.laboratoryOrder.findUnique({
+      where: { id: orderId },
+      include: {
+        visit: { select: { status: true } },
+        items: { include: { files: { select: { id: true } } } },
+      },
+    });
+    if (!order) throw new NotFoundException('Лабораторный заказ не найден');
+    if (order.status === LaboratoryOrderStatus.CANCELLED) {
+      throw new BadRequestException('Отменённый лабораторный заказ нельзя менять');
+    }
+    ensureLaboratoryVisitOperational(order.visit);
+
+    const existingById = new Map(order.items.map((item) => [item.id, item]));
+    for (const row of dto.items) {
+      const existing = existingById.get(row.itemId);
+      if (!existing) throw new BadRequestException('Один из показателей не принадлежит выбранному заказу');
+      assertCompletedLaboratoryResult(row, existing, existing.files.length > 0);
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const row of dto.items) {
+        await tx.laboratoryOrderItem.update({
+          where: { id: row.itemId },
+          data: toLaboratoryResultUpdate(row),
+        });
+      }
+      await syncLaboratoryOrderStatus(tx, orderId);
+    });
+
+    await this.auditService.log({
+      actorId,
+      action: 'laboratory.results_table.update',
+      entityType: 'LaboratoryOrder',
+      entityId: orderId,
+      metadata: { itemIds: uniqueItemIds, rows: uniqueItemIds.length },
+    });
+
+    return this.prisma.laboratoryOrder.findUniqueOrThrow({ where: { id: orderId }, include: laboratoryOrderInclude });
+  }
+
   async importResults(orderId: string, dto: ImportLaboratoryResultsDto, actorId: string) {
     const order = await this.prisma.laboratoryOrder.findUnique({
       where: { id: orderId },
       select: {
         id: true,
         status: true,
+        visit: { select: { status: true } },
         items: { select: { id: true, title: true, code: true, status: true } },
       },
     });
@@ -162,6 +223,7 @@ export class LaboratoryService {
     if (order.status === LaboratoryOrderStatus.CANCELLED) {
       throw new BadRequestException('В отменённый лабораторный заказ нельзя загружать результаты');
     }
+    ensureLaboratoryVisitOperational(order.visit);
 
     const matchedIds = new Set<string>();
     const rows = dto.rows.map((row) => matchImportRow(row, order.items, matchedIds));
@@ -557,6 +619,38 @@ const laboratoryOrderInclude = {
 function clean(value?: string | null) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
+}
+
+function ensureLaboratoryVisitOperational(visit: { status: VisitStatus }) {
+  if (visit.status === VisitStatus.CANCELLED) {
+    throw new BadRequestException('Отменённый приём не принимает результаты. Сначала верните приём в работу');
+  }
+}
+
+function assertCompletedLaboratoryResult(
+  dto: Pick<UpdateLaboratoryOrderResultRowDto, 'status' | 'resultValue' | 'resultText'>,
+  existing: { resultValue: string | null; resultText: string | null },
+  hasFile: boolean,
+) {
+  if (dto.status !== LaboratoryOrderItemStatus.COMPLETED) return;
+  const resultValue = dto.resultValue !== undefined ? clean(dto.resultValue) : clean(existing.resultValue);
+  const resultText = dto.resultText !== undefined ? clean(dto.resultText) : clean(existing.resultText);
+  if (!resultValue && !resultText && !hasFile) {
+    throw new BadRequestException('Для готового показателя укажите значение, текст результата или приложите файл');
+  }
+}
+
+function toLaboratoryResultUpdate(row: UpdateLaboratoryOrderResultRowDto): Prisma.LaboratoryOrderItemUpdateInput {
+  return {
+    ...(row.status !== undefined ? { status: row.status } : {}),
+    ...(row.resultValue !== undefined ? { resultValue: clean(row.resultValue) } : {}),
+    ...(row.resultText !== undefined ? { resultText: clean(row.resultText) } : {}),
+    ...(row.unit !== undefined ? { unit: clean(row.unit) } : {}),
+    ...(row.referenceRange !== undefined ? { referenceRange: clean(row.referenceRange) } : {}),
+    ...(row.comment !== undefined ? { comment: clean(row.comment) } : {}),
+    ...(row.status === LaboratoryOrderItemStatus.COMPLETED ? { completedAt: new Date() } : {}),
+    ...(row.status !== undefined && row.status !== LaboratoryOrderItemStatus.COMPLETED ? { completedAt: null } : {}),
+  };
 }
 
 type LaboratoryImportItem = {
