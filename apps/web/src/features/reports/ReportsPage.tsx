@@ -13,7 +13,7 @@ import { formatDate } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
 import { exportReportToExcel, printReportAsPdf } from './reportExport';
 import { getClinicReport } from './reports.api';
-import { ClinicReport, ReportSalesRow, ReportVaccinationItem } from './types';
+import { ClinicReport, ReportAdministeredVaccinationItem, ReportIdentifiedAnimal, ReportSalesRow, ReportVaccinationItem } from './types';
 
 export function ReportsPage() {
   const initialRange = useMemo(currentMonthRange, []);
@@ -272,17 +272,49 @@ function VaccinationsReport({ report }: { report: ClinicReport }) {
       <Card title="Итоги вакцинаций">
         <div className="report-summary-list">
           <SummaryRow label="Проведено за период" value={report.vaccinations.administered} />
+          <SummaryRow label="Против бешенства" value={report.vaccinations.rabiesItems.length} />
+          <SummaryRow label="Идентифицировано животных" value={report.vaccinations.identifiedAnimals.length} />
           <SummaryRow label="Предстоит в ближайшие 30 дней" value={report.vaccinations.upcoming} />
           <SummaryRow label="Просрочено" value={report.vaccinations.overdue} danger={report.vaccinations.overdue > 0} />
         </div>
         <Space wrap className="report-tags">
           {report.vaccinations.administeredByTitle.map((item) => <Tag key={item.title}>{item.title}: {item.count}</Tag>)}
         </Space>
+        <Space wrap className="report-tags">
+          {report.vaccinations.administeredBySpecies.map((item) => <Tag color="blue" key={item.species}>{item.species}: {item.count}</Tag>)}
+        </Space>
       </Card>
+      <AdministeredVaccinationTable title="Все проведённые вакцинации" items={report.vaccinations.administeredItems} wide />
+      <AdministeredVaccinationTable title="Вакцинации против бешенства" items={report.vaccinations.rabiesItems} wide />
+      <IdentifiedAnimalsTable items={report.vaccinations.identifiedAnimals} />
       <VaccinationTable title="Предстоящие" items={report.vaccinations.upcomingItems} />
       <VaccinationTable title="Просроченные" items={report.vaccinations.overdueItems} wide danger />
     </div>
   );
+}
+
+function AdministeredVaccinationTable({ title, items, wide = false }: { title: string; items: ReportAdministeredVaccinationItem[]; wide?: boolean }) {
+  return <Card title={title} className={wide ? 'report-wide-card' : undefined}><ProgressiveTable rowKey="id" size="small" dataSource={items} locale={{ emptyText: 'Список пуст' }} columns={[
+    { title: 'Дата', dataIndex: 'vaccinatedAt', render: formatDate },
+    { title: 'Вакцина', dataIndex: 'title' },
+    { title: 'Вид', render: (_, item) => textOrDash(item.animal.species) },
+    { title: 'Пациент', render: (_, item) => item.animal.nickname },
+    { title: 'Владелец', render: (_, item) => item.animal.owner.fullName },
+    { title: 'Телефон', render: (_, item) => textOrDash(item.animal.owner.phone) },
+    { title: 'Серия / партия', render: (_, item) => [item.vaccineSeries, item.vaccineBatch].filter(Boolean).join(' / ') || '—' },
+    { title: 'Микрочип', render: (_, item) => textOrDash(item.animal.microchip) },
+  ]} /></Card>;
+}
+
+function IdentifiedAnimalsTable({ items }: { items: ReportIdentifiedAnimal[] }) {
+  return <Card title="Идентифицированные животные" className="report-wide-card"><ProgressiveTable rowKey="id" size="small" dataSource={items} locale={{ emptyText: 'Идентифицированных животных нет' }} columns={[
+    { title: 'Микрочип', dataIndex: 'microchip' },
+    { title: 'Пациент', dataIndex: 'nickname' },
+    { title: 'Вид', dataIndex: 'species', render: textOrDash },
+    { title: 'Порода', dataIndex: 'breed', render: textOrDash },
+    { title: 'Владелец', render: (_, item) => item.owner.fullName },
+    { title: 'Телефон', render: (_, item) => textOrDash(item.owner.phone) },
+  ]} /></Card>;
 }
 
 function VaccinationTable({ title, items, wide = false, danger = false }: { title: string; items: ReportVaccinationItem[]; wide?: boolean; danger?: boolean }) {

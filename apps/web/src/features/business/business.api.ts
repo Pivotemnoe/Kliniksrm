@@ -1,6 +1,6 @@
 import { apiRequest } from '../../api/client';
 import { buildQuery } from '../../shared/utils/query';
-import { BusinessCategory, BusinessCategoryInput, BusinessDailyClose, BusinessEntry, BusinessEntryCorrectionInput, BusinessEntryInput, BusinessResources, BusinessSummary } from './types';
+import { BusinessCategory, BusinessCategoryInput, BusinessDailyClose, BusinessEntry, BusinessEntryCorrectionInput, BusinessEntryInput, BusinessResources, BusinessSummary, DirectorBriefing, DirectorBriefingSettings } from './types';
 
 type RangeQuery = { from?: string; to?: string; officeId?: string };
 
@@ -65,4 +65,20 @@ export function returnDailyClose(closeId: string, reason: string) {
 
 export function getBusinessSummary(query: RangeQuery) {
   return apiRequest<BusinessSummary>(`/v1/business/summary${buildQuery(query)}`);
+}
+
+export function getDirectorBriefingSettings() {
+  return apiRequest<DirectorBriefingSettings>('/v1/director-briefing/settings');
+}
+
+export function updateDirectorBriefingSettings(input: { enabled: boolean; time: string; timezone: string }) {
+  return apiRequest<DirectorBriefingSettings>('/v1/director-briefing/settings', { method: 'PATCH', body: input });
+}
+
+export function listDirectorBriefings() {
+  return apiRequest<DirectorBriefing[]>('/v1/director-briefing');
+}
+
+export function generateDirectorBriefing() {
+  return apiRequest<DirectorBriefing>('/v1/director-briefing/generate', { method: 'POST' });
 }

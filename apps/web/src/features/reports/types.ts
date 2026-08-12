@@ -20,6 +20,30 @@ export type ReportVaccinationItem = {
   };
 };
 
+export type ReportAdministeredVaccinationItem = {
+  id: string;
+  title: string;
+  vaccinatedAt: string | null;
+  vaccineBatch: string | null;
+  vaccineSeries: string | null;
+  animal: {
+    id: string;
+    nickname: string;
+    species: string | null;
+    microchip: string | null;
+    owner: { id: string; fullName: string; phone: string | null };
+  };
+};
+
+export type ReportIdentifiedAnimal = {
+  id: string;
+  nickname: string;
+  species: string | null;
+  breed: string | null;
+  microchip: string | null;
+  owner: { id: string; fullName: string; phone: string | null };
+};
+
 export type ClinicReport = {
   generatedAt: string;
   range: { from: string; to: string };
@@ -88,6 +112,10 @@ export type ClinicReport = {
   vaccinations: {
     administered: number;
     administeredByTitle: Array<{ title: string; count: number }>;
+    administeredBySpecies: Array<{ species: string; count: number }>;
+    administeredItems: ReportAdministeredVaccinationItem[];
+    rabiesItems: ReportAdministeredVaccinationItem[];
+    identifiedAnimals: ReportIdentifiedAnimal[];
     upcoming: number;
     overdue: number;
     upcomingItems: ReportVaccinationItem[];

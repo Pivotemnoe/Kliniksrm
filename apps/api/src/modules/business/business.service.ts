@@ -625,8 +625,16 @@ export class BusinessService {
     const cashIncome = total(payments.filter((item) => number(item.amount) > 0), (item) => item.amount);
     const refunds = -total(payments.filter((item) => number(item.amount) < 0), (item) => item.amount);
     const manualIncome = entries.filter((item) => item.type === BusinessCategoryType.INCOME).reduce((value, item) => value + number(item.amount), 0);
+    const unrecordedRevenue = entries
+      .filter((item) => item.type === BusinessCategoryType.INCOME && (item.source === BusinessEntrySource.UNRECORDED_REVENUE || item.category.code === 'unrecorded_revenue'))
+      .reduce((value, item) => value + number(item.amount), 0);
+    const otherManualIncome = manualIncome - unrecordedRevenue;
     const manualExpense = entries.filter((item) => item.type === BusinessCategoryType.EXPENSE).reduce((value, item) => value + number(item.amount), 0);
     const profitIncome = entries.filter((item) => item.type === BusinessCategoryType.INCOME && item.category.affectsProfit).reduce((value, item) => value + number(item.amount), 0);
+    const unrecordedProfitRevenue = entries
+      .filter((item) => item.type === BusinessCategoryType.INCOME && item.category.affectsProfit && (item.source === BusinessEntrySource.UNRECORDED_REVENUE || item.category.code === 'unrecorded_revenue'))
+      .reduce((value, item) => value + number(item.amount), 0);
+    const otherProfitIncome = profitIncome - unrecordedProfitRevenue;
     const dailySalaryExpense = entries
       .filter((item) => item.type === BusinessCategoryType.EXPENSE && item.category.code === 'daily_salary')
       .reduce((value, item) => value + number(item.amount), 0);
@@ -648,7 +656,8 @@ export class BusinessService {
     const categoryExpenses = aggregateCategories(entries.filter((item) => item.type === BusinessCategoryType.EXPENSE));
     const categoryIncome = aggregateCategories(entries.filter((item) => item.type === BusinessCategoryType.INCOME));
     return {
-      accruedSystemRevenue, ...result, cashIncome, refunds, manualIncome, manualExpense, supplierOutflow,
+      accruedSystemRevenue, ...result, cashIncome, refunds, manualIncome, unrecordedRevenue, otherManualIncome,
+      unrecordedProfitRevenue, otherProfitIncome, manualExpense, supplierOutflow,
       costOfGoods, payrollExpense, dailySalaryExpense, operatingExpenses,
       billsCount: bills.length, averageBill: bills.length ? accruedSystemRevenue / bills.length : 0,
       visits: visits.length, uniqueOwners: new Set(visits.map((item) => item.ownerId)).size, newOwners,
@@ -764,25 +773,27 @@ function aggregateBusinessDaily(
     bills: Array<{ createdAt: Date; totalAmount: Prisma.Decimal }>;
     payments: Array<{ paidAt: Date; amount: Prisma.Decimal }>;
     movements: Array<{ createdAt: Date; type: StockMovementType; quantity: Prisma.Decimal; unitCost: Prisma.Decimal | null; stockBatch: { purchasePrice: Prisma.Decimal } | null; billItemId: string | null; visitId: string | null; saleId: string | null }>;
-    entries: Array<{ occurredAt: Date; type: BusinessCategoryType; amount: Prisma.Decimal; category: { affectsProfit: boolean; code: string } }>;
+    entries: Array<{ occurredAt: Date; type: BusinessCategoryType; source: BusinessEntrySource; amount: Prisma.Decimal; category: { affectsProfit: boolean; code: string } }>;
     supplierPayments: Array<{ paidAt: Date; amount: Prisma.Decimal }>;
   },
   offsetMinutes: number,
 ) {
-  const rows = new Map<string, { date: string; accruedRevenue: number; cashIncome: number; cashExpense: number; profitExpense: number; salaryExpense: number; costOfGoods: number }>();
+  const rows = new Map<string, { date: string; accruedRevenue: number; systemRevenue: number; unrecordedRevenue: number; otherIncome: number; cashIncome: number; cashExpense: number; profitExpense: number; salaryExpense: number; costOfGoods: number }>();
   const row = (date: Date) => {
     const key = clinicDateKey(date, offsetMinutes);
-    const value = rows.get(key) ?? { date: key, accruedRevenue: 0, cashIncome: 0, cashExpense: 0, profitExpense: 0, salaryExpense: 0, costOfGoods: 0 };
+    const value = rows.get(key) ?? { date: key, accruedRevenue: 0, systemRevenue: 0, unrecordedRevenue: 0, otherIncome: 0, cashIncome: 0, cashExpense: 0, profitExpense: 0, salaryExpense: 0, costOfGoods: 0 };
     rows.set(key, value);
     return value;
   };
-  input.bills.forEach((item) => { row(item.createdAt).accruedRevenue += number(item.totalAmount); });
+  input.bills.forEach((item) => { const value = number(item.totalAmount); row(item.createdAt).systemRevenue += value; row(item.createdAt).accruedRevenue += value; });
   input.payments.forEach((item) => { const value = number(item.amount); if (value >= 0) row(item.paidAt).cashIncome += value; else row(item.paidAt).cashExpense += -value; });
   input.supplierPayments.forEach((item) => { row(item.paidAt).cashExpense += number(item.amount); });
   input.entries.forEach((item) => {
     const value = number(item.amount);
     if (item.type === BusinessCategoryType.INCOME) {
       row(item.occurredAt).cashIncome += value;
+      if (item.source === BusinessEntrySource.UNRECORDED_REVENUE || item.category.code === 'unrecorded_revenue') row(item.occurredAt).unrecordedRevenue += value;
+      else row(item.occurredAt).otherIncome += value;
       if (item.category.affectsProfit) row(item.occurredAt).accruedRevenue += value;
     } else {
       row(item.occurredAt).cashExpense += value;

@@ -3089,7 +3089,7 @@ body {
 
 .queue-tv-screen {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   min-height: 100vh;
   position: relative;
   background: #000000;
@@ -3107,6 +3107,7 @@ body {
 }
 
 .queue-tv-column {
+  min-width: 0;
   padding: 36px;
 }
 
@@ -3642,6 +3643,9 @@ body {
     border-bottom: 1px solid #edf0f3;
   }
 
+}
+
+@media (max-width: 600px) and (orientation: portrait) {
   .queue-tv-screen {
     grid-template-columns: 1fr;
   }
@@ -4807,6 +4811,19 @@ body {
   gap: 10px;
   padding: 14px 12px 4px;
   text-align: center;
+}
+
+.director-briefing-layout {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.85fr) minmax(520px, 1.65fr);
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 1040px) {
+  .director-briefing-layout {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 540px) {

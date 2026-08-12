@@ -39,9 +39,14 @@ export function exportReportToExcel(report: ClinicReport) {
       ...report.traffic.daily.map((item) => [item.date, item.visits, item.completedVisits, item.overdueVisits, item.overdueNotifications]),
     ]),
     sheet('Вакцинации', [
-      ['Статус', 'Вакцина', 'Пациент', 'Владелец', 'Телефон', 'Дата'],
+      ['Статус', 'Вакцина', 'Пациент', 'Владелец', 'Телефон', 'Дата', 'Серия', 'Партия', 'Микрочип'],
+      ...report.vaccinations.administeredItems.map((item) => ['Проведено', item.title, item.animal.nickname, item.animal.owner.fullName, item.animal.owner.phone, date(item.vaccinatedAt), item.vaccineSeries, item.vaccineBatch, item.animal.microchip]),
       ...report.vaccinations.upcomingItems.map((item) => ['Предстоит', item.title, item.animal.nickname, item.animal.owner.fullName, item.animal.owner.phone, date(item.expiresAt)]),
       ...report.vaccinations.overdueItems.map((item) => ['Просрочено', item.title, item.animal.nickname, item.animal.owner.fullName, item.animal.owner.phone, date(item.expiresAt)]),
+    ]),
+    sheet('Идентификация', [
+      ['Микрочип', 'Пациент', 'Вид', 'Порода', 'Владелец', 'Телефон'],
+      ...report.vaccinations.identifiedAnimals.map((item) => [item.microchip, item.nickname, item.species, item.breed, item.owner.fullName, item.owner.phone]),
     ]),
     sheet('Склад', [
       ['Раздел', 'Статус', 'Товар', 'Склад', 'Серия', 'Срок годности', 'Остаток', 'Единица', 'Закупочная цена', 'Минимум'],
@@ -67,6 +72,8 @@ export function printReportAsPdf(report: ClinicReport) {
   ${printTable('Товары', ['Наименование', 'Количество', 'Выручка'], report.sales.products.map((item) => [item.title, item.quantity, formatMoney(item.revenue)]))}
   ${printTable('Сотрудники', ['Сотрудник', 'Приёмы', 'Завершено', 'Более часа', 'Оповещений', 'Начислено'], report.employees.map((item) => [item.fullName, item.visits, item.completedVisits, item.overdueVisits, item.overdueNotifications, formatMoney(item.billedAmount)]))}
   ${printTable('Задолженность', ['Владелец', 'Телефон', 'Долг'], report.finance.debtors.map((item) => [item.ownerName, item.phone, formatMoney(item.debt)]))}
+  ${printTable('Проведённые вакцинации', ['Дата', 'Вакцина', 'Пациент', 'Владелец', 'Микрочип'], report.vaccinations.administeredItems.map((item) => [date(item.vaccinatedAt), item.title, item.animal.nickname, item.animal.owner.fullName, item.animal.microchip]))}
+  ${printTable('Идентифицированные животные', ['Микрочип', 'Пациент', 'Вид', 'Порода', 'Владелец'], report.vaccinations.identifiedAnimals.map((item) => [item.microchip, item.nickname, item.species, item.breed, item.owner.fullName]))}
   <p>${escapeHtml(report.profit.note)}</p><script>window.onload=()=>window.print();<\/script></body></html>`);
   popup.document.close();
   return true;

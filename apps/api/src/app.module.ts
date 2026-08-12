@@ -8,6 +8,7 @@ import { BackupsModule } from './modules/backups/backups.module';
 import { ClientPortalModule } from './modules/client-portal/client-portal.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { DocumentsModule } from './modules/documents/documents.module';
+import { DirectorBriefingModule } from './modules/director-briefing/director-briefing.module';
 import { EmployeesModule } from './modules/employees/employees.module';
 import { FinanceModule } from './modules/finance/finance.module';
 import { FilesModule } from './modules/files/files.module';
@@ -47,6 +48,7 @@ import { PrismaModule } from './prisma/prisma.module';
     OrganizationModule,
     NotificationsModule,
     DocumentsModule,
+    DirectorBriefingModule,
     EmployeesModule,
     FinanceModule,
     FilesModule,

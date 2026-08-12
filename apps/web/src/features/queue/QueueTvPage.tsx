@@ -91,13 +91,13 @@ export function QueueTvPage() {
         </Space>
       </div>
       <section className="queue-tv-column">
-        <h1 className="queue-tv-title">Ожидайте</h1>
+        <h1 className="queue-tv-title">Очередь</h1>
         {error ? <Alert type="error" showIcon message={getErrorMessage(error)} /> : null}
-        <QueueTvList items={queueScreenQuery.data?.waiting ?? []} emptyText="Очередь пуста" />
+        <QueueTvList items={queueScreenQuery.data?.waiting ?? []} emptyText="Сейчас в очереди никого нет" />
       </section>
       <section className="queue-tv-column">
-        <h1 className="queue-tv-title">На приём</h1>
-        <QueueTvList items={queueScreenQuery.data?.called ?? []} emptyText="Ожидание вызова" called />
+        <h1 className="queue-tv-title">Сейчас вызывают</h1>
+        <QueueTvList items={queueScreenQuery.data?.called ?? []} emptyText="Сейчас никого не вызывают" called />
       </section>
     </main>
   );

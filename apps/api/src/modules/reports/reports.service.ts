@@ -36,6 +36,7 @@ export class ReportsService {
       newOwners,
       vaccinationsAdministered,
       vaccinationDueCandidates,
+      identifiedAnimals,
       stockBatches,
       stockMovements,
       supplyInvoices,
@@ -156,7 +157,23 @@ export class ReportsService {
       this.prisma.owner.count({ where: { createdAt: dateWhere } }),
       this.prisma.vaccination.findMany({
         where: { vaccinatedAt: dateWhere },
-        select: { id: true, title: true, vaccinatedAt: true },
+        orderBy: { vaccinatedAt: 'desc' },
+        select: {
+          id: true,
+          title: true,
+          vaccinatedAt: true,
+          vaccineBatch: true,
+          vaccineSeries: true,
+          animal: {
+            select: {
+              id: true,
+              nickname: true,
+              species: true,
+              microchip: true,
+              owner: { select: { id: true, fullName: true, phone: true } },
+            },
+          },
+        },
       }),
       this.prisma.vaccination.findMany({
         where: { expiresAt: { not: null } },
@@ -167,6 +184,18 @@ export class ReportsService {
           expiresAt: true,
           ownerReminderEnabled: true,
           animal: { select: { id: true, nickname: true, owner: { select: { id: true, fullName: true, phone: true } } } },
+        },
+      }),
+      this.prisma.animal.findMany({
+        where: { microchip: { not: null } },
+        orderBy: { nickname: 'asc' },
+        select: {
+          id: true,
+          nickname: true,
+          species: true,
+          breed: true,
+          microchip: true,
+          owner: { select: { id: true, fullName: true, phone: true } },
         },
       }),
       this.prisma.stockBatch.findMany({
@@ -300,6 +329,10 @@ export class ReportsService {
       vaccinations: {
         administered: vaccinationsAdministered.length,
         administeredByTitle: aggregateTitles(vaccinationsAdministered),
+        administeredBySpecies: aggregateSpecies(vaccinationsAdministered),
+        administeredItems: vaccinationsAdministered.slice(0, 500),
+        rabiesItems: vaccinationsAdministered.filter((item) => isRabiesVaccination(item.title)).slice(0, 500),
+        identifiedAnimals: identifiedAnimals.filter((item) => item.microchip?.trim()).slice(0, 1000),
         upcoming: dueVaccinations.upcoming.length,
         overdue: dueVaccinations.overdue.length,
         upcomingItems: dueVaccinations.upcoming.slice(0, 100),
@@ -553,6 +586,21 @@ function aggregateTitles(items: Array<{ title: string }>) {
   return [...rows.entries()]
     .map(([title, count]) => ({ title, count }))
     .sort((left, right) => right.count - left.count);
+}
+
+function aggregateSpecies(items: Array<{ animal: { species: string | null } }>) {
+  const rows = new Map<string, number>();
+  items.forEach((item) => {
+    const species = item.animal.species?.trim() || 'Вид не указан';
+    rows.set(species, (rows.get(species) ?? 0) + 1);
+  });
+  return [...rows.entries()]
+    .map(([species, count]) => ({ species, count }))
+    .sort((left, right) => right.count - left.count || left.species.localeCompare(right.species, 'ru'));
+}
+
+function isRabiesVaccination(title: string) {
+  return title.toLocaleLowerCase('ru-RU').includes('бешен');
 }
 
 function resolveDueVaccinations<T extends { title: string; expiresAt: Date | null; animal: { id: string } }>(

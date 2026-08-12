@@ -101,6 +101,10 @@ export type BusinessMetricSet = {
   cashIncome: number;
   refunds: number;
   manualIncome: number;
+  unrecordedRevenue: number;
+  otherManualIncome: number;
+  unrecordedProfitRevenue: number;
+  otherProfitIncome: number;
   manualExpense: number;
   supplierOutflow: number;
   costOfGoods: number;
@@ -117,7 +121,7 @@ export type BusinessMetricSet = {
   uniqueOwners: number;
   newOwners: number;
   note: string;
-  daily: Array<{ date: string; accruedRevenue: number; cashIncome: number; cashExpense: number; profitExpense: number; salaryExpense: number; costOfGoods: number; operatingProfitAfterManualExpenses: number; cashNet: number }>;
+  daily: Array<{ date: string; accruedRevenue: number; systemRevenue: number; unrecordedRevenue: number; otherIncome: number; cashIncome: number; cashExpense: number; profitExpense: number; salaryExpense: number; costOfGoods: number; operatingProfitAfterManualExpenses: number; cashNet: number }>;
   categoryExpenses: Array<{ categoryId: string; title: string; groupCode: string; affectsProfit: boolean; amount: number }>;
   categoryIncome: Array<{ categoryId: string; title: string; groupCode: string; affectsProfit: boolean; amount: number }>;
 };
@@ -169,4 +173,35 @@ export type BusinessCategoryInput = {
   administratorAllowed?: boolean;
   isActive?: boolean;
   sortOrder?: number;
+};
+
+export type DirectorBriefingSettings = {
+  directorBriefingEnabled: boolean;
+  directorBriefingTime: string;
+  directorBriefingTimezone: string;
+};
+
+export type DirectorBriefingSnapshot = {
+  reportDate: string;
+  visits: { total: number; uniqueOwners: number; completed: number; unfinishedOverHour: number };
+  appointments: { total: number; completed: number; cancelled: number; noShow: number };
+  finance: { billed: number; paid: number; refunds: number; manualRevenue: number; otherIncome: number; expenses: number; debtorsAmount: number; supplierPayable: number };
+  control: { unresolvedEntries: number; submittedCloses: number };
+  vaccinations: { today: number; overdue: number; upcoming30Days: number };
+  stock: { lowStock: number };
+  laboratory: { ordered: number; completed: number; openNow: number };
+  documents: { generated: number };
+};
+
+export type DirectorBriefing = {
+  id: string;
+  businessDate: string;
+  rangeFrom: string;
+  rangeTo: string;
+  trigger: 'SCHEDULED' | 'MANUAL';
+  title: string;
+  summary: string;
+  snapshot: DirectorBriefingSnapshot;
+  createdAt: string;
+  createdById: string | null;
 };

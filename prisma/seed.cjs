@@ -1,5 +1,10 @@
 const { PrismaClient } = require('@prisma/client');
 const { createHash, randomBytes, scryptSync } = require('node:crypto');
+const {
+  vtfDocumentTemplates,
+  vtfMedicalPhrases,
+  vtfNotificationTemplates,
+} = require('./vtf-clinic-templates.cjs');
 
 const prisma = new PrismaClient();
 
@@ -640,6 +645,7 @@ const medicalPhrases = [
     source: 'DIAGNOSIS_TEMPLATE',
     diagnosis: 'гастроэнтерит',
   },
+  ...vtfMedicalPhrases,
 ];
 
 function hashPassword(password) {
@@ -829,6 +835,7 @@ async function seedNotificationTemplates() {
       title: 'Короткое напоминание о записи',
       body: '{owner.fullName}, запись {animal.nickname}: {appointment.startsAt}. TemichevVet.',
     },
+    ...vtfNotificationTemplates,
   ];
 
   for (const template of templates) {
@@ -919,6 +926,51 @@ async function seedDocumentTemplates() {
         });
       }
     }
+  }
+
+  for (const template of vtfDocumentTemplates) {
+    const category = await prisma.documentTemplateCategory.upsert({
+      where: { title: template.categoryTitle },
+      update: {},
+      create: { title: template.categoryTitle },
+    });
+    const existingTemplate = await prisma.documentTemplate.findFirst({
+      where: { categoryId: category.id, title: template.title },
+      select: { id: true },
+    });
+    if (existingTemplate) continue;
+
+    const created = await prisma.documentTemplate.create({
+      data: {
+        categoryId: category.id,
+        title: template.title,
+        body: template.body,
+        layout: template.layout,
+        variables: {
+          source: 'VTF',
+          sourceId: template.id,
+          reviewStatus: template.requiresSignature ? 'LEGAL_REVIEW_REQUIRED' : 'MANUAL_FORM',
+        },
+        requiresSignature: template.requiresSignature,
+      },
+    });
+    await prisma.documentTemplateVersion.create({
+      data: {
+        templateId: created.id,
+        version: 1,
+        categoryTitle: template.categoryTitle,
+        title: template.title,
+        body: template.body,
+        layout: template.layout,
+        variables: {
+          source: 'VTF',
+          sourceId: template.id,
+          reviewStatus: template.requiresSignature ? 'LEGAL_REVIEW_REQUIRED' : 'MANUAL_FORM',
+        },
+        requiresSignature: template.requiresSignature,
+        createdByName: 'Импорт VTF',
+      },
+    });
   }
 }
 

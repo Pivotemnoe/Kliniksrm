@@ -6,7 +6,8 @@ export type StaffAlertKind =
   | 'ONLINE_REQUEST'
   | 'UNPAID_BILL'
   | 'LOW_STOCK'
-  | 'NEWS';
+  | 'NEWS'
+  | 'DIRECTOR_BRIEFING';
 
 export type StaffAlertItem = {
   key: string;

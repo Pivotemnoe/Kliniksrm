@@ -126,6 +126,8 @@ const notificationVariableGroups = [
       ['owner.fullName', 'ФИО владельца'],
       ['owner.phone', 'Телефон'],
       ['owner.email', 'Email'],
+      ['owner.address', 'Адрес'],
+      ['owner.passportData', 'Паспортные данные'],
     ],
   },
   {
@@ -1251,6 +1253,7 @@ export function renderDocumentPreview(text: string) {
     'owner.extraPhone': '+7 (900) 000-00-01',
     'owner.email': 'owner@example.ru',
     'owner.address': 'г. Армавир, адрес владельца',
+    'owner.passportData': 'Серия, номер и кем выдан паспорт',
     'animal.nickname': 'Барсик',
     'animal.species': 'Кошка',
     'animal.breed': 'Бенгальская',

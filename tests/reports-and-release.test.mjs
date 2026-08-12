@@ -48,7 +48,8 @@ test('управленческий отчёт считает оплаты, до�
       : [{ id: 'visit-1', ownerId: 'owner-1', status: 'COMPLETED', startedAt: bill.createdAt, totalAmount: 1500, employee }] },
     visitOverdueAlert: { findMany: async () => [] },
     appointment: { findMany: async () => [{ id: 'appointment-1', status: 'COMPLETED', startsAt: bill.createdAt }] },
-    vaccination: { findMany: async ({ where }) => where.vaccinatedAt ? [{ id: 'vaccination-1', title: 'Бешенство', vaccinatedAt: bill.createdAt }] : [] },
+    vaccination: { findMany: async ({ where }) => where.vaccinatedAt ? [{ id: 'vaccination-1', title: 'Бешенство', vaccinatedAt: bill.createdAt, vaccineBatch: 'Партия 1', vaccineSeries: 'Серия 1', animal: { id: 'animal-1', nickname: 'Барсик', species: 'Кошка', microchip: '643000000000001', owner: { id: 'owner-1', fullName: 'Владелец', phone: '+70000000000' } } }] : [] },
+    animal: { findMany: async () => [{ id: 'animal-1', nickname: 'Барсик', species: 'Кошка', breed: 'Метис', microchip: '643000000000001', owner: { id: 'owner-1', fullName: 'Владелец', phone: '+70000000000' } }] },
     stockBatch: { findMany: async () => [{ id: 'batch-1', rest: 2, purchasePrice: 100, expiresAt: null, product: { id: 'product-1', title: 'Препарат', retailPrice: 160, minStock: 3, stockUnit: 'шт' }, warehouse: { id: 'warehouse-1', name: 'Основной склад' } }] },
     stockMovement: { findMany: async () => [{ type: 'SALE', quantity: -2, billItemId: null, visitId: null, saleId: 'sale-1', stockBatch: { purchasePrice: 100 } }] },
     supplyInvoice: { findMany: async () => [{ id: 'supply-1', totalAmount: 800 }] },
@@ -65,6 +66,8 @@ test('управленческий отчёт считает оплаты, до�
   assert.equal(report.stock.lowStock, 1);
   assert.equal(report.sales.services[0].title, 'Приём');
   assert.equal(report.sales.products[0].title, 'Препарат');
+  assert.equal(report.vaccinations.rabiesItems.length, 1);
+  assert.equal(report.vaccinations.identifiedAnimals.length, 1);
 });
 
 test('экран отчётов не содержит технических статусов и предлагает Excel и PDF', async () => {

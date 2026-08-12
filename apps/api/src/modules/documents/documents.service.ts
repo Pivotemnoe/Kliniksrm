@@ -934,6 +934,7 @@ function renderTemplateText(
     'owner.extraPhone': visit.owner.extraPhone,
     'owner.email': visit.owner.email,
     'owner.address': visit.owner.address,
+    'owner.passportData': visit.owner.passportData,
     'animal.nickname': visit.animal.nickname,
     'animal.species': visit.animal.species,
     'animal.breed': visit.animal.breed,

@@ -21,7 +21,7 @@ type StaffAlertSeverity = 'info' | 'warning' | 'error';
 
 type StaffAlertCandidate = {
   key: string;
-  kind: 'UNFINISHED_VISIT' | 'TODAY_VACCINATION' | 'OVERDUE_VACCINATION' | 'FAILED_DELIVERY' | 'ONLINE_REQUEST' | 'UNPAID_BILL' | 'LOW_STOCK' | 'NEWS';
+  kind: 'UNFINISHED_VISIT' | 'TODAY_VACCINATION' | 'OVERDUE_VACCINATION' | 'FAILED_DELIVERY' | 'ONLINE_REQUEST' | 'UNPAID_BILL' | 'LOW_STOCK' | 'NEWS' | 'DIRECTOR_BRIEFING';
   title: string;
   description: string;
   href: string;
@@ -123,6 +123,7 @@ export class StaffAlertsService {
     const showBills = can('billing.manage') || can('payments.manage');
     const showStock = can('stock.manage');
     const showNews = can('news.read');
+    const showDirectorBriefing = actor.roles.includes('director');
 
     const warehouseAccesses = showStock
       ? await this.prisma.employeeWarehouseAccess.findMany({
@@ -132,7 +133,7 @@ export class StaffAlertsService {
       : [];
     const warehouseIds = warehouseAccesses.map((access) => access.warehouseId);
 
-    const [visits, failedDeliveries, onlineRequests, unpaidBills, stockProducts, unreadNews, vaccinationCandidates] = await Promise.all([
+    const [visits, failedDeliveries, onlineRequests, unpaidBills, stockProducts, unreadNews, vaccinationCandidates, directorBriefings] = await Promise.all([
       this.prisma.visit.findMany({
         where: buildOverdueVisitWhere(now),
         orderBy: { startedAt: 'asc' },
@@ -219,6 +220,13 @@ export class StaffAlertsService {
           },
         },
       }),
+      showDirectorBriefing
+        ? this.loadOptionalCandidates('director briefing', () => this.prisma.directorBriefing.findMany({
+            orderBy: [{ businessDate: 'desc' }, { createdAt: 'desc' }],
+            take: 1,
+            select: { id: true, title: true, summary: true, createdAt: true },
+          }))
+        : Promise.resolve([]),
     ]);
 
     const items: StaffAlertCandidate[] = visits.map((visit) => {
@@ -350,6 +358,21 @@ export class StaffAlertsService {
         records: unreadNews.map((item) => [item.id, item.publishedAt.toISOString()]),
         occurredAt: unreadNews[0].publishedAt,
       }));
+    }
+
+    const directorBriefing = directorBriefings[0];
+    if (directorBriefing) {
+      items.push({
+        key: `director-briefing:${directorBriefing.id}`,
+        kind: 'DIRECTOR_BRIEFING',
+        title: directorBriefing.title,
+        description: directorBriefing.summary.split('\n')[0] ?? 'Ежедневная сводка сформирована',
+        href: '/business?tab=briefing',
+        count: 1,
+        severity: 'info',
+        occurredAt: directorBriefing.createdAt,
+        version: hashVersion([directorBriefing.id, directorBriefing.createdAt.toISOString(), directorBriefing.summary]),
+      });
     }
 
     return items;
