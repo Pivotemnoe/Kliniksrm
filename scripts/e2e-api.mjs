@@ -102,11 +102,23 @@ const permissionsByRole = {
 
 const sessions = {};
 const cleanupEnabled = process.env.E2E_CLEANUP !== 'false';
+const requestedScenario = process.env.E2E_SCENARIO ?? 'full';
 
 async function main() {
   await cleanupE2eData();
   await waitForApi();
   await loginAllRoles();
+
+  if (requestedScenario === 'laboratory') {
+    await scenarioLaboratoryWorkflow();
+
+    if (cleanupEnabled) {
+      await cleanupE2eData();
+    }
+
+    console.log('Laboratory E2E API checks passed');
+    return;
+  }
 
   await scenarioPasswordChange();
   await assertProtectedEndpointsRequireAuth();
@@ -703,19 +715,66 @@ async function scenarioManualBillProductStockWriteOff() {
 }
 
 async function scenarioLaboratoryWorkflow() {
+  const service = await request('stock', 'POST', '/api/v1/stock/services', {
+    title: `${e2eMarker} laboratory service`,
+    categoryTitle: `${e2eMarker} laboratory services`,
+    price: 1450,
+    priceType: 'FIXED',
+    description: `${e2eMarker} paid laboratory service`,
+  });
+  const documentTemplate = await request('doctor', 'POST', '/api/v1/document-templates', {
+    title: `${e2eMarker} laboratory result form`,
+    categoryTitle: `${e2eMarker} laboratory documents`,
+    body: `${e2eMarker} Глюкоза | Результат | Норма | Единица`,
+    layout: {
+      schemaVersion: 1,
+      page: {
+        marginTop: 24,
+        marginRight: 24,
+        marginBottom: 24,
+        marginLeft: 24,
+        fontSize: 9,
+        lineGap: 2,
+        showClinicHeader: true,
+        showVisitMeta: true,
+        showSignatures: false,
+      },
+      blocks: [
+        {
+          id: `${e2eMarker}-laboratory-table`,
+          type: 'table',
+          headerRows: 1,
+          rows: [
+            ['Показатель', 'Результат', 'Норма', 'Единица'],
+            ['Глюкоза', '', '3.3-6.1', 'ммоль/л'],
+            ['Мочевина', '', '5.0-12.0', 'ммоль/л'],
+          ],
+        },
+      ],
+    },
+  });
   const test = await request('doctor', 'POST', '/api/v1/laboratory/tests', {
     title: `${e2eMarker} laboratory glucose`,
     code: `${e2eMarker}-LAB-${randomDigits(6)}`,
     groupName: `${e2eMarker} biochemistry`,
     material: 'Кровь',
     method: 'Экспресс',
-    unit: 'ммоль/л',
-    referenceRange: '3.3-6.1',
     species: ['Кошка'],
+    serviceId: service.id,
+    documentTemplateId: documentTemplate.id,
     isActive: true,
     description: `${e2eMarker} laboratory test`,
   });
   assertEqual(test.title, `${e2eMarker} laboratory glucose`, 'laboratory test create');
+  assertEqual(test.serviceId, service.id, 'laboratory test linked service');
+  assertEqual(test.documentTemplateId, documentTemplate.id, 'laboratory test linked document');
+
+  const renamedTest = await request('doctor', 'PATCH', `/api/v1/laboratory/tests/${test.id}`, {
+    title: `${e2eMarker} laboratory glucose configured`,
+    serviceId: service.id,
+    documentTemplateId: documentTemplate.id,
+  });
+  assertEqual(renamedTest.title, `${e2eMarker} laboratory glucose configured`, 'laboratory test editable title');
 
   const testsList = await request('assistant', 'GET', `/api/v1/laboratory/tests?search=${encodeURIComponent(test.code)}`);
   if (!testsList.items.some((item) => item.id === test.id)) {
@@ -734,9 +793,19 @@ async function scenarioLaboratoryWorkflow() {
     throw new Error('laboratory order was not created from visit');
   }
 
-  const item = order.items.find((candidate) => candidate.testId === test.id);
-  if (!item) {
-    throw new Error('laboratory order item was not created from test');
+  const resultRows = order.items.filter((candidate) => candidate.testId === test.id);
+  assertEqual(resultRows.length, 2, 'laboratory document table expanded to result rows');
+  assertEqual(order.formSnapshots?.length, 1, 'laboratory linked document snapshot');
+  assertEqual(order.formSnapshots?.[0]?.documentTemplateId, documentTemplate.id, 'laboratory snapshot document');
+  assertEqual(order.formSnapshots?.[0]?.bindings?.length, 2, 'laboratory snapshot row bindings');
+  const billedRows = resultRows.filter((candidate) => candidate.billItemId);
+  assertEqual(billedRows.length, 1, 'laboratory linked service billed once');
+  const billRows = visitWithOrder.bill?.items?.filter((candidate) => candidate.serviceId === service.id) ?? [];
+  assertEqual(billRows.length, 1, 'visit contains one laboratory service line');
+  assertEqual(Number(billRows[0]?.totalAmount), 1450, 'laboratory service line price');
+
+  if (!resultRows[0] || !resultRows[1]) {
+    throw new Error('laboratory result rows were not created from linked document');
   }
 
   let activeOrders = await request('assistant', 'GET', `/api/v1/laboratory/orders?activeOnly=true&search=${encodeURIComponent(e2eMarker)}`);
@@ -744,13 +813,25 @@ async function scenarioLaboratoryWorkflow() {
     throw new Error('laboratory order missing from active journal');
   }
 
-  const inProgressItem = await request('doctor', 'PATCH', `/api/v1/laboratory/orders/${order.id}/items/${item.id}`, {
-    status: 'IN_PROGRESS',
-    resultValue: '5.2',
-    comment: `${e2eMarker} first result`,
+  const inProgressOrder = await request('doctor', 'PATCH', `/api/v1/laboratory/orders/${order.id}/results`, {
+    items: [
+      {
+        itemId: resultRows[0].id,
+        status: 'IN_PROGRESS',
+        resultValue: '5.2',
+        comment: `${e2eMarker} glucose result`,
+      },
+      {
+        itemId: resultRows[1].id,
+        status: 'IN_PROGRESS',
+        resultValue: '8.4',
+        comment: `${e2eMarker} urea result`,
+      },
+    ],
   });
-  assertEqual(inProgressItem.status, 'IN_PROGRESS', 'laboratory item in progress');
-  assertEqual(inProgressItem.resultValue, '5.2', 'laboratory result value');
+  assertEqual(inProgressOrder.status, 'IN_PROGRESS', 'laboratory order in progress after atomic result save');
+  assertEqual(inProgressOrder.items.find((candidate) => candidate.id === resultRows[0].id)?.resultValue, '5.2', 'laboratory first result value');
+  assertEqual(inProgressOrder.items.find((candidate) => candidate.id === resultRows[1].id)?.resultValue, '8.4', 'laboratory second result value');
 
   const inProgressOrders = await request('assistant', 'GET', `/api/v1/laboratory/orders?status=IN_PROGRESS&search=${encodeURIComponent(e2eMarker)}`);
   if (!inProgressOrders.items.some((candidate) => candidate.id === order.id)) {
@@ -923,6 +1004,7 @@ async function createStockProductWithSupply(label, quantity) {
 }
 
 async function cleanupE2eData() {
+  const postgresContainer = process.env.E2E_POSTGRES_CONTAINER ?? 'clinic-crm-postgres';
   const sql = `
     BEGIN;
     CREATE TEMP TABLE e2e_ids (id text);
@@ -934,6 +1016,8 @@ async function cleanupE2eData() {
     INSERT INTO e2e_ids SELECT id FROM "ClientPortalAccess" WHERE "ownerId" IN (SELECT id FROM e2e_ids);
     INSERT INTO e2e_ids SELECT id FROM "DocumentTemplateCategory" WHERE title LIKE '${e2eMarker}%';
     INSERT INTO e2e_ids SELECT id FROM "DocumentTemplate" WHERE title LIKE '${e2eMarker}%' OR body LIKE '${e2eMarker}%';
+    INSERT INTO e2e_ids SELECT id FROM "ServiceCategory" WHERE title LIKE '${e2eMarker}%';
+    INSERT INTO e2e_ids SELECT id FROM "Service" WHERE title LIKE '${e2eMarker}%' OR description LIKE '${e2eMarker}%';
     INSERT INTO e2e_ids SELECT id FROM "QueueEntry" WHERE "ownerName" LIKE '${e2eMarker}%' OR comment LIKE '${e2eMarker}%';
     INSERT INTO e2e_ids SELECT id FROM "Appointment" WHERE comment LIKE '${e2eMarker}%';
     INSERT INTO e2e_ids SELECT id FROM "Task" WHERE title LIKE '${e2eMarker}%' OR comment LIKE '${e2eMarker}%';
@@ -964,6 +1048,8 @@ async function cleanupE2eData() {
     DELETE FROM "LaboratoryProfileTest" WHERE "profileId" IN (SELECT id FROM e2e_ids) OR "testId" IN (SELECT id FROM e2e_ids);
     DELETE FROM "LaboratoryProfile" WHERE id IN (SELECT id FROM e2e_ids);
     DELETE FROM "LaboratoryTest" WHERE id IN (SELECT id FROM e2e_ids);
+    DELETE FROM "Service" WHERE id IN (SELECT id FROM e2e_ids);
+    DELETE FROM "ServiceCategory" WHERE id IN (SELECT id FROM e2e_ids);
     DELETE FROM "SupplyInvoiceItem" WHERE id IN (SELECT id FROM e2e_ids) OR "supplyInvoiceId" IN (SELECT id FROM e2e_ids) OR "productId" IN (SELECT id FROM e2e_ids);
     DELETE FROM "StockBatch" WHERE id IN (SELECT id FROM e2e_ids) OR "productId" IN (SELECT id FROM e2e_ids) OR "supplierId" IN (SELECT id FROM e2e_ids);
     DELETE FROM "SupplyInvoice" WHERE id IN (SELECT id FROM e2e_ids) OR "supplierId" IN (SELECT id FROM e2e_ids);
@@ -987,7 +1073,7 @@ async function cleanupE2eData() {
 
   execFileSync('docker', [
     'exec',
-    'clinic-crm-postgres',
+    postgresContainer,
     'psql',
     '-U',
     process.env.POSTGRES_USER ?? 'clinic_crm',

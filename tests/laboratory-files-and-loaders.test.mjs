@@ -51,13 +51,17 @@ test('лабораторные результаты проходят предп�
   assert.match(page, /LaboratoryResultsImporter/);
 });
 
-test('лабораторный журнал поддерживает атомарную таблицу, отмену и структурный профиль из 16 показателей', async () => {
-  const [controller, service, page, api, migration] = await Promise.all([
+test('лабораторный журнал использует документ анализа для атомарной таблицы, отмены и печати A5', async () => {
+  const [controller, service, page, visitTab, printer, formParser, api, migration, documentsPage] = await Promise.all([
     read('apps/api/src/modules/laboratory/laboratory.controller.ts'),
     read('apps/api/src/modules/laboratory/laboratory.service.ts'),
     read('apps/web/src/features/laboratory/LaboratoryPage.tsx'),
+    read('apps/web/src/features/visits/VisitLaboratoryTab.tsx'),
+    read('apps/web/src/features/laboratory/laboratoryPrint.ts'),
+    read('apps/api/src/modules/laboratory/laboratory-document-form.ts'),
     read('apps/web/src/features/laboratory/laboratory.api.ts'),
-    read('prisma/migrations/20260812000400_laboratory_green_disk_results/migration.sql'),
+    read('prisma/migrations/20260814000100_laboratory_test_document_forms/migration.sql'),
+    read('apps/web/src/features/documents/DocumentTemplatesPage.tsx'),
   ]);
 
   assert.match(controller, /@Patch\('orders\/:orderId\/results'\)/);
@@ -68,9 +72,21 @@ test('лабораторный журнал поддерживает атома�
   assert.match(page, /Заполнить таблицу/);
   assert.match(page, /cancelVisitLaboratoryOrder/);
   assert.match(page, /Сохранить всю таблицу/);
-  assert.match(page, /@page \{ size: A5 portrait; margin: 0; \}/);
-  assert.equal((migration.match(/'7b8a6101-7b61-4c20-9101-0000000000\d{2}'/g) ?? []).length >= 32, true);
-  assert.doesNotMatch(migration, /DELETE FROM "LaboratoryOrder|TRUNCATE|DROP TABLE/i);
+  assert.match(page, /name="documentTemplateId"/);
+  assert.match(page, /Настроить/);
+  assert.match(page, /Открыть редактор выбранного документа/);
+  assert.match(page, /\/settings\/documents\?tab=documents&templateId=/);
+  assert.match(documentsPage, /initialTemplateId=\{searchParams\.get\('templateId'\) \?\? undefined\}/);
+  assert.match(documentsPage, /openedTemplateIdRef\.current = initialTemplateId/);
+  assert.match(documentsPage, /openEdit\(template\)/);
+  assert.match(visitTab, /Заполнить показатели/);
+  assert.match(visitTab, /Печать A5/);
+  assert.match(printer, /@page \{ size: A5 portrait; margin: 0; \}/);
+  assert.match(printer, /snapshot\.documentTemplateTitle/);
+  assert.match(formParser, /extractLaboratoryDocumentIndicators/);
+  assert.match(migration, /ADD COLUMN "documentTemplateId"/);
+  assert.match(migration, /ADD COLUMN "formSnapshots"/);
+  assert.doesNotMatch(migration, /INSERT INTO|UPDATE "Laboratory|DELETE FROM|TRUNCATE|DROP TABLE/i);
 });
 
 test('загрузчик накладной автоматически сопоставляет товары и не проводит проблемные строки', async () => {

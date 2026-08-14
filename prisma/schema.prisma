@@ -1525,28 +1525,31 @@ model Service {
 }
 
 model LaboratoryTest {
-  id             String                  @id @default(uuid())
-  serviceId      String?
-  service        Service?                @relation(fields: [serviceId], references: [id], onDelete: SetNull)
-  code           String?
-  title          String
-  groupName      String?
-  material       String?
-  method         String?
-  unit           String?
-  referenceRange String?
-  species        String[]                @default([])
-  description    String?
-  isActive       Boolean                 @default(true)
-  profileLinks   LaboratoryProfileTest[]
-  orderItems     LaboratoryOrderItem[]
-  createdAt      DateTime                @default(now())
-  updatedAt      DateTime                @updatedAt
+  id                 String                  @id @default(uuid())
+  serviceId          String?
+  service            Service?                @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  documentTemplateId String?
+  documentTemplate   DocumentTemplate?       @relation(fields: [documentTemplateId], references: [id], onDelete: SetNull)
+  code               String?
+  title              String
+  groupName          String?
+  material           String?
+  method             String?
+  unit               String?
+  referenceRange     String?
+  species            String[]                @default([])
+  description        String?
+  isActive           Boolean                 @default(true)
+  profileLinks       LaboratoryProfileTest[]
+  orderItems         LaboratoryOrderItem[]
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
 
   @@index([title])
   @@index([code])
   @@index([groupName])
   @@index([serviceId])
+  @@index([documentTemplateId])
   @@index([isActive])
 }
 
@@ -1589,6 +1592,7 @@ model LaboratoryOrder {
   visit       Visit                 @relation(fields: [visitId], references: [id], onDelete: Cascade)
   status      LaboratoryOrderStatus @default(ORDERED)
   comment     String?
+  formSnapshots Json?
   createdById String?
   completedAt DateTime?
   items       LaboratoryOrderItem[]
@@ -2215,6 +2219,7 @@ model DocumentTemplate {
   versions           DocumentTemplateVersion[]
   visitDocuments     VisitDocument[]
   generatedDocuments GeneratedDocument[]
+  laboratoryTests     LaboratoryTest[]
   createdAt          DateTime                  @default(now())
   updatedAt          DateTime                  @updatedAt
 

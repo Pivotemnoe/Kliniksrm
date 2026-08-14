@@ -1,4 +1,4 @@
-import { CloseCircleOutlined, EditOutlined, ExperimentOutlined, PlayCircleOutlined, PlusOutlined, PrinterOutlined, SearchOutlined } from '@ant-design/icons';
+import { CloseCircleOutlined, EditOutlined, ExperimentOutlined, FileTextOutlined, PlayCircleOutlined, PlusOutlined, PrinterOutlined, SearchOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Alert, Button, Card, Drawer, Form, Input, Popconfirm, Select, Space, Switch, Table, Tabs, Tag, Typography } from 'antd';
@@ -13,6 +13,7 @@ import { useCurrentEmployee } from '../../auth/useAuth';
 import { LiveSearchInput } from '../../shared/ui/LiveSearchInput';
 import { InfiniteTable, useInfiniteListQuery } from '../../shared/ui/InfiniteTable';
 import { PageHeader } from '../../shared/ui/PageHeader';
+import { listDocumentTemplates } from '../documents/documents.api';
 import { AttachmentsPanel } from '../files/AttachmentsPanel';
 import { listLaboratoryFiles, listLaboratoryOrderFiles, uploadLaboratoryFile, uploadLaboratoryOrderFile } from '../files/files.api';
 import { getOrganizationPrintProfile } from '../organization/organization.api';
@@ -29,19 +30,17 @@ import {
   VisitLaboratoryOrderStatus,
 } from '../visits/types';
 import {
-  createLaboratoryProfile,
   createLaboratoryTest,
   getLaboratoryResources,
   listLaboratoryOrders,
-  listLaboratoryProfiles,
   listLaboratoryTests,
   updateLaboratoryOrder,
   updateLaboratoryOrderItem,
   updateLaboratoryOrderResults,
-  updateLaboratoryProfile,
   updateLaboratoryTest,
 } from './laboratory.api';
-import { LaboratoryOrder, LaboratoryOrderInput, LaboratoryOrderItem, LaboratoryOrderItemInput, LaboratoryOrderResultRowInput, LaboratoryProfile, LaboratoryResources, LaboratoryTest } from './types';
+import { printLaboratoryOrder } from './laboratoryPrint';
+import { LaboratoryOrder, LaboratoryOrderInput, LaboratoryOrderItem, LaboratoryOrderItemInput, LaboratoryOrderResultRowInput, LaboratoryResources, LaboratoryTest } from './types';
 import { LaboratoryResultsImporter } from './LaboratoryResultsImporter';
 
 type OrderStatusFilter = VisitLaboratoryOrderStatus | 'ACTIVE';
@@ -52,21 +51,11 @@ const testSchema = z.object({
   groupName: nullableText,
   material: nullableText,
   method: nullableText,
-  unit: nullableText,
-  referenceRange: nullableText,
   species: z.array(z.string()).optional(),
-  serviceId: nullableText,
+  serviceId: z.string().trim().min(1, 'Выберите платную услугу'),
+  documentTemplateId: z.string().trim().min(1, 'Выберите документ с таблицей показателей'),
   isActive: z.boolean().default(true),
   description: nullableText,
-});
-const profileSchema = z.object({
-  title: z.string().trim().min(1, 'Укажите название профиля').max(240),
-  code: nullableText,
-  description: nullableText,
-  species: z.array(z.string()).optional(),
-  serviceId: nullableText,
-  isActive: z.boolean().default(true),
-  testIds: z.array(z.string()).min(1, 'Выберите хотя бы один анализ').max(20, 'В одном профиле может быть не больше 20 анализов').default([]),
 });
 const resultSchema = z.object({
   status: z.enum(['ORDERED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']),
@@ -79,8 +68,6 @@ const resultSchema = z.object({
 
 type TestFormInput = z.input<typeof testSchema>;
 type TestFormValues = z.output<typeof testSchema>;
-type ProfileFormInput = z.input<typeof profileSchema>;
-type ProfileFormValues = z.output<typeof profileSchema>;
 type ResultFormInput = z.input<typeof resultSchema>;
 type ResultFormValues = z.output<typeof resultSchema>;
 
@@ -99,9 +86,7 @@ export function LaboratoryPage() {
   const [tableOrder, setTableOrder] = useState<LaboratoryOrder | null>(null);
   const [editingItem, setEditingItem] = useState<{ order: LaboratoryOrder; item: LaboratoryOrderItem } | null>(null);
   const [editingTest, setEditingTest] = useState<LaboratoryTest | null>(null);
-  const [editingProfile, setEditingProfile] = useState<LaboratoryProfile | null>(null);
   const [testOpen, setTestOpen] = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
   const resourcesQuery = useQuery({ queryKey: ['laboratory', 'resources'], queryFn: getLaboratoryResources });
   const organizationQuery = useQuery({
     queryKey: ['organization', 'print-profile'],
@@ -120,14 +105,9 @@ export function LaboratoryPage() {
         description="Рабочий журнал лабораторных заказов, результаты и справочник анализов."
         extra={
           canManage ? (
-            <Space wrap>
-              <Button icon={<PlusOutlined />} onClick={() => openTest(null)}>
-                Новый отдельный анализ
-              </Button>
-              <Button type="primary" icon={<PlusOutlined />} onClick={() => openProfile(null)}>
-                Новый профиль из нескольких анализов
-              </Button>
-            </Space>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => openTest(null)}>
+              Новый анализ
+            </Button>
           ) : null
         }
       />
@@ -244,18 +224,6 @@ export function LaboratoryPage() {
                 />
               ),
             },
-            {
-              key: 'profiles',
-              label: 'Профили',
-              children: (
-                <ProfilesTable
-                  search={search}
-                  species={species}
-                  canManage={canManage}
-                  onEdit={openProfile}
-                />
-              ),
-            },
           ]}
         />
       </div>
@@ -264,16 +232,6 @@ export function LaboratoryPage() {
         test={editingTest}
         resources={resourcesQuery.data}
         onClose={() => setTestOpen(false)}
-        onCreateProfile={() => {
-          setTestOpen(false);
-          openProfile(null);
-        }}
-      />
-      <ProfileDrawer
-        open={profileOpen}
-        profile={editingProfile}
-        resources={resourcesQuery.data}
-        onClose={() => setProfileOpen(false)}
       />
       <OrderDrawer
         order={selectedOrder}
@@ -294,10 +252,6 @@ export function LaboratoryPage() {
     setTestOpen(true);
   }
 
-  function openProfile(profile: LaboratoryProfile | null) {
-    setEditingProfile(profile);
-    setProfileOpen(true);
-  }
 }
 
 function LaboratoryWorkSummary({
@@ -934,10 +888,19 @@ function TestsTable({
       { title: 'Группа', dataIndex: 'groupName', key: 'groupName', width: 150, render: fallback },
       { title: 'Материал', dataIndex: 'material', key: 'material', width: 140, render: fallback },
       { title: 'Метод', dataIndex: 'method', key: 'method', width: 140, render: fallback },
-      { title: 'Ед.', dataIndex: 'unit', key: 'unit', width: 90, render: fallback },
-      { title: 'Референс', dataIndex: 'referenceRange', key: 'referenceRange', width: 150, render: fallback },
       { title: 'Виды', dataIndex: 'species', key: 'species', width: 180, render: renderSpecies },
-      { title: 'Услуга', key: 'service', render: (_, item) => item.service ? `${item.service.title} · ${formatServicePrice(item.service)}` : '—' },
+      {
+        title: 'Документ результатов',
+        key: 'document',
+        width: 260,
+        render: (_, item) => item.documentTemplate ? (
+          <Space direction="vertical" size={0}>
+            <Typography.Text>{item.documentTemplate.title}</Typography.Text>
+            <Typography.Text type="secondary">Версия {item.documentTemplate.currentVersion}</Typography.Text>
+          </Space>
+        ) : <Tag color="red">Не привязан</Tag>,
+      },
+      { title: 'Платная услуга', key: 'service', render: (_, item) => item.service ? `${item.service.title} · ${formatServicePrice(item.service)}` : <Tag color="red">Не привязана</Tag> },
       { title: 'Статус', dataIndex: 'isActive', key: 'isActive', width: 110, render: activeTag },
       {
         title: '',
@@ -946,7 +909,7 @@ function TestsTable({
         render: (_, item) =>
           canManage ? (
             <Button size="small" icon={<EditOutlined />} onClick={() => onEdit(item)}>
-              Открыть
+              Настроить
             </Button>
           ) : null,
       },
@@ -963,68 +926,7 @@ function TestsTable({
         rowKey="id"
         columns={columns}
         className="dense-table"
-        scroll={{ x: 1180 }}
-      />
-    </div>
-  );
-}
-
-function ProfilesTable({
-  search,
-  species,
-  canManage,
-  onEdit,
-}: {
-  search: string;
-  species?: string;
-  canManage: boolean;
-  onEdit: (profile: LaboratoryProfile) => void;
-}) {
-  const query = useInfiniteListQuery({
-    queryKey: ['laboratory', 'profiles', { search, species }],
-    queryFn: ({ limit, offset }) => listLaboratoryProfiles({ search, species, limit, offset }),
-  });
-  const columns = useMemo<ColumnsType<LaboratoryProfile>>(
-    () => [
-      { title: 'Профиль', dataIndex: 'title', key: 'title', render: (value, item) => <TitleCell title={value} code={item.code} /> },
-      { title: 'Виды', dataIndex: 'species', key: 'species', width: 180, render: renderSpecies },
-      {
-        title: 'Состав профиля',
-        key: 'tests',
-        render: (_, item) => (
-          <Space direction="vertical" size={2}>
-            <Tag color="blue">{item.tests.length} {pluralizeAnalysis(item.tests.length)}</Tag>
-            <Typography.Text>{item.tests.map((link) => link.test.title).join(', ') || 'Анализы не выбраны'}</Typography.Text>
-          </Space>
-        ),
-      },
-      { title: 'Услуга', key: 'service', render: (_, item) => item.service ? `${item.service.title} · ${formatServicePrice(item.service)}` : '—' },
-      { title: 'Статус', dataIndex: 'isActive', key: 'isActive', width: 110, render: activeTag },
-      {
-        title: '',
-        key: 'actions',
-        width: 110,
-        render: (_, item) =>
-          canManage ? (
-            <Button size="small" icon={<EditOutlined />} onClick={() => onEdit(item)}>
-              Открыть
-            </Button>
-          ) : null,
-      },
-    ],
-    [canManage, onEdit],
-  );
-
-  return (
-    <div className="list-panel-body">
-      {query.isError ? <Alert type="error" showIcon message={getErrorMessage(query.error)} className="form-alert" /> : null}
-      <InfiniteTable<LaboratoryProfile>
-        query={query}
-        errorText={query.isError ? getErrorMessage(query.error) : undefined}
-        rowKey="id"
-        columns={columns}
-        className="dense-table"
-        scroll={{ x: 980 }}
+        scroll={{ x: 1240 }}
       />
     </div>
   );
@@ -1035,22 +937,25 @@ function TestDrawer({
   test,
   resources,
   onClose,
-  onCreateProfile,
 }: {
   open: boolean;
   test: LaboratoryTest | null;
   resources?: LaboratoryResources;
   onClose: () => void;
-  onCreateProfile: () => void;
 }) {
   const queryClient = useQueryClient();
   const { message } = App.useApp();
+  const documentsQuery = useQuery({
+    queryKey: ['document-templates', 'laboratory-select'],
+    queryFn: listDocumentTemplates,
+    enabled: open,
+  });
   const form = useForm<TestFormInput, unknown, TestFormValues>({ resolver: zodResolver(testSchema), defaultValues: getTestDefaults(test) });
+  const selectedDocumentTemplateId = form.watch('documentTemplateId');
   const mutation = useMutation({
     mutationFn: (values: TestFormValues) => test ? updateLaboratoryTest(test.id, values) : createLaboratoryTest(values),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['laboratory', 'tests'] });
-      await queryClient.invalidateQueries({ queryKey: ['laboratory', 'profiles'] });
       message.success(test ? 'Анализ обновлён' : 'Анализ создан');
       onClose();
     },
@@ -1062,19 +967,16 @@ function TestDrawer({
   }, [form, test, open]);
 
   return (
-    <Drawer title={test ? 'Анализ' : 'Новый анализ'} open={open} onClose={onClose} width={620} destroyOnHidden>
+    <Drawer title={test ? 'Настройка анализа' : 'Новый анализ'} open={open} onClose={onClose} width={620} destroyOnHidden>
       <Form layout="vertical" onFinish={form.handleSubmit((values) => mutation.mutate(values))}>
-        {!test ? (
-          <Alert
-            type="info"
-            showIcon
-            className="form-alert"
-            message="Здесь создаётся один отдельный анализ"
-            description="Чтобы собрать готовую карточку из нескольких исследований и затем назначать её одной кнопкой, создайте профиль анализов."
-            action={<Button onClick={onCreateProfile}>Создать профиль</Button>}
-          />
-        ) : null}
-        <FormInput control={form.control} name="title" label="Название" />
+        <Alert
+          type="info"
+          showIcon
+          className="form-alert"
+          message="Один анализ — одна услуга и один готовый документ"
+          description="Стоимость берётся из выбранной услуги. Показатели, нормы и печатный вид берутся из существующего документа в разделе «Настройки → Документы». Отдельного редактора бланка в лаборатории нет."
+        />
+        <FormInput control={form.control} name="title" label="Название анализа" />
         <Space className="form-grid-two" align="start">
           <FormInput control={form.control} name="code" label="Код" />
           <FormInput control={form.control} name="groupName" label="Группа" />
@@ -1083,81 +985,53 @@ function TestDrawer({
           <FormInput control={form.control} name="material" label="Биоматериал" />
           <FormInput control={form.control} name="method" label="Метод" />
         </Space>
-        <Space className="form-grid-two" align="start">
-          <FormInput control={form.control} name="unit" label="Единица измерения" />
-          <FormInput control={form.control} name="referenceRange" label="Референс" />
-        </Space>
-        <SpeciesSelect control={form.control} resources={resources} />
-        <ServiceSelect control={form.control} resources={resources} />
-        <FormInput control={form.control} name="description" label="Описание" textarea />
-        <ActiveSwitch control={form.control} />
-        <Button type="primary" htmlType="submit" loading={mutation.isPending}>
-          Сохранить
-        </Button>
-      </Form>
-    </Drawer>
-  );
-}
-
-function ProfileDrawer({ open, profile, resources, onClose }: { open: boolean; profile: LaboratoryProfile | null; resources?: LaboratoryResources; onClose: () => void }) {
-  const queryClient = useQueryClient();
-  const { message } = App.useApp();
-  const testsQuery = useQuery({ queryKey: ['laboratory', 'tests', 'select'], queryFn: () => listLaboratoryTests({ limit: 300, offset: 0, isActive: true }) });
-  const form = useForm<ProfileFormInput, unknown, ProfileFormValues>({ resolver: zodResolver(profileSchema), defaultValues: getProfileDefaults(profile) });
-  const mutation = useMutation({
-    mutationFn: (values: ProfileFormValues) => profile ? updateLaboratoryProfile(profile.id, values) : createLaboratoryProfile(values),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['laboratory', 'profiles'] });
-      message.success(profile ? 'Профиль обновлён' : 'Профиль создан');
-      onClose();
-    },
-    onError: (error) => message.error(getErrorMessage(error)),
-  });
-
-  useEffect(() => {
-    form.reset(getProfileDefaults(profile));
-  }, [form, profile, open]);
-
-  return (
-    <Drawer title={profile ? 'Профиль анализов' : 'Новый профиль анализов'} open={open} onClose={onClose} width={680} destroyOnHidden>
-      <Form layout="vertical" onFinish={form.handleSubmit((values) => mutation.mutate(values))}>
-        <Alert
-          type="info"
-          showIcon
-          className="form-alert"
-          message="Профиль — готовая карточка из нескольких анализов"
-          description="Выберите до 20 исследований. Во время приёма достаточно назначить профиль — все входящие анализы добавятся автоматически."
-        />
-        <FormInput control={form.control} name="title" label="Название профиля" />
-        <FormInput control={form.control} name="code" label="Код" />
         <SpeciesSelect control={form.control} resources={resources} />
         <ServiceSelect control={form.control} resources={resources} />
         <Controller
           control={form.control}
-          name="testIds"
+          name="documentTemplateId"
           render={({ field, fieldState }) => (
             <Form.Item
-              label="Состав профиля"
+              label="Документ с показателями"
+              required
               validateStatus={fieldState.error ? 'error' : undefined}
-              help={fieldState.error?.message ?? `Выбрано ${(field.value ?? []).length} из 20 анализов`}
+              help={fieldState.error?.message ?? 'Этот же документ откроется для внесения результатов и будет напечатан на A5.'}
             >
               <Select
                 {...field}
-                mode="multiple"
                 showSearch
-                maxCount={20}
-                maxTagCount="responsive"
                 optionFilterProp="label"
-                placeholder="Выберите анализы"
-                options={testsQuery.data?.items.map((item) => ({ value: item.id, label: item.code ? `${item.title} · ${item.code}` : item.title })) ?? []}
+                loading={documentsQuery.isLoading}
+                placeholder="Выберите существующий документ"
+                options={(documentsQuery.data ?? [])
+                  .filter((document) => hasDocumentResultTable(document.layout))
+                  .map((document) => ({
+                    value: document.id,
+                    label: `${document.title}${document.category?.title ? ` · ${document.category.title}` : ''}`,
+                  }))}
               />
             </Form.Item>
           )}
         />
+        <Button
+          block
+          icon={<FileTextOutlined />}
+          disabled={!selectedDocumentTemplateId}
+          onClick={() => {
+            window.open(
+              `/settings/documents?tab=documents&templateId=${encodeURIComponent(selectedDocumentTemplateId)}`,
+              '_blank',
+              'noopener,noreferrer',
+            );
+          }}
+        >
+          Открыть редактор выбранного документа
+        </Button>
+        {documentsQuery.isError ? <Alert type="error" showIcon message={getErrorMessage(documentsQuery.error)} className="form-alert" /> : null}
         <FormInput control={form.control} name="description" label="Описание" textarea />
         <ActiveSwitch control={form.control} />
         <Button type="primary" htmlType="submit" loading={mutation.isPending}>
-          Сохранить профиль
+          Сохранить
         </Button>
       </Form>
     </Drawer>
@@ -1212,13 +1086,12 @@ function ServiceSelect({ control, resources }: { control: any; resources?: Labor
       control={control}
       name="serviceId"
       render={({ field, fieldState }) => (
-        <Form.Item label="Связанная услуга" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+        <Form.Item label="Платная услуга" required validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message ?? 'По этой услуге анализ попадёт в счёт приёма.'}>
           <Select
             {...field}
-            allowClear
             showSearch
             optionFilterProp="label"
-            placeholder="Не связана"
+            placeholder="Выберите услугу и цену"
             options={resources?.services.map((item) => ({ value: item.id, label: `${item.title} · ${formatServicePrice(item)}` })) ?? []}
           />
         </Form.Item>
@@ -1248,24 +1121,11 @@ function getTestDefaults(test: LaboratoryTest | null): TestFormInput {
     groupName: test?.groupName ?? '',
     material: test?.material ?? '',
     method: test?.method ?? '',
-    unit: test?.unit ?? '',
-    referenceRange: test?.referenceRange ?? '',
     species: test?.species ?? [],
     serviceId: test?.serviceId ?? '',
+    documentTemplateId: test?.documentTemplateId ?? '',
     isActive: test?.isActive ?? true,
     description: test?.description ?? '',
-  };
-}
-
-function getProfileDefaults(profile: LaboratoryProfile | null): ProfileFormInput {
-  return {
-    title: profile?.title ?? '',
-    code: profile?.code ?? '',
-    description: profile?.description ?? '',
-    species: profile?.species ?? [],
-    serviceId: profile?.serviceId ?? '',
-    isActive: profile?.isActive ?? true,
-    testIds: profile?.tests.map((link) => link.testId) ?? [],
   };
 }
 
@@ -1278,15 +1138,6 @@ function getResultDefaults(item: LaboratoryOrderItem | null): ResultFormInput {
     referenceRange: item?.referenceRange ?? '',
     comment: item?.comment ?? '',
   };
-}
-
-function pluralizeAnalysis(count: number) {
-  const lastTwo = count % 100;
-  const last = count % 10;
-  if (lastTwo >= 11 && lastTwo <= 14) return 'анализов';
-  if (last === 1) return 'анализ';
-  if (last >= 2 && last <= 4) return 'анализа';
-  return 'анализов';
 }
 
 function formatOrderItems(items: LaboratoryOrderItem[]) {
@@ -1340,7 +1191,11 @@ function fallback(value?: string | null) {
 }
 
 function getInitialTab(value: string | null) {
-  return value === 'tests' || value === 'profiles' ? value : 'orders';
+  return value === 'tests' ? value : 'orders';
+}
+
+function hasDocumentResultTable(layout: { blocks?: Array<{ type?: string; rows?: string[][] }> } | null) {
+  return Boolean(layout?.blocks?.some((block) => block.type === 'table' && Array.isArray(block.rows) && block.rows.length > 1));
 }
 
 function getInitialOrderStatus(value: string | null): OrderStatusFilter | undefined {
@@ -1360,115 +1215,4 @@ function toDateInput(value: Date) {
   const month = String(value.getMonth() + 1).padStart(2, '0');
   const day = String(value.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
-}
-
-function printLaboratoryOrder(order: LaboratoryOrder, organization?: OrganizationPrintProfile) {
-  const printWindow = window.open('', '_blank', 'width=760,height=900');
-  if (!printWindow) {
-    return;
-  }
-
-  const clinicName = organization?.displayName?.trim() || 'TemichevVet';
-  const clinicAddress = organization?.offices?.[0]?.address || organization?.legalAddress || '';
-  const clinicPhone = organization?.offices?.[0]?.phone || '';
-  const logoUrl = organization?.logoUrl
-    ? new URL(organization.logoUrl, window.location.href).href
-    : new URL('/brand/temichevvet-logo.jpg', window.location.href).href;
-  const patientDescription = [order.visit.animal.species, order.visit.animal.breed].filter(Boolean).join(', ') || 'Вид и порода не указаны';
-  const rows = order.items
-    .map((item) => {
-      const result = item.resultValue || item.resultText || '';
-      return `<tr>
-        <td><strong>${escapeLaboratoryPrintHtml(item.title)}</strong>${item.code ? `<br><small>${escapeLaboratoryPrintHtml(item.code)}</small>` : ''}</td>
-        <td>${escapeLaboratoryPrintHtml(result || '—')}</td>
-        <td>${escapeLaboratoryPrintHtml(item.unit || '—')}</td>
-        <td>${escapeLaboratoryPrintHtml(item.referenceRange || '—')}</td>
-        <td>${escapeLaboratoryPrintHtml(item.comment || '—')}</td>
-      </tr>`;
-    })
-    .join('');
-
-  printWindow.document.write(`<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8" />
-  <title>${escapeLaboratoryPrintHtml(`Лабораторный бланк — ${order.visit.animal.nickname}`)}</title>
-  <style>
-    * { box-sizing: border-box; }
-    body { margin: 0; color: #142033; background: #fff; font: 9px/1.28 Arial, sans-serif; }
-    .page { width: 148mm; min-height: 210mm; margin: 0 auto; padding: 7mm; }
-    .header { display: grid; grid-template-columns: 16mm 1fr; gap: 4mm; align-items: center; padding-bottom: 3mm; border-bottom: 1.5px solid #21848d; }
-    .logo { width: 15mm; height: 15mm; object-fit: contain; }
-    .brand { font-size: 15px; font-weight: 700; color: #153958; }
-    .contacts { color: #637184; font-size: 8px; }
-    h1 { margin: 4mm 0 3mm; color: #153958; font-size: 15px; line-height: 1.15; }
-    .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5mm 4mm; margin-bottom: 3mm; padding: 2.5mm; border: 1px solid #ccd7df; border-radius: 2mm; }
-    .meta div { display: grid; grid-template-columns: 20mm 1fr; gap: 1mm; }
-    .meta span { color: #6b7888; }
-    .comment { margin: 0 0 3mm; padding: 2mm; border-left: 2px solid #21848d; background: #f4f8fa; white-space: pre-wrap; }
-    table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 7.4px; line-height: 1.18; }
-    th, td { padding: 1.2mm 1mm; border: .6px solid #9eabb7; text-align: left; vertical-align: top; overflow-wrap: anywhere; white-space: pre-wrap; }
-    th { background: #eaf3f5; color: #153958; font-weight: 700; }
-    th:nth-child(1) { width: 27%; }
-    th:nth-child(2) { width: 22%; }
-    th:nth-child(3) { width: 10%; }
-    th:nth-child(4) { width: 20%; }
-    th:nth-child(5) { width: 21%; }
-    small { color: #6b7888; font-size: 6.8px; }
-    .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 10mm; margin-top: 8mm; }
-    .signature { padding-top: 5mm; border-top: 1px solid #64748b; color: #64748b; font-size: 7.5px; }
-    @page { size: A5 portrait; margin: 0; }
-    @media print { .page { max-width: none; padding: 0; } tr { break-inside: avoid; } }
-  </style>
-</head>
-<body>
-  <main class="page">
-    <header class="header">
-      <img class="logo" src="${escapeLaboratoryPrintHtml(logoUrl)}" alt="${escapeLaboratoryPrintHtml(clinicName)}" />
-      <div>
-        <div class="brand">${escapeLaboratoryPrintHtml(clinicName)}</div>
-        <div>Ветеринарная клиника</div>
-        ${clinicAddress ? `<div class="contacts">${escapeLaboratoryPrintHtml(clinicAddress)}</div>` : ''}
-        ${clinicPhone ? `<div class="contacts">${escapeLaboratoryPrintHtml(clinicPhone)}</div>` : ''}
-      </div>
-    </header>
-    <h1>Результаты лабораторного исследования</h1>
-    <section class="meta">
-      <div><span>Заказ</span><strong>${escapeLaboratoryPrintHtml(formatDateTime(order.createdAt))}</strong></div>
-      <div><span>Статус</span><strong>${escapeLaboratoryPrintHtml(laboratoryOrderStatusLabels[order.status])}</strong></div>
-      <div><span>Пациент</span><strong>${escapeLaboratoryPrintHtml(order.visit.animal.nickname)}</strong></div>
-      <div><span>Вид / порода</span><strong>${escapeLaboratoryPrintHtml(patientDescription)}</strong></div>
-      <div><span>Владелец</span><strong>${escapeLaboratoryPrintHtml(order.visit.owner.fullName)}</strong></div>
-      <div><span>Телефон</span><strong>${escapeLaboratoryPrintHtml(order.visit.owner.phone || '—')}</strong></div>
-      <div><span>Врач</span><strong>${escapeLaboratoryPrintHtml(order.visit.employee?.fullName || '—')}</strong></div>
-      <div><span>Завершён</span><strong>${escapeLaboratoryPrintHtml(order.completedAt ? formatDateTime(order.completedAt) : '—')}</strong></div>
-    </section>
-    ${order.comment ? `<div class="comment"><strong>Комментарий к заказу</strong><br>${escapeLaboratoryPrintHtml(order.comment)}</div>` : ''}
-    <table>
-      <thead><tr><th>Исследование</th><th>Результат</th><th>Ед.</th><th>Референс</th><th>Комментарий</th></tr></thead>
-      <tbody>${rows || '<tr><td colspan="5">Исследования не добавлены</td></tr>'}</tbody>
-    </table>
-    <section class="signatures">
-      <div class="signature">Подпись сотрудника лаборатории</div>
-      <div class="signature">Подпись врача</div>
-    </section>
-  </main>
-  <script>
-    const logo = document.querySelector('.logo');
-    const startPrint = () => window.setTimeout(() => window.print(), 80);
-    if (!logo || logo.complete) startPrint();
-    else { logo.addEventListener('load', startPrint, { once: true }); logo.addEventListener('error', startPrint, { once: true }); }
-  </script>
-</body>
-</html>`);
-  printWindow.document.close();
-}
-
-function escapeLaboratoryPrintHtml(value: string) {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
 }

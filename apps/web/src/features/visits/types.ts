@@ -1,6 +1,7 @@
 import { Animal, AnimalWeightRecord, Vaccination } from '../animals/types';
 import { Owner } from '../owners/types';
 import { SchedulingEmployee } from '../scheduling/types';
+import type { DocumentLayout } from '../documents/documentLayout';
 
 export type DecimalValue = string | number;
 
@@ -133,11 +134,28 @@ export type VisitLaboratoryOrder = {
   visitId: string;
   status: VisitLaboratoryOrderStatus;
   comment: string | null;
+  formSnapshots: VisitLaboratoryFormSnapshot[] | null;
   createdById: string | null;
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
   items: VisitLaboratoryOrderItem[];
+};
+
+export type VisitLaboratoryFormSnapshot = {
+  schemaVersion: 1;
+  testId: string;
+  testTitle: string;
+  documentTemplateId: string;
+  documentTemplateTitle: string;
+  documentTemplateVersion: number;
+  layout: DocumentLayout;
+  bindings: Array<{
+    itemId: string;
+    blockId: string;
+    rowIndex: number;
+    resultColumnIndex: number;
+  }>;
 };
 
 export type VisitLaboratoryOrderItem = {

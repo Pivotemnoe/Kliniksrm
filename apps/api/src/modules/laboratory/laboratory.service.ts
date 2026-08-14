@@ -12,6 +12,7 @@ import { UpdateLaboratoryOrderItemDto } from './dto/update-laboratory-order-item
 import { UpdateLaboratoryOrderResultsDto, UpdateLaboratoryOrderResultRowDto } from './dto/update-laboratory-order-results.dto';
 import { UpdateLaboratoryProfileDto, UpsertLaboratoryProfileDto } from './dto/upsert-laboratory-profile.dto';
 import { UpdateLaboratoryTestDto, UpsertLaboratoryTestDto } from './dto/upsert-laboratory-test.dto';
+import { extractLaboratoryDocumentIndicators } from './laboratory-document-form';
 
 @Injectable()
 export class LaboratoryService {
@@ -289,7 +290,9 @@ export class LaboratoryService {
   }
 
   async createTest(dto: UpsertLaboratoryTestDto, actorId: string) {
+    this.ensureActiveTestConfigured(dto.serviceId, dto.documentTemplateId, dto.isActive ?? true);
     await this.ensureServiceExists(dto.serviceId);
+    await this.ensureLaboratoryDocumentExists(dto.documentTemplateId);
     const test = await this.prisma.laboratoryTest.create({
       data: this.toTestCreateData(dto),
       include: laboratoryTestInclude,
@@ -300,15 +303,21 @@ export class LaboratoryService {
       action: 'laboratory.test.create',
       entityType: 'LaboratoryTest',
       entityId: test.id,
-      metadata: { title: test.title, serviceId: test.serviceId },
+      metadata: { title: test.title, serviceId: test.serviceId, documentTemplateId: test.documentTemplateId },
     });
 
     return test;
   }
 
   async updateTest(testId: string, dto: UpdateLaboratoryTestDto, actorId: string) {
-    await this.ensureTestExists(testId);
+    const existing = await this.ensureTestExists(testId);
+    this.ensureActiveTestConfigured(
+      dto.serviceId ?? existing.serviceId ?? undefined,
+      dto.documentTemplateId ?? existing.documentTemplateId ?? undefined,
+      dto.isActive ?? existing.isActive,
+    );
     await this.ensureServiceExists(dto.serviceId);
+    await this.ensureLaboratoryDocumentExists(dto.documentTemplateId);
     const test = await this.prisma.laboratoryTest.update({
       where: { id: testId },
       data: this.toTestUpdateData(dto),
@@ -477,6 +486,7 @@ export class LaboratoryService {
       referenceRange: clean(dto.referenceRange),
       species: normalizeSpecies(dto.species),
       ...(dto.serviceId ? { service: { connect: { id: dto.serviceId } } } : {}),
+      ...(dto.documentTemplateId ? { documentTemplate: { connect: { id: dto.documentTemplateId } } } : {}),
       isActive: dto.isActive ?? true,
       description: clean(dto.description),
     };
@@ -493,6 +503,9 @@ export class LaboratoryService {
       ...(dto.referenceRange !== undefined ? { referenceRange: clean(dto.referenceRange) } : {}),
       ...(dto.species !== undefined ? { species: normalizeSpecies(dto.species) } : {}),
       ...(dto.serviceId !== undefined ? { service: dto.serviceId ? { connect: { id: dto.serviceId } } : { disconnect: true } } : {}),
+      ...(dto.documentTemplateId !== undefined
+        ? { documentTemplate: dto.documentTemplateId ? { connect: { id: dto.documentTemplateId } } : { disconnect: true } }
+        : {}),
       ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
       ...(dto.description !== undefined ? { description: clean(dto.description) } : {}),
     };
@@ -535,10 +548,41 @@ export class LaboratoryService {
     }
   }
 
+  private async ensureLaboratoryDocumentExists(documentTemplateId?: string) {
+    if (!documentTemplateId) return;
+
+    const template = await this.prisma.documentTemplate.findUnique({
+      where: { id: documentTemplateId },
+      select: { id: true, layout: true },
+    });
+    if (!template) {
+      throw new NotFoundException('Выбранный бланк из раздела «Документы» не найден');
+    }
+
+    const { indicators } = extractLaboratoryDocumentIndicators(template.layout);
+    if (!indicators.length) {
+      throw new BadRequestException('В выбранном документе нет таблицы с колонками показателя и результата');
+    }
+  }
+
   private async ensureTestExists(testId: string) {
-    const test = await this.prisma.laboratoryTest.findUnique({ where: { id: testId }, select: { id: true } });
+    const test = await this.prisma.laboratoryTest.findUnique({
+      where: { id: testId },
+      select: { id: true, serviceId: true, documentTemplateId: true, isActive: true },
+    });
     if (!test) {
       throw new NotFoundException('Анализ не найден');
+    }
+    return test;
+  }
+
+  private ensureActiveTestConfigured(serviceId?: string, documentTemplateId?: string, isActive = true) {
+    if (!isActive) return;
+    if (!serviceId) {
+      throw new BadRequestException('Для активного лабораторного анализа выберите платную услугу');
+    }
+    if (!documentTemplateId) {
+      throw new BadRequestException('Для активного лабораторного анализа выберите документ с таблицей показателей');
     }
   }
 
@@ -568,6 +612,15 @@ export class LaboratoryService {
 
 const laboratoryTestInclude = {
   service: { select: { ...servicePricingSelect, category: { select: { id: true, title: true } } } },
+  documentTemplate: {
+    select: {
+      id: true,
+      title: true,
+      currentVersion: true,
+      layout: true,
+      category: { select: { id: true, title: true } },
+    },
+  },
   _count: { select: { profileLinks: true } },
 } satisfies Prisma.LaboratoryTestInclude;
 

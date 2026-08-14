@@ -13,8 +13,9 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Alert, Button, Card, Checkbox, Form, Input, Modal, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography } from 'antd';
 import { ColumnsType } from 'antd/es/table';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
+import { useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
@@ -152,6 +153,7 @@ const notificationVariableGroups = [
 
 export function DocumentTemplatesPage() {
   const { data: auth } = useCurrentEmployee();
+  const [searchParams] = useSearchParams();
   const canManageDocuments = hasPermission(auth?.employee, 'documents.manage');
   const canPrintDocuments = hasPermission(auth?.employee, 'documents.print');
   const canManageText = hasPermission(auth?.employee, 'settings.manage');
@@ -165,6 +167,7 @@ export function DocumentTemplatesPage() {
         description="Текстовые шаблоны, составные документы и уведомления клиники."
       />
       <Tabs
+        defaultActiveKey={searchParams.get('tab') === 'documents' ? 'documents' : 'text'}
         items={[
           {
             key: 'text',
@@ -184,7 +187,13 @@ export function DocumentTemplatesPage() {
                 Составные / документы
               </Space>
             ),
-            children: <DocumentTemplatesPanel canManage={canManageDocuments} canPrint={canPrintDocuments} />,
+            children: (
+              <DocumentTemplatesPanel
+                canManage={canManageDocuments}
+                canPrint={canPrintDocuments}
+                initialTemplateId={searchParams.get('templateId') ?? undefined}
+              />
+            ),
           },
           {
             key: 'notifications',
@@ -509,9 +518,11 @@ function TextTemplatesPanel({ canManage }: { canManage: boolean }) {
 function DocumentTemplatesPanel({
   canManage,
   canPrint,
+  initialTemplateId,
 }: {
   canManage: boolean;
   canPrint: boolean;
+  initialTemplateId?: string;
 }) {
   const queryClient = useQueryClient();
   const { message } = App.useApp();
@@ -523,6 +534,7 @@ function DocumentTemplatesPanel({
   });
   const [modalOpen, setModalOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<DocumentTemplate | null>(null);
+  const openedTemplateIdRef = useRef<string | null>(null);
   const [visualLayout, setVisualLayout] = useState<DocumentLayout>(() => createDefaultDocumentLayout());
   const { control, getValues, handleSubmit, reset, watch } = useForm<DocumentTemplateFormValues>({
     resolver: zodResolver(documentTemplateSchema),
@@ -541,6 +553,20 @@ function DocumentTemplatesPanel({
     },
     onError: (error) => message.error(getErrorMessage(error)),
   });
+
+  useEffect(() => {
+    if (!canManage || !initialTemplateId || openedTemplateIdRef.current === initialTemplateId || !templatesQuery.data) {
+      return;
+    }
+
+    openedTemplateIdRef.current = initialTemplateId;
+    const template = templatesQuery.data.find((item) => item.id === initialTemplateId);
+    if (template) {
+      openEdit(template);
+    } else {
+      message.error('Выбранный документ не найден или уже недоступен');
+    }
+  }, [canManage, initialTemplateId, templatesQuery.data]);
   const columns = useMemo<ColumnsType<DocumentTemplate>>(
     () => [
       {

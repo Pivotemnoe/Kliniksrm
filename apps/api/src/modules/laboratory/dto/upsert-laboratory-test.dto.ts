@@ -54,6 +54,11 @@ export class UpsertLaboratoryTestDto {
   @IsUUID()
   serviceId?: string;
 
+  @ApiPropertyOptional({ description: 'Existing document form used for result entry and A5 printing' })
+  @IsOptional()
+  @IsUUID()
+  documentTemplateId?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()

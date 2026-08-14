@@ -36,6 +36,7 @@ export function VisitCardPage() {
   const canReadBilling = hasPermission(auth?.employee, 'billing.read');
   const canReadHospital = hasPermission(auth?.employee, 'hospital.read');
   const canManageHospital = hasPermission(auth?.employee, 'hospital.manage');
+  const canPrintDocuments = hasPermission(auth?.employee, 'documents.print');
   const isDirector = Boolean(auth?.employee.roles.includes('director'));
   const [hospitalModalOpen, setHospitalModalOpen] = useState(false);
   const [hospitalBoxId, setHospitalBoxId] = useState<string>();
@@ -409,7 +410,15 @@ export function VisitCardPage() {
                 {
                   key: 'laboratory',
                   label: 'Лаборатория',
-                  children: <VisitLaboratoryTab visit={visit} canManage={canManage} locked={Boolean(locked)} />,
+                  children: (
+                    <VisitLaboratoryTab
+                      visit={visit}
+                      canManage={canManage}
+                      canPrint={canPrintDocuments}
+                      locked={Boolean(locked)}
+                      organization={organizationQuery.data}
+                    />
+                  ),
                 },
                 {
                   key: 'history',

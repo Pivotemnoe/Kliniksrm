@@ -1,4 +1,5 @@
 import type { DecimalValue, VisitLaboratoryOrderItemStatus, VisitLaboratoryOrderStatus, VisitStatus } from '../visits/types';
+import type { DocumentLayout } from '../documents/documentLayout';
 
 export type LaboratoryServiceItem = {
   id: string;
@@ -19,6 +20,14 @@ export type LaboratoryTest = {
   id: string;
   serviceId: string | null;
   service?: LaboratoryServiceItem | null;
+  documentTemplateId: string | null;
+  documentTemplate?: {
+    id: string;
+    title: string;
+    currentVersion: number;
+    layout: DocumentLayout | null;
+    category?: { id: string; title: string } | null;
+  } | null;
   code: string | null;
   title: string;
   groupName: string | null;
@@ -75,6 +84,7 @@ export type LaboratoryOrder = {
   visitId: string;
   status: VisitLaboratoryOrderStatus;
   comment: string | null;
+  formSnapshots: LaboratoryFormSnapshot[] | null;
   createdById: string | null;
   completedAt: string | null;
   createdAt: string;
@@ -89,6 +99,22 @@ export type LaboratoryOrder = {
     employee: { id: string; fullName: string; position: string | null } | null;
   };
   items: LaboratoryOrderItem[];
+};
+
+export type LaboratoryFormSnapshot = {
+  schemaVersion: 1;
+  testId: string;
+  testTitle: string;
+  documentTemplateId: string;
+  documentTemplateTitle: string;
+  documentTemplateVersion: number;
+  layout: DocumentLayout;
+  bindings: Array<{
+    itemId: string;
+    blockId: string;
+    rowIndex: number;
+    resultColumnIndex: number;
+  }>;
 };
 
 export type LaboratoryOrderItem = {
@@ -126,6 +152,7 @@ export type LaboratoryTestInput = {
   referenceRange?: string | null;
   species?: string[];
   serviceId?: string | null;
+  documentTemplateId?: string | null;
   isActive?: boolean;
   description?: string | null;
 };

@@ -35,6 +35,7 @@ import { UpsertVisitExamDto } from './dto/upsert-visit-exam.dto';
 import { UpsertVisitRecommendationDto } from './dto/upsert-visit-recommendation.dto';
 import { toStockQuantity } from '../stock/stock-units';
 import { resolveServiceUnitPrice, servicePricingSelect } from '../stock/service-pricing';
+import { extractLaboratoryDocumentIndicators, LaboratoryFormSnapshot } from '../laboratory/laboratory-document-form';
 import { assertPrimaryVisitDiagnosesReady } from './visit-diagnosis-rules';
 
 type WarehouseScope = string[] | null;
@@ -697,7 +698,10 @@ export class VisitsService {
     const [tests, profiles] = await this.prisma.$transaction([
       this.prisma.laboratoryTest.findMany({
         where: { id: { in: testIds }, isActive: true },
-        include: { service: laboratoryServiceSelect },
+        include: {
+          service: laboratoryServiceSelect,
+          documentTemplate: { select: { id: true, title: true, currentVersion: true, layout: true } },
+        },
       }),
       this.prisma.laboratoryProfile.findMany({
         where: { id: { in: profileIds }, isActive: true },
@@ -713,6 +717,13 @@ export class VisitsService {
 
     if (tests.length !== testIds.length) {
       throw new NotFoundException('Один или несколько анализов не найдены или выключены');
+    }
+    const unconfiguredTest = tests.find((test) => {
+      if (!test.service || !test.documentTemplate) return true;
+      return extractLaboratoryDocumentIndicators(test.documentTemplate.layout).indicators.length === 0;
+    });
+    if (unconfiguredTest) {
+      throw new BadRequestException(`Анализ «${unconfiguredTest.title}» нельзя назначить: привяжите к нему платную услугу и документ с таблицей показателей`);
     }
 
     if (profiles.length !== profileIds.length) {
@@ -731,12 +742,49 @@ export class VisitsService {
           comment: clean(dto.comment),
         },
       });
+      const formSnapshots: LaboratoryFormSnapshot[] = [];
 
       for (const test of tests) {
         const billItemId = await createBillItemFromService(tx, bill.id, test.service);
-        await tx.laboratoryOrderItem.create({
-          data: toLaboratoryOrderItemData(createdOrder.id, test, null, billItemId),
-        });
+        const { layout, indicators } = extractLaboratoryDocumentIndicators(test.documentTemplate?.layout);
+
+        if (test.documentTemplate && layout && indicators.length) {
+          const bindings: LaboratoryFormSnapshot['bindings'] = [];
+          for (const [index, indicator] of indicators.entries()) {
+            const item = await tx.laboratoryOrderItem.create({
+              data: {
+                ...toLaboratoryOrderItemData(createdOrder.id, test, null, index === 0 ? billItemId : null),
+                title: indicator.title,
+                code: indicator.code,
+                groupName: test.title,
+                unit: indicator.unit,
+                referenceRange: indicator.referenceRange,
+              },
+              select: { id: true },
+            });
+            bindings.push({
+              itemId: item.id,
+              blockId: indicator.blockId,
+              rowIndex: indicator.rowIndex,
+              resultColumnIndex: indicator.resultColumnIndex,
+            });
+          }
+
+          formSnapshots.push({
+            schemaVersion: 1,
+            testId: test.id,
+            testTitle: test.title,
+            documentTemplateId: test.documentTemplate.id,
+            documentTemplateTitle: test.documentTemplate.title,
+            documentTemplateVersion: test.documentTemplate.currentVersion,
+            layout,
+            bindings,
+          });
+        } else {
+          await tx.laboratoryOrderItem.create({
+            data: toLaboratoryOrderItemData(createdOrder.id, test, null, billItemId),
+          });
+        }
       }
 
       for (const profile of profiles) {
@@ -763,6 +811,13 @@ export class VisitsService {
         }
       }
 
+      if (formSnapshots.length) {
+        await tx.laboratoryOrder.update({
+          where: { id: createdOrder.id },
+          data: { formSnapshots: formSnapshots as unknown as Prisma.InputJsonValue },
+        });
+      }
+
       await this.recalculateVisitTotals(tx, visitId);
       return tx.laboratoryOrder.findUniqueOrThrow({
         where: { id: createdOrder.id },
@@ -775,7 +830,13 @@ export class VisitsService {
       action: 'visit_laboratory_order.create',
       entityType: 'LaboratoryOrder',
       entityId: order.id,
-      metadata: { visitId, items: order.items.length, testIds, profileIds },
+      metadata: {
+        visitId,
+        items: order.items.length,
+        testIds,
+        profileIds,
+        linkedDocumentForms: Array.isArray(order.formSnapshots) ? order.formSnapshots.length : 0,
+      },
     });
 
     return this.getVisit(visitId);

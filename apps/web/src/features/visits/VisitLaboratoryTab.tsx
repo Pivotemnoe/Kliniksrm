@@ -1,4 +1,4 @@
-import { CloseOutlined, EditOutlined, ExperimentOutlined, PlusOutlined } from '@ant-design/icons';
+import { CloseOutlined, EditOutlined, ExperimentOutlined, PlusOutlined, PrinterOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Button, Card, Drawer, Form, Input, Popconfirm, Select, Space, Table, Tag, Typography } from 'antd';
@@ -9,7 +9,10 @@ import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
 import { formatDateTime } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
-import { listLaboratoryProfiles, listLaboratoryTests } from '../laboratory/laboratory.api';
+import { listLaboratoryTests } from '../laboratory/laboratory.api';
+import { LaboratoryResultsTableDrawer } from '../laboratory/LaboratoryResultsTableDrawer';
+import { printLaboratoryOrder } from '../laboratory/laboratoryPrint';
+import type { OrganizationPrintProfile } from '../organization/types';
 import {
   laboratoryOrderItemStatusLabels,
   laboratoryOrderStatusColors,
@@ -25,11 +28,10 @@ import { cancelVisitLaboratoryOrder, createVisitLaboratoryOrder, updateVisitLabo
 const orderSchema = z
   .object({
     testIds: z.array(z.string()).optional(),
-    profileIds: z.array(z.string()).optional(),
     comment: z.string().trim().max(1000, 'До 1000 символов').optional(),
   })
-  .refine((value) => Boolean(value.testIds?.length || value.profileIds?.length), {
-    message: 'Выберите анализ или профиль',
+  .refine((value) => Boolean(value.testIds?.length), {
+    message: 'Выберите хотя бы один анализ',
     path: ['testIds'],
   });
 
@@ -47,10 +49,23 @@ type OrderFormValues = z.output<typeof orderSchema>;
 type ResultFormInput = z.input<typeof resultSchema>;
 type ResultFormValues = z.output<typeof resultSchema>;
 
-export function VisitLaboratoryTab({ visit, canManage, locked }: { visit: Visit; canManage: boolean; locked: boolean }) {
+export function VisitLaboratoryTab({
+  visit,
+  canManage,
+  canPrint,
+  locked,
+  organization,
+}: {
+  visit: Visit;
+  canManage: boolean;
+  canPrint: boolean;
+  locked: boolean;
+  organization?: OrganizationPrintProfile | null;
+}) {
   const queryClient = useQueryClient();
   const [orderOpen, setOrderOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<{ order: VisitLaboratoryOrder; item: VisitLaboratoryOrderItem } | null>(null);
+  const [tableOrder, setTableOrder] = useState<VisitLaboratoryOrder | null>(null);
   const visitCancelled = visit.status === 'CANCELLED';
   const disabled = locked || !canManage || visitCancelled;
   const cancelMutation = useMutation({
@@ -129,13 +144,25 @@ export function VisitLaboratoryTab({ visit, canManage, locked }: { visit: Visit;
               </Space>
             }
             extra={
-              !disabled && order.status !== 'CANCELLED' ? (
-                <Popconfirm title="Отменить лабораторный заказ?" okText="Отменить" cancelText="Закрыть" onConfirm={() => cancelMutation.mutate(order.id)}>
-                  <Button danger size="small" icon={<CloseOutlined />} loading={cancelMutation.isPending}>
-                    Отменить
+              <Space wrap>
+                {canPrint ? (
+                  <Button size="small" icon={<PrinterOutlined />} onClick={() => printLaboratoryOrder(toPrintOrder(visit, order), organization)}>
+                    Печать A5
                   </Button>
-                </Popconfirm>
-              ) : null
+                ) : null}
+                {order.status !== 'CANCELLED' ? (
+                  <Button size="small" icon={<EditOutlined />} disabled={disabled} onClick={() => setTableOrder(order)}>
+                    Заполнить показатели
+                  </Button>
+                ) : null}
+                {!disabled && order.status !== 'CANCELLED' ? (
+                  <Popconfirm title="Отменить лабораторный заказ?" okText="Отменить" cancelText="Закрыть" onConfirm={() => cancelMutation.mutate(order.id)}>
+                    <Button danger size="small" icon={<CloseOutlined />} loading={cancelMutation.isPending}>
+                      Отменить
+                    </Button>
+                  </Popconfirm>
+                ) : null}
+              </Space>
             }
           >
             {order.comment ? <Typography.Paragraph>{order.comment}</Typography.Paragraph> : null}
@@ -153,6 +180,12 @@ export function VisitLaboratoryTab({ visit, canManage, locked }: { visit: Visit;
         <Alert type="info" showIcon message="Лабораторные анализы ещё не назначались." />
       )}
       <OrderDrawer open={orderOpen} visit={visit} onClose={() => setOrderOpen(false)} />
+      <LaboratoryResultsTableDrawer
+        order={tableOrder}
+        patientName={visit.animal.nickname}
+        canManage={!disabled}
+        onClose={() => setTableOrder(null)}
+      />
       <ResultDrawer visit={visit} target={editingItem} onClose={() => setEditingItem(null)} />
     </Space>
   );
@@ -161,16 +194,15 @@ export function VisitLaboratoryTab({ visit, canManage, locked }: { visit: Visit;
 function OrderDrawer({ open, visit, onClose }: { open: boolean; visit: Visit; onClose: () => void }) {
   const queryClient = useQueryClient();
   const testsQuery = useQuery({ queryKey: ['laboratory', 'tests', 'visit-select'], queryFn: () => listLaboratoryTests({ limit: 300, offset: 0, isActive: true }) });
-  const profilesQuery = useQuery({ queryKey: ['laboratory', 'profiles', 'visit-select'], queryFn: () => listLaboratoryProfiles({ limit: 300, offset: 0, isActive: true }) });
   const form = useForm<OrderFormInput, unknown, OrderFormValues>({
     resolver: zodResolver(orderSchema),
-    defaultValues: { testIds: [], profileIds: [], comment: '' },
+    defaultValues: { testIds: [], comment: '' },
   });
   const mutation = useMutation({
     mutationFn: (values: OrderFormValues) => createVisitLaboratoryOrder(visit.id, values),
     onSuccess: async () => {
       await invalidateVisit(queryClient, visit.id);
-      form.reset({ testIds: [], profileIds: [], comment: '' });
+      form.reset({ testIds: [], comment: '' });
       onClose();
     },
   });
@@ -183,40 +215,26 @@ function OrderDrawer({ open, visit, onClose }: { open: boolean; visit: Visit; on
           type="info"
           showIcon
           className="form-alert"
-          message="Профиль добавляет сразу всю карточку анализов"
-          description="Выберите готовый профиль для комплексного исследования. Отдельные анализы ниже можно добавить дополнительно."
-        />
-        <Controller
-          control={form.control}
-          name="profileIds"
-          render={({ field }) => (
-            <Form.Item label="Профили анализов">
-              <Select
-                {...field}
-                mode="multiple"
-                showSearch
-                optionFilterProp="label"
-                placeholder="Например, Общий клинический профиль"
-                options={profilesQuery.data?.items.map((profile) => ({
-                  value: profile.id,
-                  label: `${profile.title}${profile.code ? ` · ${profile.code}` : ''} · ${profile.tests.length} анализов`,
-                })) ?? []}
-              />
-            </Form.Item>
-          )}
+          message="Каждый анализ уже связан с услугой и готовым документом"
+          description="Выберите нужный анализ. CRM один раз начислит связанную услугу, а для результатов откроет таблицу именно из привязанного документа."
         />
         <Controller
           control={form.control}
           name="testIds"
           render={({ field, fieldState }) => (
-            <Form.Item label="Отдельные анализы" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+            <Form.Item label="Лабораторные анализы" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
               <Select
                 {...field}
                 mode="multiple"
                 showSearch
                 optionFilterProp="label"
-                placeholder="Дополнительные отдельные анализы"
-                options={testsQuery.data?.items.map((test) => ({ value: test.id, label: test.code ? `${test.title} · ${test.code}` : test.title })) ?? []}
+                placeholder="Выберите анализы"
+                options={testsQuery.data?.items
+                  .filter((test) => test.serviceId && test.documentTemplateId)
+                  .map((test) => ({
+                    value: test.id,
+                    label: `${test.title}${test.code ? ` · ${test.code}` : ''} · ${test.service?.title ?? 'услуга'} · ${test.documentTemplate?.title ?? 'документ'}`,
+                  })) ?? []}
               />
             </Form.Item>
           )}
@@ -314,6 +332,24 @@ function getResultDefaults(item: VisitLaboratoryOrderItem | null): ResultFormInp
 
 function fallback(value?: string | null) {
   return value || '—';
+}
+
+function toPrintOrder(visit: Visit, order: VisitLaboratoryOrder) {
+  return {
+    ...order,
+    visit: {
+      owner: {
+        fullName: visit.owner.fullName,
+        phone: visit.owner.phone,
+      },
+      animal: {
+        nickname: visit.animal.nickname,
+        species: visit.animal.species,
+        breed: visit.animal.breed,
+      },
+      employee: visit.employee ? { fullName: visit.employee.fullName } : null,
+    },
+  };
 }
 
 async function invalidateVisit(queryClient: QueryClient, visitId: string) {

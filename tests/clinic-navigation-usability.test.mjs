@@ -16,18 +16,22 @@ test('технический порядок способов оплаты скр
   assert.match(page, /getNextPaymentMethodSortOrder/);
 });
 
-test('лабораторный профиль объединяет от одного до двадцати анализов', async () => {
-  const page = await read('apps/web/src/features/laboratory/LaboratoryPage.tsx');
-  const visitTab = await read('apps/web/src/features/visits/VisitLaboratoryTab.tsx');
-  const dto = await read('apps/api/src/modules/laboratory/dto/upsert-laboratory-profile.dto.ts');
+test('платный лабораторный анализ связывается с одной услугой и существующим документом', async () => {
+  const [page, visitTab, service, dto] = await Promise.all([
+    read('apps/web/src/features/laboratory/LaboratoryPage.tsx'),
+    read('apps/web/src/features/visits/VisitLaboratoryTab.tsx'),
+    read('apps/api/src/modules/laboratory/laboratory.service.ts'),
+    read('apps/api/src/modules/laboratory/dto/upsert-laboratory-test.dto.ts'),
+  ]);
 
-  assert.match(page, /Новый профиль из нескольких анализов/);
-  assert.match(page, /\.min\(1, 'Выберите хотя бы один анализ'\)\.max\(20/);
-  assert.match(page, /maxCount=\{20\}/);
-  assert.match(page, /все входящие анализы добавятся автоматически/);
-  assert.match(visitTab, /Профиль добавляет сразу всю карточку анализов/);
-  assert.match(visitTab, /profile\.tests\.length/);
-  assert.match(dto, /@ArrayMaxSize\(20\)/);
+  assert.match(page, /Один анализ — одна услуга и один готовый документ/);
+  assert.match(page, /listDocumentTemplates/);
+  assert.match(page, /name="documentTemplateId"/);
+  assert.doesNotMatch(page, /Новый профиль из нескольких анализов/);
+  assert.match(visitTab, /Каждый анализ уже связан с услугой и готовым документом/);
+  assert.doesNotMatch(visitTab, /name="profileIds"/);
+  assert.match(service, /ensureActiveTestConfigured/);
+  assert.match(dto, /documentTemplateId\?: string/);
 });
 
 test('в списке приёмов есть отдельная понятная кнопка открытия', async () => {

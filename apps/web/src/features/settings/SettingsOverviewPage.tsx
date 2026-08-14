@@ -68,7 +68,7 @@ const settingsSections: SettingsSection[] = [
   },
   {
     title: 'Лаборатории',
-    description: 'Справочник анализов, профили, единицы измерения и связанные услуги.',
+    description: 'Справочник платных анализов, связанные услуги и документы результатов.',
     path: '/settings/laboratories',
     icon: <ExperimentOutlined />,
     permission: 'laboratory.read',
