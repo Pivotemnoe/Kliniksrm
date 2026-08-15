@@ -19,6 +19,7 @@ test('первичный приём не завершается без диаг�
     assertPrimaryVisitDiagnosesReady({ visitType: 'PRIMARY' }, [{ diagnosisType: 'Предварительный' }]),
   );
   assert.doesNotThrow(() => assertPrimaryVisitDiagnosesReady({ visitType: 'FOLLOW_UP' }, []));
+  assert.doesNotThrow(() => assertPrimaryVisitDiagnosesReady({ visitType: 'OPERATION' }, []));
 });
 
 test('запрет нельзя обойти сохранением осмотра, прямым PATCH или переводом в стационар', async () => {

@@ -3,7 +3,7 @@ import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { AuthEmployee } from '../auth/auth.types';
 import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
-import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { RequireAnyPermissions, RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { CreateDocumentTemplateDto } from './dto/create-document-template.dto';
 import { CreateVisitDocumentDto } from './dto/create-visit-document.dto';
 import { UpdateDocumentTemplateDto } from './dto/update-document-template.dto';
@@ -16,7 +16,7 @@ export class DocumentsController {
   constructor(private readonly documentsService: DocumentsService) {}
 
   @Get('document-templates')
-  @RequirePermissions('documents.read')
+  @RequireAnyPermissions('documents.read', 'laboratory.read', 'laboratory.manage', 'visits.manage')
   @ApiOkResponse({ description: 'Document templates.' })
   listTemplates() {
     return this.documentsService.listTemplates();

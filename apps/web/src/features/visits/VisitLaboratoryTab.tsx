@@ -7,9 +7,12 @@ import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
+import { hasPermission } from '../../auth/permissions';
+import { useCurrentEmployee } from '../../auth/useAuth';
 import { formatDateTime } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
-import { listLaboratoryTests } from '../laboratory/laboratory.api';
+import { getLaboratoryResources, listLaboratoryTests } from '../laboratory/laboratory.api';
+import { LaboratoryTestEditorDrawer } from '../laboratory/LaboratoryPage';
 import { LaboratoryResultsTableDrawer } from '../laboratory/LaboratoryResultsTableDrawer';
 import { printLaboratoryOrder } from '../laboratory/laboratoryPrint';
 import type { OrganizationPrintProfile } from '../organization/types';
@@ -193,7 +196,17 @@ export function VisitLaboratoryTab({
 
 function OrderDrawer({ open, visit, onClose }: { open: boolean; visit: Visit; onClose: () => void }) {
   const queryClient = useQueryClient();
+  const { data: auth } = useCurrentEmployee();
+  const [configurationOpen, setConfigurationOpen] = useState(false);
   const testsQuery = useQuery({ queryKey: ['laboratory', 'tests', 'visit-select'], queryFn: () => listLaboratoryTests({ limit: 300, offset: 0, isActive: true }) });
+  const resourcesQuery = useQuery({
+    queryKey: ['laboratory', 'resources'],
+    queryFn: getLaboratoryResources,
+    enabled: configurationOpen,
+  });
+  const configuredTests = testsQuery.data?.items.filter((test) => test.serviceId && test.documentTemplateId) ?? [];
+  const unconfiguredTestsCount = (testsQuery.data?.items.length ?? 0) - configuredTests.length;
+  const canEditDocuments = hasPermission(auth?.employee, 'documents.manage');
   const form = useForm<OrderFormInput, unknown, OrderFormValues>({
     resolver: zodResolver(orderSchema),
     defaultValues: { testIds: [], comment: '' },
@@ -208,7 +221,8 @@ function OrderDrawer({ open, visit, onClose }: { open: boolean; visit: Visit; on
   });
 
   return (
-    <Drawer title="Назначить анализы" open={open} onClose={onClose} width={620} destroyOnHidden>
+    <>
+      <Drawer title="Назначить анализы" open={open} onClose={onClose} width={620} destroyOnHidden>
       <Form layout="vertical" onFinish={form.handleSubmit((values) => mutation.mutate(values))}>
         {mutation.error ? <Alert type="error" showIcon message={getErrorMessage(mutation.error)} className="form-alert" /> : null}
         <Alert
@@ -218,6 +232,23 @@ function OrderDrawer({ open, visit, onClose }: { open: boolean; visit: Visit; on
           message="Каждый анализ уже связан с услугой и готовым документом"
           description="Выберите нужный анализ. CRM один раз начислит связанную услугу, а для результатов откроет таблицу именно из привязанного документа."
         />
+        <Button block icon={<PlusOutlined />} className="form-alert" onClick={() => setConfigurationOpen(true)}>
+          Связать услугу и документ
+        </Button>
+        {testsQuery.isError ? (
+          <Alert type="error" showIcon className="form-alert" message={getErrorMessage(testsQuery.error)} />
+        ) : null}
+        {!testsQuery.isLoading && !testsQuery.isError && configuredTests.length === 0 ? (
+          <Alert
+            type="warning"
+            showIcon
+            className="form-alert"
+            message="Нет анализов, готовых к назначению"
+            description={unconfiguredTestsCount
+              ? 'В разделе «Лаборатория → Анализы» свяжите анализ с платной услугой и документом результатов.'
+              : 'Сначала создайте анализ в разделе «Лаборатория → Анализы» и выберите для него платную услугу и документ результатов.'}
+          />
+        ) : null}
         <Controller
           control={form.control}
           name="testIds"
@@ -227,14 +258,14 @@ function OrderDrawer({ open, visit, onClose }: { open: boolean; visit: Visit; on
                 {...field}
                 mode="multiple"
                 showSearch
+                loading={testsQuery.isLoading}
+                disabled={testsQuery.isLoading || configuredTests.length === 0}
                 optionFilterProp="label"
                 placeholder="Выберите анализы"
-                options={testsQuery.data?.items
-                  .filter((test) => test.serviceId && test.documentTemplateId)
-                  .map((test) => ({
-                    value: test.id,
-                    label: `${test.title}${test.code ? ` · ${test.code}` : ''} · ${test.service?.title ?? 'услуга'} · ${test.documentTemplate?.title ?? 'документ'}`,
-                  })) ?? []}
+                options={configuredTests.map((test) => ({
+                  value: test.id,
+                  label: `${test.title}${test.code ? ` · ${test.code}` : ''} · ${test.service?.title ?? 'услуга'} · ${test.documentTemplate?.title ?? 'документ'}`,
+                }))}
               />
             </Form.Item>
           )}
@@ -248,11 +279,19 @@ function OrderDrawer({ open, visit, onClose }: { open: boolean; visit: Visit; on
             </Form.Item>
           )}
         />
-        <Button type="primary" htmlType="submit" loading={mutation.isPending}>
+        <Button type="primary" htmlType="submit" loading={mutation.isPending} disabled={testsQuery.isLoading || configuredTests.length === 0}>
           Назначить
         </Button>
       </Form>
-    </Drawer>
+      </Drawer>
+      <LaboratoryTestEditorDrawer
+        open={configurationOpen}
+        test={null}
+        resources={resourcesQuery.data}
+        canEditDocuments={canEditDocuments}
+        onClose={() => setConfigurationOpen(false)}
+      />
+    </>
   );
 }
 

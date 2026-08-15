@@ -6,7 +6,7 @@ import type { DocumentLayout } from '../documents/documentLayout';
 export type DecimalValue = string | number;
 
 export type VisitStatus = 'DRAFT' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
-export type VisitType = 'PRIMARY' | 'FOLLOW_UP';
+export type VisitType = 'PRIMARY' | 'FOLLOW_UP' | 'OPERATION';
 export type VisitDiagnosisType = 'Предварительный' | 'Дифференциальный' | 'Клинический' | 'Окончательный';
 
 export type VisitSummary = {
@@ -339,6 +339,7 @@ export const visitStatusColors: Record<VisitStatus, string> = {
 export const visitTypeLabels: Record<VisitType, string> = {
   PRIMARY: 'Первичный',
   FOLLOW_UP: 'Повторный',
+  OPERATION: 'Операция',
 };
 
 export const laboratoryOrderStatusLabels: Record<VisitLaboratoryOrderStatus, string> = {

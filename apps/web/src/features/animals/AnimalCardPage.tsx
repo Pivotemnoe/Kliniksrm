@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Button, Card, Descriptions, Input, Modal, Tabs, Tag, Typography } from 'antd';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
@@ -27,6 +27,7 @@ import { PatientDocumentArchive } from '../files/PatientDocumentArchive';
 export function AnimalCardPage() {
   const { animalId } = useParams<{ animalId: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const { message, modal } = App.useApp();
   const { data: auth } = useCurrentEmployee();
@@ -107,6 +108,8 @@ export function AnimalCardPage() {
   const latestWeight = animal?.weights?.[0];
   const latestVaccination = getLatestVaccination(animal?.vaccinations);
   const nextRevaccination = getNextRevaccination(animal?.vaccinations);
+  const requestedTab = searchParams.get('tab');
+  const activeTab = animalCardTabKeys.has(requestedTab ?? '') ? requestedTab! : 'visits';
 
   function confirmRestore() {
     if (!animal) return;
@@ -256,6 +259,16 @@ export function AnimalCardPage() {
         <div className="work-surface">
           {animal ? (
             <Tabs
+              activeKey={activeTab}
+              onChange={(key) => {
+                const nextSearchParams = new URLSearchParams(searchParams);
+                if (key === 'visits') {
+                  nextSearchParams.delete('tab');
+                } else {
+                  nextSearchParams.set('tab', key);
+                }
+                setSearchParams(nextSearchParams, { replace: true });
+              }}
               items={[
                 {
                   key: 'visits',
@@ -390,6 +403,8 @@ const sexLabel: Record<string, string> = {
   FEMALE: 'Самка',
   UNKNOWN: 'Не указан',
 };
+
+const animalCardTabKeys = new Set(['visits', 'profile', 'weights', 'vaccinations', 'tasks', 'archive']);
 
 function getLatestVaccination(vaccinations?: Vaccination[]) {
   return [...(vaccinations ?? [])]

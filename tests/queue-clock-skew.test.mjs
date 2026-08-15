@@ -52,6 +52,7 @@ test('клиентский экран очереди остаётся двухк
 
   assert.match(page, />Ожидайте</);
   assert.match(page, />Вызов в кабинет</);
+  assert.match(page, /onClick=\{\(\) => void enableSound\(\)\}/);
   assert.doesNotMatch(page, /Сейчас в очереди никого нет/);
   assert.doesNotMatch(page, /Сейчас никого не вызывают/);
   assert.doesNotMatch(page, /Звук включён|Звук выключен|Проверить звук|Включить звук/);

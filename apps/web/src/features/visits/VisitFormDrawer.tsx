@@ -9,11 +9,11 @@ import { getErrorMessage } from '../../api/errors';
 import { fromDateTimeText, normalizeDateTimeText, toDateTimeText } from '../../shared/utils/date';
 import { nullToEmpty, optionalString } from '../../shared/utils/forms';
 import { Appointment } from '../appointments/types';
-import { listOwnerAnimals, listOwners } from '../owners/owners.api';
+import { getOwner, listOwnerAnimals, listOwners } from '../owners/owners.api';
 import { QuickCreateAnimalButton } from '../owners/QuickCreateAnimalButton';
 import { QueueEntry } from '../queue/types';
 import { getSchedulingResources } from '../scheduling/scheduling.api';
-import { CreateVisitInput, VisitType, visitStatusColors, visitStatusLabels, visitTypeLabels } from './types';
+import { CreateVisitInput, visitStatusColors, visitStatusLabels, visitTypeLabels } from './types';
 
 const dateTimePickerFormats = [
   'DD.MM.YYYY HH:mm',
@@ -28,6 +28,15 @@ const dateTimePickerFormats = [
   'YYYY MM DD HH:mm',
 ];
 
+const visitCreationTypeSchema = z.enum(['PRIMARY', 'FOLLOW_UP', 'OPERATION', 'VACCINATION']);
+
+type VisitCreationType = z.infer<typeof visitCreationTypeSchema>;
+
+const visitCreationTypeLabels: Record<VisitCreationType, string> = {
+  ...visitTypeLabels,
+  VACCINATION: 'Вакцинация',
+};
+
 const visitSchema = z
   .object({
     ownerId: optionalString(),
@@ -39,7 +48,7 @@ const visitSchema = z
       .min(1, 'Укажите дату и время')
       .refine((value) => Boolean(fromDateTimeText(value)), 'Например: 25.06.2026 10:15'),
     status: z.enum(['DRAFT', 'IN_PROGRESS']),
-    visitType: z.enum(['PRIMARY', 'FOLLOW_UP']),
+    visitType: visitCreationTypeSchema,
   })
   .superRefine((values, context) => {
     if (!values.ownerId) {
@@ -68,6 +77,7 @@ type VisitFormDrawerProps = {
   isSubmitting?: boolean;
   onClose: () => void;
   onSubmit: (values: CreateVisitInput) => void;
+  onOpenVaccination: (animalId: string) => void;
 };
 
 export function VisitFormDrawer({
@@ -79,6 +89,7 @@ export function VisitFormDrawer({
   isSubmitting,
   onClose,
   onSubmit,
+  onOpenVaccination,
 }: VisitFormDrawerProps) {
   const { control, handleSubmit, reset, setValue } = useForm<VisitFormInput, unknown, VisitFormValues>({
     resolver: zodResolver(visitSchema),
@@ -86,6 +97,7 @@ export function VisitFormDrawer({
   });
   const [ownerSearch, setOwnerSearch] = useState('');
   const ownerId = useWatch({ control, name: 'ownerId' });
+  const visitCreationType = useWatch({ control, name: 'visitType' });
   const resourcesQuery = useQuery({
     queryKey: ['scheduling', 'resources'],
     queryFn: getSchedulingResources,
@@ -95,6 +107,11 @@ export function VisitFormDrawer({
     queryKey: ['owners', { search: ownerSearch, limit: 20, offset: 0 }],
     queryFn: () => listOwners({ search: ownerSearch, limit: 20, offset: 0 }),
     enabled: open && !sourceContext,
+  });
+  const selectedOwnerQuery = useQuery({
+    queryKey: ['owners', ownerId],
+    queryFn: () => getOwner(ownerId!),
+    enabled: open && !sourceContext && Boolean(ownerId),
   });
   const animalsQuery = useQuery({
     queryKey: ['owners', ownerId, 'animals'],
@@ -107,6 +124,9 @@ export function VisitFormDrawer({
   const sourceBlocked = sourceContext?.type === 'queue' && (!sourceContext.queueEntry.ownerId || !sourceContext.queueEntry.animalId);
   const ownerOptions = [
     ...(sourceOwner ? [{ label: sourceOwner.fullName, value: sourceOwner.id }] : []),
+    ...(selectedOwnerQuery.data
+      ? [{ label: selectedOwnerQuery.data.fullName, value: selectedOwnerQuery.data.id }]
+      : []),
     ...(ownersQuery.data?.items.map((owner) => ({
       label: owner.phone ? `${owner.fullName}, ${owner.phone}` : owner.fullName,
       value: owner.id,
@@ -128,6 +148,13 @@ export function VisitFormDrawer({
   }
 
   function submit(values: VisitFormValues) {
+    if (values.visitType === 'VACCINATION') {
+      if (values.animalId) {
+        onOpenVaccination(values.animalId);
+      }
+      return;
+    }
+
     onSubmit({
       ownerId: values.ownerId,
       animalId: values.animalId,
@@ -152,7 +179,11 @@ export function VisitFormDrawer({
         <Space>
           <Button onClick={onClose}>Отмена</Button>
           <Button type="primary" loading={isSubmitting} disabled={sourceBlocked} onClick={handleSubmit(submit)}>
-            {sourceContext ? 'Создать приём' : 'Добавить на приём'}
+            {visitCreationType === 'VACCINATION'
+              ? 'Открыть вакцинацию'
+              : sourceContext
+                ? 'Создать приём'
+                : 'Добавить на приём'}
           </Button>
         </Space>
       }
@@ -177,11 +208,12 @@ export function VisitFormDrawer({
               <Form.Item label="Владелец" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
                 <Select
                   {...field}
+                  value={ownerOptions.some((option) => option.value === field.value) ? field.value : undefined}
                   showSearch
                   disabled={Boolean(sourceContext)}
                   filterOption={false}
                   onSearch={setOwnerSearch}
-                  loading={ownersQuery.isLoading}
+                  loading={ownersQuery.isLoading || selectedOwnerQuery.isLoading}
                   options={ownerOptions}
                   placeholder="Найти владельца"
                   onChange={(value) => {
@@ -252,9 +284,12 @@ export function VisitFormDrawer({
             name="visitType"
             render={({ field }) => (
               <Form.Item label="Прием">
-                <Select<VisitType>
+                <Select<VisitCreationType>
                   {...field}
-                  options={Object.entries(visitTypeLabels).map(([value, label]) => ({ value: value as VisitType, label }))}
+                  options={Object.entries(visitCreationTypeLabels).map(([value, label]) => ({
+                    value: value as VisitCreationType,
+                    label,
+                  }))}
                 />
               </Form.Item>
             )}

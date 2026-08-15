@@ -75,6 +75,9 @@ export function LaboratoryPage() {
   const { data: auth } = useCurrentEmployee();
   const [searchParams] = useSearchParams();
   const canManage = hasPermission(auth?.employee, 'laboratory.manage');
+  const canConfigureTests =
+    hasPermission(auth?.employee, 'laboratory.read') || canManage || hasPermission(auth?.employee, 'visits.manage');
+  const canEditDocuments = hasPermission(auth?.employee, 'documents.manage');
   const canPrintDocuments = hasPermission(auth?.employee, 'documents.print');
   const [activeTab, setActiveTab] = useState(() => getInitialTab(searchParams.get('tab')));
   const [search, setSearch] = useState('');
@@ -104,9 +107,9 @@ export function LaboratoryPage() {
         title="Лаборатории"
         description="Рабочий журнал лабораторных заказов, результаты и справочник анализов."
         extra={
-          canManage ? (
+          canConfigureTests ? (
             <Button type="primary" icon={<PlusOutlined />} onClick={() => openTest(null)}>
-              Новый анализ
+              Связать услугу и документ
             </Button>
           ) : null
         }
@@ -219,7 +222,7 @@ export function LaboratoryPage() {
                 <TestsTable
                   search={search}
                   species={species}
-                  canManage={canManage}
+                  canManage={canConfigureTests}
                   onEdit={openTest}
                 />
               ),
@@ -227,10 +230,11 @@ export function LaboratoryPage() {
           ]}
         />
       </div>
-      <TestDrawer
+      <LaboratoryTestEditorDrawer
         open={testOpen}
         test={editingTest}
         resources={resourcesQuery.data}
+        canEditDocuments={canEditDocuments}
         onClose={() => setTestOpen(false)}
       />
       <OrderDrawer
@@ -251,7 +255,6 @@ export function LaboratoryPage() {
     setEditingTest(test);
     setTestOpen(true);
   }
-
 }
 
 function LaboratoryWorkSummary({
@@ -932,15 +935,17 @@ function TestsTable({
   );
 }
 
-function TestDrawer({
+export function LaboratoryTestEditorDrawer({
   open,
   test,
   resources,
+  canEditDocuments,
   onClose,
 }: {
   open: boolean;
   test: LaboratoryTest | null;
   resources?: LaboratoryResources;
+  canEditDocuments: boolean;
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -967,16 +972,16 @@ function TestDrawer({
   }, [form, test, open]);
 
   return (
-    <Drawer title={test ? 'Настройка анализа' : 'Новый анализ'} open={open} onClose={onClose} width={620} destroyOnHidden>
+    <Drawer title={test ? 'Связь услуги и документа' : 'Новая связь услуги и документа'} open={open} onClose={onClose} width={620} destroyOnHidden>
       <Form layout="vertical" onFinish={form.handleSubmit((values) => mutation.mutate(values))}>
         <Alert
           type="info"
           showIcon
           className="form-alert"
-          message="Один анализ — одна услуга и один готовый документ"
-          description="Стоимость берётся из выбранной услуги. Показатели, нормы и печатный вид берутся из существующего документа в разделе «Настройки → Документы». Отдельного редактора бланка в лаборатории нет."
+          message="Свяжите услугу с документом результатов"
+          description="Цена берётся из услуги. Показатели, нормы и печатный вид берутся из выбранного документа. Название связи, услугу и документ можно изменить в любой момент."
         />
-        <FormInput control={form.control} name="title" label="Название анализа" />
+        <FormInput control={form.control} name="title" label="Название в лаборатории" />
         <Space className="form-grid-two" align="start">
           <FormInput control={form.control} name="code" label="Код" />
           <FormInput control={form.control} name="groupName" label="Группа" />
@@ -1013,20 +1018,22 @@ function TestDrawer({
             </Form.Item>
           )}
         />
-        <Button
-          block
-          icon={<FileTextOutlined />}
-          disabled={!selectedDocumentTemplateId}
-          onClick={() => {
-            window.open(
-              `/settings/documents?tab=documents&templateId=${encodeURIComponent(selectedDocumentTemplateId)}`,
-              '_blank',
-              'noopener,noreferrer',
-            );
-          }}
-        >
-          Открыть редактор выбранного документа
-        </Button>
+        {canEditDocuments ? (
+          <Button
+            block
+            icon={<FileTextOutlined />}
+            disabled={!selectedDocumentTemplateId}
+            onClick={() => {
+              window.open(
+                `/settings/documents?tab=documents&templateId=${encodeURIComponent(selectedDocumentTemplateId)}`,
+                '_blank',
+                'noopener,noreferrer',
+              );
+            }}
+          >
+            Открыть редактор выбранного документа
+          </Button>
+        ) : null}
         {documentsQuery.isError ? <Alert type="error" showIcon message={getErrorMessage(documentsQuery.error)} className="form-alert" /> : null}
         <FormInput control={form.control} name="description" label="Описание" textarea />
         <ActiveSwitch control={form.control} />
@@ -1086,7 +1093,7 @@ function ServiceSelect({ control, resources }: { control: any; resources?: Labor
       control={control}
       name="serviceId"
       render={({ field, fieldState }) => (
-        <Form.Item label="Платная услуга" required validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message ?? 'По этой услуге анализ попадёт в счёт приёма.'}>
+        <Form.Item label="Услуга и цена" required validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message ?? 'По этой услуге анализ попадёт в счёт приёма.'}>
           <Select
             {...field}
             showSearch

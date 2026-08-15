@@ -52,7 +52,7 @@ const routeAccessRules: RouteAccessRule[] = [
   { path: '/daily-finance', anyOf: ['daily_finance.read', 'daily_finance.manage', 'daily_finance.submit', 'business.approve'] },
   { path: '/business', anyOf: ['business.read'] },
   { path: '/employees', anyOf: ['employees.read', 'employees.manage'] },
-  { path: '/laboratory', anyOf: ['laboratory.read'] },
+  { path: '/laboratory', anyOf: ['laboratory.read', 'laboratory.manage', 'visits.manage'] },
   { path: '/hospital', anyOf: ['hospital.read'] },
   { path: '/schedule', anyOf: ['appointments.read'] },
   { path: '/queue', anyOf: ['queue.read'] },

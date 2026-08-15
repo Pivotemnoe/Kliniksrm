@@ -2,7 +2,7 @@ import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common
 import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { AuthEmployee } from '../auth/auth.types';
 import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
-import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { RequireAnyPermissions, RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { ImportLaboratoryResultsDto } from './dto/import-laboratory-results.dto';
 import { ListLaboratoryOrdersQueryDto } from './dto/list-laboratory-orders-query.dto';
 import { ListLaboratoryQueryDto } from './dto/list-laboratory-query.dto';
@@ -19,14 +19,14 @@ export class LaboratoryController {
   constructor(private readonly laboratoryService: LaboratoryService) {}
 
   @Get('resources')
-  @RequirePermissions('laboratory.read')
+  @RequireAnyPermissions('laboratory.read', 'laboratory.manage', 'visits.manage')
   @ApiOkResponse({ description: 'Laboratory services and animal species.' })
   getResources() {
     return this.laboratoryService.getResources();
   }
 
   @Get('orders')
-  @RequirePermissions('laboratory.read')
+  @RequireAnyPermissions('laboratory.read', 'laboratory.manage', 'visits.manage')
   @ApiOkResponse({ description: 'Laboratory order journal.' })
   listOrders(@Query() query: ListLaboratoryOrdersQueryDto) {
     return this.laboratoryService.listOrders(query);
@@ -81,14 +81,14 @@ export class LaboratoryController {
   }
 
   @Post('tests')
-  @RequirePermissions('laboratory.manage')
+  @RequireAnyPermissions('laboratory.read', 'laboratory.manage', 'visits.manage')
   @ApiCreatedResponse({ description: 'Laboratory test created.' })
   createTest(@Body() dto: UpsertLaboratoryTestDto, @CurrentEmployee() actor: AuthEmployee) {
     return this.laboratoryService.createTest(dto, actor.id);
   }
 
   @Patch('tests/:testId')
-  @RequirePermissions('laboratory.manage')
+  @RequireAnyPermissions('laboratory.read', 'laboratory.manage', 'visits.manage')
   @ApiOkResponse({ description: 'Laboratory test updated.' })
   updateTest(@Param('testId') testId: string, @Body() dto: UpdateLaboratoryTestDto, @CurrentEmployee() actor: AuthEmployee) {
     return this.laboratoryService.updateTest(testId, dto, actor.id);

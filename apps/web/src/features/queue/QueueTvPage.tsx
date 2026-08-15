@@ -67,7 +67,7 @@ export function QueueTvPage() {
   return (
     <main
       className="queue-tv-screen"
-      onClick={!soundEnabled || soundBlocked ? () => void enableSound() : undefined}
+      onClick={() => void enableSound()}
     >
       <section className="queue-tv-column">
         <h1 className="queue-tv-title">Ожидайте</h1>

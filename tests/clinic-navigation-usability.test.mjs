@@ -24,7 +24,7 @@ test('платный лабораторный анализ связываетс�
     read('apps/api/src/modules/laboratory/dto/upsert-laboratory-test.dto.ts'),
   ]);
 
-  assert.match(page, /Один анализ — одна услуга и один готовый документ/);
+  assert.match(page, /Свяжите услугу с документом результатов/);
   assert.match(page, /listDocumentTemplates/);
   assert.match(page, /name="documentTemplateId"/);
   assert.doesNotMatch(page, /Новый профиль из нескольких анализов/);

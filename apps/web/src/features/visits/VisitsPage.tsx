@@ -14,6 +14,9 @@ import { formatAnimalAge } from '../../shared/utils/animalBirthDate';
 import { formatDateTime } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
 import { getAppointment } from '../appointments/appointments.api';
+import { createVaccination } from '../animals/animals.api';
+import { VaccinationFormDrawer } from '../animals/VaccinationFormDrawer';
+import { VaccinationMutationInput } from '../animals/types';
 import { getQueueEntry } from '../queue/queue.api';
 import { createQueueEntryFromForm } from '../queue/createQueueEntryFromForm';
 import { QueueFormDrawer, QueueFormSubmitInput } from '../queue/QueueFormDrawer';
@@ -34,6 +37,7 @@ export function VisitsPage() {
   const [status, setStatus] = useState<VisitStatus | undefined>();
   const [createOpen, setCreateOpen] = useState(false);
   const [createQueueOpen, setCreateQueueOpen] = useState(false);
+  const [vaccinationAnimalId, setVaccinationAnimalId] = useState<string | null>(null);
   const appointmentId = searchParams.get('appointmentId') ?? undefined;
   const queueEntryId = searchParams.get('queueEntryId') ?? undefined;
   const initialOwnerId = searchParams.get('ownerId') ?? undefined;
@@ -78,6 +82,21 @@ export function VisitsPage() {
       setCreateQueueOpen(false);
       message.success('Пациент добавлен в очередь');
       navigate(`/queue/${queueEntry.id}`);
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
+  const vaccinationMutation = useMutation({
+    mutationFn: ({ animalId, values }: { animalId: string; values: VaccinationMutationInput }) =>
+      createVaccination(animalId, values),
+    onSuccess: async (_, variables) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['animals', variables.animalId] }),
+        queryClient.invalidateQueries({ queryKey: ['animals', variables.animalId, 'vaccinations'] }),
+        queryClient.invalidateQueries({ queryKey: ['tasks'] }),
+      ]);
+      setVaccinationAnimalId(null);
+      message.success('Вакцинация добавлена');
+      navigate(`/patients/${variables.animalId}?tab=vaccinations`);
     },
     onError: (error) => message.error(getErrorMessage(error)),
   });
@@ -211,8 +230,24 @@ export function VisitsPage() {
         initialAnimalId={initialAnimalId}
         onClose={closeCreateDrawer}
         onSubmit={(values) => createMutation.mutate(values)}
+        onOpenVaccination={(animalId) => {
+          closeCreateDrawer();
+          setVaccinationAnimalId(animalId);
+        }}
         isSubmitting={createMutation.isPending}
         submitError={createMutation.error ?? appointmentQuery.error ?? queueQuery.error}
+      />
+      <VaccinationFormDrawer
+        open={Boolean(vaccinationAnimalId)}
+        title="Добавить вакцинацию"
+        onClose={() => setVaccinationAnimalId(null)}
+        onSubmit={(values) => {
+          if (vaccinationAnimalId) {
+            vaccinationMutation.mutate({ animalId: vaccinationAnimalId, values });
+          }
+        }}
+        isSubmitting={vaccinationMutation.isPending}
+        submitError={vaccinationMutation.error}
       />
       <QueueFormDrawer
         open={createQueueOpen}

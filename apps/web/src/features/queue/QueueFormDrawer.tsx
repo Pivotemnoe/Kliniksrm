@@ -35,7 +35,7 @@ const queueSchema = z
     animalSpecies: optionalString(80),
     animalBreed: optionalString(120),
     animalSex: z.enum(['MALE', 'FEMALE', 'UNKNOWN']),
-    visitType: z.enum(['PRIMARY', 'FOLLOW_UP']),
+    visitType: z.enum(['PRIMARY', 'FOLLOW_UP', 'OPERATION']),
     birthDate: optionalString().refine(isAnimalBirthDateInputValid, 'Введите дату: ГГГГ, ММ.ГГГГ или ДД.ММ.ГГГГ'),
     color: optionalString(120),
     microchip: optionalString(120),
