@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query } from '@
 import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { AuthEmployee } from '../auth/auth.types';
 import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
-import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { RequireAnyPermissions, RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { AddVisitServiceDto } from './dto/add-visit-service.dto';
 import { AddVisitServicesDto } from './dto/add-visit-services.dto';
 import { CreateVisitLaboratoryOrderDto } from './dto/create-visit-laboratory-order.dto';
@@ -177,7 +177,7 @@ export class VisitsController {
   }
 
   @Post(':visitId/laboratory-orders')
-  @RequirePermissions('visits.manage')
+  @RequireAnyPermissions('laboratory.read', 'laboratory.manage', 'visits.manage')
   @ApiCreatedResponse({ description: 'Laboratory order added to visit.' })
   createLaboratoryOrder(
     @Param('visitId') visitId: string,
@@ -188,7 +188,7 @@ export class VisitsController {
   }
 
   @Patch(':visitId/laboratory-orders/:orderId/items/:itemId')
-  @RequirePermissions('visits.manage')
+  @RequireAnyPermissions('laboratory.read', 'laboratory.manage', 'visits.manage')
   @ApiOkResponse({ description: 'Laboratory order item result updated.' })
   updateLaboratoryOrderItem(
     @Param('visitId') visitId: string,
@@ -201,7 +201,7 @@ export class VisitsController {
   }
 
   @Post(':visitId/laboratory-orders/:orderId/cancel')
-  @RequirePermissions('visits.manage')
+  @RequireAnyPermissions('laboratory.read', 'laboratory.manage', 'visits.manage')
   @ApiOkResponse({ description: 'Laboratory order cancelled.' })
   cancelLaboratoryOrder(@Param('visitId') visitId: string, @Param('orderId') orderId: string, @CurrentEmployee() actor: AuthEmployee) {
     return this.visitsService.cancelLaboratoryOrder(visitId, orderId, actor);

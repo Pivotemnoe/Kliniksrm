@@ -33,14 +33,14 @@ export class LaboratoryController {
   }
 
   @Patch('orders/:orderId')
-  @RequirePermissions('laboratory.manage')
+  @RequireAnyPermissions('laboratory.read', 'laboratory.manage', 'visits.manage')
   @ApiOkResponse({ description: 'Laboratory order status updated.' })
   updateOrder(@Param('orderId') orderId: string, @Body() dto: UpdateLaboratoryOrderDto, @CurrentEmployee() actor: AuthEmployee) {
     return this.laboratoryService.updateOrder(orderId, dto, actor.id);
   }
 
   @Patch('orders/:orderId/items/:itemId')
-  @RequirePermissions('laboratory.manage')
+  @RequireAnyPermissions('laboratory.read', 'laboratory.manage', 'visits.manage')
   @ApiOkResponse({ description: 'Laboratory order item result updated.' })
   updateOrderItem(
     @Param('orderId') orderId: string,
@@ -52,7 +52,7 @@ export class LaboratoryController {
   }
 
   @Patch('orders/:orderId/results')
-  @RequirePermissions('laboratory.manage')
+  @RequireAnyPermissions('laboratory.read', 'laboratory.manage', 'visits.manage')
   @ApiOkResponse({ description: 'Laboratory result table updated atomically.' })
   updateOrderResults(
     @Param('orderId') orderId: string,
@@ -63,7 +63,7 @@ export class LaboratoryController {
   }
 
   @Post('orders/:orderId/results/import')
-  @RequirePermissions('laboratory.manage')
+  @RequireAnyPermissions('laboratory.read', 'laboratory.manage', 'visits.manage')
   @ApiOkResponse({ description: 'Preview or apply automatically matched laboratory results.' })
   importResults(
     @Param('orderId') orderId: string,
@@ -74,7 +74,7 @@ export class LaboratoryController {
   }
 
   @Get('tests')
-  @RequirePermissions('laboratory.read')
+  @RequireAnyPermissions('laboratory.read', 'laboratory.manage', 'visits.manage')
   @ApiOkResponse({ description: 'Laboratory test catalog.' })
   listTests(@Query() query: ListLaboratoryQueryDto) {
     return this.laboratoryService.listTests(query);

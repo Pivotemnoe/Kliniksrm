@@ -33,6 +33,8 @@ export function VisitCardPage() {
   const { message, modal } = App.useApp();
   const { data: auth } = useCurrentEmployee();
   const canManage = hasPermission(auth?.employee, 'visits.manage');
+  const canManageLaboratory =
+    canManage || hasPermission(auth?.employee, 'laboratory.read') || hasPermission(auth?.employee, 'laboratory.manage');
   const canReadBilling = hasPermission(auth?.employee, 'billing.read');
   const canReadHospital = hasPermission(auth?.employee, 'hospital.read');
   const canManageHospital = hasPermission(auth?.employee, 'hospital.manage');
@@ -413,7 +415,7 @@ export function VisitCardPage() {
                   children: (
                     <VisitLaboratoryTab
                       visit={visit}
-                      canManage={canManage}
+                      canManage={canManageLaboratory}
                       canPrint={canPrintDocuments}
                       locked={Boolean(locked)}
                       organization={organizationQuery.data}

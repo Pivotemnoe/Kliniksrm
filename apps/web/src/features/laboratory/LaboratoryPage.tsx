@@ -74,9 +74,11 @@ type ResultFormValues = z.output<typeof resultSchema>;
 export function LaboratoryPage() {
   const { data: auth } = useCurrentEmployee();
   const [searchParams] = useSearchParams();
-  const canManage = hasPermission(auth?.employee, 'laboratory.manage');
-  const canConfigureTests =
-    hasPermission(auth?.employee, 'laboratory.read') || canManage || hasPermission(auth?.employee, 'visits.manage');
+  const canManage =
+    hasPermission(auth?.employee, 'laboratory.read') ||
+    hasPermission(auth?.employee, 'laboratory.manage') ||
+    hasPermission(auth?.employee, 'visits.manage');
+  const canConfigureTests = canManage;
   const canEditDocuments = hasPermission(auth?.employee, 'documents.manage');
   const canPrintDocuments = hasPermission(auth?.employee, 'documents.print');
   const [activeTab, setActiveTab] = useState(() => getInitialTab(searchParams.get('tab')));
