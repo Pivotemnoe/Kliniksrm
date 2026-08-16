@@ -5,6 +5,7 @@ import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { AdmitHospitalPatientDto } from './dto/admit-hospital-patient.dto';
 import { AdmitExistingHospitalStayDto } from './dto/admit-existing-hospital-stay.dto';
+import { CancelHospitalRecordsDto } from './dto/cancel-hospital-records.dto';
 import { CreateHospitalAmendmentDto } from './dto/create-hospital-amendment.dto';
 import { CreateHospitalRecordDto } from './dto/create-hospital-record.dto';
 import { CreateHospitalTreatmentPlanDto } from './dto/create-hospital-treatment-plan.dto';
@@ -96,6 +97,18 @@ export class HospitalController {
     @CurrentEmployee() actor: AuthEmployee,
   ) {
     return this.hospitalService.updateRecord(stayId, recordId, dto, actor.id);
+  }
+
+  @Post(':stayId/records/:recordId/cancel')
+  @RequirePermissions('hospital.manage')
+  @ApiOkResponse({ description: 'One planned execution or its remaining series cancelled.' })
+  cancelRecords(
+    @Param('stayId') stayId: string,
+    @Param('recordId') recordId: string,
+    @Body() dto: CancelHospitalRecordsDto,
+    @CurrentEmployee() actor: AuthEmployee,
+  ) {
+    return this.hospitalService.cancelRecords(stayId, recordId, dto, actor.id);
   }
 
   @Post(':stayId/records/:recordId/amendments')

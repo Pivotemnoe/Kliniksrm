@@ -18,6 +18,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { AdmitHospitalPatientDto } from './dto/admit-hospital-patient.dto';
 import { AdmitExistingHospitalStayDto } from './dto/admit-existing-hospital-stay.dto';
+import { CancelHospitalRecordsDto } from './dto/cancel-hospital-records.dto';
 import { CreateHospitalAmendmentDto } from './dto/create-hospital-amendment.dto';
 import { CreateHospitalRecordDto } from './dto/create-hospital-record.dto';
 import { CreateHospitalTreatmentPlanDto } from './dto/create-hospital-treatment-plan.dto';
@@ -105,7 +106,6 @@ export class HospitalService {
       this.prisma.product.findMany({
         where: productWhere,
         orderBy: { title: 'asc' },
-        take: 100,
         select: {
           id: true,
           title: true,
@@ -126,7 +126,6 @@ export class HospitalService {
       this.prisma.service.findMany({
         where: serviceWhere,
         orderBy: { title: 'asc' },
-        take: 100,
         select: servicePricingSelect,
       }),
     ]);
@@ -207,6 +206,7 @@ export class HospitalService {
           visitId: stay.sourceVisitId,
           billItemId,
           recordedById: actorId,
+          performedById: recordStatus === HospitalRecordStatus.COMPLETED ? actorId : null,
           recordType: dto.recordType,
           recordStatus,
           createdAsPlan: recordStatus === HospitalRecordStatus.PLANNED,
@@ -549,13 +549,30 @@ export class HospitalService {
           ...(dto.recordStatus !== undefined ? { recordStatus: dto.recordStatus } : {}),
           ...(dto.title !== undefined ? { title: dto.title.trim() } : {}),
           ...(dto.recordedAt !== undefined ? { recordedAt: new Date(dto.recordedAt) } : {}),
-          ...(dto.completedAt !== undefined
-            ? { completedAt: new Date(dto.completedAt) }
-            : dto.recordStatus === HospitalRecordStatus.PLANNED
-              ? { completedAt: null }
-              : dto.recordStatus === HospitalRecordStatus.COMPLETED || dto.recordStatus === HospitalRecordStatus.SKIPPED
-                ? { completedAt: existing.completedAt ?? new Date() }
-                : {}),
+          ...(dto.recordStatus === HospitalRecordStatus.COMPLETED
+            ? {
+                performedById: actorId,
+                completedAt: dto.completedAt ? new Date(dto.completedAt) : existing.completedAt ?? new Date(),
+                cancelledById: null,
+                cancelledAt: null,
+              }
+            : dto.recordStatus === HospitalRecordStatus.SKIPPED
+              ? {
+                  performedById: null,
+                  completedAt: null,
+                  cancelledById: actorId,
+                  cancelledAt: new Date(),
+                }
+              : dto.recordStatus === HospitalRecordStatus.PLANNED
+                ? {
+                    performedById: null,
+                    completedAt: null,
+                    cancelledById: null,
+                    cancelledAt: null,
+                  }
+                : dto.completedAt !== undefined
+                  ? { completedAt: new Date(dto.completedAt) }
+                  : {}),
           ...(nextRecordType === 'TEMPERATURE'
             ? (dto.temperatureC !== undefined ? { temperatureC: dto.temperatureC, value: null } : { value: null })
             : { temperatureC: null, ...(dto.value !== undefined ? { value: cleanOrNull(dto.value) } : {}) }),
@@ -584,6 +601,61 @@ export class HospitalService {
     });
 
     return record;
+  }
+
+  async cancelRecords(
+    stayId: string,
+    recordId: string,
+    dto: CancelHospitalRecordsDto,
+    actorId: string,
+  ) {
+    const stay = await this.getExistingHospitalStay(stayId);
+    if (stay.status !== HospitalStayStatus.ACTIVE) {
+      throw new BadRequestException('Назначения можно отменять только во время активного стационара');
+    }
+
+    const target = await this.prisma.hospitalRecord.findFirst({
+      where: { id: recordId, visitId: stay.sourceVisitId },
+      select: { id: true, recordStatus: true, treatmentPlanItemId: true, recordedAt: true },
+    });
+    if (!target) {
+      throw new NotFoundException('Назначение не найдено');
+    }
+    if (target.recordStatus !== HospitalRecordStatus.PLANNED) {
+      throw new BadRequestException('Отменить можно только ожидающее выполнения назначение');
+    }
+
+    const cancelSeries = dto.scope === 'THIS_AND_FUTURE' && Boolean(target.treatmentPlanItemId);
+    const cancelledAt = new Date();
+    const result = await this.prisma.hospitalRecord.updateMany({
+      where: {
+        visitId: stay.sourceVisitId,
+        recordStatus: HospitalRecordStatus.PLANNED,
+        ...(cancelSeries
+          ? { treatmentPlanItemId: target.treatmentPlanItemId, recordedAt: { gte: target.recordedAt } }
+          : { id: target.id }),
+      },
+      data: {
+        recordStatus: HospitalRecordStatus.SKIPPED,
+        completedAt: null,
+        performedById: null,
+        cancelledById: actorId,
+        cancelledAt,
+      },
+    });
+    if (result.count === 0) {
+      throw new BadRequestException('Назначение уже обработано другим сотрудником. Обновите лист стационара');
+    }
+
+    await this.auditService.log({
+      actorId,
+      action: 'hospital.record.cancel',
+      entityType: 'HospitalRecord',
+      entityId: target.id,
+      metadata: { stayId: stay.id, scope: cancelSeries ? 'THIS_AND_FUTURE' : 'ONE', count: result.count },
+    });
+
+    return { count: result.count };
   }
 
   async createAmendment(stayId: string, recordId: string, dto: CreateHospitalAmendmentDto, actorId: string) {
@@ -1301,6 +1373,8 @@ function getEffectivePlannedCatalog(
 
 const hospitalRecordBaseInclude = {
   recordedBy: { select: { id: true, fullName: true, position: true } },
+  performedBy: { select: { id: true, fullName: true, position: true } },
+  cancelledBy: { select: { id: true, fullName: true, position: true } },
   treatmentPlan: { select: { id: true, title: true } },
   plannedProduct: {
     select: {

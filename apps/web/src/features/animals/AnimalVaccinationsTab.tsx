@@ -2,7 +2,7 @@ import { EditOutlined, PlusOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Button, Space, Table, Tag, Typography } from 'antd';
 import { ColumnsType } from 'antd/es/table';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { getErrorMessage } from '../../api/errors';
 import { taskStatusColors, taskStatusLabels, TaskStatus } from '../tasks/types';
 import { createVaccination, listVaccinations, updateVaccination } from './animals.api';
@@ -12,13 +12,17 @@ import { VaccinationFormDrawer } from './VaccinationFormDrawer';
 type AnimalVaccinationsTabProps = {
   animalId: string;
   readOnly?: boolean;
+  autoOpen?: boolean;
 };
 
-export function AnimalVaccinationsTab({ animalId, readOnly = false }: AnimalVaccinationsTabProps) {
+export function AnimalVaccinationsTab({ animalId, readOnly = false, autoOpen = false }: AnimalVaccinationsTabProps) {
   const queryClient = useQueryClient();
   const { message } = App.useApp();
   const [createOpen, setCreateOpen] = useState(false);
   const [editingVaccination, setEditingVaccination] = useState<Vaccination | null>(null);
+  useEffect(() => {
+    if (autoOpen && !readOnly) setCreateOpen(true);
+  }, [autoOpen, readOnly]);
   const vaccinationsQuery = useQuery({
     queryKey: ['animals', animalId, 'vaccinations'],
     queryFn: () => listVaccinations(animalId),

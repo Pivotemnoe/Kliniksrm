@@ -17,8 +17,7 @@ import { animalStatusOptions, normalizeAnimalStatusInput } from '../animals/anim
 import { AnimalMutationInput, AnimalSex } from '../animals/types';
 import { QuickCreateAnimalButton } from '../owners/QuickCreateAnimalButton';
 import { Owner, OwnerMutationInput } from '../owners/types';
-import { QueueEntry, QueueMutationInput, QueueUrgency, queueUrgencyLabels } from './types';
-import { VisitType, visitTypeLabels } from '../visits/types';
+import { QueueEntry, QueueMutationInput, QueuePurpose, QueueUrgency, queuePurposeLabels, queueUrgencyLabels } from './types';
 
 const queueSchema = z
   .object({
@@ -35,7 +34,7 @@ const queueSchema = z
     animalSpecies: optionalString(80),
     animalBreed: optionalString(120),
     animalSex: z.enum(['MALE', 'FEMALE', 'UNKNOWN']),
-    visitType: z.enum(['PRIMARY', 'FOLLOW_UP', 'OPERATION']),
+    visitType: z.enum(['PRIMARY', 'FOLLOW_UP', 'OPERATION', 'VACCINATION']),
     birthDate: optionalString().refine(isAnimalBirthDateInputValid, 'Введите дату: ГГГГ, ММ.ГГГГ или ДД.ММ.ГГГГ'),
     color: optionalString(120),
     microchip: optionalString(120),
@@ -748,10 +747,10 @@ function QueueDetailsFields({
             control={control}
             name="visitType"
             render={({ field }) => (
-              <Form.Item label="Прием">
-                <Select<VisitType>
+              <Form.Item label="Цель">
+                <Select<QueuePurpose>
                   {...field}
-                  options={Object.entries(visitTypeLabels).map(([value, label]) => ({ value: value as VisitType, label }))}
+                  options={Object.entries(queuePurposeLabels).map(([value, label]) => ({ value: value as QueuePurpose, label }))}
                 />
               </Form.Item>
             )}
@@ -785,7 +784,7 @@ function getDefaultValues(queueEntry?: QueueEntry | null): QueueFormInput {
     animalSpecies: nullToEmpty(queueEntry?.animalSpecies),
     animalBreed: nullToEmpty(queueEntry?.animalBreed),
     animalSex: queueEntry?.animalSex ?? 'UNKNOWN',
-    visitType: queueEntry?.visitType ?? 'PRIMARY',
+    visitType: queueEntry?.isVaccination ? 'VACCINATION' : queueEntry?.visitType ?? 'PRIMARY',
     birthDate: '',
     color: '',
     microchip: '',
@@ -804,7 +803,8 @@ function toQueueInput(values: QueueFormValues, options: { createCards: boolean }
     officeId: values.officeId,
     employeeId: values.employeeId,
     roomId: values.roomId,
-    visitType: values.visitType,
+    visitType: values.visitType === 'VACCINATION' ? undefined : values.visitType,
+    isVaccination: values.visitType === 'VACCINATION',
     urgency: values.urgency,
     comment: values.comment,
   };

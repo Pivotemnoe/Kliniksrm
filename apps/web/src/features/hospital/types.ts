@@ -85,12 +85,15 @@ export type HospitalRecord = {
   id: string;
   visitId: string;
   recordedById: string | null;
+  performedById: string | null;
+  cancelledById: string | null;
   recordType: HospitalRecordType;
   recordStatus: HospitalRecordStatus;
   createdAsPlan: boolean;
   title: string;
   recordedAt: string;
   completedAt: string | null;
+  cancelledAt: string | null;
   temperatureC: DecimalValue | null;
   value: string | null;
   notes: string | null;
@@ -160,6 +163,16 @@ export type HospitalRecord = {
     fullName: string;
     position: string | null;
   } | null;
+  performedBy?: {
+    id: string;
+    fullName: string;
+    position: string | null;
+  } | null;
+  cancelledBy?: {
+    id: string;
+    fullName: string;
+    position: string | null;
+  } | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -217,6 +230,10 @@ export type CreateHospitalRecordInput = {
 
 export type UpdateHospitalRecordInput = Omit<Partial<CreateHospitalRecordInput>, 'recordStatus'> & {
   recordStatus?: Extract<HospitalRecordStatus, 'PLANNED' | 'COMPLETED' | 'SKIPPED'>;
+};
+
+export type CancelHospitalRecordsInput = {
+  scope: 'ONE' | 'THIS_AND_FUTURE';
 };
 
 export type CreateHospitalAmendmentInput = {

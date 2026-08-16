@@ -1,7 +1,7 @@
 import { apiRequest } from '../../api/client';
 import { PaginatedResponse } from '../../shared/types/api';
 import { buildQuery } from '../../shared/utils/query';
-import { AdmitHospitalInput, CreateHospitalAmendmentInput, CreateHospitalRecordInput, CreateHospitalTreatmentPlanInput, HospitalCatalog, HospitalRecord, HospitalResources, HospitalStay, HospitalStayStatus, HospitalTreatmentPlan, UpdateHospitalRecordInput } from './types';
+import { AdmitHospitalInput, CancelHospitalRecordsInput, CreateHospitalAmendmentInput, CreateHospitalRecordInput, CreateHospitalTreatmentPlanInput, HospitalCatalog, HospitalRecord, HospitalResources, HospitalStay, HospitalStayStatus, HospitalTreatmentPlan, UpdateHospitalRecordInput } from './types';
 
 type HospitalListQuery = {
   search?: string;
@@ -37,6 +37,10 @@ export function createHospitalTreatmentPlan(stayId: string, input: CreateHospita
 
 export function updateHospitalRecord(stayId: string, recordId: string, input: UpdateHospitalRecordInput) {
   return apiRequest<HospitalRecord>(`/v1/hospital/${stayId}/records/${recordId}`, { method: 'PATCH', body: input });
+}
+
+export function cancelHospitalRecords(stayId: string, recordId: string, input: CancelHospitalRecordsInput) {
+  return apiRequest<{ count: number }>(`/v1/hospital/${stayId}/records/${recordId}/cancel`, { method: 'POST', body: input });
 }
 
 export function createHospitalAmendment(stayId: string, recordId: string, input: CreateHospitalAmendmentInput) {

@@ -162,7 +162,16 @@ export function HospitalTreatmentPlanModal({
         <Form.List name="items">
           {(fields, { add, remove }) => (
             <Space direction="vertical" size={14} className="full-width">
-              {fields.map((field, itemIndex) => (
+              {fields.map((field, itemIndex) => {
+                const currentItem = items[field.name] ?? newTreatmentPlanItem();
+                const typeView = treatmentTypeView[currentItem.recordType];
+                const visibleCatalogOptions = catalogOptions.filter((option) =>
+                  currentItem.recordType === 'MEDICATION'
+                    ? option.catalogKind === 'PRODUCT'
+                    : currentItem.recordType === 'PROCEDURE'
+                      ? option.catalogKind === 'SERVICE'
+                      : false);
+                return (
                 <section className="hospital-treatment-plan-item" key={field.key}>
                   <div className="hospital-treatment-plan-item-heading">
                     <Typography.Title level={5} className="compact-title">Назначение {itemIndex + 1}</Typography.Title>
@@ -170,28 +179,51 @@ export function HospitalTreatmentPlanModal({
                   </div>
                   <div className="form-grid two-columns">
                     <Form.Item name={[field.name, 'recordType']} label="Тип" rules={[{ required: true, message: 'Выберите тип' }]}>
-                      <Select options={recordTypeOptions} />
+                      <Select
+                        options={recordTypeOptions}
+                        onChange={(recordType: HospitalRecordType) => {
+                          form.setFieldsValue({
+                            items: replaceTreatmentPlanItem(form.getFieldValue('items'), field.name, {
+                              ...emptyCatalogSelection,
+                              recordType,
+                              title: treatmentTypeView[recordType].defaultTitle ?? '',
+                              value: '',
+                            }),
+                          });
+                        }}
+                      />
                     </Form.Item>
-                    <Form.Item name={[field.name, 'title']} label="Препарат, процедура или действие" rules={[{ required: true, message: 'Укажите назначение' }, { min: 2, message: 'Минимум 2 символа' }]}>
+                    {typeView.catalog === 'NONE' ? (
+                      <Form.Item label="Действие">
+                        <Typography.Text strong>{typeView.defaultTitle}</Typography.Text>
+                        <Form.Item name={[field.name, 'title']} hidden rules={[{ required: true }]}><Input /></Form.Item>
+                      </Form.Item>
+                    ) : <Form.Item
+                      name={[field.name, 'title']}
+                      label={typeView.catalog === 'PRODUCT' ? 'Препарат' : 'Услуга или процедура'}
+                      rules={[
+                        { required: true, message: typeView.catalog === 'PRODUCT' ? 'Выберите препарат' : 'Укажите услугу или процедуру' },
+                        { min: 2, message: 'Минимум 2 символа' },
+                        {
+                          validator: async () => {
+                            const item = form.getFieldValue(['items', field.name]);
+                            if (item?.recordType === 'MEDICATION' && !item?.productId) {
+                              throw new Error('Выберите препарат из реестра');
+                            }
+                          },
+                        },
+                      ]}
+                    >
                       <AutoComplete
-                        options={catalogOptions}
-                        placeholder="Начните вводить название"
+                        options={visibleCatalogOptions}
+                        placeholder={typeView.catalog === 'PRODUCT' ? 'Начните вводить название препарата' : 'Выберите услугу или введите процедуру'}
                         onSearch={(value) => {
                           setCatalogSearch(value);
                           const current = form.getFieldValue(['items', field.name]);
                           if (!current?.productId && !current?.serviceId) return;
                           form.setFieldsValue({
                             items: replaceTreatmentPlanItem(form.getFieldValue('items'), field.name, {
-                              catalogKind: undefined,
-                              productId: undefined,
-                              serviceId: undefined,
-                              quantity: undefined,
-                              stockQuantity: undefined,
-                              unitPrice: undefined,
-                              writeOffUnit: undefined,
-                              billingUnit: undefined,
-                              stockUnit: undefined,
-                              stockRest: undefined,
+                              ...emptyCatalogSelection,
                             }),
                           });
                         }}
@@ -218,7 +250,7 @@ export function HospitalTreatmentPlanModal({
                           });
                         }}
                       />
-                    </Form.Item>
+                    </Form.Item>}
                   </div>
                   {items[field.name]?.catalogKind === 'PRODUCT' ? (
                     <>
@@ -283,9 +315,11 @@ export function HospitalTreatmentPlanModal({
                     </>
                   ) : null}
                   <div className="form-grid two-columns">
-                    <Form.Item name={[field.name, 'value']} label="Доза, способ введения или объём">
-                      <Input placeholder="Например: 0,5 мл внутримышечно" maxLength={500} />
-                    </Form.Item>
+                    {typeView.valueLabel ? (
+                      <Form.Item name={[field.name, 'value']} label={typeView.valueLabel}>
+                        <Input placeholder={typeView.valuePlaceholder} maxLength={500} />
+                      </Form.Item>
+                    ) : <span />}
                     <Form.Item name={[field.name, 'notes']} label="Дополнительные указания">
                       <Input placeholder="Например: после кормления" maxLength={2000} />
                     </Form.Item>
@@ -340,7 +374,8 @@ export function HospitalTreatmentPlanModal({
                     </Space>
                   </div>
                 </section>
-              ))}
+                );
+              })}
               <Button type="dashed" block icon={<PlusOutlined />} onClick={() => add(newTreatmentPlanItem())}>
                 Добавить препарат, процедуру или другое действие
               </Button>
@@ -428,3 +463,31 @@ const recordTypeOptions: Array<{ value: HospitalRecordType; label: string }> = [
   { value: 'CARE', label: 'Уход' },
   { value: 'OTHER', label: 'Другое действие' },
 ];
+
+const emptyCatalogSelection = {
+  catalogKind: undefined,
+  productId: undefined,
+  serviceId: undefined,
+  quantity: undefined,
+  stockQuantity: undefined,
+  unitPrice: undefined,
+  writeOffUnit: undefined,
+  billingUnit: undefined,
+  stockUnit: undefined,
+  stockRest: undefined,
+} as const;
+
+const treatmentTypeView: Record<HospitalRecordType, {
+  catalog: 'PRODUCT' | 'SERVICE' | 'NONE';
+  defaultTitle?: string;
+  valueLabel?: string;
+  valuePlaceholder?: string;
+}> = {
+  MEDICATION: { catalog: 'PRODUCT', valueLabel: 'Доза и способ введения', valuePlaceholder: 'Например: 0,5 мл внутримышечно' },
+  PROCEDURE: { catalog: 'SERVICE', valueLabel: 'Способ выполнения или объём', valuePlaceholder: 'Например: обработать область' },
+  TEMPERATURE: { catalog: 'NONE', defaultTitle: 'Измерение температуры' },
+  OBSERVATION: { catalog: 'NONE', defaultTitle: 'Наблюдение', valueLabel: 'Что наблюдать', valuePlaceholder: 'Например: аппетит и мочеиспускание' },
+  FEEDING: { catalog: 'NONE', defaultTitle: 'Кормление', valueLabel: 'Корм и объём', valuePlaceholder: 'Например: влажный корм, 50 г' },
+  CARE: { catalog: 'NONE', defaultTitle: 'Уход', valueLabel: 'Что выполнить', valuePlaceholder: 'Например: сменить пелёнку' },
+  OTHER: { catalog: 'NONE', defaultTitle: 'Другое действие', valueLabel: 'Описание действия', valuePlaceholder: 'Что необходимо выполнить' },
+};

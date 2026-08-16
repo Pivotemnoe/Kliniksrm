@@ -322,7 +322,11 @@ export function AnimalCardPage() {
                 {
                   key: 'vaccinations',
                   label: 'Вакцинации',
-                  children: <AnimalVaccinationsTab animalId={animal.id} readOnly={Boolean(animal.archivedAt)} />,
+                  children: <AnimalVaccinationsTab
+                    animalId={animal.id}
+                    readOnly={Boolean(animal.archivedAt)}
+                    autoOpen={searchParams.get('new') === 'vaccination'}
+                  />,
                 },
                 {
                   key: 'tasks',

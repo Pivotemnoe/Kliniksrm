@@ -18,7 +18,6 @@ import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatAnimalAge } from '../../shared/utils/animalBirthDate';
 import { formatDateTime } from '../../shared/utils/date';
-import { visitTypeLabels } from '../visits/types';
 import { AnimalMutationInput } from '../animals/types';
 import { createOwner, createOwnerAnimal } from '../owners/owners.api';
 import { OwnerMutationInput } from '../owners/types';
@@ -31,7 +30,7 @@ import {
 } from './queue.api';
 import { QueueFormDrawer } from './QueueFormDrawer';
 import { QueueCreateCardsDrawer } from './QueueCreateCardsDrawer';
-import { QueueMutationInput, getQueueDisplayStatus, queueUrgencyColors, queueUrgencyLabels } from './types';
+import { QueueMutationInput, getQueueDisplayStatus, queuePurposeLabels, queueUrgencyColors, queueUrgencyLabels } from './types';
 
 type QueueCardsInput = {
   owner: OwnerMutationInput;
@@ -87,6 +86,9 @@ export function QueueCardPage() {
         cancel: 'Очередь отменена',
       }[action];
       message.success(successText);
+      if (action === 'complete' && queueEntry?.isVaccination && queueEntry.animalId) {
+        navigate(`/patients/${queueEntry.animalId}?tab=vaccinations&new=vaccination`);
+      }
     },
     onError: (error) => message.error(getErrorMessage(error)),
   });
@@ -175,7 +177,7 @@ export function QueueCardPage() {
                         disabled={acceptWaitSeconds > 0}
                         onClick={() => actionMutation.mutate('complete')}
                       >
-                        {acceptWaitSeconds > 0 ? `Начать через ${acceptWaitSeconds} с` : 'Начать приём'}
+                        {acceptWaitSeconds > 0 ? `Начать через ${acceptWaitSeconds} с` : queueEntry.isVaccination ? 'Начать вакцинацию' : 'Начать приём'}
                       </Button>
                     ) : null}
                   </>
@@ -195,8 +197,10 @@ export function QueueCardPage() {
                     Открыть приём
                   </Button>
                 ) : canManageVisits && queueEntry.ownerId && queueEntry.animalId && ['WAITING', 'IN_PROGRESS', 'COMPLETED'].includes(queueEntry.status) ? (
-                  <Button icon={<FileTextOutlined />} onClick={() => navigate(`/visits?queueEntryId=${queueEntry.id}`)}>
-                    Создать приём
+                  <Button icon={<FileTextOutlined />} onClick={() => navigate(queueEntry.isVaccination
+                    ? `/patients/${queueEntry.animalId}?tab=vaccinations&new=vaccination`
+                    : `/visits?queueEntryId=${queueEntry.id}`)}>
+                    {queueEntry.isVaccination ? 'Открыть вакцинацию' : 'Создать приём'}
                   </Button>
                 ) : null}
                 {canManage ? (
@@ -229,7 +233,7 @@ export function QueueCardPage() {
             <Descriptions.Item label="Срочность">
               <Tag color={queueUrgencyColors[queueEntry.urgency]}>{queueUrgencyLabels[queueEntry.urgency]}</Tag>
             </Descriptions.Item>
-            <Descriptions.Item label="Прием">{queueEntry.visitType ? visitTypeLabels[queueEntry.visitType] : '—'}</Descriptions.Item>
+            <Descriptions.Item label="Цель">{queueEntry.isVaccination ? queuePurposeLabels.VACCINATION : queueEntry.visitType ? queuePurposeLabels[queueEntry.visitType] : '—'}</Descriptions.Item>
             <Descriptions.Item label="Статус">
               {statusView ? <Tag color={statusView.color}>{statusView.label}</Tag> : '—'}
             </Descriptions.Item>

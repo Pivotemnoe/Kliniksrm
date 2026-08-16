@@ -8,7 +8,7 @@ import {
   SwapOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Descriptions, Form, Input, InputNumber, Modal, Select, Space, Tag, Typography } from 'antd';
+import { Alert, App, Button, Descriptions, Form, Input, InputNumber, Modal, Radio, Select, Space, Tag, Typography } from 'antd';
 import { useDeferredValue, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';
@@ -25,6 +25,7 @@ import { listVisitFiles, uploadVisitFile } from '../files/files.api';
 import { getOrganizationSettings } from '../organization/organization.api';
 import {
   cancelHospitalStay,
+  cancelHospitalRecords,
   createHospitalAmendment,
   createHospitalRecord,
   createHospitalTreatmentPlan,
@@ -136,6 +137,15 @@ export function HospitalCardPage() {
     },
     onError: (error) => message.error(getErrorMessage(error)),
   });
+  const cancelRecordMutation = useMutation({
+    mutationFn: ({ recordId, scope }: { recordId: string; scope: 'ONE' | 'THIS_AND_FUTURE' }) =>
+      cancelHospitalRecords(stayId, recordId, { scope }),
+    onSuccess: async (result) => {
+      await refresh();
+      message.success(result.count > 1 ? `Отменено будущих выполнений: ${result.count}` : 'Назначение отменено');
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
   const treatmentPlanMutation = useMutation({
     mutationFn: (input: Parameters<typeof createHospitalTreatmentPlan>[1]) => createHospitalTreatmentPlan(stayId, input),
     onSuccess: async (plan) => {
@@ -201,7 +211,7 @@ export function HospitalCardPage() {
         extra={
           <Space wrap>
             <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/hospital')}>К стационару</Button>
-            {stay ? <Button icon={<FileTextOutlined />} onClick={() => navigate(`/visits/${stay.sourceVisitId}`)}>Осмотр при поступлении</Button> : null}
+            {stay ? <Button icon={<FileTextOutlined />} onClick={() => navigate(`/visits/${stay.sourceVisitId}`)}>Открыть исходный приём</Button> : null}
             {stay && canPrint ? <Button icon={<PrinterOutlined />} onClick={() => {
               if (!printHospitalSheet(stay, organizationQuery.data)) message.warning('Браузер заблокировал окно печати');
             }}>Отчёт владельцу / PDF</Button> : null}
@@ -300,14 +310,38 @@ export function HospitalCardPage() {
                 onAmend={setAmendmentRecord}
                 onComplete={openCompleteRecord}
                 onQuickComplete={quickCompleteRecord}
-                onSkip={(record) => modal.confirm({
-                  title: `Отменить назначение «${record.title}»?`,
-                  content: 'Назначение останется в истории со статусом «Отменено». Склад и счёт не изменятся.',
-                  okText: 'Отменить назначение',
-                  cancelText: 'Назад',
-                  onOk: () => recordStatusMutation.mutateAsync({ recordId: record.id, input: { recordStatus: 'SKIPPED', completedAt: new Date().toISOString() } }),
-                })}
-                updatingRecordId={recordStatusMutation.isPending ? recordStatusMutation.variables?.recordId : undefined}
+                onSkip={(record) => {
+                  const hasFuture = Boolean(record.treatmentPlanItemId && stay.hospitalRecords?.some((candidate) =>
+                    candidate.id !== record.id
+                    && candidate.treatmentPlanItemId === record.treatmentPlanItemId
+                    && candidate.recordStatus === 'PLANNED'
+                    && new Date(candidate.recordedAt).getTime() >= new Date(record.recordedAt).getTime()));
+                  let scope: 'ONE' | 'THIS_AND_FUTURE' = 'ONE';
+                  modal.confirm({
+                    title: `Отменить назначение «${record.title}»?`,
+                    content: (
+                      <Space direction="vertical" size={12}>
+                        <Typography.Text>Склад и счёт не изменятся. В истории будет указано «Отменено».</Typography.Text>
+                        {hasFuture ? (
+                          <Radio.Group defaultValue="ONE" onChange={(event) => { scope = event.target.value; }}>
+                            <Space direction="vertical">
+                              <Radio value="ONE">Только это выполнение</Radio>
+                              <Radio value="THIS_AND_FUTURE">Это и все будущие выполнения</Radio>
+                            </Space>
+                          </Radio.Group>
+                        ) : null}
+                      </Space>
+                    ),
+                    okText: 'Отменить назначение',
+                    cancelText: 'Назад',
+                    onOk: () => cancelRecordMutation.mutateAsync({ recordId: record.id, scope }),
+                  });
+                }}
+                updatingRecordId={recordStatusMutation.isPending
+                  ? recordStatusMutation.variables?.recordId
+                  : cancelRecordMutation.isPending
+                    ? cancelRecordMutation.variables?.recordId
+                    : undefined}
               />
             </div>
           </div>

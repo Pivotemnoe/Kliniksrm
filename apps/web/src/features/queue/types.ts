@@ -5,6 +5,7 @@ import type { VisitSummary, VisitType } from '../visits/types';
 
 export type QueueUrgency = 'PLANNED' | 'URGENT';
 export type QueueStatus = 'WAITING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+export type QueuePurpose = VisitType | 'VACCINATION';
 
 export type QueueEntry = {
   id: string;
@@ -21,6 +22,7 @@ export type QueueEntry = {
   animalBreed: string | null;
   animalSex: Animal['sex'] | null;
   visitType: VisitType | null;
+  isVaccination: boolean;
   urgency: QueueUrgency;
   status: QueueStatus;
   comment: string | null;
@@ -73,9 +75,17 @@ export type QueueMutationInput = {
   animalBreed?: string;
   animalSex?: Animal['sex'];
   visitType?: VisitType;
+  isVaccination?: boolean;
   urgency?: QueueUrgency;
   status?: QueueStatus;
   comment?: string;
+};
+
+export const queuePurposeLabels: Record<QueuePurpose, string> = {
+  PRIMARY: 'Первичный',
+  FOLLOW_UP: 'Повторный',
+  OPERATION: 'Операция',
+  VACCINATION: 'Вакцинация',
 };
 
 export type ListQueueQuery = {

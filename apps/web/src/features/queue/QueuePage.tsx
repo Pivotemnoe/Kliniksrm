@@ -14,7 +14,7 @@ import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatAnimalAge } from '../../shared/utils/animalBirthDate';
 import { formatDateTime } from '../../shared/utils/date';
 import { createVisit } from '../visits/visits.api';
-import { visitStatusColors, visitStatusLabels, visitTypeLabels } from '../visits/types';
+import { visitStatusColors, visitStatusLabels } from '../visits/types';
 import { completeQueueEntry, listQueue, startQueueEntry } from './queue.api';
 import { createQueueEntryFromForm } from './createQueueEntryFromForm';
 import { QueueFormDrawer, QueueFormSubmitInput } from './QueueFormDrawer';
@@ -24,6 +24,7 @@ import {
   QueueStatus,
   QueueUrgency,
   getQueueDisplayStatus,
+  queuePurposeLabels,
   queueUrgencyColors,
   queueUrgencyLabels,
 } from './types';
@@ -92,6 +93,13 @@ export function QueuePage() {
         throw new Error('Сначала заведите карточки владельца и пациента');
       }
 
+      if (record.isVaccination) {
+        if (action === 'accept') {
+          await completeQueueEntry(record.id);
+        }
+        return { action, vaccinationAnimalId: record.animalId };
+      }
+
       if (action === 'accept') {
         await completeQueueEntry(record.id);
       }
@@ -117,12 +125,14 @@ export function QueuePage() {
       const successText = {
         call: 'Клиент вызван на приём',
         repeat: 'Вызов повторён',
-        accept: 'Приём создан и открыт',
-        createVisit: 'Приём создан и открыт',
+        accept: result.vaccinationAnimalId ? 'Открыта карточка вакцинации' : 'Приём создан и открыт',
+        createVisit: result.vaccinationAnimalId ? 'Открыта карточка вакцинации' : 'Приём создан и открыт',
       }[variables.action];
       message.success(successText);
       if ((result.action === 'accept' || result.action === 'createVisit') && result.visit) {
         navigate(`/visits/${result.visit.id}`);
+      } else if (result.vaccinationAnimalId) {
+        navigate(`/patients/${result.vaccinationAnimalId}?tab=vaccinations&new=vaccination`);
       }
     },
     onError: (error) => message.error(getErrorMessage(error)),
@@ -187,7 +197,7 @@ export function QueuePage() {
         title: 'Прием',
         key: 'visitType',
         width: 120,
-        render: (_, record) => (record.visitType ? visitTypeLabels[record.visitType] : '—'),
+        render: (_, record) => record.isVaccination ? queuePurposeLabels.VACCINATION : record.visitType ? queuePurposeLabels[record.visitType] : '—',
       },
       {
         title: 'Состояние приёма',
@@ -361,7 +371,7 @@ function QueueActionButton({
             disabled={waitSeconds > 0}
             onClick={onAccept}
           >
-            {waitSeconds > 0 ? `Начать через ${waitSeconds} с` : 'Начать приём'}
+            {waitSeconds > 0 ? `Начать через ${waitSeconds} с` : record.isVaccination ? 'Начать вакцинацию' : 'Начать приём'}
           </Button>
         ) : null}
       </Space>
@@ -380,7 +390,7 @@ function QueueActionButton({
     if (canManageVisits && record.ownerId && record.animalId) {
       return (
         <Button size="small" icon={<FileTextOutlined />} onClick={onCreateVisit}>
-          Создать приём
+          {record.isVaccination ? 'Открыть вакцинацию' : 'Создать приём'}
         </Button>
       );
     }

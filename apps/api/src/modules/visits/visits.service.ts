@@ -1032,7 +1032,7 @@ export class VisitsService {
     if (dto.queueEntryId) {
       const queueEntry = await this.prisma.queueEntry.findUnique({
         where: { id: dto.queueEntryId },
-        select: { ownerId: true, animalId: true, employeeId: true, visitType: true, visit: { select: { id: true } } },
+        select: { ownerId: true, animalId: true, employeeId: true, visitType: true, isVaccination: true, visit: { select: { id: true } } },
       });
 
       if (!queueEntry) {
@@ -1041,6 +1041,10 @@ export class VisitsService {
 
       if (queueEntry.visit) {
         throw new BadRequestException('Queue entry already has a visit');
+      }
+
+      if (queueEntry.isVaccination) {
+        throw new BadRequestException('Для этой очереди откройте карточку вакцинации пациента; обычный приём создавать не нужно');
       }
 
       if (!queueEntry.ownerId || !queueEntry.animalId) {

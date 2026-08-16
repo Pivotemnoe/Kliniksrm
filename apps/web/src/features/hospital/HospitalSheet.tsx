@@ -51,6 +51,9 @@ export function HospitalSheet({
               <Space wrap size={6}>
                 <Tag color="gold">Назначено {group.records.filter((record) => record.recordStatus === 'PLANNED').length}</Tag>
                 <Tag color="green">Выполнено {group.records.filter((record) => record.recordStatus === 'COMPLETED').length}</Tag>
+                {group.records.some((record) => record.recordStatus === 'SKIPPED') ? (
+                  <Tag>Отменено {group.records.filter((record) => record.recordStatus === 'SKIPPED').length}</Tag>
+                ) : null}
               </Space>
             </header>
             <div className="hospital-sheet-grid hospital-sheet-grid-head" aria-hidden="true">
@@ -63,8 +66,10 @@ export function HospitalSheet({
               <article className={`hospital-sheet-grid hospital-sheet-row hospital-sheet-row-${record.recordStatus.toLowerCase()}`} key={record.id}>
                 <div className="hospital-sheet-time">
                   <strong>{formatTime(record.recordedAt, timeZone)}</strong>
-                  {record.completedAt && record.createdAsPlan ? (
+                  {record.createdAsPlan && record.recordStatus === 'COMPLETED' && record.completedAt ? (
                     <Typography.Text type="secondary">выполнено {formatTime(record.completedAt, timeZone)}</Typography.Text>
+                  ) : record.recordStatus === 'SKIPPED' && record.cancelledAt ? (
+                    <Typography.Text type="secondary">отменено {formatTime(record.cancelledAt, timeZone)}</Typography.Text>
                   ) : null}
                 </div>
                 <div>
@@ -75,6 +80,7 @@ export function HospitalSheet({
                   <Typography.Paragraph strong className="hospital-sheet-title">{record.title}</Typography.Paragraph>
                   {record.treatmentPlan?.title ? <Typography.Text type="secondary">План: {record.treatmentPlan.title}</Typography.Text> : null}
                   {record.createdAsPlan ? <Typography.Text type="secondary">Назначено на {formatDateTime(record.recordedAt, timeZone)}</Typography.Text> : null}
+                  {record.createdAsPlan ? <Typography.Text type="secondary">Назначил: {record.recordedBy?.fullName ?? '—'}</Typography.Text> : null}
                 </div>
                 <div>
                   {record.recordStatus === 'PLANNED' ? (
@@ -83,7 +89,7 @@ export function HospitalSheet({
                       {describePlannedPosting(record) ? <Typography.Text>{describePlannedPosting(record)}</Typography.Text> : null}
                     </Space>
                   ) : record.recordStatus === 'SKIPPED' ? (
-                    <Typography.Text type="warning">Не выполнено{record.notes ? `: ${record.notes}` : ''}</Typography.Text>
+                    <Typography.Text>Отменено{record.notes ? `: ${record.notes}` : ''}</Typography.Text>
                   ) : (
                     <RecordResult record={record} />
                   )}
@@ -101,7 +107,7 @@ export function HospitalSheet({
                   ) : null}
                 </div>
                 <div className="hospital-sheet-actions">
-                  <Typography.Text>{record.recordedBy?.fullName ?? 'Сотрудник не указан'}</Typography.Text>
+                  <RecordActor record={record} />
                   {canManage ? (
                     <Space wrap size={4}>
                       {active && record.recordStatus === 'PLANNED' ? (
@@ -139,6 +145,19 @@ export function HospitalSheet({
       </div>
     </Space>
   );
+}
+
+function RecordActor({ record }: { record: HospitalRecord }) {
+  if (record.recordStatus === 'COMPLETED') {
+    return <Typography.Text>Исполнитель: {record.performedBy?.fullName ?? '—'}</Typography.Text>;
+  }
+  if (record.recordStatus === 'SKIPPED') {
+    return <Typography.Text>Отменил: {record.cancelledBy?.fullName ?? '—'}</Typography.Text>;
+  }
+  if (!record.createdAsPlan) {
+    return <Typography.Text>Сотрудник: {record.recordedBy?.fullName ?? '—'}</Typography.Text>;
+  }
+  return null;
 }
 
 function RecordStatusTag({ record }: { record: HospitalRecord }) {

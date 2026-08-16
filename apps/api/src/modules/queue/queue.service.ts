@@ -314,6 +314,7 @@ export class QueueService {
       animalBreed: dto.animalBreed,
       animalSex: dto.animalSex,
       visitType: dto.visitType,
+      isVaccination: dto.isVaccination,
       urgency: dto.urgency,
       comment: dto.comment,
     };
@@ -460,6 +461,7 @@ type QueueMutationData = {
   animalBreed?: string;
   animalSex?: AnimalSex;
   visitType?: VisitType;
+  isVaccination?: boolean;
   urgency?: QueueUrgency;
   comment?: string;
 };

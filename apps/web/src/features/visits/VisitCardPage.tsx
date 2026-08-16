@@ -506,7 +506,7 @@ export function VisitCardPage() {
         onOk={() => hospitalBoxId && hospitalAdmissionMutation.mutate(hospitalBoxId)}
       >
         <Typography.Paragraph type="secondary">
-          Приём будет завершён, а наблюдения, температура, препараты и процедуры продолжатся независимо в отдельной карте стационара.
+          Этот приём сохранится полностью и будет завершён. Отдельная карта стационара откроется со ссылкой на исходный приём.
         </Typography.Paragraph>
         <Select
           value={hospitalBoxId}

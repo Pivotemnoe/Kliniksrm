@@ -366,6 +366,8 @@ model Employee {
   visits                        Visit[]
   hospitalStays                 HospitalStay[]
   hospitalRecords               HospitalRecord[]             @relation("HospitalRecordAuthor")
+  performedHospitalRecords      HospitalRecord[]             @relation("HospitalRecordPerformer")
+  cancelledHospitalRecords      HospitalRecord[]             @relation("HospitalRecordCanceller")
   hospitalPlans                 HospitalTreatmentPlan[]      @relation("HospitalTreatmentPlanAuthor")
   assignedTasks                 Task[]                       @relation("TaskAssignee")
   createdTasks                  Task[]                       @relation("TaskCreator")
@@ -376,7 +378,7 @@ model Employee {
   visitOverdueAlerts            VisitOverdueAlert[]          @relation("VisitOverdueAlertEmployee")
   sentInternalMessages          InternalMessage[]            @relation("InternalMessageSender")
   receivedInternalMessages      InternalMessage[]            @relation("InternalMessageRecipient")
-  createdDirectorBriefings      DirectorBriefing[]            @relation("DirectorBriefingCreator")
+  createdDirectorBriefings      DirectorBriefing[]           @relation("DirectorBriefingCreator")
   auditLogs                     AuditLog[]                   @relation("AuditActor")
   payments                      Payment[]
   createdSales                  Sale[]                       @relation("SaleEmployee")
@@ -514,36 +516,36 @@ model AuditLog {
 }
 
 model Organization {
-  id                  String                   @id @default(uuid())
-  displayName         String
-  legalName           String?
-  orgType             String?
-  inn                 String?
-  kpp                 String?
-  legalAddress        String?
-  postalAddress       String?
-  bankName            String?
-  bik                 String?
-  account             String?
-  corrAccount         String?
-  defaultBillDueDays  Int?
-  logoStorageKey      String?
-  logoOriginalName    String?
-  logoMimeType        String?
-  logoSizeBytes       Int?
-  logoUpdatedAt       DateTime?
-  directorBriefingEnabled  Boolean              @default(true)
-  directorBriefingTime     String               @default("08:00")
-  directorBriefingTimezone String               @default("Europe/Moscow")
-  offices             ClinicOffice[]
-  directorBriefings   DirectorBriefing[]
-  businessDailyCloses BusinessDailyClose[]
-  installation        ClinicInstallation?
-  remoteAccessPolicy  RemoteAccessPolicy?
-  remoteInvitations   RemoteAccessInvitation[]
-  remoteDevices       RemoteAccessDevice[]
-  createdAt           DateTime                 @default(now())
-  updatedAt           DateTime                 @updatedAt
+  id                       String                   @id @default(uuid())
+  displayName              String
+  legalName                String?
+  orgType                  String?
+  inn                      String?
+  kpp                      String?
+  legalAddress             String?
+  postalAddress            String?
+  bankName                 String?
+  bik                      String?
+  account                  String?
+  corrAccount              String?
+  defaultBillDueDays       Int?
+  logoStorageKey           String?
+  logoOriginalName         String?
+  logoMimeType             String?
+  logoSizeBytes            Int?
+  logoUpdatedAt            DateTime?
+  directorBriefingEnabled  Boolean                  @default(true)
+  directorBriefingTime     String                   @default("08:00")
+  directorBriefingTimezone String                   @default("Europe/Moscow")
+  offices                  ClinicOffice[]
+  directorBriefings        DirectorBriefing[]
+  businessDailyCloses      BusinessDailyClose[]
+  installation             ClinicInstallation?
+  remoteAccessPolicy       RemoteAccessPolicy?
+  remoteInvitations        RemoteAccessInvitation[]
+  remoteDevices            RemoteAccessDevice[]
+  createdAt                DateTime                 @default(now())
+  updatedAt                DateTime                 @updatedAt
 }
 
 model DirectorBriefing {
@@ -1009,6 +1011,7 @@ model QueueEntry {
   animalBreed    String?
   animalSex      AnimalSex?
   visitType      VisitType?
+  isVaccination  Boolean       @default(false)
   urgency        QueueUrgency  @default(PLANNED)
   status         QueueStatus   @default(WAITING)
   comment        String?
@@ -1166,12 +1169,17 @@ model HospitalRecord {
   plannedUnitPrice     Decimal?               @db.Decimal(12, 2)
   recordedById         String?
   recordedBy           Employee?              @relation("HospitalRecordAuthor", fields: [recordedById], references: [id], onDelete: SetNull)
+  performedById        String?
+  performedBy          Employee?              @relation("HospitalRecordPerformer", fields: [performedById], references: [id], onDelete: SetNull)
+  cancelledById        String?
+  cancelledBy          Employee?              @relation("HospitalRecordCanceller", fields: [cancelledById], references: [id], onDelete: SetNull)
   recordType           String
   recordStatus         HospitalRecordStatus   @default(COMPLETED)
   createdAsPlan        Boolean                @default(false)
   title                String
   recordedAt           DateTime               @default(now())
   completedAt          DateTime?
+  cancelledAt          DateTime?
   temperatureC         Decimal?               @db.Decimal(4, 1)
   value                String?
   notes                String?
@@ -1184,6 +1192,8 @@ model HospitalRecord {
 
   @@index([visitId, recordedAt])
   @@index([recordedById])
+  @@index([performedById])
+  @@index([cancelledById])
   @@index([parentRecordId])
   @@index([visitId, recordStatus, recordedAt])
   @@index([treatmentPlanId, treatmentPlanItemId, recordedAt])
@@ -1588,18 +1598,18 @@ model LaboratoryProfileTest {
 }
 
 model LaboratoryOrder {
-  id          String                @id @default(uuid())
-  visitId     String
-  visit       Visit                 @relation(fields: [visitId], references: [id], onDelete: Cascade)
-  status      LaboratoryOrderStatus @default(ORDERED)
-  comment     String?
+  id            String                @id @default(uuid())
+  visitId       String
+  visit         Visit                 @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  status        LaboratoryOrderStatus @default(ORDERED)
+  comment       String?
   formSnapshots Json?
-  createdById String?
-  completedAt DateTime?
-  items       LaboratoryOrderItem[]
-  files       FileObject[]
-  createdAt   DateTime              @default(now())
-  updatedAt   DateTime              @updatedAt
+  createdById   String?
+  completedAt   DateTime?
+  items         LaboratoryOrderItem[]
+  files         FileObject[]
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
 
   @@index([visitId])
   @@index([status, createdAt])
@@ -2220,7 +2230,7 @@ model DocumentTemplate {
   versions           DocumentTemplateVersion[]
   visitDocuments     VisitDocument[]
   generatedDocuments GeneratedDocument[]
-  laboratoryTests     LaboratoryTest[]
+  laboratoryTests    LaboratoryTest[]
   createdAt          DateTime                  @default(now())
   updatedAt          DateTime                  @updatedAt
 
