@@ -65,14 +65,16 @@ export function HospitalSheet({
               <div>Выполнение / результат</div>
               <div>Исполнитель и действия</div>
             </div>
-            {group.records.map((record) => (
+            {group.records.map((record) => record.recordStatus === 'SKIPPED' ? (
+              <article className="hospital-sheet-row-cancelled" key={record.id} aria-label="Отменено">
+                <Tag>Отменено</Tag>
+              </article>
+            ) : (
               <article className={`hospital-sheet-grid hospital-sheet-row hospital-sheet-row-${record.recordStatus.toLowerCase()}`} key={record.id}>
                 <div className="hospital-sheet-time">
                   <strong>{formatTime(record.recordedAt, timeZone)}</strong>
                   {record.createdAsPlan && record.recordStatus === 'COMPLETED' && record.completedAt ? (
                     <Typography.Text type="secondary">выполнено {formatTime(record.completedAt, timeZone)}</Typography.Text>
-                  ) : record.recordStatus === 'SKIPPED' && record.cancelledAt ? (
-                    <Typography.Text type="secondary">отменено {formatTime(record.cancelledAt, timeZone)}</Typography.Text>
                   ) : null}
                 </div>
                 <div>
@@ -82,8 +84,8 @@ export function HospitalSheet({
                   </Space>
                   <Typography.Paragraph strong className="hospital-sheet-title">{record.title}</Typography.Paragraph>
                   {record.treatmentPlan?.title ? <Typography.Text type="secondary">План: {record.treatmentPlan.title}</Typography.Text> : null}
-                  {record.createdAsPlan && record.recordStatus !== 'SKIPPED' ? <Typography.Text type="secondary">Назначено на {formatDateTime(record.recordedAt, timeZone)}</Typography.Text> : null}
-                  {record.createdAsPlan && record.recordStatus !== 'SKIPPED' ? <Typography.Text type="secondary">Назначил: {record.recordedBy?.fullName ?? '—'}</Typography.Text> : null}
+                  {record.createdAsPlan ? <Typography.Text type="secondary">Назначено на {formatDateTime(record.recordedAt, timeZone)}</Typography.Text> : null}
+                  {record.createdAsPlan ? <Typography.Text type="secondary">Назначил: {record.recordedBy?.fullName ?? '—'}</Typography.Text> : null}
                 </div>
                 <div>
                   {record.recordStatus === 'PLANNED' ? (
@@ -91,8 +93,6 @@ export function HospitalSheet({
                       <Typography.Text type="secondary">Ожидает выполнения</Typography.Text>
                       {describePlannedPosting(record) ? <Typography.Text>{describePlannedPosting(record)}</Typography.Text> : null}
                     </Space>
-                  ) : record.recordStatus === 'SKIPPED' ? (
-                    record.notes ? <Typography.Text>{record.notes}</Typography.Text> : null
                   ) : (
                     <RecordResult record={record} />
                   )}

@@ -34,7 +34,8 @@ test('отмена имеет отдельное время и может охв
   assert.match(service, /THIS_AND_FUTURE/);
   assert.match(service, /recordedAt: \{ gte: target\.recordedAt \}/);
   assert.match(service, /cancelledAt/);
-  assert.match(sheet, /отменено \{formatTime\(record\.cancelledAt/);
+  assert.match(sheet, /hospital-sheet-row-cancelled/);
+  assert.match(sheet, /aria-label="Отменено"/);
   assert.doesNotMatch(sheet, /Не выполнено/);
 });
 
@@ -116,5 +117,7 @@ test('температуры всех сотрудников видны, а пр
   assert.match(card, /createHospitalRecord\(stayId, input/);
   assert.match(sheet, /Исполнитель: \{record\.performedBy\?\.fullName/);
   assert.match(card, /openNewRecord\('COMPLETED', 'TEMPERATURE'\)/);
-  assert.match(styles, /\.hospital-sheet-days \{[\s\S]*gap: 10px/);
+  assert.match(styles, /\.hospital-sheet-days \{[\s\S]*gap: 6px/);
+  assert.match(styles, /\.hospital-sheet-row-cancelled \{[\s\S]*min-height: 25px/);
+  assert.match(styles, /\.hospital-sheet-grid > div \{[\s\S]*overflow-wrap: anywhere/);
 });

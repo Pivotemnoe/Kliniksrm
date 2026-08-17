@@ -2732,7 +2732,7 @@ body {
 .hospital-sheet-days {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 10px;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -2740,7 +2740,7 @@ body {
   min-width: 0;
   overflow: hidden;
   border: 1px solid #d9e3e8;
-  border-radius: 10px;
+  border-radius: 8px;
   background: #ffffff;
 }
 
@@ -2748,21 +2748,22 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 9px 12px;
+  gap: 8px;
+  padding: 6px 10px;
   border-bottom: 1px solid #d9e3e8;
   background: #eef4f7;
 }
 
 .hospital-sheet-grid {
   display: grid;
-  grid-template-columns: 120px minmax(220px, 1.05fr) minmax(280px, 1.45fr) minmax(190px, 0.8fr);
+  grid-template-columns: 104px minmax(190px, 1.05fr) minmax(230px, 1.45fr) minmax(165px, 0.8fr);
 }
 
 .hospital-sheet-grid > div {
   min-width: 0;
-  padding: 8px 10px;
+  padding: 6px 8px;
   border-right: 1px solid #e4ebef;
+  overflow-wrap: anywhere;
 }
 
 .hospital-sheet-grid > div:last-child {
@@ -2793,15 +2794,31 @@ body {
   background: #fafafa;
 }
 
+.hospital-sheet-row-cancelled {
+  display: flex;
+  align-items: center;
+  min-height: 25px;
+  padding: 2px 8px;
+  border-top: 1px solid #e4ebef;
+  background: #fafafa;
+}
+
+.hospital-sheet-row-cancelled .ant-tag {
+  margin-inline-end: 0;
+  color: #7a8490;
+  font-size: 11px;
+  line-height: 17px;
+}
+
 .hospital-sheet-time,
 .hospital-sheet-actions {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .hospital-sheet-title.ant-typography {
-  margin: 3px 0 1px;
+  margin: 2px 0 0;
 }
 
 .hospital-amendments {
@@ -3882,6 +3899,10 @@ body {
 
   .hospital-sheet-row {
     padding: 10px 0;
+  }
+
+  .hospital-sheet-row-cancelled {
+    padding: 2px 14px;
   }
 
   .hospital-sheet-grid > div {

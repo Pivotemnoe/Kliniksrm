@@ -318,7 +318,7 @@ export class AnimalsService {
   async updateAnimal(animalId: string, dto: UpdateAnimalDto, actorId: string) {
     const currentAnimal = await this.prisma.animal.findUnique({
       where: { id: animalId },
-      select: { id: true, nickname: true, archivedAt: true },
+      select: { id: true, nickname: true, species: true, breed: true, archivedAt: true },
     });
     if (!currentAnimal) {
       throw new NotFoundException('Animal not found');
@@ -327,7 +327,7 @@ export class AnimalsService {
       throw new BadRequestException('Пациент находится в архиве. Сначала восстановите карточку');
     }
     if (dto.species !== undefined || dto.breed !== undefined) {
-      await this.animalCatalogService.validateSelection(dto.species, dto.breed);
+      await this.animalCatalogService.validateSelection(dto.species ?? currentAnimal.species, dto.breed ?? currentAnimal.breed);
     }
 
     const animal = await this.prisma.animal.update({

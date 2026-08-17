@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { Form, Select } from 'antd';
-import { useEffect } from 'react';
+import { Button, Form, Input, Select } from 'antd';
+import { useState } from 'react';
 import { Controller, useWatch } from 'react-hook-form';
 import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
 import { getAnimalCatalog } from './animals.api';
@@ -22,6 +22,7 @@ export function AnimalCatalogFields({
   speciesLabel = 'Вид',
   breedLabel = 'Порода',
 }: AnimalCatalogFieldsProps) {
+  const ownerStatedBreedValue = '__OWNER_STATED_BREED__';
   const catalogQuery = useQuery({
     queryKey: ['animals', 'catalog'],
     queryFn: getAnimalCatalog,
@@ -32,12 +33,8 @@ export function AnimalCatalogFields({
   const species = catalogQuery.data?.species ?? [];
   const selectedSpecies = species.find((item) => item.title === speciesValue);
   const breedOptions = selectedSpecies?.breeds.map((breed) => ({ value: breed.title, label: breed.title })) ?? [];
-
-  useEffect(() => {
-    if (breedValue && selectedSpecies && !selectedSpecies.breeds.some((breed) => breed.title === breedValue)) {
-      setValue(breedName, '');
-    }
-  }, [breedName, breedValue, selectedSpecies, setValue]);
+  const [ownerStatedBreedMode, setOwnerStatedBreedMode] = useState(false);
+  const isOwnerStatedBreed = ownerStatedBreedMode || Boolean(breedValue && selectedSpecies && !breedOptions.some((breed) => breed.value === breedValue));
 
   return (
     <>
@@ -62,6 +59,7 @@ export function AnimalCatalogFields({
               onChange={(value) => {
                 field.onChange(value ?? '');
                 setValue(breedName, '');
+                setOwnerStatedBreedMode(false);
               }}
             />
           </Form.Item>
@@ -72,17 +70,40 @@ export function AnimalCatalogFields({
         name={breedName}
         render={({ field, fieldState }) => (
           <Form.Item label={breedLabel} validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
-            <Select
-              {...field}
-              allowClear
-              showSearch
-              optionFilterProp="label"
-              disabled={!speciesValue}
-              loading={catalogQuery.isLoading}
-              options={breedOptions}
-              placeholder={speciesValue ? 'Выберите породу' : 'Сначала выберите вид'}
-              onChange={(value) => field.onChange(value ?? '')}
-            />
+            {isOwnerStatedBreed ? (
+              <>
+                <Input
+                  {...field}
+                  placeholder="Укажите породу со слов владельца"
+                  disabled={!speciesValue}
+                />
+                <Button type="link" size="small" onClick={() => { setOwnerStatedBreedMode(false); field.onChange(''); }}>
+                  Выбрать из реестра
+                </Button>
+              </>
+            ) : (
+              <Select
+                value={field.value || undefined}
+                allowClear
+                showSearch
+                optionFilterProp="label"
+                disabled={!speciesValue}
+                loading={catalogQuery.isLoading}
+                options={[
+                  ...breedOptions,
+                  { value: ownerStatedBreedValue, label: 'Нет в реестре — указать со слов владельца' },
+                ]}
+                placeholder={speciesValue ? 'Выберите породу' : 'Сначала выберите вид'}
+                onChange={(value) => {
+                  if (value === ownerStatedBreedValue) {
+                    setOwnerStatedBreedMode(true);
+                    field.onChange('');
+                    return;
+                  }
+                  field.onChange(value ?? '');
+                }}
+              />
+            )}
           </Form.Item>
         )}
       />

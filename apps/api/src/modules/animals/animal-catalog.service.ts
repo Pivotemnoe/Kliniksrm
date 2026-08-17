@@ -30,16 +30,15 @@ export class AnimalCatalogService {
       throw new BadRequestException('Выберите породу');
     }
 
-    const catalogBreed = await this.prisma.animalBreed.findFirst({
-      where: {
-        title: breed,
-        species: { title: species },
-      },
+    const catalogSpecies = await this.prisma.animalSpecies.findFirst({
+      where: { title: species },
       select: { id: true },
     });
 
-    if (!catalogBreed) {
-      throw new BadRequestException('Порода не относится к выбранному виду животного');
+    if (!catalogSpecies) {
+      throw new BadRequestException('Выберите вид животного из реестра');
     }
+
+    // Порода может быть внесена со слов владельца и не обязана быть в реестре.
   }
 }
