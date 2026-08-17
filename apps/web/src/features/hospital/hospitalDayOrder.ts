@@ -5,7 +5,7 @@ export function compareHospitalDayKeys(leftKey: string, rightKey: string, todayK
 
   const leftIsPast = leftKey < todayKey;
   const rightIsPast = rightKey < todayKey;
-  if (leftIsPast !== rightIsPast) return leftIsPast ? 1 : -1;
+  if (leftIsPast !== rightIsPast) return leftIsPast ? -1 : 1;
 
   return leftIsPast
     ? rightKey.localeCompare(leftKey)

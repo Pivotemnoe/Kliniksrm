@@ -259,10 +259,10 @@ test('в карте стационара текущий день показан 
   assert.match(sheet, /records: sortedGroup/);
   assert.deepEqual(days.sort((left, right) => compareHospitalDayKeys(left, right, today)), [
     today,
-    '2026-08-08',
-    '2026-08-10',
     '2026-08-06',
     '2026-07-29',
+    '2026-08-08',
+    '2026-08-10',
   ]);
 });
 

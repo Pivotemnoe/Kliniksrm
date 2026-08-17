@@ -1,4 +1,4 @@
-import { EditOutlined, FileAddOutlined, StopOutlined } from '@ant-design/icons';
+import { EditOutlined, FileAddOutlined, PlusOutlined, StopOutlined } from '@ant-design/icons';
 import { Button, Checkbox, Empty, Space, Tag, Tooltip, Typography } from 'antd';
 import { compareHospitalDayKeys } from './hospitalDayOrder';
 import type { HospitalRecord } from './types';
@@ -13,6 +13,7 @@ export function HospitalSheet({
   onComplete,
   onQuickComplete,
   onSkip,
+  onAddTemperature,
   updatingRecordId,
 }: {
   records: HospitalRecord[];
@@ -24,10 +25,12 @@ export function HospitalSheet({
   onComplete: (record: HospitalRecord) => void;
   onQuickComplete: (record: HospitalRecord) => void;
   onSkip: (record: HospitalRecord) => void;
+  onAddTemperature: () => void;
   updatingRecordId?: string;
 }) {
   const groups = groupHospitalRecords(records, timeZone);
   const temperatures = records
+    .flatMap((record) => [record, ...(record.amendments ?? [])])
     .filter((record) => record.recordStatus !== 'PLANNED' && record.temperatureC !== null)
     .map((record) => ({ at: record.completedAt ?? record.recordedAt, value: Number(record.temperatureC) }))
     .filter((point) => Number.isFinite(point.value))
@@ -39,7 +42,7 @@ export function HospitalSheet({
 
   return (
     <Space direction="vertical" size={18} className="full-width">
-      <TemperatureChart points={temperatures} timeZone={timeZone} />
+      <TemperatureChart points={temperatures} timeZone={timeZone} onAdd={active && canManage ? onAddTemperature : undefined} />
       <div className="hospital-sheet-days">
         {groups.map((group) => (
           <section className="hospital-sheet-day" key={group.key}>
@@ -79,8 +82,8 @@ export function HospitalSheet({
                   </Space>
                   <Typography.Paragraph strong className="hospital-sheet-title">{record.title}</Typography.Paragraph>
                   {record.treatmentPlan?.title ? <Typography.Text type="secondary">План: {record.treatmentPlan.title}</Typography.Text> : null}
-                  {record.createdAsPlan ? <Typography.Text type="secondary">Назначено на {formatDateTime(record.recordedAt, timeZone)}</Typography.Text> : null}
-                  {record.createdAsPlan ? <Typography.Text type="secondary">Назначил: {record.recordedBy?.fullName ?? '—'}</Typography.Text> : null}
+                  {record.createdAsPlan && record.recordStatus !== 'SKIPPED' ? <Typography.Text type="secondary">Назначено на {formatDateTime(record.recordedAt, timeZone)}</Typography.Text> : null}
+                  {record.createdAsPlan && record.recordStatus !== 'SKIPPED' ? <Typography.Text type="secondary">Назначил: {record.recordedBy?.fullName ?? '—'}</Typography.Text> : null}
                 </div>
                 <div>
                   {record.recordStatus === 'PLANNED' ? (
@@ -89,7 +92,7 @@ export function HospitalSheet({
                       {describePlannedPosting(record) ? <Typography.Text>{describePlannedPosting(record)}</Typography.Text> : null}
                     </Space>
                   ) : record.recordStatus === 'SKIPPED' ? (
-                    <Typography.Text>Отменено{record.notes ? `: ${record.notes}` : ''}</Typography.Text>
+                    record.notes ? <Typography.Text>{record.notes}</Typography.Text> : null
                   ) : (
                     <RecordResult record={record} />
                   )}
@@ -216,12 +219,15 @@ function describeCompletedPosting(record: HospitalRecord) {
   return `${item.title}: ${item.quantity} × ${item.unitPrice} ₽`;
 }
 
-function TemperatureChart({ points, timeZone }: { points: Array<{ at: string; value: number }>; timeZone: string }) {
+function TemperatureChart({ points, timeZone, onAdd }: { points: Array<{ at: string; value: number }>; timeZone: string; onAdd?: () => void }) {
   if (!points.length) {
     return (
       <div className="hospital-temperature-empty">
-        <Typography.Text strong>График температуры</Typography.Text>
-        <Typography.Text type="secondary">Появится после первого выполненного измерения.</Typography.Text>
+        <div>
+          <Typography.Text strong>График температуры</Typography.Text>
+          <Typography.Text type="secondary">Появится после первого выполненного измерения.</Typography.Text>
+        </div>
+        {onAdd ? <Button size="small" icon={<PlusOutlined />} onClick={onAdd}>Записать температуру</Button> : null}
       </div>
     );
   }
@@ -241,8 +247,11 @@ function TemperatureChart({ points, timeZone }: { points: Array<{ at: string; va
   return (
     <div className="hospital-temperature-chart">
       <div className="hospital-temperature-chart-heading">
-        <Typography.Text strong>Температура за всё пребывание</Typography.Text>
-        <Typography.Text type="secondary">{points.length} измерений · {Math.min(...values).toFixed(1)}–{Math.max(...values).toFixed(1)} °C</Typography.Text>
+        <div>
+          <Typography.Text strong>Температура за всё пребывание</Typography.Text>
+          <Typography.Text type="secondary">{points.length} измерений · {Math.min(...values).toFixed(1)}–{Math.max(...values).toFixed(1)} °C</Typography.Text>
+        </div>
+        {onAdd ? <Button size="small" icon={<PlusOutlined />} onClick={onAdd}>Записать температуру</Button> : null}
       </div>
       <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="График температуры пациента">
         {ticks.map((tick) => (

@@ -65,6 +65,7 @@ export function HospitalCardPage() {
   const [treatmentPlanOpen, setTreatmentPlanOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<HospitalRecord | null>(null);
   const [initialRecordStatus, setInitialRecordStatus] = useState<Extract<HospitalRecordStatus, 'PLANNED' | 'COMPLETED'>>('COMPLETED');
+  const [initialRecordType, setInitialRecordType] = useState<HospitalRecordType>('OBSERVATION');
   const [amendmentRecord, setAmendmentRecord] = useState<HospitalRecord | null>(null);
   const [boxId, setBoxId] = useState<string>();
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -168,21 +169,24 @@ export function HospitalCardPage() {
     onError: (error) => message.error(getErrorMessage(error)),
   });
 
-  function openNewRecord(status: Extract<HospitalRecordStatus, 'PLANNED' | 'COMPLETED'>) {
+  function openNewRecord(status: Extract<HospitalRecordStatus, 'PLANNED' | 'COMPLETED'>, type: HospitalRecordType = 'OBSERVATION') {
     setEditingRecord(null);
     setInitialRecordStatus(status);
+    setInitialRecordType(type);
     setRecordOpen(true);
   }
 
   function openEditRecord(record: HospitalRecord) {
     setEditingRecord(record);
     setInitialRecordStatus(record.recordStatus === 'PLANNED' ? 'PLANNED' : 'COMPLETED');
+    setInitialRecordType(record.recordType);
     setRecordOpen(true);
   }
 
   function openCompleteRecord(record: HospitalRecord) {
     setEditingRecord(record);
     setInitialRecordStatus('COMPLETED');
+    setInitialRecordType(record.recordType);
     setRecordOpen(true);
   }
 
@@ -337,6 +341,7 @@ export function HospitalCardPage() {
                     onOk: () => cancelRecordMutation.mutateAsync({ recordId: record.id, scope }),
                   });
                 }}
+                onAddTemperature={() => openNewRecord('COMPLETED', 'TEMPERATURE')}
                 updatingRecordId={recordStatusMutation.isPending
                   ? recordStatusMutation.variables?.recordId
                   : cancelRecordMutation.isPending
@@ -371,7 +376,8 @@ export function HospitalCardPage() {
         open={recordOpen}
         record={editingRecord}
         initialStatus={initialRecordStatus}
-        billingLocked={Number(stay?.bill?.paidAmount ?? 0) > 0}
+        initialRecordType={initialRecordType}
+        billingLocked={stay?.bill?.status === 'CANCELLED' || Number(stay?.bill?.paidAmount ?? 0) > 0}
         loading={recordMutation.isPending}
         onClose={() => { setRecordOpen(false); setEditingRecord(null); }}
         onSubmit={(values) => recordMutation.mutate({
@@ -399,6 +405,7 @@ function HospitalRecordModal({
   open,
   record,
   initialStatus,
+  initialRecordType,
   billingLocked,
   loading,
   onClose,
@@ -407,6 +414,7 @@ function HospitalRecordModal({
   open: boolean;
   record: HospitalRecord | null;
   initialStatus: Extract<HospitalRecordStatus, 'PLANNED' | 'COMPLETED'>;
+  initialRecordType: HospitalRecordType;
   billingLocked: boolean;
   loading: boolean;
   onClose: () => void;
@@ -438,10 +446,11 @@ function HospitalRecordModal({
     if (!open) return;
     setCatalogSearch('');
     if (!record) {
+      const initialType = recordTypeOptions.find((option) => option.value === initialRecordType) ?? recordTypeOptions[3];
       form.setFieldsValue({
-        recordType: 'OBSERVATION',
+        recordType: initialType.value,
         recordStatus: initialStatus,
-        title: 'Состояние пациента',
+        title: initialType.defaultTitle,
         recordedAt: toDatetimeInput(new Date()),
         value: '',
         notes: '',
@@ -478,7 +487,7 @@ function HospitalRecordModal({
         : undefined,
       unitPrice: Number(record.billItem?.unitPrice ?? currentPlannedCatalog.unitPrice ?? 0),
     });
-  }, [form, initialStatus, open, record]);
+  }, [form, initialRecordType, initialStatus, open, record]);
 
   function submit(values: HospitalRecordFormValues) {
     const { catalogKind: _catalogKind, ...rawInput } = values;
@@ -630,8 +639,8 @@ function HospitalRecordModal({
             type="warning"
             showIcon
             className="form-alert"
-            message="Счёт уже оплачивался"
-            description="Текст записи можно исправить, но количество списания и цену оплаченного счёта менять нельзя."
+            message="Финансовые поля счёта закрыты"
+            description="Текст и медицинский результат можно исправить, но количество списания и цену закрытого счёта менять нельзя."
           />
         ) : null}
         <Form.Item name="catalogKind" label="Что учесть" hidden={recordStatus === 'PLANNED' || lateCompletion}>

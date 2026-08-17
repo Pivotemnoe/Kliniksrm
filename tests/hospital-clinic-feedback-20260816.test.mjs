@@ -84,3 +84,28 @@ test('перевод в стационар сохраняет и открыва�
   assert.match(hospitalCard, /Открыть исходный приём/);
   assert.match(visitCard, /Этот приём сохранится полностью/);
 });
+
+test('повторное выполнение не блокируется отменённым счётом, а медицинская правка не трогает цену', async () => {
+  const [service, card] = await Promise.all([
+    read('apps/api/src/modules/hospital/hospital.service.ts'),
+    read('apps/web/src/features/hospital/HospitalCardPage.tsx'),
+  ]);
+
+  assert.match(service, /existing\.status === PaymentStatus\.CANCELLED[\s\S]*resolvePaymentStatus\(existing\.totalAmount, existing\.paidAmount\)[\s\S]*tx\.bill\.update/);
+  assert.match(service, /hasHospitalBillingChanged\(existing\.billItem, dto\)/);
+  assert.match(service, /billItem\.quantity\.equals\(dto\.quantity\)/);
+  assert.match(card, /stay\?\.bill\?\.status === 'CANCELLED'/);
+});
+
+test('температуры всех сотрудников видны, а прошлые дни идут перед будущими', async () => {
+  const [sheet, card, styles] = await Promise.all([
+    read('apps/web/src/features/hospital/HospitalSheet.tsx'),
+    read('apps/web/src/features/hospital/HospitalCardPage.tsx'),
+    read('apps/web/src/styles.css'),
+  ]);
+
+  assert.match(sheet, /flatMap\(\(record\) => \[record, \.\.\.\(record\.amendments \?\? \[\]\)\]\)/);
+  assert.match(sheet, /Записать температуру/);
+  assert.match(card, /openNewRecord\('COMPLETED', 'TEMPERATURE'\)/);
+  assert.match(styles, /\.hospital-sheet-days \{[\s\S]*gap: 10px/);
+});

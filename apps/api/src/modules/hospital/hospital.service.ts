@@ -387,10 +387,10 @@ export class HospitalService {
     }
     const nextRecordedAt = dto.recordedAt ? new Date(dto.recordedAt) : existing.recordedAt;
     this.ensureRecordWithinStay(nextRecordedAt, stay.startedAt, stay.completedAt);
-    const billingChanged = dto.quantity !== undefined || dto.stockQuantity !== undefined || dto.unitPrice !== undefined;
     const completingPlannedRecord = existing.recordStatus === HospitalRecordStatus.PLANNED
       && nextRecordStatus === HospitalRecordStatus.COMPLETED;
     const effectivePlannedCatalog = getEffectivePlannedCatalog(existing);
+    const billingChanged = hasHospitalBillingChanged(existing.billItem, dto);
     const plannedProductId = dto.productId ?? effectivePlannedCatalog.productId ?? undefined;
     const plannedServiceId = dto.serviceId ?? effectivePlannedCatalog.serviceId ?? undefined;
     const hasCatalogItemForCompletion = Boolean(plannedProductId || plannedServiceId);
@@ -1082,11 +1082,16 @@ export class HospitalService {
 
     const existing = await tx.bill.findUnique({
       where: { visitId },
-      select: { id: true, status: true, paidAmount: true },
+      select: { id: true, status: true, totalAmount: true, paidAmount: true },
     });
     if (existing) {
       if (existing.status === PaymentStatus.CANCELLED) {
-        throw new BadRequestException('В отменённый счёт нельзя добавлять новые позиции');
+        const status = resolvePaymentStatus(existing.totalAmount, existing.paidAmount);
+        return tx.bill.update({
+          where: { id: existing.id },
+          data: { status },
+          select: { id: true, status: true, paidAmount: true },
+        });
       }
       return existing;
     }
@@ -1521,6 +1526,18 @@ function calculateCatalogLine(input: {
     unitPrice,
     totalAmount: maxDecimal(quantity.mul(unitPrice), decimal(0)),
   };
+}
+
+function hasHospitalBillingChanged(
+  billItem: { quantity: Prisma.Decimal; stockQuantity: Prisma.Decimal | null; unitPrice: Prisma.Decimal } | null,
+  dto: UpdateHospitalRecordDto,
+) {
+  if (!billItem) {
+    return dto.quantity !== undefined || dto.stockQuantity !== undefined || dto.unitPrice !== undefined;
+  }
+  return (dto.quantity !== undefined && !billItem.quantity.equals(dto.quantity))
+    || (dto.stockQuantity !== undefined && (billItem.stockQuantity === null || !billItem.stockQuantity.equals(dto.stockQuantity)))
+    || (dto.unitPrice !== undefined && !billItem.unitPrice.equals(dto.unitPrice));
 }
 
 type HospitalCatalogLine = ReturnType<typeof calculateCatalogLine>;
