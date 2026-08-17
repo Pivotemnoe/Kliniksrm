@@ -171,40 +171,17 @@ export class HospitalService {
     }
     this.ensureBillingInputHasCatalogItem(hasCatalogItem, dto);
     const warehouseScope = hasCatalogItem ? await this.getWarehouseScope(actorId) : null;
-    const dueAt = hasCatalogItem ? await this.financeService.getDefaultBillDueAt() : null;
 
     const record = await this.prisma.$transaction(async (tx) => {
       const line = hasCatalogItem ? await this.resolveCatalogLine(tx, dto) : null;
-      let billItemId: string | null = null;
-
-      if (line) {
-        const bill = await this.getEditableHospitalBill(tx, stay.sourceVisitId, dueAt);
-        const billItem = await tx.billItem.create({
-          data: {
-            billId: bill.id,
-            serviceId: line.serviceId,
-            productId: line.productId,
-            title: line.title,
-            quantity: line.quantity,
-            stockQuantity: line.stockQuantity,
-            unitPrice: line.unitPrice,
-            discount: 0,
-            totalAmount: line.totalAmount,
-          },
-        });
-        billItemId = billItem.id;
-
-        if (line.productId) {
-          await this.writeOffHospitalProduct(tx, stay.sourceVisitId, billItem.id, line, warehouseScope);
-        }
-
-        await this.recalculateHospitalBill(tx, bill.id, stay.sourceVisitId);
-      }
-
-      return tx.hospitalRecord.create({
+      const created = await tx.hospitalRecord.create({
         data: {
           visitId: stay.sourceVisitId,
-          billItemId,
+          plannedProductId: line?.productId,
+          plannedServiceId: line?.serviceId,
+          plannedQuantity: line?.quantity,
+          plannedStockQuantity: line?.stockQuantity,
+          plannedUnitPrice: line?.unitPrice,
           recordedById: actorId,
           performedById: recordStatus === HospitalRecordStatus.COMPLETED ? actorId : null,
           recordType: dto.recordType,
@@ -221,6 +198,12 @@ export class HospitalService {
         },
         include: hospitalRecordInclude,
       });
+
+      if (line?.productId) {
+        await this.writeOffHospitalProduct(tx, stay.sourceVisitId, null, created.id, line, warehouseScope);
+      }
+
+      return created;
     });
 
     await this.auditService.log({
@@ -390,11 +373,12 @@ export class HospitalService {
     const completingPlannedRecord = existing.recordStatus === HospitalRecordStatus.PLANNED
       && nextRecordStatus === HospitalRecordStatus.COMPLETED;
     const effectivePlannedCatalog = getEffectivePlannedCatalog(existing);
-    const billingChanged = hasHospitalBillingChanged(existing.billItem, dto);
+    const billingSnapshot = existing.billItem ?? effectivePlannedCatalog;
+    const billingChanged = hasHospitalBillingChanged(billingSnapshot, dto);
     const plannedProductId = dto.productId ?? effectivePlannedCatalog.productId ?? undefined;
     const plannedServiceId = dto.serviceId ?? effectivePlannedCatalog.serviceId ?? undefined;
     const hasCatalogItemForCompletion = Boolean(plannedProductId || plannedServiceId);
-    const shouldPostPlannedCatalog = completingPlannedRecord && !existing.billItem && hasCatalogItemForCompletion;
+    const shouldStagePlannedCatalog = completingPlannedRecord && !existing.billItem && hasCatalogItemForCompletion;
 
     if (dto.productId && dto.serviceId) {
       throw new BadRequestException('В одной записи можно выбрать товар или услугу, но не оба варианта одновременно');
@@ -408,23 +392,22 @@ export class HospitalService {
     if ((dto.productId || dto.serviceId) && !completingPlannedRecord) {
       throw new BadRequestException('Товар или услугу можно выбрать только при выполнении планового назначения');
     }
-    if (billingChanged && !existing.billItem && !shouldPostPlannedCatalog) {
+    if (billingChanged && !existing.billItem && !hasCatalogItemForCompletion) {
       throw new BadRequestException('У этой записи нет связанной позиции счёта. Добавьте новую запись с товаром или услугой');
     }
     if (nextRecordStatus === HospitalRecordStatus.PLANNED && existing.billItem) {
       throw new BadRequestException('Начисленную позицию нельзя вернуть в план. Создайте отдельное плановое назначение');
     }
 
-    const warehouseScope = (billingChanged && existing.billItem?.productId) || (shouldPostPlannedCatalog && plannedProductId)
+    const warehouseScope = (billingChanged && (existing.billItem?.productId || effectivePlannedCatalog.productId))
+      || (shouldStagePlannedCatalog && plannedProductId)
       ? await this.getWarehouseScope(actorId)
       : null;
-    const dueAt = shouldPostPlannedCatalog ? await this.financeService.getDefaultBillDueAt() : null;
 
     const record = await this.prisma.$transaction(async (tx) => {
-      let nextBillItemId = existing.billItemId;
       let postedLine: HospitalCatalogLine | null = null;
 
-      if (shouldPostPlannedCatalog) {
+      if (shouldStagePlannedCatalog) {
         await tx.$queryRaw`SELECT "id" FROM "HospitalRecord" WHERE "id" = ${existing.id} FOR UPDATE`;
         const lockedRecord = await tx.hospitalRecord.findUniqueOrThrow({
           where: { id: existing.id },
@@ -457,27 +440,10 @@ export class HospitalService {
             stockQuantity: dto.stockQuantity ?? decimalToOptionalNumber(lockedPlannedCatalog.stockQuantity),
             unitPrice: dto.unitPrice ?? decimalToOptionalNumber(lockedPlannedCatalog.unitPrice),
           }, { preserveStoredServicePrice: usesStoredPlannedPrice });
-          const bill = await this.getEditableHospitalBill(tx, stay.sourceVisitId, dueAt);
-          const billItem = await tx.billItem.create({
-            data: {
-              billId: bill.id,
-              serviceId: postedLine.serviceId,
-              productId: postedLine.productId,
-              title: postedLine.title,
-              quantity: postedLine.quantity,
-              stockQuantity: postedLine.stockQuantity,
-              unitPrice: postedLine.unitPrice,
-              discount: 0,
-              totalAmount: postedLine.totalAmount,
-            },
-          });
-          nextBillItemId = billItem.id;
-
           if (postedLine.productId) {
-            await this.writeOffHospitalProduct(tx, stay.sourceVisitId, billItem.id, postedLine, warehouseScope);
+            await this.writeOffHospitalProduct(tx, stay.sourceVisitId, null, existing.id, postedLine, warehouseScope);
           }
-          await this.recalculateHospitalBill(tx, bill.id, stay.sourceVisitId);
-        } else if (lockedRecord.recordStatus === HospitalRecordStatus.COMPLETED && lockedRecord.billItemId) {
+        } else if (lockedRecord.recordStatus === HospitalRecordStatus.COMPLETED) {
           return tx.hospitalRecord.findUniqueOrThrow({
             where: { id: existing.id },
             include: hospitalRecordInclude,
@@ -526,18 +492,38 @@ export class HospitalService {
             tx,
             stay.sourceVisitId,
             existing.billItem.id,
+            existing.id,
             line,
             warehouseScope,
           );
         }
 
         await this.recalculateHospitalBill(tx, existing.billItem.billId, stay.sourceVisitId);
+      } else if (billingChanged && !existing.billItem && existing.recordStatus === HospitalRecordStatus.COMPLETED) {
+        postedLine = await this.resolveCatalogLine(tx, {
+          recordType: nextRecordType as CreateHospitalRecordDto['recordType'],
+          title: dto.title ?? existing.title,
+          productId: effectivePlannedCatalog.productId ?? undefined,
+          serviceId: effectivePlannedCatalog.serviceId ?? undefined,
+          quantity: dto.quantity ?? decimalToOptionalNumber(effectivePlannedCatalog.quantity),
+          stockQuantity: dto.stockQuantity ?? decimalToOptionalNumber(effectivePlannedCatalog.stockQuantity),
+          unitPrice: dto.unitPrice ?? decimalToOptionalNumber(effectivePlannedCatalog.unitPrice),
+        }, { preserveStoredServicePrice: dto.unitPrice === undefined });
+        if (postedLine.productId) {
+          await this.syncHospitalProductWriteOff(
+            tx,
+            stay.sourceVisitId,
+            null,
+            existing.id,
+            postedLine,
+            warehouseScope,
+          );
+        }
       }
 
       return tx.hospitalRecord.update({
         where: { id: existing.id },
         data: {
-          ...(nextBillItemId !== existing.billItemId ? { billItemId: nextBillItemId } : {}),
           ...(postedLine?.productId ? { plannedProductId: postedLine.productId } : {}),
           ...(postedLine?.serviceId ? { plannedServiceId: postedLine.serviceId } : {}),
           ...(postedLine ? {
@@ -873,7 +859,6 @@ export class HospitalService {
   async admit(dto: AdmitHospitalPatientDto, actorId: string) {
     const ownerId = await this.schedulingService.resolveAnimalOwner(dto.animalId, dto.ownerId);
     const box = await this.schedulingService.ensureHospitalBoxExists(dto.hospitalBoxId);
-    const dueAt = await this.financeService.getDefaultBillDueAt();
     const admittedAt = dto.admittedAt ? new Date(dto.admittedAt) : new Date();
 
     if (dto.employeeId) {
@@ -890,17 +875,6 @@ export class HospitalService {
           completedAt: admittedAt,
           status: VisitStatus.COMPLETED,
           exam: dto.purpose ? { create: { purpose: dto.purpose } } : undefined,
-        },
-      });
-
-      await tx.bill.create({
-        data: {
-          ownerId,
-          animalId: dto.animalId,
-          visitId: sourceVisit.id,
-          source: BillSource.VISIT,
-          status: PaymentStatus.UNPAID,
-          dueAt,
         },
       });
 
@@ -973,9 +947,63 @@ export class HospitalService {
       throw new BadRequestException('Отменённую госпитализацию нельзя завершить выпиской');
     }
 
-    await this.prisma.hospitalStay.update({
-      where: { id: existing.id },
-      data: { status: HospitalStayStatus.DISCHARGED, completedAt: new Date() },
+    const dueAt = await this.financeService.getDefaultBillDueAt();
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "HospitalStay" WHERE "id" = ${existing.id} FOR UPDATE`;
+      const lockedStay = await tx.hospitalStay.findUniqueOrThrow({
+        where: { id: existing.id },
+        select: { status: true },
+      });
+      if (lockedStay.status === HospitalStayStatus.CANCELLED) {
+        throw new BadRequestException('Отменённую госпитализацию нельзя завершить выпиской');
+      }
+      if (lockedStay.status === HospitalStayStatus.DISCHARGED) return;
+
+      const bill = await this.getEditableHospitalBill(tx, existing.sourceVisitId, dueAt);
+      const pendingRecords = await tx.hospitalRecord.findMany({
+        where: {
+          visitId: existing.sourceVisitId,
+          recordStatus: HospitalRecordStatus.COMPLETED,
+          billItemId: null,
+          OR: [{ plannedProductId: { not: null } }, { plannedServiceId: { not: null } }],
+        },
+        orderBy: { recordedAt: 'asc' },
+      });
+
+      for (const record of pendingRecords) {
+        const line = calculateCatalogLine({
+          productId: record.plannedProductId ?? undefined,
+          serviceId: record.plannedServiceId ?? undefined,
+          title: record.title,
+          quantity: record.plannedQuantity ?? 1,
+          stockQuantity: record.plannedStockQuantity ?? undefined,
+          unitPrice: record.plannedUnitPrice ?? 0,
+        });
+        const billItem = await tx.billItem.create({
+          data: {
+            billId: bill.id,
+            productId: line.productId,
+            serviceId: line.serviceId,
+            title: line.title,
+            quantity: line.quantity,
+            stockQuantity: line.stockQuantity,
+            unitPrice: line.unitPrice,
+            discount: 0,
+            totalAmount: line.totalAmount,
+          },
+        });
+        await tx.hospitalRecord.update({ where: { id: record.id }, data: { billItemId: billItem.id } });
+        await tx.stockMovement.updateMany({
+          where: { hospitalRecordId: record.id, billItemId: null },
+          data: { billItemId: billItem.id },
+        });
+      }
+
+      await this.recalculateHospitalBill(tx, bill.id, existing.sourceVisitId);
+      await tx.hospitalStay.update({
+        where: { id: existing.id },
+        data: { status: HospitalStayStatus.DISCHARGED, completedAt: new Date() },
+      });
     });
 
     await this.auditService.log({
@@ -1124,7 +1152,8 @@ export class HospitalService {
   private async writeOffHospitalProduct(
     tx: Prisma.TransactionClient,
     visitId: string,
-    billItemId: string,
+    billItemId: string | null,
+    hospitalRecordId: string,
     line: HospitalCatalogLine,
     warehouseScope: WarehouseScope,
     quantityIsInStockUnits = false,
@@ -1164,6 +1193,7 @@ export class HospitalService {
         data: {
           productId: line.productId,
           billItemId,
+          hospitalRecordId,
           stockBatchId: batch.id,
           warehouseId: batch.warehouseId,
           visitId,
@@ -1179,7 +1209,8 @@ export class HospitalService {
   private async syncHospitalProductWriteOff(
     tx: Prisma.TransactionClient,
     visitId: string,
-    billItemId: string,
+    billItemId: string | null,
+    hospitalRecordId: string,
     line: HospitalCatalogLine,
     warehouseScope: WarehouseScope,
   ) {
@@ -1188,20 +1219,21 @@ export class HospitalService {
       where: { id: line.productId },
       select: { stockUnit: true, writeOffUnit: true, packageQuantity: true },
     });
-    const deducted = await this.getHospitalProductDeductedQuantity(tx, billItemId, line.productId);
+    const deducted = await this.getHospitalProductDeductedQuantity(tx, billItemId, hospitalRecordId, line.productId);
     const delta = toStockQuantity(product, line.stockQuantity ?? line.quantity).minus(deducted);
 
     if (delta.greaterThan(0)) {
-      await this.writeOffHospitalProduct(tx, visitId, billItemId, { ...line, stockQuantity: delta }, warehouseScope, true);
+      await this.writeOffHospitalProduct(tx, visitId, billItemId, hospitalRecordId, { ...line, stockQuantity: delta }, warehouseScope, true);
     } else if (delta.lessThan(0)) {
-      await this.restoreHospitalProduct(tx, visitId, billItemId, line.productId, line.title, delta.abs());
+      await this.restoreHospitalProduct(tx, visitId, billItemId, hospitalRecordId, line.productId, line.title, delta.abs());
     }
   }
 
   private async restoreHospitalProduct(
     tx: Prisma.TransactionClient,
     visitId: string,
-    billItemId: string,
+    billItemId: string | null,
+    hospitalRecordId: string,
     productId: string,
     title: string,
     quantityToRestore: Prisma.Decimal.Value,
@@ -1209,7 +1241,7 @@ export class HospitalService {
     let remaining = decimal(quantityToRestore);
     const movements = await tx.stockMovement.findMany({
       where: {
-        billItemId,
+        ...(billItemId ? { billItemId } : { hospitalRecordId }),
         productId,
         stockBatchId: { not: null },
         type: { in: [StockMovementType.VISIT_USAGE, StockMovementType.CORRECTION] },
@@ -1243,6 +1275,7 @@ export class HospitalService {
         data: {
           productId,
           billItemId,
+          hospitalRecordId,
           stockBatchId: item.stockBatchId,
           warehouseId: item.warehouseId,
           visitId,
@@ -1261,12 +1294,13 @@ export class HospitalService {
 
   private async getHospitalProductDeductedQuantity(
     tx: Prisma.TransactionClient,
-    billItemId: string,
+    billItemId: string | null,
+    hospitalRecordId: string,
     productId: string,
   ) {
     const movements = await tx.stockMovement.findMany({
       where: {
-        billItemId,
+        ...(billItemId ? { billItemId } : { hospitalRecordId }),
         productId,
         type: { in: [StockMovementType.VISIT_USAGE, StockMovementType.CORRECTION] },
       },
@@ -1529,15 +1563,15 @@ function calculateCatalogLine(input: {
 }
 
 function hasHospitalBillingChanged(
-  billItem: { quantity: Prisma.Decimal; stockQuantity: Prisma.Decimal | null; unitPrice: Prisma.Decimal } | null,
+  billItem: { quantity: Prisma.Decimal | null; stockQuantity: Prisma.Decimal | null; unitPrice: Prisma.Decimal | null } | null,
   dto: UpdateHospitalRecordDto,
 ) {
   if (!billItem) {
     return dto.quantity !== undefined || dto.stockQuantity !== undefined || dto.unitPrice !== undefined;
   }
-  return (dto.quantity !== undefined && !billItem.quantity.equals(dto.quantity))
+  return (dto.quantity !== undefined && (billItem.quantity === null || !billItem.quantity.equals(dto.quantity)))
     || (dto.stockQuantity !== undefined && (billItem.stockQuantity === null || !billItem.stockQuantity.equals(dto.stockQuantity)))
-    || (dto.unitPrice !== undefined && !billItem.unitPrice.equals(dto.unitPrice));
+    || (dto.unitPrice !== undefined && (billItem.unitPrice === null || !billItem.unitPrice.equals(dto.unitPrice)));
 }
 
 type HospitalCatalogLine = ReturnType<typeof calculateCatalogLine>;

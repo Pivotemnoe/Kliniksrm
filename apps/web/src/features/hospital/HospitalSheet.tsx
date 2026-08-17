@@ -177,7 +177,7 @@ function RecordResult({ record }: { record: HospitalRecord }) {
       {record.recordStatus === 'AMENDMENT' && describePlannedPosting(record) ? (
         <Typography.Text strong>Исправлено: {describePlannedPosting(record)}</Typography.Text>
       ) : null}
-      {record.billItem ? (
+      {record.billItem || (record.recordStatus === 'COMPLETED' && (record.plannedProductId || record.plannedServiceId)) ? (
         <Typography.Text type="secondary">
           {describeCompletedPosting(record)}
         </Typography.Text>
@@ -211,7 +211,17 @@ function getEffectivePlannedRecord(record: HospitalRecord) {
 
 function describeCompletedPosting(record: HospitalRecord) {
   const item = record.billItem;
-  if (!item) return '';
+  if (!item) {
+    const staged = getEffectivePlannedRecord(record);
+    if (staged.plannedProductId) {
+      const unit = staged.plannedProduct?.writeOffUnit || staged.plannedProduct?.stockUnit || 'ед.';
+      return `Списано ${staged.plannedStockQuantity ?? staged.plannedQuantity ?? 1} ${unit}; к выписке ${staged.plannedQuantity ?? 1} × ${staged.plannedUnitPrice ?? 0} ₽`;
+    }
+    if (staged.plannedServiceId) {
+      return `К выписке: ${record.title}, ${staged.plannedQuantity ?? 1} × ${staged.plannedUnitPrice ?? 0} ₽`;
+    }
+    return '';
+  }
   if (item.productId) {
     const unit = item.product?.writeOffUnit || item.product?.stockUnit || 'ед.';
     return `Списано ${item.stockQuantity ?? item.quantity} ${unit}; начислено ${item.quantity} × ${item.unitPrice} ₽`;

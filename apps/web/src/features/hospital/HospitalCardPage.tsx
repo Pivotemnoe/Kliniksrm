@@ -441,6 +441,7 @@ function HospitalRecordModal({
   const selectedServiceRange = getServicePriceRange(selectedService);
   const catalogIdentityLocked = Boolean(record)
     && (!completingPlannedRecord || Boolean(record?.billItem || hasPlannedCatalog));
+  const postedBillingLocked = billingLocked && Boolean(record?.billItem);
 
   useEffect(() => {
     if (!open) return;
@@ -506,7 +507,7 @@ function HospitalRecordModal({
       delete input.productId;
       delete input.serviceId;
     }
-    if (billingLocked) {
+    if (postedBillingLocked) {
       delete input.quantity;
       delete input.stockQuantity;
       delete input.unitPrice;
@@ -540,7 +541,7 @@ function HospitalRecordModal({
             showIcon
             className="form-alert"
             message="Отмечается выполнение назначения прошлых суток"
-            description="Исходное назначение не переписывается. Система зафиксирует фактическое время, сотрудника и один раз проведёт исправленное количество по складу и счёту."
+            description="Исходное назначение не переписывается. Система зафиксирует фактическое время и сотрудника, спишет товар один раз, а стоимость добавит в общий счёт при выписке."
           />
         ) : null}
         <Form.Item name="recordType" label={recordStatus === 'PLANNED' ? 'Что назначить' : 'Что выполнено'} rules={[{ required: true, message: 'Выберите тип записи' }]}>
@@ -622,7 +623,7 @@ function HospitalRecordModal({
             showIcon
             className="form-alert"
             message="Можно связать выполнение с товаром или услугой"
-            description="Выберите товар и фактический объём, например 0,5 мл: после сохранения он один раз спишется со склада и добавится в счёт."
+            description="Выберите товар и фактический объём, например 0,5 мл: товар спишется один раз, а стоимость накопится до выписки."
           />
         ) : null}
         {record && !record.billItem && !completingPlannedRecord ? (
@@ -634,7 +635,7 @@ function HospitalRecordModal({
             description="Медицинский текст можно исправить. Чтобы добавить товар или услугу, создайте отдельную запись — так сохранится правильная история действий."
           />
         ) : null}
-        {billingLocked && record?.billItem ? (
+        {postedBillingLocked ? (
           <Alert
             type="warning"
             showIcon
@@ -690,13 +691,13 @@ function HospitalRecordModal({
             </Form.Item>
             <div className="form-grid two-columns">
               <Form.Item name="stockQuantity" label={`Списать со склада, ${selectedProductWriteOffUnit(selectedProductId, record, catalogQuery.data?.products)}`} rules={[{ required: true, message: 'Укажите количество для списания' }]}>
-                <InputNumber min={0.001} precision={3} disabled={lateCompletion || billingLocked} className="full-width" />
+                <InputNumber min={0.001} precision={3} disabled={lateCompletion || postedBillingLocked} className="full-width" />
               </Form.Item>
               <Form.Item name="quantity" label={`Начислить клиенту, ${selectedProductBillingUnit(selectedProductId, record, catalogQuery.data?.products)}`} rules={[{ required: true, message: 'Укажите количество начислений' }]}>
-                <InputNumber min={0.001} precision={3} disabled={lateCompletion || billingLocked} className="full-width" />
+                <InputNumber min={0.001} precision={3} disabled={lateCompletion || postedBillingLocked} className="full-width" />
               </Form.Item>
               <Form.Item name="unitPrice" label={`Цена за 1 ${selectedProductBillingUnit(selectedProductId, record, catalogQuery.data?.products)}, ₽`} rules={[{ required: true, message: 'Укажите цену' }]}>
-                <InputNumber min={0} precision={2} disabled={lateCompletion || billingLocked} className="full-width" />
+                <InputNumber min={0} precision={2} disabled={lateCompletion || postedBillingLocked} className="full-width" />
               </Form.Item>
             </div>
           </>
@@ -724,7 +725,7 @@ function HospitalRecordModal({
             </Form.Item>
             <div className="form-grid two-columns">
               <Form.Item name="quantity" label="Количество услуг" rules={[{ required: true, message: 'Укажите количество' }]}>
-                <InputNumber min={0.001} precision={3} disabled={lateCompletion || billingLocked} className="full-width" />
+                <InputNumber min={0.001} precision={3} disabled={lateCompletion || postedBillingLocked} className="full-width" />
               </Form.Item>
               <Form.Item
                 name="unitPrice"
@@ -732,7 +733,7 @@ function HospitalRecordModal({
                 help={getServicePriceHelp(selectedService)}
                 rules={hospitalServicePriceRules(selectedService)}
               >
-                <InputNumber min={selectedServiceRange?.minimum ?? 0} max={selectedServiceRange?.maximum} precision={2} disabled={lateCompletion || billingLocked} className="full-width" />
+                <InputNumber min={selectedServiceRange?.minimum ?? 0} max={selectedServiceRange?.maximum} precision={2} disabled={lateCompletion || postedBillingLocked} className="full-width" />
               </Form.Item>
             </div>
           </>
@@ -999,10 +1000,10 @@ function describePlannedCatalogPosting(record: HospitalRecord | null) {
   if (plannedCatalog.productId) {
     const writeOffUnit = plannedCatalog.product?.writeOffUnit || plannedCatalog.product?.stockUnit || 'ед.';
     const billingUnit = plannedCatalog.product?.billingUnit || writeOffUnit;
-    return `Будет списано ${plannedCatalog.stockQuantity ?? plannedCatalog.quantity ?? 1} ${writeOffUnit} и начислено ${plannedCatalog.quantity ?? 1} ${billingUnit} по ${plannedCatalog.unitPrice ?? 0} ₽.`;
+    return `При выполнении будет списано ${plannedCatalog.stockQuantity ?? plannedCatalog.quantity ?? 1} ${writeOffUnit}; ${plannedCatalog.quantity ?? 1} ${billingUnit} по ${plannedCatalog.unitPrice ?? 0} ₽ попадёт в счёт при выписке.`;
   }
   if (plannedCatalog.serviceId) {
-    return `В счёт будет добавлено ${plannedCatalog.quantity ?? 1} услуги по ${plannedCatalog.unitPrice ?? 0} ₽.`;
+    return `При выполнении накопится ${plannedCatalog.quantity ?? 1} услуги по ${plannedCatalog.unitPrice ?? 0} ₽; в счёт она попадёт при выписке.`;
   }
   return '';
 }

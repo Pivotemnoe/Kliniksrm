@@ -299,8 +299,8 @@ test('план лечения создаёт несколько действий
   assert.match(service, /recordCount > 200/);
   assert.match(service, /plannedStockQuantity: line\?\.stockQuantity/);
   assert.match(service, /SELECT "id" FROM "HospitalRecord" WHERE "id" = \$\{existing\.id\} FOR UPDATE/);
-  assert.match(service, /writeOffHospitalProduct\(tx, stay\.sourceVisitId, billItem\.id, postedLine, warehouseScope\)/);
-  assert.match(service, /lockedRecord\.recordStatus === HospitalRecordStatus\.COMPLETED && lockedRecord\.billItemId/);
+  assert.match(service, /writeOffHospitalProduct\(tx, stay\.sourceVisitId, null, existing\.id, postedLine, warehouseScope\)/);
+  assert.match(service, /lockedRecord\.recordStatus === HospitalRecordStatus\.COMPLETED/);
   assert.match(modal, /Добавить препарат, процедуру или другое действие/);
   assert.match(modal, /Добавить ещё одно выполнение вручную/);
   assert.match(modal, /Сформировать даты/);

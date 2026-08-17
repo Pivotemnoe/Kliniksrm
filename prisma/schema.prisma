@@ -1186,6 +1186,7 @@ model HospitalRecord {
   parentRecordId       String?
   parentRecord         HospitalRecord?        @relation("HospitalRecordAmendments", fields: [parentRecordId], references: [id], onDelete: Restrict)
   amendments           HospitalRecord[]       @relation("HospitalRecordAmendments")
+  stockMovements       StockMovement[]
   amendmentReason      String?
   createdAt            DateTime               @default(now())
   updatedAt            DateTime               @updatedAt
@@ -1701,6 +1702,8 @@ model StockMovement {
   product             Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
   billItemId          String?
   billItem            BillItem?          @relation(fields: [billItemId], references: [id], onDelete: SetNull)
+  hospitalRecordId    String?
+  hospitalRecord      HospitalRecord?     @relation(fields: [hospitalRecordId], references: [id], onDelete: SetNull)
   stockBatchId        String?
   stockBatch          StockBatch?        @relation(fields: [stockBatchId], references: [id], onDelete: SetNull)
   targetStockBatchId  String?
@@ -1725,6 +1728,7 @@ model StockMovement {
 
   @@index([productId])
   @@index([billItemId])
+  @@index([hospitalRecordId])
   @@index([warehouseId])
   @@index([type])
   @@index([stockDocumentId])

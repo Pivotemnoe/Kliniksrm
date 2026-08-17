@@ -85,16 +85,23 @@ test('перевод в стационар сохраняет и открыва�
   assert.match(visitCard, /Этот приём сохранится полностью/);
 });
 
-test('повторное выполнение не блокируется отменённым счётом, а медицинская правка не трогает цену', async () => {
+test('выполнения накапливаются без счёта и переносятся в него только при выписке', async () => {
   const [service, card] = await Promise.all([
     read('apps/api/src/modules/hospital/hospital.service.ts'),
     read('apps/web/src/features/hospital/HospitalCardPage.tsx'),
   ]);
 
-  assert.match(service, /existing\.status === PaymentStatus\.CANCELLED[\s\S]*resolvePaymentStatus\(existing\.totalAmount, existing\.paidAmount\)[\s\S]*tx\.bill\.update/);
-  assert.match(service, /hasHospitalBillingChanged\(existing\.billItem, dto\)/);
-  assert.match(service, /billItem\.quantity\.equals\(dto\.quantity\)/);
-  assert.match(card, /stay\?\.bill\?\.status === 'CANCELLED'/);
+  const createRecord = service.slice(service.indexOf('async createRecord'), service.indexOf('async createTreatmentPlan'));
+  const admit = service.slice(service.indexOf('async admit('), service.indexOf('async updateStay'));
+  const discharge = service.slice(service.indexOf('async discharge'), service.indexOf('async cancel('));
+  assert.doesNotMatch(createRecord, /billItem\.create|getEditableHospitalBill/);
+  assert.doesNotMatch(admit, /tx\.bill\.create/);
+  assert.match(createRecord, /plannedUnitPrice: line\?\.unitPrice/);
+  assert.match(discharge, /recordStatus: HospitalRecordStatus\.COMPLETED/);
+  assert.match(discharge, /billItemId: null/);
+  assert.match(discharge, /tx\.billItem\.create/);
+  assert.match(discharge, /hospitalRecord\.update/);
+  assert.match(card, /const postedBillingLocked = billingLocked && Boolean\(record\?\.billItem\)/);
 });
 
 test('температуры всех сотрудников видны, а прошлые дни идут перед будущими', async () => {
@@ -106,6 +113,8 @@ test('температуры всех сотрудников видны, а пр
 
   assert.match(sheet, /flatMap\(\(record\) => \[record, \.\.\.\(record\.amendments \?\? \[\]\)\]\)/);
   assert.match(sheet, /Записать температуру/);
+  assert.match(card, /createHospitalRecord\(stayId, input/);
+  assert.match(sheet, /Исполнитель: \{record\.performedBy\?\.fullName/);
   assert.match(card, /openNewRecord\('COMPLETED', 'TEMPERATURE'\)/);
   assert.match(styles, /\.hospital-sheet-days \{[\s\S]*gap: 10px/);
 });
