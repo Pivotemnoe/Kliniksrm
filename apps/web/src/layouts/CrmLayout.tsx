@@ -4,7 +4,6 @@ import {
   LogoutOutlined,
   MenuOutlined,
   MessageOutlined,
-  ReloadOutlined,
   SwapOutlined,
   UserOutlined,
   WalletOutlined,
@@ -42,7 +41,6 @@ export function CrmLayout() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const { data } = useCurrentEmployee();
   const logoutMutation = useLogoutMutation();
   const employee = data?.employee;
@@ -110,15 +108,6 @@ export function CrmLayout() {
     navigate(path);
   }
 
-  async function refreshCurrentData() {
-    setRefreshing(true);
-    try {
-      await queryClient.invalidateQueries({ refetchType: 'active' });
-    } finally {
-      setRefreshing(false);
-    }
-  }
-
   return (
     <Layout className="crm-shell">
       <Sider width={72} collapsedWidth={72} collapsed className="crm-sider">
@@ -162,17 +151,6 @@ export function CrmLayout() {
           </div>
           <GlobalSearch />
           <Space size={12} className="header-actions">
-            <span className="header-action header-action-refresh">
-              <Tooltip title="Обновить данные">
-                <Button
-                  type="text"
-                  shape="circle"
-                  icon={<ReloadOutlined spin={refreshing} />}
-                  aria-label="Обновить данные"
-                  onClick={() => void refreshCurrentData()}
-                />
-              </Tooltip>
-            </span>
             <span className="header-action header-action-messages">
               <Tooltip title="Сообщения сотрудникам">
                 <Badge count={internalMessagesQuery.data?.totalUnread || undefined} size="small">
@@ -268,9 +246,6 @@ export function CrmLayout() {
         />
         <div className="mobile-navigation-quick-actions">
           <Typography.Text type="secondary">Быстрые действия</Typography.Text>
-          <Button icon={<ReloadOutlined spin={refreshing} />} onClick={() => void refreshCurrentData()}>
-            Обновить данные
-          </Button>
           <Button icon={<MessageOutlined />} onClick={() => navigateFromShell('/staff-messages')}>
             Сообщения сотрудникам
             {internalMessagesQuery.data?.totalUnread ? ` (${internalMessagesQuery.data.totalUnread})` : ''}

@@ -50,7 +50,8 @@ test('изменения с другого компьютера обновляю
   assert.match(hook, /new EventSource/);
   assert.match(hook, /invalidateQueries\(\{ refetchType: 'active' \}\)/);
   assert.match(client, /x-temichevvet-client-id/);
-  assert.match(layout, /Обновить данные/);
+  assert.match(layout, /useLiveUpdates\(Boolean\(employee\), queryClient\)/);
+  assert.doesNotMatch(layout, /Обновить данные|ReloadOutlined/);
   assert.match(queryClient, /refetchOnWindowFocus: 'always'/);
   for (const source of [localNginx, gatewayNginx]) {
     assert.match(source, /location = \/api\/v1\/live-updates/);
