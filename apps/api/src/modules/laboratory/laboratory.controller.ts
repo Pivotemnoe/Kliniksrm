@@ -32,6 +32,13 @@ export class LaboratoryController {
     return this.laboratoryService.listOrders(query);
   }
 
+  @Get('summary')
+  @RequireAnyPermissions('laboratory.read', 'laboratory.manage', 'visits.manage')
+  @ApiOkResponse({ description: 'Compact laboratory workload counters.' })
+  getSummary() {
+    return this.laboratoryService.getSummary();
+  }
+
   @Patch('orders/:orderId')
   @RequireAnyPermissions('laboratory.read', 'laboratory.manage', 'visits.manage')
   @ApiOkResponse({ description: 'Laboratory order status updated.' })

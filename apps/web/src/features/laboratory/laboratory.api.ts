@@ -14,6 +14,7 @@ import {
   LaboratoryResources,
   LaboratoryResultImportRow,
   LaboratoryResultsImportPreview,
+  LaboratorySummary,
   LaboratoryTest,
   LaboratoryTestInput,
 } from './types';
@@ -24,6 +25,10 @@ export function getLaboratoryResources() {
 
 export function listLaboratoryOrders(query: LaboratoryOrdersQuery) {
   return apiRequest<PaginatedResponse<LaboratoryOrder>>(`/v1/laboratory/orders${buildQuery(query)}`);
+}
+
+export function getLaboratorySummary() {
+  return apiRequest<LaboratorySummary>('/v1/laboratory/summary');
 }
 
 export function updateLaboratoryOrder(orderId: string, input: LaboratoryOrderInput) {

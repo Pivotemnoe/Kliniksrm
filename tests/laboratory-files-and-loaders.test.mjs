@@ -52,10 +52,11 @@ test('лабораторные результаты проходят предп�
 });
 
 test('лабораторный журнал использует документ анализа для атомарной таблицы, отмены и печати A5', async () => {
-  const [controller, service, page, visitTab, printer, formParser, api, migration, documentsPage] = await Promise.all([
+  const [controller, service, page, resultTable, visitTab, printer, formParser, api, migration, documentsPage] = await Promise.all([
     read('apps/api/src/modules/laboratory/laboratory.controller.ts'),
     read('apps/api/src/modules/laboratory/laboratory.service.ts'),
     read('apps/web/src/features/laboratory/LaboratoryPage.tsx'),
+    read('apps/web/src/features/laboratory/LaboratoryResultsTableDrawer.tsx'),
     read('apps/web/src/features/visits/VisitLaboratoryTab.tsx'),
     read('apps/web/src/features/laboratory/laboratoryPrint.ts'),
     read('apps/api/src/modules/laboratory/laboratory-document-form.ts'),
@@ -71,7 +72,7 @@ test('лабораторный журнал использует докумен�
   assert.match(api, /updateLaboratoryOrderResults/);
   assert.match(page, /Заполнить таблицу/);
   assert.match(page, /cancelVisitLaboratoryOrder/);
-  assert.match(page, /Сохранить всю таблицу/);
+  assert.match(resultTable, /Сохранить всю таблицу/);
   assert.match(page, /name="documentTemplateId"/);
   assert.match(page, /Настроить/);
   assert.match(page, /Открыть редактор выбранного документа/);

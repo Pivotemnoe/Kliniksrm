@@ -98,6 +98,7 @@ export const queuePurposeLabels: Record<QueuePurpose, string> = {
   PRIMARY: 'Первичный',
   FOLLOW_UP: 'Повторный',
   OPERATION: 'Операция',
+  POST_OPERATION: 'Послеоперационный',
   VACCINATION: 'Вакцинация',
 };
 

@@ -17,7 +17,7 @@ import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatAnimalAge } from '../../shared/utils/animalBirthDate';
 import { formatDateTime } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
-import { listAnimals } from '../animals/animals.api';
+import { listOwnerAnimals, listOwners } from '../owners/owners.api';
 import { getSchedulingResources } from '../scheduling/scheduling.api';
 import {
   admitHospitalPatient,
@@ -230,10 +230,16 @@ type AdmitFormValues = z.infer<typeof admitSchema>;
 function AdmitModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const queryClient = useQueryClient();
   const { message } = App.useApp();
+  const [ownerSearch, setOwnerSearch] = useState('');
+  const [selectedOwner, setSelectedOwner] = useState<{ id: string; fullName: string } | null>(null);
   const resourcesQuery = useQuery({ queryKey: ['hospital', 'resources'], queryFn: getHospitalResources, enabled: open });
   const schedulingQuery = useQuery({ queryKey: ['scheduling', 'resources'], queryFn: getSchedulingResources, enabled: open });
-  const animalsQuery = useQuery({ queryKey: ['animals', 'hospital-select'], queryFn: () => listAnimals({ limit: 100, offset: 0 }), enabled: open });
-  const { control, handleSubmit, watch, reset } = useForm<AdmitFormValues>({
+  const ownersQuery = useQuery({
+    queryKey: ['owners', 'hospital-select', ownerSearch],
+    queryFn: () => listOwners({ search: ownerSearch.trim() || undefined, limit: 50, offset: 0 }),
+    enabled: open,
+  });
+  const { control, handleSubmit, watch, reset, setValue } = useForm<AdmitFormValues>({
     resolver: zodResolver(admitSchema),
     defaultValues: {
       ownerId: '',
@@ -245,7 +251,23 @@ function AdmitModal({ open, onClose }: { open: boolean; onClose: () => void }) {
     },
   });
   const selectedOwnerId = watch('ownerId');
-  const animals = animalsQuery.data?.items ?? [];
+  const animalsQuery = useQuery({
+    queryKey: ['owners', selectedOwnerId, 'animals', 'hospital-select'],
+    queryFn: () => listOwnerAnimals(selectedOwnerId!),
+    enabled: open && Boolean(selectedOwnerId),
+  });
+  const ownerOptions = dedupeOwners([
+    ...(selectedOwner ? [selectedOwner] : []),
+    ...(ownersQuery.data?.items.map((owner) => ({ id: owner.id, fullName: owner.fullName })) ?? []),
+  ]).map((owner) => ({ value: owner.id, label: owner.fullName }));
+
+  useEffect(() => {
+    if (open) return;
+    reset();
+    setOwnerSearch('');
+    setSelectedOwner(null);
+  }, [open, reset]);
+
   const mutation = useMutation({
     mutationFn: (values: AdmitFormValues) =>
       admitHospitalPatient({
@@ -259,6 +281,8 @@ function AdmitModal({ open, onClose }: { open: boolean; onClose: () => void }) {
       ]);
       message.success('Пациент помещён в стационар');
       reset();
+      setOwnerSearch('');
+      setSelectedOwner(null);
       onClose();
     },
     onError: (error) => message.error(getErrorMessage(error)),
@@ -275,9 +299,19 @@ function AdmitModal({ open, onClose }: { open: boolean; onClose: () => void }) {
               <Form.Item label="Владелец" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
                 <Select
                   {...field}
+                  allowClear
                   showSearch
-                  options={dedupeOwners(animals).map((owner) => ({ value: owner.id, label: owner.fullName }))}
+                  filterOption={false}
+                  loading={ownersQuery.isFetching}
+                  options={ownerOptions}
                   placeholder="Выберите владельца"
+                  onSearch={setOwnerSearch}
+                  onChange={(ownerId) => {
+                    field.onChange(ownerId ?? '');
+                    setValue('animalId', '', { shouldDirty: true, shouldValidate: true });
+                    const owner = ownersQuery.data?.items.find((item) => item.id === ownerId);
+                    setSelectedOwner(owner ? { id: owner.id, fullName: owner.fullName } : null);
+                  }}
                 />
               </Form.Item>
             )}
@@ -291,9 +325,9 @@ function AdmitModal({ open, onClose }: { open: boolean; onClose: () => void }) {
                   {...field}
                   showSearch
                   loading={animalsQuery.isLoading}
-                  options={animals
-                    .filter((animal) => !selectedOwnerId || animal.ownerId === selectedOwnerId)
-                    .map((animal) => ({ value: animal.id, label: animal.nickname }))}
+                  disabled={!selectedOwnerId}
+                  optionFilterProp="label"
+                  options={animalsQuery.data?.map((animal) => ({ value: animal.id, label: animal.nickname })) ?? []}
                   placeholder="Выберите пациента"
                 />
               </Form.Item>
@@ -345,12 +379,10 @@ function AdmitModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   );
 }
 
-function dedupeOwners(animals: Array<{ owner?: { id: string; fullName: string } | null }>) {
+function dedupeOwners(ownerItems: Array<{ id: string; fullName: string }>) {
   const owners = new Map<string, { id: string; fullName: string }>();
-  for (const animal of animals) {
-    if (animal.owner) {
-      owners.set(animal.owner.id, animal.owner);
-    }
+  for (const owner of ownerItems) {
+    owners.set(owner.id, owner);
   }
 
   return [...owners.values()];

@@ -13,7 +13,7 @@ import { Visit, VisitType, visitTypeLabels } from './types';
 const examSchema = z.object({
   weightKg: optionalNumber(0, 300),
   temperatureC: optionalNumber(30, 45),
-  visitType: z.enum(['PRIMARY', 'FOLLOW_UP', 'OPERATION']).optional(),
+  visitType: z.enum(['PRIMARY', 'FOLLOW_UP', 'OPERATION', 'POST_OPERATION']).optional(),
   purpose: optionalString(1000),
   anamnesis: optionalString(4000),
   examination: optionalString(4000),

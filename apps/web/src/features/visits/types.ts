@@ -6,7 +6,7 @@ import type { DocumentLayout } from '../documents/documentLayout';
 export type DecimalValue = string | number;
 
 export type VisitStatus = 'DRAFT' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
-export type VisitType = 'PRIMARY' | 'FOLLOW_UP' | 'OPERATION';
+export type VisitType = 'PRIMARY' | 'FOLLOW_UP' | 'OPERATION' | 'POST_OPERATION';
 export type VisitDiagnosisType = 'Предварительный' | 'Дифференциальный' | 'Клинический' | 'Окончательный';
 
 export type VisitSummary = {
@@ -340,6 +340,7 @@ export const visitTypeLabels: Record<VisitType, string> = {
   PRIMARY: 'Первичный',
   FOLLOW_UP: 'Повторный',
   OPERATION: 'Операция',
+  POST_OPERATION: 'Послеоперационный',
 };
 
 export const laboratoryOrderStatusLabels: Record<VisitLaboratoryOrderStatus, string> = {

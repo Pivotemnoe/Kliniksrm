@@ -31,17 +31,18 @@ import {
 } from '../visits/types';
 import {
   createLaboratoryTest,
+  getLaboratorySummary,
   getLaboratoryResources,
   listLaboratoryOrders,
   listLaboratoryTests,
   updateLaboratoryOrder,
   updateLaboratoryOrderItem,
-  updateLaboratoryOrderResults,
   updateLaboratoryTest,
 } from './laboratory.api';
 import { printLaboratoryOrder } from './laboratoryPrint';
-import { LaboratoryOrder, LaboratoryOrderInput, LaboratoryOrderItem, LaboratoryOrderItemInput, LaboratoryOrderResultRowInput, LaboratoryResources, LaboratoryTest } from './types';
+import { LaboratoryOrder, LaboratoryOrderInput, LaboratoryOrderItem, LaboratoryOrderItemInput, LaboratoryResources, LaboratoryTest } from './types';
 import { LaboratoryResultsImporter } from './LaboratoryResultsImporter';
+import { LaboratoryResultsTableDrawer } from './LaboratoryResultsTableDrawer';
 
 type OrderStatusFilter = VisitLaboratoryOrderStatus | 'ACTIVE';
 const nullableText = z.string().trim().optional().transform((value) => value || undefined);
@@ -92,11 +93,15 @@ export function LaboratoryPage() {
   const [editingItem, setEditingItem] = useState<{ order: LaboratoryOrder; item: LaboratoryOrderItem } | null>(null);
   const [editingTest, setEditingTest] = useState<LaboratoryTest | null>(null);
   const [testOpen, setTestOpen] = useState(false);
-  const resourcesQuery = useQuery({ queryKey: ['laboratory', 'resources'], queryFn: getLaboratoryResources });
+  const resourcesQuery = useQuery({
+    queryKey: ['laboratory', 'resources'],
+    queryFn: getLaboratoryResources,
+    enabled: activeTab === 'tests' || testOpen,
+  });
   const organizationQuery = useQuery({
     queryKey: ['organization', 'print-profile'],
     queryFn: getOrganizationPrintProfile,
-    enabled: canPrintDocuments,
+    enabled: canPrintDocuments && Boolean(selectedOrder),
   });
 
   function handleSearch(value: string) {
@@ -248,7 +253,12 @@ export function LaboratoryPage() {
         onEditResults={setTableOrder}
         onEditItem={(order, item) => setEditingItem({ order, item })}
       />
-      <ResultsTableDrawer order={tableOrder} canManage={canManage} onClose={() => setTableOrder(null)} />
+      <LaboratoryResultsTableDrawer
+        order={tableOrder}
+        patientName={tableOrder?.visit.animal.nickname ?? ''}
+        canManage={canManage}
+        onClose={() => setTableOrder(null)}
+      />
       <ResultDrawer target={editingItem} canManage={canManage} onClose={() => setEditingItem(null)} />
     </div>
   );
@@ -270,30 +280,18 @@ function LaboratoryWorkSummary({
   onSelectInProgress: () => void;
   onSelectCompletedToday: () => void;
 }) {
-  const today = useMemo(() => toDateInput(new Date()), []);
-  const activeQuery = useQuery({
-    queryKey: ['laboratory', 'orders', 'summary', 'active'],
-    queryFn: () => listLaboratoryOrders({ activeOnly: true, limit: 1, offset: 0 }),
-  });
-  const orderedQuery = useQuery({
-    queryKey: ['laboratory', 'orders', 'summary', 'ordered'],
-    queryFn: () => listLaboratoryOrders({ status: 'ORDERED', limit: 1, offset: 0 }),
-  });
-  const inProgressQuery = useQuery({
-    queryKey: ['laboratory', 'orders', 'summary', 'in-progress'],
-    queryFn: () => listLaboratoryOrders({ status: 'IN_PROGRESS', limit: 1, offset: 0 }),
-  });
-  const completedTodayQuery = useQuery({
-    queryKey: ['laboratory', 'orders', 'summary', 'completed-today', today],
-    queryFn: () => listLaboratoryOrders({ status: 'COMPLETED', from: today, to: today, limit: 1, offset: 0 }),
+  const summaryQuery = useQuery({
+    queryKey: ['laboratory', 'orders', 'summary'],
+    queryFn: getLaboratorySummary,
+    refetchInterval: 30_000,
   });
 
   return (
     <div className="laboratory-work-strip">
-      <LaboratoryWorkTile title="Активные" value={activeQuery.data?.total ?? 0} hint="Назначены или в работе" loading={activeQuery.isLoading} onClick={onSelectActive} />
-      <LaboratoryWorkTile title="Назначено" value={orderedQuery.data?.total ?? 0} hint="Ждут забора или запуска" loading={orderedQuery.isLoading} onClick={onSelectOrdered} />
-      <LaboratoryWorkTile title="В работе" value={inProgressQuery.data?.total ?? 0} hint="Результат ещё не готов" loading={inProgressQuery.isLoading} onClick={onSelectInProgress} />
-      <LaboratoryWorkTile title="Готово сегодня" value={completedTodayQuery.data?.total ?? 0} hint="Завершённые за день" loading={completedTodayQuery.isLoading} onClick={onSelectCompletedToday} />
+      <LaboratoryWorkTile title="Активные" value={summaryQuery.data?.active ?? 0} hint="Назначены или в работе" loading={summaryQuery.isLoading} onClick={onSelectActive} />
+      <LaboratoryWorkTile title="Назначено" value={summaryQuery.data?.ordered ?? 0} hint="Ждут забора или запуска" loading={summaryQuery.isLoading} onClick={onSelectOrdered} />
+      <LaboratoryWorkTile title="В работе" value={summaryQuery.data?.inProgress ?? 0} hint="Результат ещё не готов" loading={summaryQuery.isLoading} onClick={onSelectInProgress} />
+      <LaboratoryWorkTile title="Готово сегодня" value={summaryQuery.data?.completedToday ?? 0} hint="Завершённые за день" loading={summaryQuery.isLoading} onClick={onSelectCompletedToday} />
     </div>
   );
 }
@@ -703,171 +701,6 @@ function ResultDrawer({
           />
         </Card>
       ) : null}
-    </Drawer>
-  );
-}
-
-type ResultTableRow = LaboratoryOrderResultRowInput & {
-  title: string;
-  code: string | null;
-  disabled: boolean;
-};
-
-function ResultsTableDrawer({
-  order,
-  canManage,
-  onClose,
-}: {
-  order: LaboratoryOrder | null;
-  canManage: boolean;
-  onClose: () => void;
-}) {
-  const queryClient = useQueryClient();
-  const { message } = App.useApp();
-  const [rows, setRows] = useState<ResultTableRow[]>([]);
-  const mutation = useMutation({
-    mutationFn: (items: LaboratoryOrderResultRowInput[]) => updateLaboratoryOrderResults(order!.id, items),
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['laboratory', 'orders'] }),
-        queryClient.invalidateQueries({ queryKey: ['visits'] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
-      ]);
-      message.success('Таблица результатов сохранена');
-      onClose();
-    },
-    onError: (error) => message.error(getErrorMessage(error)),
-  });
-
-  useEffect(() => {
-    setRows(
-      order?.items.map((item) => ({
-        itemId: item.id,
-        title: item.title,
-        code: item.code,
-        status: item.status,
-        resultValue: item.resultValue ?? '',
-        resultText: item.resultText ?? '',
-        unit: item.unit ?? '',
-        referenceRange: item.referenceRange ?? '',
-        comment: item.comment ?? '',
-        disabled: item.status === 'CANCELLED',
-      })) ?? [],
-    );
-  }, [order]);
-
-  function updateRow(itemId: string, patch: Partial<ResultTableRow>) {
-    setRows((current) => current.map((row) => (row.itemId === itemId ? { ...row, ...patch } : row)));
-  }
-
-  const columns = useMemo<ColumnsType<ResultTableRow>>(
-    () => [
-      {
-        title: 'Показатель',
-        key: 'indicator',
-        width: 220,
-        render: (_, row) => (
-          <Space direction="vertical" size={0}>
-            <Typography.Text strong>{row.title}</Typography.Text>
-            {row.code ? <Typography.Text type="secondary">{row.code}</Typography.Text> : null}
-          </Space>
-        ),
-      },
-      {
-        title: 'Значение',
-        dataIndex: 'resultValue',
-        key: 'resultValue',
-        width: 145,
-        render: (value, row) => (
-          <Input
-            value={value ?? ''}
-            disabled={row.disabled}
-            aria-label={`Значение ${row.title}`}
-            onChange={(event) =>
-              updateRow(row.itemId, {
-                resultValue: event.target.value,
-                ...(event.target.value.trim() && row.status === 'ORDERED' ? { status: 'COMPLETED' } : {}),
-              })
-            }
-          />
-        ),
-      },
-      {
-        title: 'Ед.',
-        dataIndex: 'unit',
-        key: 'unit',
-        width: 110,
-        render: (value, row) => <Input value={value ?? ''} disabled={row.disabled} onChange={(event) => updateRow(row.itemId, { unit: event.target.value })} />,
-      },
-      {
-        title: 'Референс',
-        dataIndex: 'referenceRange',
-        key: 'referenceRange',
-        width: 230,
-        render: (value, row) => <Input value={value ?? ''} disabled={row.disabled} onChange={(event) => updateRow(row.itemId, { referenceRange: event.target.value })} />,
-      },
-      {
-        title: 'Комментарий',
-        dataIndex: 'comment',
-        key: 'comment',
-        width: 210,
-        render: (value, row) => <Input value={value ?? ''} disabled={row.disabled} onChange={(event) => updateRow(row.itemId, { comment: event.target.value })} />,
-      },
-      {
-        title: 'Статус',
-        dataIndex: 'status',
-        key: 'status',
-        width: 155,
-        render: (value, row) => (
-          <Select
-            value={value}
-            disabled={row.disabled}
-            className="full-width"
-            onChange={(status) => updateRow(row.itemId, { status })}
-            options={Object.entries(laboratoryOrderItemStatusLabels)
-              .filter(([status]) => status !== 'CANCELLED')
-              .map(([status, label]) => ({ value: status, label }))}
-          />
-        ),
-      },
-    ],
-    [],
-  );
-
-  return (
-    <Drawer
-      title={order ? `Результаты: ${order.visit.animal.nickname}` : 'Таблица результатов'}
-      open={Boolean(order)}
-      onClose={onClose}
-      width="min(1280px, 96vw)"
-      destroyOnHidden
-      extra={
-        <Button
-          type="primary"
-          loading={mutation.isPending}
-          disabled={!canManage || !rows.some((row) => !row.disabled)}
-          onClick={() => mutation.mutate(rows.map(({ title: _title, code: _code, disabled: _disabled, ...row }) => row))}
-        >
-          Сохранить всю таблицу
-        </Button>
-      }
-    >
-      <Alert
-        type="info"
-        showIcon
-        className="form-alert"
-        message="Введите результаты прямо в строки показателей"
-        description="При вводе значения строка автоматически становится готовой. Можно скорректировать единицы, референс и статус до общего сохранения. Вся таблица сохраняется одной операцией."
-      />
-      {mutation.isError ? <Alert type="error" showIcon message={getErrorMessage(mutation.error)} className="form-alert" /> : null}
-      <Table<ResultTableRow>
-        rowKey="itemId"
-        columns={columns}
-        dataSource={rows}
-        pagination={false}
-        className="dense-table laboratory-result-grid"
-        scroll={{ x: 1070, y: 'calc(100vh - 250px)' }}
-      />
     </Drawer>
   );
 }

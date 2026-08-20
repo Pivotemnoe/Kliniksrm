@@ -63,6 +63,7 @@ enum VisitType {
   PRIMARY
   FOLLOW_UP
   OPERATION
+  POST_OPERATION
 }
 
 enum TaskStatus {

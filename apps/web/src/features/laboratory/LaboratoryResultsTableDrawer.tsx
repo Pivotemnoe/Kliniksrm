@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Alert, App, Button, Drawer, Input, Select, Space, Table, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getErrorMessage } from '../../api/errors';
 import { laboratoryOrderItemStatusLabels } from '../visits/types';
 import type { LaboratoryOrderItem, LaboratoryOrderResultRowInput } from './types';
@@ -30,14 +30,14 @@ export function LaboratoryResultsTableDrawer({
   const [rows, setRows] = useState<ResultTableRow[]>([]);
   const mutation = useMutation({
     mutationFn: (items: LaboratoryOrderResultRowInput[]) => updateLaboratoryOrderResults(order!.id, items),
-    onSuccess: async () => {
-      await Promise.all([
+    onSuccess: () => {
+      onClose();
+      message.success('Таблица результатов сохранена');
+      void Promise.all([
         queryClient.invalidateQueries({ queryKey: ['laboratory', 'orders'] }),
         queryClient.invalidateQueries({ queryKey: ['visits'] }),
         queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
       ]);
-      message.success('Таблица результатов сохранена');
-      onClose();
     },
     onError: (error) => message.error(getErrorMessage(error)),
   });
@@ -57,29 +57,32 @@ export function LaboratoryResultsTableDrawer({
     })) ?? []);
   }, [order]);
 
-  function updateRow(itemId: string, patch: Partial<ResultTableRow>) {
+  const updateRow = useCallback((itemId: string, patch: Partial<ResultTableRow>) => {
     setRows((current) => current.map((row) => (row.itemId === itemId ? { ...row, ...patch } : row)));
-  }
+  }, []);
 
   const columns = useMemo<ColumnsType<ResultTableRow>>(() => [
     {
       title: 'Показатель',
       key: 'indicator',
       width: 220,
+      shouldCellUpdate: (row, previous) => row.title !== previous.title || row.code !== previous.code,
       render: (_, row) => <Space direction="vertical" size={0}><Typography.Text strong>{row.title}</Typography.Text>{row.code ? <Typography.Text type="secondary">{row.code}</Typography.Text> : null}</Space>,
     },
     {
       title: 'Значение', dataIndex: 'resultValue', key: 'resultValue', width: 145,
+      shouldCellUpdate: (row, previous) => row.resultValue !== previous.resultValue || row.status !== previous.status || row.disabled !== previous.disabled,
       render: (value, row) => <Input value={value ?? ''} disabled={row.disabled} aria-label={`Значение ${row.title}`} onChange={(event) => updateRow(row.itemId, { resultValue: event.target.value, ...(event.target.value.trim() && row.status === 'ORDERED' ? { status: 'COMPLETED' } : {}) })} />,
     },
-    { title: 'Ед.', dataIndex: 'unit', key: 'unit', width: 110, render: (value, row) => <Input value={value ?? ''} disabled={row.disabled} onChange={(event) => updateRow(row.itemId, { unit: event.target.value })} /> },
-    { title: 'Референс', dataIndex: 'referenceRange', key: 'referenceRange', width: 230, render: (value, row) => <Input value={value ?? ''} disabled={row.disabled} onChange={(event) => updateRow(row.itemId, { referenceRange: event.target.value })} /> },
-    { title: 'Комментарий', dataIndex: 'comment', key: 'comment', width: 210, render: (value, row) => <Input value={value ?? ''} disabled={row.disabled} onChange={(event) => updateRow(row.itemId, { comment: event.target.value })} /> },
+    { title: 'Ед.', dataIndex: 'unit', key: 'unit', width: 110, shouldCellUpdate: (row, previous) => row.unit !== previous.unit || row.disabled !== previous.disabled, render: (value, row) => <Input value={value ?? ''} disabled={row.disabled} onChange={(event) => updateRow(row.itemId, { unit: event.target.value })} /> },
+    { title: 'Референс', dataIndex: 'referenceRange', key: 'referenceRange', width: 230, shouldCellUpdate: (row, previous) => row.referenceRange !== previous.referenceRange || row.disabled !== previous.disabled, render: (value, row) => <Input value={value ?? ''} disabled={row.disabled} onChange={(event) => updateRow(row.itemId, { referenceRange: event.target.value })} /> },
+    { title: 'Комментарий', dataIndex: 'comment', key: 'comment', width: 210, shouldCellUpdate: (row, previous) => row.comment !== previous.comment || row.disabled !== previous.disabled, render: (value, row) => <Input value={value ?? ''} disabled={row.disabled} onChange={(event) => updateRow(row.itemId, { comment: event.target.value })} /> },
     {
       title: 'Статус', dataIndex: 'status', key: 'status', width: 155,
+      shouldCellUpdate: (row, previous) => row.status !== previous.status || row.disabled !== previous.disabled,
       render: (value, row) => <Select value={value} disabled={row.disabled} className="full-width" onChange={(status) => updateRow(row.itemId, { status })} options={Object.entries(laboratoryOrderItemStatusLabels).filter(([status]) => status !== 'CANCELLED').map(([status, label]) => ({ value: status, label }))} />,
     },
-  ], []);
+  ], [updateRow]);
 
   return (
     <Drawer

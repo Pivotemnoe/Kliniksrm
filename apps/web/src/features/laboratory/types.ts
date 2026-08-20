@@ -16,6 +16,13 @@ export type LaboratoryResources = {
   species: Array<{ id: string; title: string }>;
 };
 
+export type LaboratorySummary = {
+  active: number;
+  ordered: number;
+  inProgress: number;
+  completedToday: number;
+};
+
 export type LaboratoryTest = {
   id: string;
   serviceId: string | null;

@@ -1594,6 +1594,8 @@ function parseSex(value?: string | null): AnimalSex {
 
 function parseVisitType(value?: string | null): VisitType | undefined {
   const normalized = normalize(value);
+  if (normalized.includes('послеоперац') || normalized.includes('после операц')) return VisitType.POST_OPERATION;
+  if (normalized.includes('операц')) return VisitType.OPERATION;
   if (normalized.includes('повтор')) return VisitType.FOLLOW_UP;
   if (normalized.includes('первич')) return VisitType.PRIMARY;
   return undefined;

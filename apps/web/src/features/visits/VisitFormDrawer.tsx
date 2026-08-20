@@ -28,7 +28,7 @@ const dateTimePickerFormats = [
   'YYYY MM DD HH:mm',
 ];
 
-const visitCreationTypeSchema = z.enum(['PRIMARY', 'FOLLOW_UP', 'OPERATION', 'VACCINATION']);
+const visitCreationTypeSchema = z.enum(['PRIMARY', 'FOLLOW_UP', 'OPERATION', 'POST_OPERATION', 'VACCINATION']);
 
 type VisitCreationType = z.infer<typeof visitCreationTypeSchema>;
 

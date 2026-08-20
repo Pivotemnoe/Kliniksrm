@@ -2,6 +2,17 @@ import { ApiError, ApiErrorPayload } from './errors';
 
 const rawBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:4000/api';
 export const apiBaseUrl = rawBaseUrl.replace(/\/$/, '');
+const CLIENT_ID_KEY = 'temichevvet-crm-client-id';
+
+export function getApiClientId() {
+  const existing = window.sessionStorage.getItem(CLIENT_ID_KEY);
+  if (existing) return existing;
+  const created = typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  window.sessionStorage.setItem(CLIENT_ID_KEY, created);
+  return created;
+}
 
 type ApiRequestOptions = Omit<RequestInit, 'body'> & {
   body?: unknown;
@@ -13,6 +24,7 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
     credentials: 'include',
     headers: {
       ...(options.body !== undefined ? { 'content-type': 'application/json' } : {}),
+      'x-temichevvet-client-id': getApiClientId(),
       ...options.headers,
     },
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
@@ -38,6 +50,7 @@ export async function apiUpload<T>(path: string, file: File, fields: Record<stri
   const response = await fetch(`${apiBaseUrl}${path}`, {
     method: 'POST',
     credentials: 'include',
+    headers: { 'x-temichevvet-client-id': getApiClientId() },
     body: form,
   });
   const payload = await parseResponse(response);
@@ -56,6 +69,7 @@ export async function apiUploadMany<T>(
   const response = await fetch(`${apiBaseUrl}${path}`, {
     method: 'POST',
     credentials: 'include',
+    headers: { 'x-temichevvet-client-id': getApiClientId() },
     body: form,
   });
   const payload = await parseResponse(response);

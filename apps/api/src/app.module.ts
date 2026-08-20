@@ -17,6 +17,7 @@ import { HospitalModule } from './modules/hospital/hospital.module';
 import { ImportsModule } from './modules/imports/imports.module';
 import { InternalMessagesModule } from './modules/internal-messages/internal-messages.module';
 import { LaboratoryModule } from './modules/laboratory/laboratory.module';
+import { LiveUpdatesModule } from './modules/live-updates/live-updates.module';
 import { MedicalPhrasesModule } from './modules/medical-phrases/medical-phrases.module';
 import { MetaModule } from './modules/meta/meta.module';
 import { NewsModule } from './modules/news/news.module';
@@ -75,6 +76,7 @@ import { PrismaModule } from './prisma/prisma.module';
     SupportModule,
     HospitalModule,
     LaboratoryModule,
+    LiveUpdatesModule,
     ImportsModule,
     InternalMessagesModule,
     MedicalPhrasesModule,

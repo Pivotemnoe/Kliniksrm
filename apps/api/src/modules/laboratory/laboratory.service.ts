@@ -52,6 +52,21 @@ export class LaboratoryService {
     return { items, total, limit, offset };
   }
 
+  async getSummary() {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const end = new Date();
+    end.setHours(23, 59, 59, 999);
+    const activeStatuses = [LaboratoryOrderStatus.ORDERED, LaboratoryOrderStatus.IN_PROGRESS];
+    const [active, ordered, inProgress, completedToday] = await this.prisma.$transaction([
+      this.prisma.laboratoryOrder.count({ where: { status: { in: activeStatuses } } }),
+      this.prisma.laboratoryOrder.count({ where: { status: LaboratoryOrderStatus.ORDERED } }),
+      this.prisma.laboratoryOrder.count({ where: { status: LaboratoryOrderStatus.IN_PROGRESS } }),
+      this.prisma.laboratoryOrder.count({ where: { status: LaboratoryOrderStatus.COMPLETED, completedAt: { gte: start, lte: end } } }),
+    ]);
+    return { active, ordered, inProgress, completedToday };
+  }
+
   async updateOrder(orderId: string, dto: UpdateLaboratoryOrderDto, actorId: string) {
     const existingOrder = await this.prisma.laboratoryOrder.findUnique({
       where: { id: orderId },
@@ -189,15 +204,21 @@ export class LaboratoryService {
       assertCompletedLaboratoryResult(row, existing, existing.files.length > 0);
     }
 
-    await this.prisma.$transaction(async (tx) => {
-      for (const row of dto.items) {
-        await tx.laboratoryOrderItem.update({
-          where: { id: row.itemId },
-          data: toLaboratoryResultUpdate(row),
-        });
-      }
-      await syncLaboratoryOrderStatus(tx, orderId);
-    });
+    const resultingStatuses = order.items.map((item) => dto.items.find((row) => row.itemId === item.id)?.status ?? item.status);
+    const resultingOrderStatus = resolveLaboratoryOrderStatus(resultingStatuses);
+    await this.prisma.$transaction([
+      ...dto.items.map((row) => this.prisma.laboratoryOrderItem.update({
+        where: { id: row.itemId },
+        data: toLaboratoryResultUpdate(row),
+      })),
+      this.prisma.laboratoryOrder.update({
+        where: { id: orderId },
+        data: {
+          status: resultingOrderStatus,
+          completedAt: resultingOrderStatus === LaboratoryOrderStatus.COMPLETED ? new Date() : null,
+        },
+      }),
+    ]);
 
     await this.auditService.log({
       actorId,
@@ -429,10 +450,14 @@ export class LaboratoryService {
 
   private buildOrderWhere(query: ListLaboratoryOrdersQueryDto): Prisma.LaboratoryOrderWhereInput {
     const search = query.search?.trim();
-    const createdAt = parseDateRange(query.from, query.to);
+    const dateRange = parseDateRange(query.from, query.to);
 
     return {
-      ...(createdAt ? { createdAt } : {}),
+      ...(dateRange
+        ? query.status === LaboratoryOrderStatus.COMPLETED
+          ? { completedAt: dateRange }
+          : { createdAt: dateRange }
+        : {}),
       ...(query.status ? { status: query.status } : {}),
       ...(query.activeOnly === 'true' ? { status: { in: [LaboratoryOrderStatus.ORDERED, LaboratoryOrderStatus.IN_PROGRESS] } } : {}),
       ...(search
