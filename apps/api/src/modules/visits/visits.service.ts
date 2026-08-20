@@ -12,6 +12,7 @@ import {
   VisitType,
 } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
+import { rankSearchResults } from '../../common/search-ranking';
 import { AuditService } from '../audit/audit.service';
 import { AuthEmployee } from '../auth/auth.types';
 import { FinanceService } from '../finance/finance.service';
@@ -118,7 +119,7 @@ export class VisitsService {
           } : {}),
         },
         orderBy: { title: 'asc' },
-        take: 50,
+        take: search ? 200 : 50,
         select: {
           id: true,
           isActive: true,
@@ -146,7 +147,7 @@ export class VisitsService {
           ...(search ? { title: { contains: search, mode: 'insensitive' } } : {}),
         },
         orderBy: { title: 'asc' },
-        take: 50,
+        take: search ? 200 : 50,
         select: {
           id: true,
           isActive: true,
@@ -160,11 +161,11 @@ export class VisitsService {
     ]);
 
     return {
-      products: products.map(({ batches, ...product }) => ({
+      products: rankSearchResults(products, search, (product) => [product.title]).slice(0, 50).map(({ batches, ...product }) => ({
         ...product,
         stockRest: batches.reduce((sum, batch) => sum.plus(batch.rest), decimal(0)),
       })),
-      services,
+      services: rankSearchResults(services, search, (service) => [service.title]).slice(0, 50),
     };
   }
 

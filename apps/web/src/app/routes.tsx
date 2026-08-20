@@ -162,6 +162,7 @@ export const routes: RouteObject[] = [
           { path: '/settings/office/profile', element: <ClinicResourcesPage /> },
           { path: '/settings/office/schedule', element: <ClinicResourcesPage /> },
           { path: '/settings/office/rooms', element: <ClinicResourcesPage /> },
+          { path: '/settings/office/workstations', element: <ClinicResourcesPage /> },
           { path: '/settings/office/warehouses', element: <ClinicResourcesPage /> },
           { path: '/settings/office/cashboxes', element: <FinanceSettingsPage /> },
           { path: '/settings/office/hospital', element: <ClinicResourcesPage /> },

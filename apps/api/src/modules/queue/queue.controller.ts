@@ -5,8 +5,10 @@ import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 import { RequireAnyPermissions, RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { CreateQueueEntryDto } from './dto/create-queue-entry.dto';
+import { CallQueueEntryDto } from './dto/call-queue-entry.dto';
 import { ListQueueQueryDto } from './dto/list-queue-query.dto';
 import { UpdateQueueEntryDto } from './dto/update-queue-entry.dto';
+import { RegisterQueueWorkstationDto, UpdateQueueWorkstationDto } from './dto/register-queue-workstation.dto';
 import { QueueService } from './queue.service';
 
 @ApiTags('queue')
@@ -35,6 +37,28 @@ export class QueueController {
     return this.queueService.createQueueEntry(dto, actor.id);
   }
 
+  @Post('workstations/register')
+  @RequirePermissions('queue.read')
+  registerWorkstation(@Body() dto: RegisterQueueWorkstationDto) {
+    return this.queueService.registerWorkstation(dto);
+  }
+
+  @Get('workstations')
+  @RequireAnyPermissions('queue.manage', 'settings.manage')
+  listWorkstations() {
+    return this.queueService.listWorkstations();
+  }
+
+  @Patch('workstations/:workstationId')
+  @RequireAnyPermissions('queue.manage', 'settings.manage')
+  updateWorkstation(
+    @Param('workstationId') workstationId: string,
+    @Body() dto: UpdateQueueWorkstationDto,
+    @CurrentEmployee() actor: AuthEmployee,
+  ) {
+    return this.queueService.updateWorkstation(workstationId, dto, actor.id);
+  }
+
   @Get(':queueEntryId')
   @RequirePermissions('queue.read')
   @ApiOkResponse({ description: 'Queue entry card.' })
@@ -56,8 +80,12 @@ export class QueueController {
   @Post(':queueEntryId/start')
   @RequirePermissions('queue.call')
   @ApiOkResponse({ description: 'Queue entry moved to in-progress.' })
-  startQueueEntry(@Param('queueEntryId') queueEntryId: string, @CurrentEmployee() actor: AuthEmployee) {
-    return this.queueService.startQueueEntry(queueEntryId, actor.id);
+  startQueueEntry(
+    @Param('queueEntryId') queueEntryId: string,
+    @Body() dto: CallQueueEntryDto,
+    @CurrentEmployee() actor: AuthEmployee,
+  ) {
+    return this.queueService.startQueueEntry(queueEntryId, actor.id, dto.deviceId);
   }
 
   @Post(':queueEntryId/complete')

@@ -1,4 +1,4 @@
-import { DeleteOutlined, DownloadOutlined, EditOutlined, InboxOutlined, UploadOutlined } from '@ant-design/icons';
+import { DeleteOutlined, DownloadOutlined, EditOutlined, EyeOutlined, InboxOutlined, UploadOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, App, Button, Card, DatePicker, Form, Input, List, Modal, Popconfirm, Select, Space, Tag, Typography, Upload } from 'antd';
 import type { UploadFile } from 'antd/es/upload/interface';
@@ -10,6 +10,7 @@ import {
   deleteAttachment,
   downloadAttachment,
   listAnimalFiles,
+  previewAttachment,
   updateAnimalArchiveMetadata,
   uploadAnimalFilesBatch,
 } from './files.api';
@@ -71,6 +72,10 @@ export function PatientDocumentArchive({ animalId, canManage }: { animalId: stri
   });
   const downloadMutation = useMutation({
     mutationFn: downloadAttachment,
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
+  const previewMutation = useMutation({
+    mutationFn: previewAttachment,
     onError: (error) => message.error(getErrorMessage(error)),
   });
   const deleteMutation = useMutation({
@@ -168,6 +173,7 @@ export function PatientDocumentArchive({ animalId, canManage }: { animalId: stri
           renderItem={(file) => (
             <List.Item
               actions={[
+                <Button key="preview" type="link" size="small" icon={<EyeOutlined />} onClick={() => previewMutation.mutate(file)}>Открыть</Button>,
                 <Button key="download" type="link" size="small" icon={<DownloadOutlined />} onClick={() => downloadMutation.mutate(file)}>Скачать</Button>,
                 canManage ? <Button key="edit" type="link" size="small" icon={<EditOutlined />} onClick={() => openEdit(file)}>Описание</Button> : null,
                 canManage ? <Popconfirm key="delete" title="Удалить файл из активного архива?" okText="Удалить" cancelText="Отмена" onConfirm={() => deleteMutation.mutate(file.id)}><Button danger type="link" size="small" icon={<DeleteOutlined />}>Удалить</Button></Popconfirm> : null,

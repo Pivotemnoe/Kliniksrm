@@ -1,5 +1,6 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Res, StreamableFile } from '@nestjs/common';
 import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { Public } from '../auth/decorators/public.decorator';
 import { CreatePortalOnlineRequestDto } from './dto/create-portal-online-request.dto';
 import { RequestPortalCodeDto } from './dto/request-portal-code.dto';
@@ -30,9 +31,27 @@ export class ClientPortalController {
     return this.clientPortalService.getSummary(token);
   }
 
+  @Get(':token/files/:fileId')
+  async openFile(
+    @Param('token') token: string,
+    @Param('fileId') fileId: string,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const file = await this.clientPortalService.openFile(token, fileId);
+    response.setHeader('Content-Type', file.mimeType || 'application/octet-stream');
+    response.setHeader('Content-Disposition', contentDisposition(file.fileName));
+    response.setHeader('Cache-Control', 'private, no-store');
+    return new StreamableFile(file.stream);
+  }
+
   @Post(':token/online-requests')
   @ApiCreatedResponse({ description: 'Online appointment request created from client portal.' })
   createOnlineRequest(@Param('token') token: string, @Body() dto: CreatePortalOnlineRequestDto) {
     return this.clientPortalService.createOnlineRequest(token, dto);
   }
+}
+
+function contentDisposition(fileName: string) {
+  const fallback = fileName.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '_') || 'document';
+  return `inline; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
 }

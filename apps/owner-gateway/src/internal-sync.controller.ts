@@ -5,6 +5,7 @@ import { SendOwnerMessageDto } from './dto/send-owner-message.dto';
 import { InternalSyncService } from './internal-sync.service';
 import { assertSecret } from './security';
 import { MarkBookingRequestImportedDto } from './dto/mark-booking-request-imported.dto';
+import { SyncOwnerDocumentsDto, UploadOwnerDocumentContentDto } from './dto/sync-owner-documents.dto';
 
 @Controller('internal/v1/owners')
 export class InternalSyncController {
@@ -26,6 +27,27 @@ export class InternalSyncController {
   ) {
     this.assertSyncSecret(secret);
     return this.internalSyncService.upsertSnapshot(ownerId, dto);
+  }
+
+  @Post(':ownerId/documents/sync')
+  syncDocuments(
+    @Param('ownerId') ownerId: string,
+    @Headers('x-owner-gateway-secret') secret: string | undefined,
+    @Body() dto: SyncOwnerDocumentsDto,
+  ) {
+    this.assertSyncSecret(secret);
+    return this.internalSyncService.syncDocuments(ownerId, dto.documents);
+  }
+
+  @Put(':ownerId/documents/:sourceFileId/content')
+  uploadDocumentContent(
+    @Param('ownerId') ownerId: string,
+    @Param('sourceFileId') sourceFileId: string,
+    @Headers('x-owner-gateway-secret') secret: string | undefined,
+    @Body() dto: UploadOwnerDocumentContentDto,
+  ) {
+    this.assertSyncSecret(secret);
+    return this.internalSyncService.uploadDocumentContent(ownerId, sourceFileId, dto);
   }
 
   @Get(':ownerId/status')

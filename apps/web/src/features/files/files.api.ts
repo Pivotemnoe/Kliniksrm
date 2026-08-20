@@ -66,6 +66,24 @@ export async function downloadAttachment(file: FileAttachment) {
   URL.revokeObjectURL(url);
 }
 
+export async function previewAttachment(file: FileAttachment) {
+  const previewWindow = window.open('', '_blank');
+  if (!previewWindow) throw new Error('Браузер заблокировал новое окно. Разрешите всплывающие окна для CRM.');
+  previewWindow.opener = null;
+  previewWindow.document.title = file.originalName;
+  previewWindow.document.body.textContent = 'Открываем документ…';
+
+  try {
+    const result = await apiDownload(`/v1/files/${file.id}/download`);
+    const url = URL.createObjectURL(result.blob);
+    previewWindow.location.replace(url);
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch (error) {
+    previewWindow.close();
+    throw error;
+  }
+}
+
 function metadataFields(metadata: PatientArchiveMetadata) {
   return Object.fromEntries(
     Object.entries(metadata).filter((entry): entry is [string, string] => typeof entry[1] === 'string' && Boolean(entry[1])),

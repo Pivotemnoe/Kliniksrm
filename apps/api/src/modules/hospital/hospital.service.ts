@@ -12,6 +12,7 @@ import {
   VisitStatus,
 } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
+import { rankSearchResults } from '../../common/search-ranking';
 import { AuditService } from '../audit/audit.service';
 import { FinanceService } from '../finance/finance.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -131,11 +132,11 @@ export class HospitalService {
     ]);
 
     return {
-      products: products.map(({ batches, ...product }) => ({
+      products: rankSearchResults(products, search, (product) => [product.title]).map(({ batches, ...product }) => ({
         ...product,
         stockRest: batches.reduce((sum, batch) => sum.plus(batch.rest), decimal(0)),
       })),
-      services,
+      services: rankSearchResults(services, search, (service) => [service.title]),
     };
   }
 

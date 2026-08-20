@@ -43,8 +43,33 @@ model OwnerSnapshot {
   sessions        PortalSession[]
   pushSubscriptions PortalPushSubscription[]
   bookingRequests   PortalBookingRequest[]
+  documents         PortalDocument[]
 
   @@index([syncedAt])
+}
+
+model PortalDocument {
+  id               String        @id @default(uuid())
+  ownerId          String
+  owner            OwnerSnapshot @relation(fields: [ownerId], references: [ownerId], onDelete: Cascade)
+  sourceFileId     String
+  animalId         String?
+  animalName       String?
+  fileName         String
+  mimeType         String?
+  sizeBytes        Int?
+  checksumSha256   String?
+  archiveCategory  String?
+  documentDate     DateTime?
+  sourceLabel      String?
+  content          Bytes?
+  contentStoredAt  DateTime?
+  sourceCreatedAt  DateTime
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@unique([ownerId, sourceFileId])
+  @@index([ownerId, sourceCreatedAt])
 }
 
 model PortalBookingRequest {

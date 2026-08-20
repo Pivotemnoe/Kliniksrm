@@ -725,10 +725,25 @@ model Room {
   name         String
   queueEntries QueueEntry[]
   appointments Appointment[]
+  queueWorkstations QueueWorkstation[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
   @@unique([officeId, name])
+}
+
+model QueueWorkstation {
+  id         String   @id @default(uuid())
+  deviceId   String   @unique
+  label      String?
+  roomId     String?
+  room       Room?    @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  lastSeenAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([roomId])
+  @@index([lastSeenAt])
 }
 
 model Warehouse {

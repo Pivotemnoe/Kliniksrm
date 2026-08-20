@@ -1,4 +1,4 @@
-import { apiRequest } from '../../api/client';
+import { apiBaseUrl, apiRequest } from '../../api/client';
 import {
   ClientPortalCodeRequestResponse,
   ClientPortalCodeVerifyResponse,
@@ -9,6 +9,10 @@ import {
 
 export function getClientPortalSummary(token: string) {
   return apiRequest<ClientPortalSummary>(`/v1/client-portal/${encodeURIComponent(token)}`);
+}
+
+export function getClientPortalFileUrl(token: string, fileId: string) {
+  return `${apiBaseUrl}/v1/client-portal/${encodeURIComponent(token)}/files/${encodeURIComponent(fileId)}`;
 }
 
 export function requestClientPortalCode(input: { phone: string }) {

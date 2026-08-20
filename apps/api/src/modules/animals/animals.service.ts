@@ -10,6 +10,7 @@ import {
   VisitStatus,
 } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
+import { rankSearchResults } from '../../common/search-ranking';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
@@ -54,35 +55,26 @@ export class AnimalsService {
         : {}),
     };
 
+    if (search) {
+      const summaries = await this.prisma.animal.findMany({
+        where,
+        select: { id: true, nickname: true },
+      });
+      const pageIds = rankSearchResults(summaries, search, (animal) => [animal.nickname])
+        .slice(offset, offset + limit)
+        .map((animal) => animal.id);
+      const pageItems = pageIds.length
+        ? await this.prisma.animal.findMany({ where: { id: { in: pageIds } }, include: animalListInclude })
+        : [];
+      const itemsById = new Map(pageItems.map((animal) => [animal.id, animal]));
+      return { items: pageIds.flatMap((id) => itemsById.get(id) ?? []), total: summaries.length, limit, offset };
+    }
+
     const [items, total] = await this.prisma.$transaction([
       this.prisma.animal.findMany({
         where,
         orderBy: { createdAt: 'desc' },
-        include: {
-          owner: {
-            select: {
-              id: true,
-              fullName: true,
-              phone: true,
-              extraPhone: true,
-            },
-          },
-          weights: {
-            orderBy: { measuredAt: 'desc' },
-            take: 1,
-          },
-          vaccinations: {
-            orderBy: { expiresAt: 'asc' },
-            take: 3,
-          },
-          _count: {
-            select: {
-              visits: true,
-              tasks: true,
-              vaccinations: true,
-            },
-          },
-        },
+        include: animalListInclude,
         skip: offset,
         take: limit,
       }),
@@ -792,6 +784,32 @@ export class AnimalsService {
     }
   }
 }
+
+const animalListInclude = {
+  owner: {
+    select: {
+      id: true,
+      fullName: true,
+      phone: true,
+      extraPhone: true,
+    },
+  },
+  weights: {
+    orderBy: { measuredAt: 'desc' },
+    take: 1,
+  },
+  vaccinations: {
+    orderBy: { expiresAt: 'asc' },
+    take: 3,
+  },
+  _count: {
+    select: {
+      visits: true,
+      tasks: true,
+      vaccinations: true,
+    },
+  },
+} satisfies Prisma.AnimalInclude;
 
 const vaccinationInclude = {
   revaccinationTask: {

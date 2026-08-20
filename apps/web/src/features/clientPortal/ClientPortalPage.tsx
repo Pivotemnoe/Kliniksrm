@@ -1,5 +1,6 @@
 import {
   CalendarOutlined,
+  EyeOutlined,
   ExportOutlined,
   FileTextOutlined,
   HistoryOutlined,
@@ -20,7 +21,7 @@ import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
 import { RussianPhoneInput } from '../../shared/ui/RussianPhoneInput';
 import { formatAnimalAge } from '../../shared/utils/animalBirthDate';
 import { formatDate, formatDateTime } from '../../shared/utils/date';
-import { createPortalOnlineRequest, getClientPortalSummary, requestClientPortalCode, verifyClientPortalCode } from './clientPortal.api';
+import { createPortalOnlineRequest, getClientPortalFileUrl, getClientPortalSummary, requestClientPortalCode, verifyClientPortalCode } from './clientPortal.api';
 import {
   ClientPortalDeliveryChannel,
   PortalAnimal,
@@ -61,9 +62,15 @@ const documentStatusLabels: Record<string, string> = {
   CANCELLED: 'Отменён',
 };
 
-type PortalDocumentRow = PortalVisit['documents'][number] & {
-  visitStartedAt: string;
+type PortalDocumentRow = {
+  id: string;
+  title: string;
+  createdAt: string;
+  body: string | null;
+  status: string;
+  visitStartedAt: string | null;
   animal: PortalVisit['animal'];
+  fileId?: string;
 };
 
 export function ClientPortalPage() {
@@ -91,8 +98,13 @@ export function ClientPortalPage() {
       { title: 'Дата', dataIndex: 'startedAt', key: 'startedAt', width: 170, render: formatDateTime },
       { title: 'Пациент', key: 'animal', render: (_, item) => <AnimalSpeciesLabel species={item.animal.species} fallback={item.animal.nickname} /> },
       { title: 'Статус', dataIndex: 'status', key: 'status', width: 130, render: (value: string) => statusTag(value) },
-      { title: 'Диагнозы', key: 'diagnoses', render: (_, item) => item.diagnoses.map((diagnosis) => diagnosis.title).join(', ') || '—' },
+      { title: 'Цель и анамнез', key: 'history', width: 260, render: (_, item) => [item.exam?.purpose, item.exam?.anamnesis].filter(Boolean).join('; ') || '—' },
+      { title: 'Осмотр и симптомы', key: 'exam', width: 280, render: (_, item) => [item.exam?.examination, item.exam?.symptoms].filter(Boolean).join('; ') || '—' },
+      { title: 'Показатели', key: 'vitals', width: 150, render: (_, item) => [item.exam?.weightKg ? `${item.exam.weightKg} кг` : '', item.exam?.temperatureC ? `${item.exam.temperatureC} °C` : ''].filter(Boolean).join(' · ') || '—' },
+      { title: 'Диагнозы', key: 'diagnoses', width: 260, render: (_, item) => item.diagnoses.map((diagnosis) => diagnosis.description ? `${diagnosis.title} — ${diagnosis.description}` : diagnosis.title).join('; ') || '—' },
       { title: 'Манипуляции', key: 'manipulations', render: (_, item) => item.exam?.manipulations || '—' },
+      { title: 'Стационар', key: 'hospital', width: 280, render: (_, item) => item.hospitalRecords.map((record) => `${formatDateTime(record.recordedAt)} — ${record.title}${record.temperatureC ? ` (${record.temperatureC} °C)` : record.value ? ` (${record.value})` : ''}`).join('; ') || '—' },
+      { title: 'Анализы', key: 'laboratory', width: 300, render: (_, item) => item.laboratoryOrders.flatMap((order) => order.items).map((result) => `${result.title}: ${result.resultValue || result.resultText || 'результат не внесён'}${result.unit ? ` ${result.unit}` : ''}`).join('; ') || '—' },
       { title: 'Рекомендации', key: 'recommendation', render: (_, item) => item.recommendation?.treatmentPlan || item.recommendation?.careNotes || '—' },
       { title: 'Документы', key: 'documents', width: 120, render: (_, item) => item.documents.length || '—' },
       { title: 'Сумма', dataIndex: 'totalAmount', key: 'totalAmount', width: 120, render: formatMoney },
@@ -120,14 +132,26 @@ export function ClientPortalPage() {
   );
   const documentRows = useMemo<PortalDocumentRow[]>(
     () =>
-      data?.visits.flatMap((visit) =>
-        visit.documents.map((document) => ({
+      [
+        ...(data?.files.map((file) => ({
+          id: file.id,
+          title: file.fileName,
+          createdAt: file.documentDate || file.sourceCreatedAt,
+          body: null,
+          status: file.archiveCategory || 'Документ',
+          visitStartedAt: null,
+          animal: { id: file.animalId || '', nickname: file.animalName || 'Пациент', species: null },
+          fileId: file.id,
+        })) ?? []),
+        ...(data?.visits.flatMap((visit) =>
+          visit.documents.map((document) => ({
           ...document,
           visitStartedAt: visit.startedAt,
           animal: visit.animal,
-        })),
-      ) ?? [],
-    [data?.visits],
+          })),
+        ) ?? []),
+      ],
+    [data?.files, data?.visits],
   );
   const documentColumns = useMemo<ColumnsType<PortalDocumentRow>>(
     () => [
@@ -142,8 +166,18 @@ export function ClientPortalPage() {
         width: 140,
         render: (value: string) => statusTag(documentStatusLabels[value] ?? value),
       },
+      {
+        title: '',
+        key: 'open',
+        width: 120,
+        render: (_, item) => item.fileId ? (
+          <Button icon={<EyeOutlined />} href={getClientPortalFileUrl(token, item.fileId)} target="_blank" rel="noopener">
+            Открыть
+          </Button>
+        ) : null,
+      },
     ],
-    [],
+    [token],
   );
   if (!token) {
     return <ClientPortalLoginPage onVerified={(verifiedToken) => navigate(`/portal/${verifiedToken}`, { replace: true })} />;
@@ -208,6 +242,7 @@ export function ClientPortalPage() {
             <div className="list-panel-body">
               <InfoRow label="ФИО" value={data.owner.fullName} />
               <InfoRow label="Телефон" value={data.owner.phone} />
+              <InfoRow label="Дополнительный телефон" value={data.owner.extraPhone} />
               <InfoRow label="Email" value={data.owner.email} />
               <InfoRow label="Адрес" value={data.owner.address} />
             </div>
@@ -521,14 +556,27 @@ function AnimalList({ animals }: { animals: PortalAnimal[] }) {
           <InfoRow label="Возраст" value={formatAnimalAge(animal.birthDate)} />
           <InfoRow label="Дата рождения" value={formatDate(animal.birthDate)} />
           <InfoRow label="Вес" value={animal.weights[0] ? `${animal.weights[0].weightKg} кг` : '—'} />
+          <InfoRow label="Окрас" value={animal.color} />
           <InfoRow label="Микрочип" value={animal.microchip} />
+          <InfoRow label="Клеймо" value={animal.mark} />
+          <InfoRow label="Состояние" value={animal.status} />
+          <InfoRow label="Стерилизация" value={animal.isSterilized ? 'Да' : 'Нет'} />
+          {animal.weights.length > 1 ? (
+            <div className="portal-animal-vaccines">
+              <Typography.Text strong>История веса</Typography.Text>
+              {animal.weights.map((weight) => <span key={weight.id}>{formatDate(weight.measuredAt)} — {weight.weightKg} кг</span>)}
+            </div>
+          ) : null}
           <div className="portal-animal-vaccines">
             <Typography.Text strong>Вакцинации</Typography.Text>
             {animal.vaccinations.length ? (
               animal.vaccinations.map((vaccination) => (
                 <span key={vaccination.id}>
                   {vaccination.title}
+                  {vaccination.vaccinatedAt ? ` от ${formatDate(vaccination.vaccinatedAt)}` : ''}
                   {vaccination.expiresAt ? ` до ${formatDate(vaccination.expiresAt)}` : ''}
+                  {vaccination.vaccineSeries ? ` · серия ${vaccination.vaccineSeries}` : ''}
+                  {vaccination.vaccineBatch ? ` · партия ${vaccination.vaccineBatch}` : ''}
                 </span>
               ))
             ) : (

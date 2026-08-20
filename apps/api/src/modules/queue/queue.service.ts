@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { AnimalSex, Prisma, QueueStatus, QueueUrgency, VisitStatus, VisitType } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
+import { rankSearchResults } from '../../common/search-ranking';
 import { normalizeRussianPhone } from '../../common/phone';
 import { AuditService } from '../audit/audit.service';
 import { AnimalCatalogService } from '../animals/animal-catalog.service';
@@ -9,6 +10,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CreateQueueEntryDto } from './dto/create-queue-entry.dto';
 import { ListQueueQueryDto } from './dto/list-queue-query.dto';
 import { UpdateQueueEntryDto } from './dto/update-queue-entry.dto';
+import { RegisterQueueWorkstationDto, UpdateQueueWorkstationDto } from './dto/register-queue-workstation.dto';
 
 const QUEUE_ACCEPT_DELAY_MS = 15_000;
 
@@ -64,14 +66,39 @@ export class QueueService {
       ...(filters.length ? { AND: filters } : {}),
     };
 
-    const [items, total] = await this.prisma.$transaction([
-      this.prisma.queueEntry.findMany({
+    if (search) {
+      const summaries = await this.prisma.queueEntry.findMany({
         where,
-        orderBy: { createdAt: 'asc' },
-        include: queueEntryInclude,
-        skip: offset,
-        take: limit,
-      }),
+        select: {
+          id: true,
+          ownerName: true,
+          animalNickname: true,
+          owner: { select: { fullName: true } },
+          animal: { select: { nickname: true } },
+        },
+      });
+      const pageIds = rankSearchResults(summaries, search, (item) => [
+        item.owner?.fullName ?? item.ownerName,
+        item.animal?.nickname ?? item.animalNickname,
+      ]).slice(offset, offset + limit).map((item) => item.id);
+      const pageItems = pageIds.length
+        ? await this.prisma.queueEntry.findMany({ where: { id: { in: pageIds } }, include: queueEntryInclude })
+        : [];
+      const itemsById = new Map(pageItems.map((item) => [item.id, item]));
+      const responseTime = Date.now();
+      return {
+        items: pageIds.flatMap((id) => {
+          const item = itemsById.get(id);
+          return item ? [toQueueEntryResponse(item, responseTime)] : [];
+        }),
+        total: summaries.length,
+        limit,
+        offset,
+      };
+    }
+
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.queueEntry.findMany({ where, orderBy: { createdAt: 'asc' }, include: queueEntryInclude, skip: offset, take: limit }),
       this.prisma.queueEntry.count({ where }),
     ]);
 
@@ -99,6 +126,46 @@ export class QueueService {
       waiting: waiting.map(toQueueScreenItem),
       called: called.map(toQueueScreenItem),
     };
+  }
+
+  registerWorkstation(dto: RegisterQueueWorkstationDto) {
+    const label = clean(dto.label);
+    return this.prisma.queueWorkstation.upsert({
+      where: { deviceId: dto.deviceId },
+      create: { deviceId: dto.deviceId, label, lastSeenAt: new Date() },
+      update: { lastSeenAt: new Date(), ...(label ? { label } : {}) },
+      include: queueWorkstationInclude,
+    });
+  }
+
+  listWorkstations() {
+    return this.prisma.queueWorkstation.findMany({
+      orderBy: [{ lastSeenAt: 'desc' }, { createdAt: 'asc' }],
+      include: queueWorkstationInclude,
+    });
+  }
+
+  async updateWorkstation(workstationId: string, dto: UpdateQueueWorkstationDto, actorId: string) {
+    const existing = await this.prisma.queueWorkstation.findUnique({ where: { id: workstationId }, select: { id: true } });
+    if (!existing) throw new NotFoundException('Рабочее место не найдено');
+    if (dto.roomId) await this.schedulingService.ensureRoomExists(dto.roomId);
+
+    const workstation = await this.prisma.queueWorkstation.update({
+      where: { id: workstationId },
+      data: {
+        ...(dto.roomId !== undefined ? { roomId: dto.roomId } : {}),
+        ...(dto.label !== undefined ? { label: clean(dto.label) } : {}),
+      },
+      include: queueWorkstationInclude,
+    });
+    await this.auditService.log({
+      actorId,
+      action: 'queue.workstation_update',
+      entityType: 'QueueWorkstation',
+      entityId: workstation.id,
+      metadata: { roomId: workstation.roomId, label: workstation.label },
+    });
+    return workstation;
   }
 
   async createQueueEntry(dto: CreateQueueEntryDto, actorId: string) {
@@ -164,10 +231,10 @@ export class QueueService {
     return toQueueEntryResponse(queueEntry);
   }
 
-  async startQueueEntry(queueEntryId: string, actorId: string) {
+  async startQueueEntry(queueEntryId: string, actorId: string, workstationDeviceId: string) {
     const existing = await this.prisma.queueEntry.findUnique({
       where: { id: queueEntryId },
-      select: { id: true, status: true, startedAt: true, callCount: true },
+      select: { id: true, status: true, startedAt: true, callCount: true, roomId: true },
     });
 
     if (!existing) {
@@ -180,6 +247,14 @@ export class QueueService {
 
     const calledAt = new Date();
     const action = existing.status === QueueStatus.IN_PROGRESS ? 'queue.call' : 'queue.start';
+    const workstation = await this.prisma.queueWorkstation.findUnique({
+      where: { deviceId: workstationDeviceId },
+      include: { room: { select: { id: true, officeId: true } } },
+    });
+    if (!workstation) throw new BadRequestException('Этот компьютер ещё не зарегистрирован как рабочее место');
+    if (!workstation.room) throw new BadRequestException('Для этого компьютера не выбран кабинет');
+    await this.prisma.queueWorkstation.update({ where: { id: workstation.id }, data: { lastSeenAt: calledAt } });
+    const workstationRoom = workstation.room;
     const queueEntry = await this.prisma.queueEntry.update({
       where: { id: queueEntryId },
       data: {
@@ -188,6 +263,9 @@ export class QueueService {
         lastCalledAt: calledAt,
         callCount: { increment: 1 },
         completedAt: null,
+        employeeId: actorId,
+        roomId: workstationRoom.id,
+        officeId: workstationRoom.officeId,
       },
       include: queueEntryInclude,
     });
@@ -201,6 +279,8 @@ export class QueueService {
         status: queueEntry.status,
         callCount: queueEntry.callCount,
         lastCalledAt: queueEntry.lastCalledAt,
+        employeeId: queueEntry.employeeId,
+        roomId: queueEntry.roomId,
       },
     });
 
@@ -353,6 +433,17 @@ const queueEntryInclude = {
   },
 } satisfies Prisma.QueueEntryInclude;
 
+const queueWorkstationInclude = {
+  room: {
+    select: {
+      id: true,
+      name: true,
+      officeId: true,
+      office: { select: { id: true, name: true } },
+    },
+  },
+} satisfies Prisma.QueueWorkstationInclude;
+
 const queueScreenSelect = {
   id: true,
   ownerName: true,
@@ -445,6 +536,11 @@ function resolveQueueStatusData(status?: QueueStatus): Prisma.QueueEntryUnchecke
 
 function getEmployeePublicName(value?: string | null) {
   return value?.trim().split(/\s+/)[0] || null;
+}
+
+function clean(value?: string | null) {
+  const normalized = value?.trim();
+  return normalized || null;
 }
 
 type QueueMutationData = {

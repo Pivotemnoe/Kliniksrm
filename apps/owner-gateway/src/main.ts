@@ -1,13 +1,15 @@
 import 'reflect-metadata';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { NextFunction, Request, Response } from 'express';
 import { AppModule } from './app.module';
 import { assertGatewaySecurityConfiguration } from './runtime-config';
 
 async function bootstrap() {
   assertGatewaySecurityConfiguration();
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false });
+  app.useBodyParser('json', { limit: process.env.OWNER_GATEWAY_BODY_LIMIT?.trim() || '24mb' });
   app.use((_request: Request, response: Response, next: NextFunction) => {
     response.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
     response.setHeader('Referrer-Policy', 'no-referrer');

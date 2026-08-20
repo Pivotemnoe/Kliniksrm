@@ -8,6 +8,7 @@ export type ClientPortalSummary = {
   owner: PortalOwner;
   appointments: PortalAppointment[];
   visits: PortalVisit[];
+  files: PortalFile[];
   bills: PortalBill[];
   notifications: PortalNotification[];
   onlineRequests: PortalOnlineRequest[];
@@ -31,6 +32,7 @@ export type PortalOwner = {
   id: string;
   fullName: string;
   phone: string | null;
+  extraPhone: string | null;
   email: string | null;
   address: string | null;
   balance: string | number;
@@ -46,9 +48,20 @@ export type PortalAnimal = {
   birthDate: string | null;
   color: string | null;
   microchip: string | null;
+  mark: string | null;
+  isSterilized: boolean;
   status: string | null;
   weights: Array<{ id: string; weightKg: string | number; measuredAt: string }>;
-  vaccinations: Array<{ id: string; title: string; status: string | null; vaccinatedAt: string | null; expiresAt: string | null }>;
+  vaccinations: Array<{
+    id: string;
+    title: string;
+    status: string | null;
+    vaccinatedAt: string | null;
+    expiresAt: string | null;
+    vaccineBatch: string | null;
+    vaccineSeries: string | null;
+    vaccineExpiresAt: string | null;
+  }>;
 };
 
 export type PortalAppointment = {
@@ -69,10 +82,63 @@ export type PortalVisit = {
   totalAmount: string | number;
   animal: Pick<PortalAnimal, 'id' | 'nickname' | 'species'>;
   employee: { id: string; fullName: string; position: string | null } | null;
-  exam: { manipulations: string | null } | null;
-  diagnoses: Array<{ id: string; title: string; status: string | null }>;
+  exam: {
+    purpose: string | null;
+    anamnesis: string | null;
+    examination: string | null;
+    symptoms: string | null;
+    manipulations: string | null;
+    weightKg: string | number | null;
+    temperatureC: string | number | null;
+  } | null;
+  diagnoses: Array<{
+    id: string;
+    diagnosisType: string | null;
+    title: string;
+    description: string | null;
+    status: string | null;
+  }>;
   recommendation: { treatmentPlan: string | null; careNotes: string | null } | null;
+  hospitalRecords: Array<{
+    id: string;
+    recordType: string;
+    title: string;
+    recordedAt: string;
+    completedAt: string | null;
+    temperatureC: string | number | null;
+    value: string | null;
+    performedBy: { id: string; fullName: string } | null;
+  }>;
+  laboratoryOrders: Array<{
+    id: string;
+    status: string;
+    createdAt: string;
+    items: Array<{
+      id: string;
+      title: string;
+      code: string | null;
+      status: string;
+      resultValue: string | null;
+      resultText: string | null;
+      unit: string | null;
+      referenceRange: string | null;
+      completedAt: string | null;
+    }>;
+  }>;
   documents: Array<{ id: string; title: string; body: string | null; status: string; createdAt: string }>;
+};
+
+export type PortalFile = {
+  id: string;
+  animalId: string | null;
+  animalName: string | null;
+  fileName: string;
+  mimeType: string | null;
+  sizeBytes: number | null;
+  archiveCategory: string | null;
+  documentDate: string | null;
+  sourceLabel: string | null;
+  sourceCreatedAt: string;
 };
 
 export type PortalBill = {

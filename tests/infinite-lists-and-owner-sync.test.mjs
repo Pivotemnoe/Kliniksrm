@@ -95,11 +95,13 @@ test('кабинет владельца получает диагнозы и м�
     read('apps/web/src/features/clientPortal/types.ts'),
   ]);
 
-  assert.match(clientPortalService, /exam: \{ select: \{ manipulations: true \} \}/);
-  assert.match(clientPortalService, /diagnoses: \{ select: \{ id: true, title: true, status: true \} \}/);
+  assert.match(clientPortalService, /exam: \{[\s\S]*purpose: true,[\s\S]*symptoms: true,[\s\S]*manipulations: true,[\s\S]*temperatureC: true/);
+  assert.match(clientPortalService, /diagnoses: \{[\s\S]*diagnosisType: true,[\s\S]*description: true/);
+  assert.match(clientPortalService, /files: files\.map\(toPortalFileMetadata\)/);
   assert.match(publicPortal, /<strong>Манипуляции:<\/strong> \$\{escapeHtml\(item\.exam\?\.manipulations \|\| '—'\)\}/);
   assert.match(localPortal, /title: 'Манипуляции'[\s\S]*item\.exam\?\.manipulations \|\| '—'/);
-  assert.match(portalTypes, /exam: \{ manipulations: string \| null \} \| null/);
+  assert.match(portalTypes, /exam: \{[\s\S]*manipulations: string \| null;[\s\S]*temperatureC: string \| number \| null;/);
+  assert.match(portalTypes, /files: PortalFile\[\]/);
 
   for (const mutation of ['upsertExam', 'upsertRecommendation', 'createDiagnosis', 'updateDiagnosis', 'deleteDiagnosis']) {
     const start = visitsService.indexOf(`async ${mutation}`);

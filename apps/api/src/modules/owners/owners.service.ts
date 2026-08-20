@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { AnimalSex, ClientPortalStatus, Prisma } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
+import { rankSearchResults } from '../../common/search-ranking';
 import {
   formatNormalizedRussianPhone,
   normalizeDisplayName,
@@ -47,28 +48,26 @@ export class OwnersService {
         }
       : {};
 
+    if (search) {
+      const summaries = await this.prisma.owner.findMany({
+        where,
+        select: { id: true, fullName: true },
+      });
+      const pageIds = rankSearchResults(summaries, search, (owner) => [owner.fullName])
+        .slice(offset, offset + limit)
+        .map((owner) => owner.id);
+      const pageItems = pageIds.length
+        ? await this.prisma.owner.findMany({ where: { id: { in: pageIds } }, include: ownerListInclude })
+        : [];
+      const itemsById = new Map(pageItems.map((owner) => [owner.id, owner]));
+      return { items: pageIds.flatMap((id) => itemsById.get(id) ?? []), total: summaries.length, limit, offset };
+    }
+
     const [items, total] = await this.prisma.$transaction([
       this.prisma.owner.findMany({
         where,
         orderBy: { createdAt: 'desc' },
-        include: {
-          _count: {
-            select: { animals: { where: { archivedAt: null } }, visits: true, bills: true },
-          },
-          animals: {
-            where: { archivedAt: null },
-            orderBy: { createdAt: 'desc' },
-            take: 3,
-            select: {
-              id: true,
-              nickname: true,
-              species: true,
-              breed: true,
-              sex: true,
-              status: true,
-            },
-          },
-        },
+        include: ownerListInclude,
         skip: offset,
         take: limit,
       }),
@@ -498,6 +497,25 @@ export class OwnersService {
     );
   }
 }
+
+const ownerListInclude = {
+  _count: {
+    select: { animals: { where: { archivedAt: null } }, visits: true, bills: true },
+  },
+  animals: {
+    where: { archivedAt: null },
+    orderBy: { createdAt: 'desc' },
+    take: 3,
+    select: {
+      id: true,
+      nickname: true,
+      species: true,
+      breed: true,
+      sex: true,
+      status: true,
+    },
+  },
+} satisfies Prisma.OwnerInclude;
 
 function decimal(value: Prisma.Decimal.Value) {
   return new Prisma.Decimal(value);

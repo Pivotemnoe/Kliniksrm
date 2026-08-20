@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { randomInt } from 'node:crypto';
 import { HospitalRecordStatus, Prisma, ProductBarcodeType, StockDocumentStatus, StockMovementType } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
+import { rankSearchResults } from '../../common/search-ranking';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateSupplyInvoiceDto } from './dto/create-supply-invoice.dto';
@@ -124,7 +125,7 @@ export class StockService {
         : {}),
     };
 
-    if (stockState !== 'all' || sortBy !== 'title') {
+    if (search || stockState !== 'all' || sortBy !== 'title') {
       const summaries = await this.prisma.product.findMany({
         where,
         select: { id: true, title: true, category: { select: { title: true } } },
@@ -142,7 +143,7 @@ export class StockService {
         }
       }
 
-      const ordered = summaries
+      let ordered = summaries
         .map((item) => ({
           id: item.id,
           title: item.title,
@@ -152,6 +153,9 @@ export class StockService {
         .filter((item) => stockState === 'all'
           || (stockState === 'zero' ? item.stockRest.equals(0) : item.stockRest.greaterThan(0)))
         .sort((left, right) => compareProductListItems(left, right, sortBy, sortOrder));
+      if (search && sortBy === 'title') {
+        ordered = rankSearchResults(ordered, search, (item) => [item.title]);
+      }
       const pageIds = ordered.slice(offset, offset + limit).map((item) => item.id);
       const products = pageIds.length
         ? await this.prisma.product.findMany({
@@ -465,14 +469,20 @@ export class StockService {
         : {}),
     };
 
+    if (search) {
+      const summaries = await this.prisma.service.findMany({ where, select: { id: true, title: true } });
+      const pageIds = rankSearchResults(summaries, search, (service) => [service.title])
+        .slice(offset, offset + limit)
+        .map((service) => service.id);
+      const pageItems = pageIds.length
+        ? await this.prisma.service.findMany({ where: { id: { in: pageIds } }, include: serviceInclude })
+        : [];
+      const itemsById = new Map(pageItems.map((service) => [service.id, service]));
+      return { items: pageIds.flatMap((id) => itemsById.get(id) ?? []), total: summaries.length, limit, offset };
+    }
+
     const [items, total] = await this.prisma.$transaction([
-      this.prisma.service.findMany({
-        where,
-        orderBy: { title: 'asc' },
-        include: serviceInclude,
-        skip: offset,
-        take: limit,
-      }),
+      this.prisma.service.findMany({ where, orderBy: { title: 'asc' }, include: serviceInclude, skip: offset, take: limit }),
       this.prisma.service.count({ where }),
     ]);
 

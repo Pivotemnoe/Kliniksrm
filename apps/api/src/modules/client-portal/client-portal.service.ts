@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { ClientPortalStatus, DocumentStatus, Prisma } from '@prisma/client';
+import { ClientPortalStatus, DocumentStatus, FilePurpose, Prisma } from '@prisma/client';
 import { createHash, randomBytes, randomInt } from 'node:crypto';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -7,6 +7,7 @@ import { CreatePortalOnlineRequestDto } from './dto/create-portal-online-request
 import { RequestPortalCodeDto } from './dto/request-portal-code.dto';
 import { VerifyPortalCodeDto } from './dto/verify-portal-code.dto';
 import { shouldExposePortalDebugCode } from '../../config/runtime-config';
+import { ObjectStorageService } from '../files/object-storage.service';
 
 const PORTAL_CODE_TTL_MINUTES = Number(process.env.CLIENT_PORTAL_CODE_TTL_MINUTES ?? 10);
 const PORTAL_CODE_MAX_ATTEMPTS = Number(process.env.CLIENT_PORTAL_CODE_MAX_ATTEMPTS ?? 5);
@@ -18,6 +19,7 @@ export class ClientPortalService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
+    private readonly objectStorageService: ObjectStorageService,
   ) {}
 
   async requestLoginCode(dto: RequestPortalCodeDto) {
@@ -137,20 +139,36 @@ export class ClientPortalService {
       owner: { ...snapshot.owner, animals: snapshot.animals },
       appointments: snapshot.appointments,
       visits: snapshot.visits,
+      files: snapshot.files,
       bills: snapshot.bills,
       notifications: snapshot.notifications,
       onlineRequests,
     };
   }
 
+  async openFile(token: string, fileId: string) {
+    const access = await this.resolveAccess(token);
+    const file = await this.prisma.fileObject.findFirst({
+      where: { id: fileId, ...ownerGatewayFileWhere(access.ownerId) },
+      select: { originalName: true, mimeType: true, storageKey: true },
+    });
+    if (!file) throw new NotFoundException('Документ не найден');
+    return {
+      fileName: file.originalName,
+      mimeType: file.mimeType,
+      stream: await this.objectStorageService.getObject(file.storageKey),
+    };
+  }
+
   async buildOwnerGatewaySnapshot(ownerId: string) {
-    const [owner, appointments, visits, bills, notifications] = await this.prisma.$transaction([
+    const [owner, appointments, visits, files, bills, notifications] = await this.prisma.$transaction([
       this.prisma.owner.findUnique({
         where: { id: ownerId },
         select: {
           id: true,
           fullName: true,
           phone: true,
+          extraPhone: true,
           email: true,
           address: true,
           balance: true,
@@ -166,16 +184,27 @@ export class ClientPortalService {
               birthDate: true,
               color: true,
               microchip: true,
+              mark: true,
+              isSterilized: true,
               status: true,
               weights: {
                 orderBy: { measuredAt: 'desc' },
-                take: 1,
+                take: 20,
                 select: { id: true, weightKg: true, measuredAt: true },
               },
               vaccinations: {
                 orderBy: [{ expiresAt: 'asc' }, { vaccinatedAt: 'desc' }],
-                take: 8,
-                select: { id: true, title: true, status: true, vaccinatedAt: true, expiresAt: true },
+                take: 20,
+                select: {
+                  id: true,
+                  title: true,
+                  status: true,
+                  vaccinatedAt: true,
+                  expiresAt: true,
+                  vaccineBatch: true,
+                  vaccineSeries: true,
+                  vaccineExpiresAt: true,
+                },
               },
             },
           },
@@ -207,9 +236,57 @@ export class ClientPortalService {
           totalAmount: true,
           animal: { select: { id: true, nickname: true, species: true } },
           employee: { select: { id: true, fullName: true, position: true } },
-          exam: { select: { manipulations: true } },
-          diagnoses: { select: { id: true, title: true, status: true } },
+          exam: {
+            select: {
+              purpose: true,
+              anamnesis: true,
+              examination: true,
+              symptoms: true,
+              manipulations: true,
+              weightKg: true,
+              temperatureC: true,
+            },
+          },
+          diagnoses: {
+            select: { id: true, diagnosisType: true, title: true, description: true, status: true },
+          },
           recommendation: { select: { treatmentPlan: true, careNotes: true } },
+          hospitalRecords: {
+            where: { recordStatus: 'COMPLETED' },
+            orderBy: { recordedAt: 'asc' },
+            select: {
+              id: true,
+              recordType: true,
+              title: true,
+              recordedAt: true,
+              completedAt: true,
+              temperatureC: true,
+              value: true,
+              performedBy: { select: { id: true, fullName: true } },
+            },
+          },
+          laboratoryOrders: {
+            orderBy: { createdAt: 'asc' },
+            select: {
+              id: true,
+              status: true,
+              createdAt: true,
+              items: {
+                orderBy: { createdAt: 'asc' },
+                select: {
+                  id: true,
+                  title: true,
+                  code: true,
+                  status: true,
+                  resultValue: true,
+                  resultText: true,
+                  unit: true,
+                  referenceRange: true,
+                  completedAt: true,
+                },
+              },
+            },
+          },
           documents: {
             where: { status: DocumentStatus.SIGNED },
             select: {
@@ -222,6 +299,12 @@ export class ClientPortalService {
             },
           },
         },
+      }),
+      this.prisma.fileObject.findMany({
+        where: ownerGatewayFileWhere(ownerId),
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+        select: ownerGatewayFileSelect,
       }),
       this.prisma.bill.findMany({
         where: { ownerId },
@@ -294,10 +377,20 @@ export class ClientPortalService {
       animals,
       appointments,
       visits: portalVisits,
+      files: files.map(toPortalFileMetadata),
       bills,
       notifications: visibleNotifications,
       syncedAt: new Date().toISOString(),
     };
+  }
+
+  listOwnerGatewayFiles(ownerId: string) {
+    return this.prisma.fileObject.findMany({
+      where: ownerGatewayFileWhere(ownerId),
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+      select: ownerGatewayFileSyncSelect,
+    });
   }
 
   async createOnlineRequest(token: string, dto: CreatePortalOnlineRequestDto) {
@@ -428,6 +521,52 @@ export class ClientPortalService {
 
     return access;
   }
+}
+
+const ownerGatewayFileSyncSelect = {
+  id: true,
+  storageKey: true,
+  originalName: true,
+  mimeType: true,
+  sizeBytes: true,
+  checksumSha256: true,
+  archiveCategory: true,
+  documentDate: true,
+  sourceLabel: true,
+  createdAt: true,
+  animal: { select: { id: true, nickname: true } },
+  visit: { select: { animal: { select: { id: true, nickname: true } } } },
+} satisfies Prisma.FileObjectSelect;
+
+const ownerGatewayFileSelect = ownerGatewayFileSyncSelect;
+
+function ownerGatewayFileWhere(ownerId: string): Prisma.FileObjectWhereInput {
+  return {
+    purpose: FilePurpose.MEDICAL_DOCUMENT,
+    deletedAt: null,
+    OR: [
+      { ownerId },
+      { animal: { ownerId } },
+      { visit: { ownerId } },
+    ],
+  };
+}
+
+function toPortalFileMetadata(file: Prisma.FileObjectGetPayload<{ select: typeof ownerGatewayFileSyncSelect }>) {
+  const animal = file.animal ?? file.visit?.animal ?? null;
+  return {
+    id: file.id,
+    animalId: animal?.id ?? null,
+    animalName: animal?.nickname ?? null,
+    fileName: file.originalName,
+    mimeType: file.mimeType,
+    sizeBytes: file.sizeBytes,
+    checksumSha256: file.checksumSha256,
+    archiveCategory: file.archiveCategory,
+    documentDate: file.documentDate,
+    sourceLabel: file.sourceLabel,
+    sourceCreatedAt: file.createdAt,
+  };
 }
 
 function getGeneratedDocumentText(snapshot: Prisma.JsonValue | null | undefined) {

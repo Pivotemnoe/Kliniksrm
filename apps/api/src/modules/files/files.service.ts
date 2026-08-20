@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { FilePurpose, Prisma } from '@prisma/client';
+import { ClientPortalStatus, FilePurpose, JobStatus, Prisma } from '@prisma/client';
 import { createHash, randomUUID } from 'node:crypto';
 import { extname } from 'node:path';
 import { AuditService } from '../audit/audit.service';
@@ -125,7 +125,7 @@ export class FilesService {
           continue;
         }
         uploaded.push(
-          await this.upload({ kind: 'animal', animalId, ownerId: animal.ownerId }, file, actorId, metadata),
+          await this.upload({ kind: 'animal', animalId, ownerId: animal.ownerId }, file, actorId, metadata, false),
         );
       } catch (error) {
         failed.push({ originalName, message: readableUploadError(error) });
@@ -145,6 +145,8 @@ export class FilesService {
         archiveCategory: clean(metadata.archiveCategory),
       },
     });
+
+    if (uploaded.length) await this.enqueueOwnerPortalSync(animal.ownerId, actorId).catch(() => undefined);
 
     return { uploaded, duplicates, failed };
   }
@@ -171,6 +173,8 @@ export class FilesService {
       entityId: file.id,
       metadata: { changedFields: Object.keys(dto) },
     });
+    const ownerId = await this.resolveFileOwnerId(file);
+    if (ownerId) await this.enqueueOwnerPortalSync(ownerId, actor.id).catch(() => undefined);
     return updated;
   }
 
@@ -242,6 +246,8 @@ export class FilesService {
       entityId: file.id,
       metadata: { purpose: file.purpose, originalName: file.originalName },
     });
+    const ownerId = file.purpose === FilePurpose.MEDICAL_DOCUMENT ? await this.resolveFileOwnerId(file) : null;
+    if (ownerId) await this.enqueueOwnerPortalSync(ownerId, actor.id).catch(() => undefined);
     return { deleted: true };
   }
 
@@ -259,6 +265,7 @@ export class FilesService {
     file: UploadedFilePayload | undefined,
     actorId: string,
     archiveMetadata: ArchiveFileMetadataDto = {},
+    enqueuePortal = true,
   ) {
     const originalName = normalizedOriginalName(file?.originalname ?? '');
     this.validateFile(file, originalName);
@@ -296,6 +303,14 @@ export class FilesService {
           ...(scope.kind === 'animal' ? { archiveCategory: clean(archiveMetadata.archiveCategory) } : {}),
         },
       });
+      if (enqueuePortal && purpose === FilePurpose.MEDICAL_DOCUMENT) {
+        const ownerId = scope.kind === 'animal'
+          ? scope.ownerId
+          : scope.kind === 'visit'
+            ? await this.resolveVisitOwnerId(scope.visitId)
+            : null;
+        if (ownerId) await this.enqueueOwnerPortalSync(ownerId, actorId).catch(() => undefined);
+      }
       return saved;
     } catch (error) {
       await this.storage.removeObject(storageKey).catch(() => undefined);
@@ -360,6 +375,45 @@ export class FilesService {
     const file = await this.prisma.fileObject.findFirst({ where: { id: fileId, deletedAt: null } });
     if (!file) throw new NotFoundException('Файл не найден');
     return file;
+  }
+
+  private async resolveVisitOwnerId(visitId: string) {
+    const visit = await this.prisma.visit.findUnique({ where: { id: visitId }, select: { ownerId: true } });
+    return visit?.ownerId ?? null;
+  }
+
+  private async resolveFileOwnerId(file: { ownerId: string | null; animalId: string | null; visitId: string | null }) {
+    if (file.ownerId) return file.ownerId;
+    if (file.animalId) {
+      const animal = await this.prisma.animal.findUnique({ where: { id: file.animalId }, select: { ownerId: true } });
+      if (animal) return animal.ownerId;
+    }
+    return file.visitId ? this.resolveVisitOwnerId(file.visitId) : null;
+  }
+
+  private async enqueueOwnerPortalSync(ownerId: string, actorId: string) {
+    const access = await this.prisma.clientPortalAccess.findUnique({
+      where: { ownerId },
+      select: { status: true },
+    });
+    if (!access || access.status === ClientPortalStatus.DISABLED) return;
+
+    const now = new Date().toISOString();
+    await this.prisma.backgroundJob.create({
+      data: {
+        queueName: 'owner-gateway-snapshot',
+        jobName: 'sync-owner-snapshot',
+        status: JobStatus.PENDING,
+        payload: {
+          ownerId,
+          visitId: null,
+          visitStatus: null,
+          actorId,
+          attempts: 0,
+          nextAttemptAt: now,
+        },
+      },
+    });
   }
 
   private ensurePurposePermission(purpose: FilePurpose, actor: AuthEmployee, manage: boolean) {

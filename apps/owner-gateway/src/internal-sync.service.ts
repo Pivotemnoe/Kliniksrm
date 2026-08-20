@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { MessengerChannel, PortalInviteChannel, PortalInviteStatus, Prisma } from './generated/client';
+import { createHash } from 'node:crypto';
 import { PrismaService } from './prisma.service';
 import { hashToken, normalizeBaseUrl } from './security';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
@@ -8,8 +9,10 @@ import { SendOwnerMessageDto } from './dto/send-owner-message.dto';
 import { MaxBotClient } from './max-bot.client';
 import { TelegramBotClient } from './telegram-bot.client';
 import { OwnerPushMessage, WebPushService } from './web-push.service';
+import { OwnerDocumentMetadataDto, UploadOwnerDocumentContentDto } from './dto/sync-owner-documents.dto';
 
-const allowedSnapshotKeys = new Set(['owner', 'animals', 'appointments', 'visits', 'bills', 'notifications', 'syncedAt']);
+const allowedSnapshotKeys = new Set(['owner', 'animals', 'appointments', 'visits', 'files', 'bills', 'notifications', 'syncedAt']);
+const MAX_DOCUMENT_BYTES = 15 * 1024 * 1024;
 
 @Injectable()
 export class InternalSyncService {
@@ -84,6 +87,100 @@ export class InternalSyncService {
       activatedAt: sessionActivity._min.createdAt,
       lastSeenAt: sessionActivity._max.lastSeenAt,
     };
+  }
+
+  async syncDocuments(ownerId: string, documents: OwnerDocumentMetadataDto[]) {
+    const owner = await this.prisma.ownerSnapshot.findUnique({ where: { ownerId }, select: { ownerId: true } });
+    if (!owner) {
+      throw new NotFoundException('Сначала синхронизируйте разрешённый снимок владельца');
+    }
+
+    const existing = await this.prisma.portalDocument.findMany({
+      where: { ownerId },
+      select: { sourceFileId: true, checksumSha256: true, contentStoredAt: true },
+    });
+    const existingById = new Map(existing.map((item) => [item.sourceFileId, item]));
+    const requiredUploadIds: string[] = [];
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const document of documents) {
+        const current = existingById.get(document.id);
+        const checksum = clean(document.checksumSha256);
+        const needsContent = !current?.contentStoredAt || current.checksumSha256 !== checksum;
+        if (needsContent) requiredUploadIds.push(document.id);
+
+        await tx.portalDocument.upsert({
+          where: { ownerId_sourceFileId: { ownerId, sourceFileId: document.id } },
+          create: {
+            ownerId,
+            sourceFileId: document.id,
+            animalId: clean(document.animalId),
+            animalName: clean(document.animalName),
+            fileName: document.fileName.trim(),
+            mimeType: clean(document.mimeType),
+            sizeBytes: document.sizeBytes ?? null,
+            checksumSha256: checksum,
+            archiveCategory: clean(document.archiveCategory),
+            documentDate: document.documentDate ? new Date(document.documentDate) : null,
+            sourceLabel: clean(document.sourceLabel),
+            sourceCreatedAt: new Date(document.sourceCreatedAt),
+          },
+          update: {
+            animalId: clean(document.animalId),
+            animalName: clean(document.animalName),
+            fileName: document.fileName.trim(),
+            mimeType: clean(document.mimeType),
+            sizeBytes: document.sizeBytes ?? null,
+            checksumSha256: checksum,
+            archiveCategory: clean(document.archiveCategory),
+            documentDate: document.documentDate ? new Date(document.documentDate) : null,
+            sourceLabel: clean(document.sourceLabel),
+            sourceCreatedAt: new Date(document.sourceCreatedAt),
+            ...(needsContent ? { content: null, contentStoredAt: null } : {}),
+          },
+        });
+      }
+
+      await tx.portalDocument.deleteMany({
+        where: {
+          ownerId,
+          ...(documents.length ? { sourceFileId: { notIn: documents.map((item) => item.id) } } : {}),
+        },
+      });
+    });
+
+    return { requiredUploadIds };
+  }
+
+  async uploadDocumentContent(ownerId: string, sourceFileId: string, dto: UploadOwnerDocumentContentDto) {
+    const document = await this.prisma.portalDocument.findUnique({
+      where: { ownerId_sourceFileId: { ownerId, sourceFileId } },
+      select: { id: true, sizeBytes: true, checksumSha256: true },
+    });
+    if (!document) throw new NotFoundException('Документ владельца не найден');
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(dto.contentBase64)) {
+      throw new BadRequestException('Некорректное содержимое документа');
+    }
+
+    const content = Buffer.from(dto.contentBase64, 'base64');
+    if (!content.length || content.length > MAX_DOCUMENT_BYTES) {
+      throw new BadRequestException('Документ пустой или превышает 15 МБ');
+    }
+    if (document.sizeBytes !== null && content.length !== document.sizeBytes) {
+      throw new BadRequestException('Размер документа не совпадает с метаданными');
+    }
+
+    const checksum = createHash('sha256').update(content).digest('hex');
+    if ((document.checksumSha256 && document.checksumSha256 !== checksum)
+      || (dto.checksumSha256 && dto.checksumSha256 !== checksum)) {
+      throw new BadRequestException('Контрольная сумма документа не совпадает');
+    }
+
+    await this.prisma.portalDocument.update({
+      where: { id: document.id },
+      data: { content, checksumSha256: checksum, contentStoredAt: new Date() },
+    });
+    return { ok: true };
   }
 
   async getPortalStatistics() {
@@ -436,6 +533,11 @@ function normalizeMessengerChannel(value: string) {
   }
 
   throw new BadRequestException('Поддерживаются только подключения MAX и Telegram');
+}
+
+function clean(value: string | null | undefined) {
+  const normalized = value?.trim();
+  return normalized || null;
 }
 
 function normalizeBotName(value: string | undefined) {

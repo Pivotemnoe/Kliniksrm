@@ -11,6 +11,9 @@ import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { PageHeader } from '../../shared/ui/PageHeader';
+import { formatDateTime } from '../../shared/utils/date';
+import { listQueueWorkstations, updateQueueWorkstation } from '../queue/queue.api';
+import { QueueWorkstation } from '../queue/types';
 import {
   createClinicOffice,
   createHospitalBox,
@@ -53,6 +56,7 @@ const tabRoutes: Record<string, string> = {
   profile: '/settings/office/profile',
   schedule: '/settings/office/schedule',
   rooms: '/settings/office/rooms',
+  workstations: '/settings/office/workstations',
   hospital: '/settings/office/hospital',
   warehouses: '/settings/office/warehouses',
 };
@@ -253,6 +257,11 @@ export function ClinicResourcesPage() {
               ),
             },
             {
+              key: 'workstations',
+              label: 'Рабочие компьютеры',
+              children: <QueueWorkstationsTab offices={offices} canManage={canManage} />,
+            },
+            {
               key: 'hospital',
               label: 'Стационар',
               children: (
@@ -342,6 +351,89 @@ export function ClinicResourcesPage() {
           </div>
         </Form>
       </Modal>
+    </div>
+  );
+}
+
+function QueueWorkstationsTab({ offices, canManage }: { offices: ClinicOfficeSettings[]; canManage: boolean }) {
+  const { message } = App.useApp();
+  const queryClient = useQueryClient();
+  const workstationsQuery = useQuery({
+    queryKey: ['queue-workstations'],
+    queryFn: listQueueWorkstations,
+    enabled: canManage,
+  });
+  const updateMutation = useMutation({
+    mutationFn: ({ id, input }: { id: string; input: { roomId?: string; label?: string } }) => updateQueueWorkstation(id, input),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['queue-workstations'] });
+      await queryClient.invalidateQueries({ queryKey: ['queue-workstation'] });
+      message.success('Рабочее место сохранено');
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
+  const roomOptions = offices.flatMap((office) => office.rooms.map((room) => ({
+    value: room.id,
+    label: `${office.name} — ${room.name}`,
+  })));
+  const columns: ColumnsType<QueueWorkstation> = [
+    {
+      title: 'Рабочий компьютер',
+      key: 'label',
+      render: (_, item) => (
+        <Space direction="vertical" size={2}>
+          <Input
+            defaultValue={item.label ?? ''}
+            placeholder={`Компьютер ${item.deviceId.slice(0, 8)}`}
+            style={{ width: 260 }}
+            onBlur={(event) => {
+              const label = event.target.value.trim();
+              if (label !== (item.label ?? '')) updateMutation.mutate({ id: item.id, input: { label } });
+            }}
+          />
+          <Typography.Text type="secondary">Код: {item.deviceId.slice(0, 8)}</Typography.Text>
+        </Space>
+      ),
+    },
+    {
+      title: 'Постоянный кабинет',
+      key: 'room',
+      render: (_, item) => (
+        <Select
+          value={item.roomId ?? undefined}
+          placeholder="Выберите кабинет"
+          style={{ minWidth: 260 }}
+          options={roomOptions}
+          loading={updateMutation.isPending}
+          onChange={(roomId) => updateMutation.mutate({ id: item.id, input: { roomId } })}
+        />
+      ),
+    },
+    { title: 'Последняя связь', dataIndex: 'lastSeenAt', key: 'lastSeenAt', width: 190, render: formatDateTime },
+  ];
+
+  if (!canManage) {
+    return <Alert type="warning" showIcon message="Настройка рабочих компьютеров доступна руководителю" />;
+  }
+
+  return (
+    <div className="list-panel-body">
+      <Alert
+        type="info"
+        showIcon
+        className="form-alert"
+        message="Кабинет закрепляется за компьютером, а не за сотрудником"
+        description="Компьютер появится здесь после первого открытия очереди. Кабинет можно перепривязать удалённо — новое значение применяется при следующем вызове пациента."
+      />
+      <Table<QueueWorkstation>
+        rowKey="id"
+        columns={columns}
+        dataSource={workstationsQuery.data ?? []}
+        loading={workstationsQuery.isLoading}
+        pagination={false}
+        locale={{ emptyText: 'Рабочие компьютеры ещё не зарегистрированы' }}
+        scroll={{ x: 820 }}
+      />
     </div>
   );
 }

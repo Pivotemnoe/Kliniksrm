@@ -1,6 +1,6 @@
-import { CheckOutlined, ExportOutlined, FileTextOutlined, PhoneOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
+import { CheckOutlined, DeleteOutlined, ExportOutlined, FileTextOutlined, PhoneOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Segmented, Select, Space, Tag, Typography } from 'antd';
+import { App, Button, Popconfirm, Segmented, Select, Space, Tag, Typography } from 'antd';
 import { ColumnsType } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -15,9 +15,10 @@ import { formatAnimalAge } from '../../shared/utils/animalBirthDate';
 import { formatDateTime } from '../../shared/utils/date';
 import { createVisit } from '../visits/visits.api';
 import { visitStatusColors, visitStatusLabels } from '../visits/types';
-import { completeQueueEntry, listQueue, startQueueEntry } from './queue.api';
+import { cancelQueueEntry, completeQueueEntry, listQueue, startQueueEntry } from './queue.api';
 import { createQueueEntryFromForm } from './createQueueEntryFromForm';
 import { QueueFormDrawer, QueueFormSubmitInput } from './QueueFormDrawer';
+import { QueueWorkstationRoomSelect, useQueueWorkstationDeviceId } from './QueueWorkstationRoomSelect';
 import {
   QueueEntry,
   QueueMutationInput,
@@ -44,6 +45,7 @@ export function QueuePage() {
   const [status, setStatus] = useState<QueueStatus | undefined>('WAITING');
   const [urgency, setUrgency] = useState<QueueUrgency | undefined>();
   const [createOpen, setCreateOpen] = useState(false);
+  const workstationDeviceId = useQueueWorkstationDeviceId();
   const now = useNow();
   const dateRange = getQueueDateRange(status);
   const queueQuery = useInfiniteListQuery({
@@ -81,7 +83,7 @@ export function QueuePage() {
   const actionMutation = useMutation({
     mutationFn: async ({ record, action }: { record: QueueEntry; action: 'call' | 'repeat' | 'accept' | 'createVisit' }) => {
       if (action === 'call' || action === 'repeat') {
-        const queueEntry = await startQueueEntry(record.id);
+        const queueEntry = await startQueueEntry(record.id, workstationDeviceId);
         return { action, queueEntry };
       }
 
@@ -137,6 +139,14 @@ export function QueuePage() {
     },
     onError: (error) => message.error(getErrorMessage(error)),
   });
+  const cancelMutation = useMutation({
+    mutationFn: cancelQueueEntry,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['queue'] });
+      message.success('Запись удалена из очереди');
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
 
   const columns = useMemo<ColumnsType<QueueEntry>>(
     () => [
@@ -177,12 +187,14 @@ export function QueuePage() {
               record={record}
               loading={actionMutation.isPending}
               canCallQueue={canCallQueue}
+              canManage={canManage}
               canManageVisits={canManageVisits}
               onCall={() => actionMutation.mutate({ record, action: 'call' })}
               onRepeat={() => actionMutation.mutate({ record, action: 'repeat' })}
               onAccept={() => actionMutation.mutate({ record, action: 'accept' })}
               onOpenVisit={() => navigate(`/visits/${record.visit?.id}`)}
               onCreateVisit={() => actionMutation.mutate({ record, action: 'createVisit' })}
+              onCancel={() => cancelMutation.mutate(record.id)}
             />
           ) : null,
       },
@@ -242,7 +254,7 @@ export function QueuePage() {
       { title: 'Сотрудник', key: 'employee', width: 150, render: (_, record) => record.employee?.fullName ?? '—', responsive: ['xl'] },
       { title: 'Кабинет', key: 'room', width: 120, render: (_, record) => record.room?.name ?? '—', responsive: ['xl'] },
     ],
-    [actionMutation, canCallQueue, canManage, canManageVisits, navigate, now],
+    [actionMutation, cancelMutation, canCallQueue, canManage, canManageVisits, navigate, now],
   );
 
   return (
@@ -251,6 +263,7 @@ export function QueuePage() {
         title={`${isPersonalQueue ? 'Моя очередь' : 'Электронная очередь'}${queueQuery.data?.pages[0]?.total !== undefined ? ` ${queueQuery.data.pages[0].total}` : ''}`}
         extra={
           <Space>
+            {canCallQueue ? <QueueWorkstationRoomSelect deviceId={workstationDeviceId} canChange={canManage} /> : null}
             <Button icon={<ExportOutlined />} onClick={() => window.open('/queue/tv', '_blank', 'noopener,noreferrer')}>
               Экран для клиентов
             </Button>
@@ -332,25 +345,34 @@ function QueueActionButton({
   onRepeat,
   onAccept,
   canCallQueue,
+  canManage,
   canManageVisits,
   onOpenVisit,
   onCreateVisit,
+  onCancel,
 }: {
   record: QueueEntry;
   loading: boolean;
   canCallQueue: boolean;
+  canManage: boolean;
   canManageVisits: boolean;
   onCall: () => void;
   onRepeat: () => void;
   onAccept: () => void;
   onOpenVisit: () => void;
   onCreateVisit: () => void;
+  onCancel: () => void;
 }) {
   if (record.status === 'WAITING' && canCallQueue) {
     return (
-      <Button size="small" icon={<PhoneOutlined />} loading={loading} onClick={onCall}>
-        Вызвать
-      </Button>
+      <Space size={6} wrap>
+        <Button size="small" icon={<PhoneOutlined />} loading={loading} onClick={onCall}>Вызвать</Button>
+        {canManage ? (
+          <Popconfirm title="Удалить запись из очереди?" okText="Удалить" cancelText="Отмена" onConfirm={onCancel}>
+            <Button danger size="small" icon={<DeleteOutlined />}>Удалить из очереди</Button>
+          </Popconfirm>
+        ) : null}
+      </Space>
     );
   }
 
@@ -373,6 +395,11 @@ function QueueActionButton({
           >
             {waitSeconds > 0 ? `Начать через ${waitSeconds} с` : record.isVaccination ? 'Начать вакцинацию' : 'Начать приём'}
           </Button>
+        ) : null}
+        {canManage ? (
+          <Popconfirm title="Удалить вызванную запись из очереди?" okText="Удалить" cancelText="Отмена" onConfirm={onCancel}>
+            <Button danger size="small" icon={<DeleteOutlined />}>Удалить из очереди</Button>
+          </Popconfirm>
         ) : null}
       </Space>
     );

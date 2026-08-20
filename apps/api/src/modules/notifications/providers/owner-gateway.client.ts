@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ClientPortalService } from '../../client-portal/client-portal.service';
+import { ObjectStorageService } from '../../files/object-storage.service';
 import { PortalInviteChannel } from '../dto/create-portal-invite.dto';
 
 export type OwnerGatewaySyncStatus = 'synced' | 'skipped_not_configured' | 'failed';
@@ -62,7 +63,10 @@ const GATEWAY_RETRY_DELAY_MS = 400;
 
 @Injectable()
 export class OwnerGatewayClient {
-  constructor(private readonly clientPortalService: ClientPortalService) {}
+  constructor(
+    private readonly clientPortalService: ClientPortalService,
+    private readonly objectStorageService: ObjectStorageService,
+  ) {}
 
   async syncInvitation(input: {
     ownerId: string;
@@ -94,6 +98,7 @@ export class OwnerGatewayClient {
           sourceUpdatedAt: snapshot.syncedAt,
         },
       });
+      await this.syncDocuments(baseUrl, syncSecret, input.ownerId);
 
       const invitation = await requestGateway<{
         deliveryUrl?: unknown;
@@ -153,6 +158,7 @@ export class OwnerGatewayClient {
           sourceUpdatedAt: snapshot.syncedAt,
         },
       });
+      await this.syncDocuments(baseUrl, syncSecret, input.ownerId);
       return 'synced';
     } catch {
       return 'failed';
@@ -342,6 +348,56 @@ export class OwnerGatewayClient {
       return null;
     }
   }
+
+  private async syncDocuments(baseUrl: string, syncSecret: string, ownerId: string) {
+    const files = await this.clientPortalService.listOwnerGatewayFiles(ownerId);
+    const result = await requestGatewayWithRetry<{ requiredUploadIds?: unknown }>(
+      `${baseUrl}/internal/v1/owners/${encodeURIComponent(ownerId)}/documents/sync`,
+      syncSecret,
+      {
+        method: 'POST',
+        body: {
+          documents: files.map((file) => {
+            const animal = file.animal ?? file.visit?.animal ?? null;
+            return {
+              id: file.id,
+              animalId: animal?.id,
+              animalName: animal?.nickname,
+              fileName: file.originalName,
+              mimeType: file.mimeType ?? undefined,
+              sizeBytes: file.sizeBytes ?? undefined,
+              checksumSha256: file.checksumSha256 ?? undefined,
+              archiveCategory: file.archiveCategory ?? undefined,
+              documentDate: file.documentDate?.toISOString(),
+              sourceLabel: file.sourceLabel ?? undefined,
+              sourceCreatedAt: file.createdAt.toISOString(),
+            };
+          }),
+        },
+      },
+    );
+
+    const requiredIds = Array.isArray(result.requiredUploadIds)
+      ? new Set(result.requiredUploadIds.filter((value): value is string => typeof value === 'string'))
+      : new Set<string>();
+
+    for (const file of files) {
+      if (!requiredIds.has(file.id)) continue;
+      const stream = await this.objectStorageService.getObject(file.storageKey);
+      const content = await streamToBuffer(stream);
+      await requestGatewayWithRetry(
+        `${baseUrl}/internal/v1/owners/${encodeURIComponent(ownerId)}/documents/${encodeURIComponent(file.id)}/content`,
+        syncSecret,
+        {
+          method: 'PUT',
+          body: {
+            checksumSha256: file.checksumSha256 ?? undefined,
+            contentBase64: content.toString('base64'),
+          },
+        },
+      );
+    }
+  }
 }
 
 function normalizeDeliveryUrls(value: unknown): Partial<Record<PortalInviteChannel, string>> {
@@ -410,7 +466,7 @@ async function requestGateway<T = unknown>(
 async function requestGatewayWithRetry<T = unknown>(
   url: string,
   syncSecret: string,
-  input: { method: 'PUT'; body: unknown } | { method: 'DELETE' | 'GET'; body?: never },
+  input: { method: 'POST' | 'PUT'; body: unknown } | { method: 'DELETE' | 'GET'; body?: never },
 ): Promise<T> {
   try {
     return await requestGateway<T>(url, syncSecret, input);
@@ -422,6 +478,14 @@ async function requestGatewayWithRetry<T = unknown>(
     await new Promise((resolve) => setTimeout(resolve, GATEWAY_RETRY_DELAY_MS));
     return requestGateway<T>(url, syncSecret, input);
   }
+}
+
+async function streamToBuffer(stream: NodeJS.ReadableStream) {
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
 }
 
 function getGatewayRequestTimeoutMs() {

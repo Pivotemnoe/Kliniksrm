@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Headers, HttpCode, Post, Res, UnauthorizedException } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Post, Res, StreamableFile, UnauthorizedException } from '@nestjs/common';
 import type { Response } from 'express';
 import { ExchangeInvitationDto } from './dto/exchange-invitation.dto';
 import { PortalPushSubscriptionDto, RemovePortalPushSubscriptionDto } from './dto/portal-push-subscription.dto';
@@ -35,6 +35,19 @@ export class PortalController {
     const snapshot = await this.portalService.getSnapshot(sessionToken);
     setSessionCookie(response, sessionToken, snapshot.sessionExpiresAt);
     return snapshot;
+  }
+
+  @Get('documents/:sourceFileId')
+  async openDocument(
+    @Param('sourceFileId') sourceFileId: string,
+    @Headers('cookie') cookieHeader: string | undefined,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const document = await this.portalService.getDocument(requireSessionToken(cookieHeader), sourceFileId);
+    response.setHeader('Content-Type', document.mimeType || 'application/octet-stream');
+    response.setHeader('Content-Disposition', contentDisposition(document.fileName));
+    response.setHeader('Cache-Control', 'private, no-store');
+    return new StreamableFile(document.content);
   }
 
   @Get('push/config')
@@ -108,4 +121,9 @@ function setSessionCookie(response: Response, token: string, expires: Date) {
     path: '/',
     expires,
   });
+}
+
+function contentDisposition(fileName: string) {
+  const fallback = fileName.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '_') || 'document';
+  return `inline; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
 }

@@ -175,7 +175,7 @@ export function VisitExamTab({ visit, canManage, locked }: VisitExamTabProps) {
         render={({ field, fieldState }) => (
           <Form.Item label="Симптомы" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
             <MedicalTextArea
-              rows={6}
+              rows={4}
               disabled={disabled}
               snippets={examSnippets.symptoms}
               fieldKey="visit.exam.symptoms"
@@ -192,7 +192,7 @@ export function VisitExamTab({ visit, canManage, locked }: VisitExamTabProps) {
         render={({ field, fieldState }) => (
           <Form.Item label="Манипуляции" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
             <MedicalTextArea
-              rows={6}
+              rows={10}
               disabled={disabled}
               snippets={examSnippets.manipulations}
               fieldKey="visit.exam.manipulations"
@@ -214,7 +214,7 @@ export function VisitExamTab({ visit, canManage, locked }: VisitExamTabProps) {
             help={fieldState.error?.message}
           >
             <MedicalTextArea
-              rows={3}
+              rows={2}
               disabled={disabled}
               snippets={examSnippets.comment}
               fieldKey="visit.exam.comment"

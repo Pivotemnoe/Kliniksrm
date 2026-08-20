@@ -86,15 +86,19 @@ function renderPortal(response) {
   const animals = array(snapshot.animals);
   const appointments = array(snapshot.appointments);
   const visits = array(snapshot.visits);
+  const files = array(snapshot.files);
   const bills = array(snapshot.bills);
   const notifications = array(snapshot.notifications);
   const unreadNotifications = getUnreadNotificationCount(response.ownerId, notifications);
-  const documents = visits.flatMap((visit) => array(visit.documents).map((document) => ({ ...document, visit })));
+  const documents = [
+    ...files.map((file) => ({ ...file, documentKind: 'file' })),
+    ...visits.flatMap((visit) => array(visit.documents).map((document) => ({ ...document, visit, documentKind: 'signed' }))),
+  ];
   const showBrowserTransfer = !isStandaloneMode();
 
   app.innerHTML = `
     <section class="hero">
-      <div><h1>${escapeHtml(owner.fullName || response.displayName || 'Личный кабинет')}</h1><p>Пациенты, история лечения и документы TemichevVet.</p></div>
+      <div><h1>${escapeHtml(owner.fullName || response.displayName || 'Личный кабинет')}</h1><p>Пациенты, история лечения и документы TemichevVet.</p><p>${joinText([owner.phone, owner.extraPhone, owner.email, owner.address])}</p></div>
       <div class="hero-meta">
         <span>Обновлено ${formatDateTime(response.syncedAt)}</span>
         ${showBrowserTransfer ? '<button id="prepare-browser" class="button browser-button browser-only" type="button">Открыть в браузере</button>' : ''}
@@ -131,7 +135,7 @@ function renderPortal(response) {
     ${section('appointments', 'Записи в клинику', renderAppointments(appointments), true)}
     ${section('booking', 'Запись на приём', renderBookingForm(animals), true)}
     ${section('visits', 'Завершённые приёмы', renderVisits(visits), true)}
-    ${section('documents', 'Подписанные документы', renderDocuments(documents), true)}
+    ${section('documents', 'Документы', renderDocuments(documents), true)}
     ${section('bills', 'Счета', renderBills(bills), true)}
     ${section('notifications', 'Сообщения клиники', renderNotifications(notifications), true)}
   `;
@@ -276,8 +280,13 @@ function renderAnimals(items) {
       <p>${joinText([animal.species, animal.breed]) || 'Вид и порода не указаны'}</p>
       <p><strong>Пол:</strong> ${escapeHtml(sexLabel(animal.sex))}</p>
       <p><strong>Дата рождения:</strong> ${formatDate(animal.birthDate)}</p>
+      <p><strong>Окрас:</strong> ${escapeHtml(animal.color || '—')}</p>
+      <p><strong>Микрочип:</strong> ${escapeHtml(animal.microchip || '—')}</p>
+      <p><strong>Клеймо:</strong> ${escapeHtml(animal.mark || '—')}</p>
+      <p><strong>Состояние:</strong> ${escapeHtml(animal.status || '—')}</p>
       <p><strong>Последний вес:</strong> ${array(animal.weights).length ? `${escapeHtml(animal.weights[0].weightKg)} кг` : '—'}</p>
-      <p><strong>Прививки:</strong> ${array(animal.vaccinations).length ? array(animal.vaccinations).map((item) => escapeHtml(item.title)).join(', ') : '—'}</p>
+      ${array(animal.weights).length ? `<details><summary>История веса</summary>${array(animal.weights).map((item) => `<p>${formatDate(item.measuredAt)} — ${escapeHtml(item.weightKg)} кг</p>`).join('')}</details>` : ''}
+      ${array(animal.vaccinations).length ? `<details><summary>Прививки</summary>${array(animal.vaccinations).map((item) => `<p><strong>${escapeHtml(item.title)}</strong><br>${formatDate(item.vaccinatedAt)} · ${escapeHtml(item.status || 'Статус не указан')}${item.expiresAt ? `<br>Действует до ${formatDate(item.expiresAt)}` : ''}${item.vaccineSeries ? `<br>Серия: ${escapeHtml(item.vaccineSeries)}` : ''}${item.vaccineBatch ? `<br>Партия: ${escapeHtml(item.vaccineBatch)}` : ''}</p>`).join('')}</details>` : '<p><strong>Прививки:</strong> —</p>'}
     </article>`);
 }
 
@@ -295,15 +304,28 @@ function renderVisits(items) {
   return renderGrid(items, (item) => `
     <article class="card"><h3>${formatDateTime(item.startedAt)} · ${escapeHtml(item.animal?.nickname || 'Пациент')}</h3>
       <p><strong>Врач:</strong> ${escapeHtml(item.employee?.fullName || '—')}</p>
-      <p><strong>Диагноз:</strong> ${array(item.diagnoses).length ? array(item.diagnoses).map((value) => escapeHtml(value.title)).join(', ') : '—'}</p>
+      <p><strong>Цель приёма:</strong> ${escapeHtml(item.exam?.purpose || '—')}</p>
+      <p><strong>Анамнез:</strong> ${escapeHtml(item.exam?.anamnesis || '—')}</p>
+      <p><strong>Осмотр:</strong> ${escapeHtml(item.exam?.examination || '—')}</p>
+      <p><strong>Симптомы:</strong> ${escapeHtml(item.exam?.symptoms || '—')}</p>
+      <p><strong>Вес:</strong> ${item.exam?.weightKg ?? '—'}${item.exam?.weightKg ? ' кг' : ''}</p>
+      <p><strong>Температура:</strong> ${item.exam?.temperatureC ?? '—'}${item.exam?.temperatureC ? ' °C' : ''}</p>
+      <p><strong>Диагноз:</strong> ${array(item.diagnoses).length ? array(item.diagnoses).map((value) => `${escapeHtml(value.title)}${value.description ? ` — ${escapeHtml(value.description)}` : ''}`).join('<br>') : '—'}</p>
       <p><strong>Манипуляции:</strong> ${escapeHtml(item.exam?.manipulations || '—')}</p>
+      <p><strong>Стационар:</strong> ${array(item.hospitalRecords).length ? array(item.hospitalRecords).map((record) => `${formatDateTime(record.recordedAt)} — ${escapeHtml(record.title)}${record.temperatureC ? ` (${escapeHtml(record.temperatureC)} °C)` : record.value ? ` (${escapeHtml(record.value)})` : ''}`).join('<br>') : '—'}</p>
+      <p><strong>Анализы:</strong> ${array(item.laboratoryOrders).flatMap((order) => array(order.items)).length ? array(item.laboratoryOrders).flatMap((order) => array(order.items)).map((result) => `${escapeHtml(result.title)}: ${escapeHtml(result.resultValue || result.resultText || 'результат не внесён')}${result.unit ? ` ${escapeHtml(result.unit)}` : ''}`).join('<br>') : '—'}</p>
       <p><strong>Лечение:</strong> ${escapeHtml(item.recommendation?.treatmentPlan || '—')}</p>
       <p><strong>Уход:</strong> ${escapeHtml(item.recommendation?.careNotes || '—')}</p>
     </article>`);
 }
 
 function renderDocuments(items) {
-  return renderGrid(items, (item) => `
+  return renderGrid(items, (item) => item.documentKind === 'file' ? `
+    <article class="card"><h3>${escapeHtml(item.fileName || 'Документ')}</h3>
+      <p>${formatDateTime(item.documentDate || item.sourceCreatedAt)} · ${escapeHtml(item.animalName || 'Пациент')}</p>
+      <p>${joinText([item.archiveCategory, item.sourceLabel, formatFileSize(item.sizeBytes)])}</p>
+      <a class="button" href="/v1/portal/documents/${encodeURIComponent(item.id)}" target="_blank" rel="noopener">Открыть</a>
+    </article>` : `
     <article class="card"><h3>${escapeHtml(item.title || 'Документ')}</h3>
       <p>${formatDateTime(item.createdAt)} · ${escapeHtml(item.visit?.animal?.nickname || 'Пациент')}</p>
       ${item.body ? `<div class="document-body">${escapeHtml(item.body).replaceAll('\n', '<br>')}</div>` : ''}
@@ -316,7 +338,7 @@ function renderBills(items) {
       <p><strong>Дата:</strong> ${formatDateTime(item.createdAt)}</p>
       <p><strong>Статус:</strong> ${escapeHtml(billStatusLabel(item.status))}</p>
       <p><strong>Оплачено:</strong> ${formatMoney(item.paidAmount)}</p>
-      <p>${array(item.items).map((value) => escapeHtml(value.title)).join(', ') || 'Позиции не указаны'}</p>
+      <p>${array(item.items).map((value) => `${escapeHtml(value.title)} — ${escapeHtml(value.quantity)} × ${formatMoney(value.totalAmount)}`).join('<br>') || 'Позиции не указаны'}</p>
     </article>`);
 }
 
@@ -562,6 +584,7 @@ function escapeHtml(value) { return String(value ?? '').replace(/[&<>'"]/g, (cha
 function formatDate(value) { return value ? new Intl.DateTimeFormat('ru-RU').format(new Date(value)) : '—'; }
 function formatDateTime(value) { return value ? new Intl.DateTimeFormat('ru-RU', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—'; }
 function formatMoney(value) { const amount = Number(value); return Number.isFinite(amount) ? new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 2 }).format(amount) : '—'; }
+function formatFileSize(value) { const bytes = Number(value); return Number.isFinite(bytes) && bytes >= 0 ? `${Math.max(1, Math.round(bytes / 1024))} КБ` : ''; }
 function sexLabel(value) { return value === 'MALE' ? 'Самец' : value === 'FEMALE' ? 'Самка' : 'Не указан'; }
 function statusLabel(value) { return ({ PLANNED: 'Запланирована', ARRIVED: 'В клинике', IN_PROGRESS: 'Идёт приём', COMPLETED: 'Завершена', CANCELLED: 'Отменена', NO_SHOW: 'Не пришли' })[value] || value || '—'; }
 function billStatusLabel(value) { return ({ UNPAID: 'Не оплачен', PARTIAL: 'Оплачен частично', PAID: 'Оплачен', REFUNDED: 'Возврат', CANCELLED: 'Отменён' })[value] || value || '—'; }

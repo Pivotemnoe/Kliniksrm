@@ -61,6 +61,19 @@ export type QueueScreenResponse = {
   called: QueueScreenItem[];
 };
 
+export type QueueWorkstation = {
+  id: string;
+  deviceId: string;
+  label: string | null;
+  roomId: string | null;
+  lastSeenAt: string;
+  createdAt: string;
+  updatedAt: string;
+  room: (Pick<SchedulingRoom, 'id' | 'name' | 'officeId'> & {
+    office: Pick<SchedulingOffice, 'id' | 'name'>;
+  }) | null;
+};
+
 export type QueueMutationInput = {
   officeId?: string;
   ownerId?: string;

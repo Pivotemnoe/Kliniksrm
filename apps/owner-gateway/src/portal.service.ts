@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PortalInviteChannel, PortalInviteStatus } from './generated/client';
 import { randomBytes } from 'node:crypto';
 import { PrismaService } from './prisma.service';
@@ -102,6 +102,16 @@ export class PortalService {
       syncedAt: session.owner.syncedAt,
       sessionExpiresAt,
     };
+  }
+
+  async getDocument(sessionToken: string, sourceFileId: string) {
+    const session = await this.resolveSession(sessionToken);
+    const document = await this.prisma.portalDocument.findUnique({
+      where: { ownerId_sourceFileId: { ownerId: session.ownerId, sourceFileId } },
+      select: { fileName: true, mimeType: true, content: true },
+    });
+    if (!document || !document.content) throw new NotFoundException('Документ не найден или ещё не синхронизирован');
+    return { ...document, content: Buffer.from(document.content) };
   }
 
   async revokeSession(sessionToken: string) {

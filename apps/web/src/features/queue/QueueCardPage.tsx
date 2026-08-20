@@ -1,6 +1,6 @@
 import {
   CheckOutlined,
-  CloseOutlined,
+  DeleteOutlined,
   EditOutlined,
   FileTextOutlined,
   LeftOutlined,
@@ -8,7 +8,7 @@ import {
   UserAddOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Card, Descriptions, Space, Tag, Typography } from 'antd';
+import { App, Button, Card, Descriptions, Popconfirm, Space, Tag, Typography } from 'antd';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';
@@ -29,6 +29,7 @@ import {
   updateQueueEntry,
 } from './queue.api';
 import { QueueFormDrawer } from './QueueFormDrawer';
+import { QueueWorkstationRoomSelect, useQueueWorkstationDeviceId } from './QueueWorkstationRoomSelect';
 import { QueueCreateCardsDrawer } from './QueueCreateCardsDrawer';
 import { QueueMutationInput, getQueueDisplayStatus, queuePurposeLabels, queueUrgencyColors, queueUrgencyLabels } from './types';
 
@@ -49,6 +50,7 @@ export function QueueCardPage() {
   const canManageVisits = hasPermission(auth?.employee, 'visits.manage');
   const [editOpen, setEditOpen] = useState(false);
   const [createCardsOpen, setCreateCardsOpen] = useState(false);
+  const workstationDeviceId = useQueueWorkstationDeviceId();
   const queueQuery = useQuery({
     queryKey: ['queue', queueEntryId],
     queryFn: () => getQueueEntry(queueEntryId!),
@@ -68,7 +70,7 @@ export function QueueCardPage() {
   const actionMutation = useMutation({
     mutationFn: (action: 'start' | 'repeat' | 'complete' | 'cancel') => {
       if (action === 'start' || action === 'repeat') {
-        return startQueueEntry(queueEntryId!);
+        return startQueueEntry(queueEntryId!, workstationDeviceId);
       }
 
       if (action === 'complete') {
@@ -83,7 +85,7 @@ export function QueueCardPage() {
         start: 'Клиент вызван на приём',
         repeat: 'Вызов повторён',
         complete: 'Пациент направлен на приём',
-        cancel: 'Очередь отменена',
+        cancel: 'Запись удалена из очереди',
       }[action];
       message.success(successText);
       if (action === 'complete' && queueEntry?.isVaccination && queueEntry.animalId) {
@@ -146,6 +148,7 @@ export function QueueCardPage() {
         description="Карточка электронной очереди."
         extra={
           <Space wrap>
+            {canCallQueue ? <QueueWorkstationRoomSelect deviceId={workstationDeviceId} canChange={canManage} /> : null}
             <Button icon={<LeftOutlined />} onClick={() => navigate('/queue')}>
               К списку
             </Button>
@@ -183,9 +186,9 @@ export function QueueCardPage() {
                   </>
                 ) : null}
                 {canManage && (queueEntry.status === 'WAITING' || queueEntry.status === 'IN_PROGRESS') ? (
-                  <Button danger icon={<CloseOutlined />} loading={actionMutation.isPending} onClick={() => actionMutation.mutate('cancel')}>
-                    Отменить
-                  </Button>
+                  <Popconfirm title="Удалить запись из очереди?" okText="Удалить" cancelText="Отмена" onConfirm={() => actionMutation.mutate('cancel')}>
+                    <Button danger icon={<DeleteOutlined />} loading={actionMutation.isPending}>Удалить из очереди</Button>
+                  </Popconfirm>
                 ) : null}
                 {canManage && (!queueEntry.ownerId || !queueEntry.animalId) ? (
                   <Button icon={<UserAddOutlined />} onClick={() => setCreateCardsOpen(true)}>
