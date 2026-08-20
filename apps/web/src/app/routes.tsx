@@ -73,6 +73,7 @@ const SettingsOverviewPage = lazyPage(() => import('../features/settings/Setting
 const StaffMessagesPage = lazyPage(() => import('../features/internalMessages/StaffMessagesPage'), 'StaffMessagesPage');
 const StockPage = lazyPage(() => import('../features/stock/StockPage'), 'StockPage');
 const StockOperationsPage = lazyPage(() => import('../features/stock/StockOperationsPage'), 'StockOperationsPage');
+const StorePage = lazyPage(() => import('../features/store/StorePage'), 'StorePage');
 const SupportPage = lazyPage(() => import('../features/support/SupportPage'), 'SupportPage');
 const SystemSettingsPage = lazyPage(() => import('../features/system/SystemSettingsPage'), 'SystemSettingsPage');
 const TaskCardPage = lazyPage(() => import('../features/tasks/TaskCardPage'), 'TaskCardPage');
@@ -144,9 +145,13 @@ export const routes: RouteObject[] = [
           { path: '/stock', element: <StockPage /> },
           { path: '/stock/goods', element: <StockPage /> },
           { path: '/stock/services', element: <StockPage /> },
+          { path: '/stock/labels', element: <StockPage /> },
           { path: '/stock/supplies', element: <StockPage /> },
           { path: '/stock/invoices', element: <StockPage /> },
           { path: '/stock/operations', element: <StockOperationsPage /> },
+          { path: '/store', element: <StorePage /> },
+          { path: '/store/products', element: <StorePage /> },
+          { path: '/store/labels', element: <StorePage /> },
           { path: '/employees', element: <EmployeesPage /> },
           { path: '/settings', element: <SettingsOverviewPage /> },
           { path: '/settings/organization', element: <OrganizationSettingsPage /> },

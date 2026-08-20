@@ -42,6 +42,7 @@ import { Product, ServiceItem, StockBatch, StockResources, SupplyInvoice } from 
 import { formatServicePrice } from './service-pricing';
 import { SupplyInvoiceImporter } from './SupplyInvoiceImporter';
 import { SupplierModal } from './SupplierModal';
+import { StockCatalogLabelPrinter, toClinicProductPrintItem, toClinicServicePrintItem, type StockPrintLine } from './StockCatalogLabelPrinter';
 
 export function StockPage() {
   const location = useLocation();
@@ -61,6 +62,7 @@ export function StockPage() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedService, setSelectedService] = useState<ServiceItem | null>(null);
   const [printingProduct, setPrintingProduct] = useState<Product | null>(null);
+  const [printLines, setPrintLines] = useState<StockPrintLine[]>([]);
   const [supplyOpen, setSupplyOpen] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<SupplyInvoice | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<SupplyInvoice | null>(null);
@@ -123,7 +125,7 @@ export function StockPage() {
         title="Склад"
         description="Товары, услуги, остатки и приёмка на склад."
         extra={
-          canManage ? (
+          canManage && activeTab !== 'labels' ? (
             <Space wrap>
               <Button icon={<PlusOutlined />} onClick={() => setProductOpen(true)}>
                 Добавить товар
@@ -139,7 +141,7 @@ export function StockPage() {
           ) : null
         }
       />
-      {catalogQualityQuery.data && catalogQualityQuery.data.qualityPercent < 100 ? (
+      {activeTab !== 'labels' && catalogQualityQuery.data && catalogQualityQuery.data.qualityPercent < 100 ? (
         <Alert
           type={catalogQualityQuery.data.qualityPercent >= 80 ? 'warning' : 'error'}
           showIcon
@@ -155,7 +157,7 @@ export function StockPage() {
             setActiveTab(key);
             navigate(stockTabPaths[key] ?? '/stock');
           }}
-          tabBarExtraContent={
+          tabBarExtraContent={activeTab !== 'labels' ? (
             <Space wrap>
               <Input
                 allowClear
@@ -165,7 +167,7 @@ export function StockPage() {
                 onChange={(event) => setSearchInput(event.target.value)}
               />
             </Space>
-          }
+          ) : undefined}
           items={[
             {
               key: 'products',
@@ -181,7 +183,11 @@ export function StockPage() {
                     setProductOpen(true);
                   }}
                   onDelete={confirmProductDeletion}
-                  onPrint={setPrintingProduct}
+                  onPrint={(product) => {
+                    const item = toClinicProductPrintItem(product);
+                    setPrintLines((lines) => lines.some((line) => line.item.key === item.key) ? lines : [...lines, { item, copies: 1 }]);
+                    navigate('/stock/labels');
+                  }}
                   onAdjustStock={(product) => navigate(`/stock/operations?inventoryProductId=${encodeURIComponent(product.id)}`)}
                 />
               ),
@@ -199,8 +205,18 @@ export function StockPage() {
                     setServiceOpen(true);
                   }}
                   onDelete={confirmServiceDeletion}
+                  onPrint={(service) => {
+                    const item = toClinicServicePrintItem(service);
+                    setPrintLines((lines) => lines.some((line) => line.item.key === item.key) ? lines : [...lines, { item, copies: 1 }]);
+                    navigate('/stock/labels');
+                  }}
                 />
               ),
+            },
+            {
+              key: 'labels',
+              label: 'Печать ценников и этикеток',
+              children: <StockCatalogLabelPrinter lines={printLines} onChange={setPrintLines} organization={resourcesQuery.data?.organization ?? null} />,
             },
             {
               key: 'batches',
@@ -383,11 +399,16 @@ export function StockPage() {
 const stockTabPaths: Record<string, string> = {
   products: '/stock/goods',
   services: '/stock/services',
+  labels: '/stock/labels',
   batches: '/stock/supplies',
   invoices: '/stock/invoices',
 };
 
 function getStockTabFromPath(pathname: string) {
+  if (pathname.startsWith('/stock/labels')) {
+    return 'labels';
+  }
+
   if (pathname.startsWith('/stock/services')) {
     return 'services';
   }
@@ -569,12 +590,14 @@ function ServicesTable({
   onOpen,
   onEdit,
   onDelete,
+  onPrint,
 }: {
   search: string;
   canManage: boolean;
   onOpen: (service: ServiceItem) => void;
   onEdit: (service: ServiceItem) => void;
   onDelete: (service: ServiceItem) => void;
+  onPrint: (service: ServiceItem) => void;
 }) {
   const servicesQuery = useInfiniteListQuery({
     queryKey: ['stock', 'services', { search }],
@@ -598,6 +621,7 @@ function ServicesTable({
             menu={{
               items: [
                 { key: 'open', icon: <EyeOutlined />, label: 'Открыть' },
+                { key: 'print', icon: <PrinterOutlined />, label: 'Добавить в печать' },
                 ...(canManage ? [
                   { key: 'edit', icon: <EditOutlined />, label: 'Изменить' },
                   { type: 'divider' as const },
@@ -606,6 +630,7 @@ function ServicesTable({
               ],
               onClick: ({ key }) => {
                 if (key === 'open') onOpen(record);
+                if (key === 'print') onPrint(record);
                 if (key === 'edit') onEdit(record);
                 if (key === 'delete') onDelete(record);
               },
@@ -616,7 +641,7 @@ function ServicesTable({
         ),
       },
     ],
-    [canManage, onDelete, onEdit, onOpen],
+    [canManage, onDelete, onEdit, onOpen, onPrint],
   );
 
   return <StockTable query={servicesQuery} columns={columns} scrollX={1150} />;

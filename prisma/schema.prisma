@@ -1536,6 +1536,24 @@ model Service {
   @@index([isActive, title])
 }
 
+model StoreProduct {
+  id            String   @id @default(uuid())
+  isActive      Boolean  @default(true)
+  title         String
+  categoryTitle String?
+  sku           String?  @unique
+  barcode       String?  @unique
+  retailPrice   Decimal  @default(0) @db.Decimal(12, 2)
+  unit          String?  @default("шт")
+  vatRate       Decimal? @db.Decimal(5, 2)
+  description   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([isActive, title])
+  @@index([categoryTitle])
+}
+
 model LaboratoryTest {
   id                 String                  @id @default(uuid())
   serviceId          String?

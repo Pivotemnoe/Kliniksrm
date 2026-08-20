@@ -33,6 +33,8 @@ const permissions = [
   ['payments.manage', 'Прием оплат'],
   ['stock.read', 'Просмотр склада'],
   ['stock.manage', 'Склад'],
+  ['store.read', 'Просмотр магазина'],
+  ['store.manage', 'Управление магазином'],
   ['payroll.read', 'Просмотр расчётов зарплаты'],
   ['payroll.manage', 'Настройка и расчёт зарплаты'],
   ['payroll.approve', 'Утверждение зарплаты'],
@@ -92,6 +94,8 @@ const roles = [
       'billing.manage',
       'payments.manage',
       'stock.read',
+      'store.read',
+      'store.manage',
       'laboratory.read',
       'laboratory.manage',
       'hospital.read',
@@ -163,11 +167,13 @@ const roles = [
       'billing.manage',
       'payments.manage',
       'stock.read',
+      'store.read',
+      'store.manage',
       'notifications.read',
       'documents.print',
     ],
   ],
-  ['stock', 'Складской сотрудник', ['dashboard.read', 'news.read', 'stock.read', 'stock.manage']],
+  ['stock', 'Складской сотрудник', ['dashboard.read', 'news.read', 'stock.read', 'stock.manage', 'store.read', 'store.manage']],
 ];
 
 const businessCategories = [

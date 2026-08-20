@@ -19,6 +19,7 @@ import {
   NotificationOutlined,
   OrderedListOutlined,
   ProfileOutlined,
+  PrinterOutlined,
   ReadOutlined,
   SafetyCertificateOutlined,
   SettingOutlined,
@@ -59,12 +60,22 @@ export const menuItems: MenuProps['items'] = [
   { key: '/laboratory', icon: <ExperimentOutlined />, label: 'Лаборатория' },
   { key: '/hospital', icon: <HomeOutlined />, label: 'Стационар' },
   {
+    key: '/store',
+    icon: <ShopOutlined />,
+    label: 'Магазин',
+    children: [
+      { key: '/store/products', icon: <TagsOutlined />, label: 'Товары магазина' },
+      { key: '/store/labels', icon: <PrinterOutlined />, label: 'Ценники и этикетки' },
+    ],
+  },
+  {
     key: '/stock',
     icon: <DatabaseOutlined />,
     label: 'Склад',
     children: [
       { key: '/stock/goods', icon: <TagsOutlined />, label: 'Товары' },
       { key: '/stock/services', icon: <SolutionOutlined />, label: 'Услуги' },
+      { key: '/stock/labels', icon: <PrinterOutlined />, label: 'Ценники и этикетки' },
       { key: '/stock/supplies', icon: <DatabaseOutlined />, label: 'Учёт' },
       { key: '/stock/operations', icon: <SwapOutlined />, label: 'Операции' },
     ],
@@ -113,6 +124,7 @@ export const pageTitles: Record<string, string> = {
   bills: 'Счета',
   sales: 'Продажи',
   stock: 'Склад',
+  store: 'Магазин',
   employees: 'Сотрудники',
   settings: 'Настройки',
   documents: 'Шаблоны',
