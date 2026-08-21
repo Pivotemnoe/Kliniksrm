@@ -5,7 +5,6 @@ import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 import { RequireAnyPermissions, RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { CreateQueueEntryDto } from './dto/create-queue-entry.dto';
-import { CallQueueEntryDto } from './dto/call-queue-entry.dto';
 import { ListQueueQueryDto } from './dto/list-queue-query.dto';
 import { UpdateQueueEntryDto } from './dto/update-queue-entry.dto';
 import { RegisterQueueWorkstationDto, UpdateQueueWorkstationDto } from './dto/register-queue-workstation.dto';
@@ -80,12 +79,8 @@ export class QueueController {
   @Post(':queueEntryId/start')
   @RequirePermissions('queue.call')
   @ApiOkResponse({ description: 'Queue entry moved to in-progress.' })
-  startQueueEntry(
-    @Param('queueEntryId') queueEntryId: string,
-    @Body() dto: CallQueueEntryDto,
-    @CurrentEmployee() actor: AuthEmployee,
-  ) {
-    return this.queueService.startQueueEntry(queueEntryId, actor.id, dto.deviceId);
+  startQueueEntry(@Param('queueEntryId') queueEntryId: string, @CurrentEmployee() actor: AuthEmployee) {
+    return this.queueService.startQueueEntry(queueEntryId, actor.id);
   }
 
   @Post(':queueEntryId/complete')

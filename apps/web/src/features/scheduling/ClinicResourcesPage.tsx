@@ -56,7 +56,6 @@ const tabRoutes: Record<string, string> = {
   profile: '/settings/office/profile',
   schedule: '/settings/office/schedule',
   rooms: '/settings/office/rooms',
-  workstations: '/settings/office/workstations',
   hospital: '/settings/office/hospital',
   warehouses: '/settings/office/warehouses',
 };
@@ -255,11 +254,6 @@ export function ClinicResourcesPage() {
                   canManage={canManage}
                 />
               ),
-            },
-            {
-              key: 'workstations',
-              label: 'Рабочие компьютеры',
-              children: <QueueWorkstationsTab offices={offices} canManage={canManage} />,
             },
             {
               key: 'hospital',

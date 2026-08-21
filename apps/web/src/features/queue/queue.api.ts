@@ -29,8 +29,8 @@ export function updateQueueEntry(queueEntryId: string, input: QueueMutationInput
   });
 }
 
-export function startQueueEntry(queueEntryId: string, deviceId: string) {
-  return apiRequest<QueueEntry>(`/v1/queue/${queueEntryId}/start`, { method: 'POST', body: { deviceId } });
+export function startQueueEntry(queueEntryId: string) {
+  return apiRequest<QueueEntry>(`/v1/queue/${queueEntryId}/start`, { method: 'POST' });
 }
 
 export function registerQueueWorkstation(deviceId: string) {

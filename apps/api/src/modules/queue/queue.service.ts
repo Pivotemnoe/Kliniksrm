@@ -231,10 +231,10 @@ export class QueueService {
     return toQueueEntryResponse(queueEntry);
   }
 
-  async startQueueEntry(queueEntryId: string, actorId: string, workstationDeviceId: string) {
+  async startQueueEntry(queueEntryId: string, actorId: string) {
     const existing = await this.prisma.queueEntry.findUnique({
       where: { id: queueEntryId },
-      select: { id: true, status: true, startedAt: true, callCount: true, roomId: true },
+      select: { id: true, status: true, startedAt: true, callCount: true },
     });
 
     if (!existing) {
@@ -247,14 +247,6 @@ export class QueueService {
 
     const calledAt = new Date();
     const action = existing.status === QueueStatus.IN_PROGRESS ? 'queue.call' : 'queue.start';
-    const workstation = await this.prisma.queueWorkstation.findUnique({
-      where: { deviceId: workstationDeviceId },
-      include: { room: { select: { id: true, officeId: true } } },
-    });
-    if (!workstation) throw new BadRequestException('Этот компьютер ещё не зарегистрирован как рабочее место');
-    if (!workstation.room) throw new BadRequestException('Для этого компьютера не выбран кабинет');
-    await this.prisma.queueWorkstation.update({ where: { id: workstation.id }, data: { lastSeenAt: calledAt } });
-    const workstationRoom = workstation.room;
     const queueEntry = await this.prisma.queueEntry.update({
       where: { id: queueEntryId },
       data: {
@@ -263,9 +255,6 @@ export class QueueService {
         lastCalledAt: calledAt,
         callCount: { increment: 1 },
         completedAt: null,
-        employeeId: actorId,
-        roomId: workstationRoom.id,
-        officeId: workstationRoom.officeId,
       },
       include: queueEntryInclude,
     });
@@ -279,8 +268,6 @@ export class QueueService {
         status: queueEntry.status,
         callCount: queueEntry.callCount,
         lastCalledAt: queueEntry.lastCalledAt,
-        employeeId: queueEntry.employeeId,
-        roomId: queueEntry.roomId,
       },
     });
 

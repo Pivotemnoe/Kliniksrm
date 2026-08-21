@@ -18,33 +18,27 @@ test('поиск ставит совпадение с начала имени в
   assert.deepEqual(result.map((item) => item.title), ['Бульдогова Мария', 'Анна Бульварная', 'Школа Буль']);
 });
 
-test('очередь хранит кабинет рабочего компьютера на сервере, удалённо перепривязывает его и позволяет убрать запись', async () => {
-  const [selector, page, card, controller, service, queueApi, settings, schema] = await Promise.all([
-    read('apps/web/src/features/queue/QueueWorkstationRoomSelect.tsx'),
+test('очередь работает без привязки компьютера, кабинет выбирается вручную и запись можно убрать', async () => {
+  const [page, card, form, controller, service, queueApi, routes] = await Promise.all([
     read('apps/web/src/features/queue/QueuePage.tsx'),
     read('apps/web/src/features/queue/QueueCardPage.tsx'),
+    read('apps/web/src/features/queue/QueueFormDrawer.tsx'),
     read('apps/api/src/modules/queue/queue.controller.ts'),
     read('apps/api/src/modules/queue/queue.service.ts'),
     read('apps/web/src/features/queue/queue.api.ts'),
-    read('apps/web/src/features/scheduling/ClinicResourcesPage.tsx'),
-    read('prisma/schema.prisma'),
+    read('apps/web/src/app/routes.tsx'),
   ]);
 
-  assert.match(selector, /localStorage\.setItem\(storageKey, created\)/);
-  assert.match(selector, /Кабинет этого компьютера/);
-  assert.match(selector, /Рабочее место:/);
-  assert.match(selector, /Изменить привязку/);
-  assert.match(schema, /model QueueWorkstation \{/);
-  assert.match(queueApi, /\/v1\/queue\/workstations/);
-  assert.match(controller, /listWorkstations/);
-  assert.match(controller, /updateWorkstation/);
-  assert.match(settings, /Рабочие компьютеры/);
-  assert.match(settings, /можно перепривязать удалённо/);
   assert.match(page, /Удалить из очереди/);
   assert.match(card, /Удалить из очереди/);
-  assert.match(controller, /dto\.deviceId/);
-  assert.match(service, /employeeId: actorId/);
-  assert.match(service, /roomId: workstationRoom\.id,[\s\S]*officeId: workstationRoom\.officeId/);
+  assert.match(form, /name="roomId"/);
+  assert.match(form, /label="Кабинет"/);
+  assert.doesNotMatch(page, /QueueWorkstationRoomSelect|workstationDeviceId/);
+  assert.doesNotMatch(card, /QueueWorkstationRoomSelect|workstationDeviceId/);
+  assert.doesNotMatch(controller, /CallQueueEntryDto|dto\.deviceId/);
+  assert.doesNotMatch(service, /workstationDeviceId|workstationRoom/);
+  assert.match(queueApi, /startQueueEntry\(queueEntryId: string\)/);
+  assert.doesNotMatch(routes, /settings\/office\/workstations/);
 });
 
 test('архив пациента имеет кнопку просмотра, а личные кабинеты получают и открывают файлы', async () => {

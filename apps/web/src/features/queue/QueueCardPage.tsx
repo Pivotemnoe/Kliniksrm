@@ -29,7 +29,6 @@ import {
   updateQueueEntry,
 } from './queue.api';
 import { QueueFormDrawer } from './QueueFormDrawer';
-import { QueueWorkstationRoomSelect, useQueueWorkstationDeviceId } from './QueueWorkstationRoomSelect';
 import { QueueCreateCardsDrawer } from './QueueCreateCardsDrawer';
 import { QueueMutationInput, getQueueDisplayStatus, queuePurposeLabels, queueUrgencyColors, queueUrgencyLabels } from './types';
 
@@ -50,7 +49,6 @@ export function QueueCardPage() {
   const canManageVisits = hasPermission(auth?.employee, 'visits.manage');
   const [editOpen, setEditOpen] = useState(false);
   const [createCardsOpen, setCreateCardsOpen] = useState(false);
-  const workstationDeviceId = useQueueWorkstationDeviceId();
   const queueQuery = useQuery({
     queryKey: ['queue', queueEntryId],
     queryFn: () => getQueueEntry(queueEntryId!),
@@ -70,7 +68,7 @@ export function QueueCardPage() {
   const actionMutation = useMutation({
     mutationFn: (action: 'start' | 'repeat' | 'complete' | 'cancel') => {
       if (action === 'start' || action === 'repeat') {
-        return startQueueEntry(queueEntryId!, workstationDeviceId);
+        return startQueueEntry(queueEntryId!);
       }
 
       if (action === 'complete') {
@@ -148,7 +146,6 @@ export function QueueCardPage() {
         description="Карточка электронной очереди."
         extra={
           <Space wrap>
-            {canCallQueue ? <QueueWorkstationRoomSelect deviceId={workstationDeviceId} canChange={canManage} /> : null}
             <Button icon={<LeftOutlined />} onClick={() => navigate('/queue')}>
               К списку
             </Button>

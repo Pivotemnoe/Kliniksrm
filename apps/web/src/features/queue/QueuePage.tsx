@@ -18,7 +18,6 @@ import { visitStatusColors, visitStatusLabels } from '../visits/types';
 import { cancelQueueEntry, completeQueueEntry, listQueue, startQueueEntry } from './queue.api';
 import { createQueueEntryFromForm } from './createQueueEntryFromForm';
 import { QueueFormDrawer, QueueFormSubmitInput } from './QueueFormDrawer';
-import { QueueWorkstationRoomSelect, useQueueWorkstationDeviceId } from './QueueWorkstationRoomSelect';
 import {
   QueueEntry,
   QueueMutationInput,
@@ -45,7 +44,6 @@ export function QueuePage() {
   const [status, setStatus] = useState<QueueStatus | undefined>('WAITING');
   const [urgency, setUrgency] = useState<QueueUrgency | undefined>();
   const [createOpen, setCreateOpen] = useState(false);
-  const workstationDeviceId = useQueueWorkstationDeviceId();
   const now = useNow();
   const dateRange = getQueueDateRange(status);
   const queueQuery = useInfiniteListQuery({
@@ -83,7 +81,7 @@ export function QueuePage() {
   const actionMutation = useMutation({
     mutationFn: async ({ record, action }: { record: QueueEntry; action: 'call' | 'repeat' | 'accept' | 'createVisit' }) => {
       if (action === 'call' || action === 'repeat') {
-        const queueEntry = await startQueueEntry(record.id, workstationDeviceId);
+        const queueEntry = await startQueueEntry(record.id);
         return { action, queueEntry };
       }
 
@@ -263,7 +261,6 @@ export function QueuePage() {
         title={`${isPersonalQueue ? 'Моя очередь' : 'Электронная очередь'}${queueQuery.data?.pages[0]?.total !== undefined ? ` ${queueQuery.data.pages[0].total}` : ''}`}
         extra={
           <Space>
-            {canCallQueue ? <QueueWorkstationRoomSelect deviceId={workstationDeviceId} canChange={canManage} /> : null}
             <Button icon={<ExportOutlined />} onClick={() => window.open('/queue/tv', '_blank', 'noopener,noreferrer')}>
               Экран для клиентов
             </Button>

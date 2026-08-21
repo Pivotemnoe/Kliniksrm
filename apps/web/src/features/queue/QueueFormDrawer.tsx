@@ -134,6 +134,7 @@ export function QueueFormDrawer({
   const [step, setStep] = useState<'intake' | 'cards'>('intake');
   const clientMode = useWatch({ control, name: 'clientMode' });
   const ownerId = useWatch({ control, name: 'ownerId' });
+  const officeId = useWatch({ control, name: 'officeId' });
   const primaryOwnerName = useWatch({ control, name: 'ownerName' });
   const primaryPhone = useWatch({ control, name: 'phone' });
   const primaryAnimalNickname = useWatch({ control, name: 'animalNickname' });
@@ -161,6 +162,8 @@ export function QueueFormDrawer({
     queryFn: () => listOwners({ search: duplicateSearch, limit: 10, offset: 0 }),
     enabled: open && isPrimaryCreate && !isCardsStep && Boolean(duplicateSearch),
   });
+
+  const rooms = resourcesQuery.data?.rooms.filter((room) => !officeId || room.officeId === officeId) ?? [];
 
   const ownerOptions = [
     ...(initialQueue?.owner ? [toOwnerSelectOption(initialQueue.owner)] : []),
@@ -297,6 +300,7 @@ export function QueueFormDrawer({
               control={control}
               resourcesLoading={resourcesQuery.isLoading}
               offices={resourcesQuery.data?.offices ?? []}
+              rooms={rooms}
               employees={resourcesQuery.data?.employees ?? []}
               setValue={setValue}
             />
@@ -657,12 +661,14 @@ function QueueDetailsFields({
   control,
   resourcesLoading,
   offices,
+  rooms,
   employees,
   setValue,
 }: {
   control: any;
   resourcesLoading: boolean;
   offices: Array<{ id: string; name: string }>;
+  rooms: Array<{ id: string; name: string }>;
   employees: Array<{ id: string; fullName: string; position?: string | null }>;
   setValue: any;
 }) {
@@ -684,6 +690,22 @@ function QueueDetailsFields({
                     field.onChange(value ?? '');
                     setValue('roomId', '');
                   }}
+                />
+              </Form.Item>
+            )}
+          />
+          <Controller
+            control={control}
+            name="roomId"
+            render={({ field }) => (
+              <Form.Item label="Кабинет">
+                <Select
+                  {...field}
+                  allowClear
+                  loading={resourcesLoading}
+                  options={rooms.map((room) => ({ label: room.name, value: room.id }))}
+                  placeholder="Не выбран"
+                  onChange={(value) => field.onChange(value ?? '')}
                 />
               </Form.Item>
             )}
