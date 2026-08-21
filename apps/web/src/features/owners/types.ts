@@ -23,6 +23,7 @@ export type Owner = {
   goodsDiscount: string;
   servicesDiscount: string;
   balance: string;
+  lastVisitAt?: string | null;
   animals?: Animal[];
   trustedPeople?: TrustedPerson[];
   balanceOperations?: OwnerBalanceOperation[];

@@ -453,19 +453,21 @@ function ProductsTable({
   });
   const columns = useMemo<ColumnsType<Product>>(
     () => [
-      { title: 'Название', dataIndex: 'title', key: 'title' },
-      { title: 'Категория', key: 'category', render: (_, record) => record.category?.title ?? '—' },
-      { title: 'SKU', dataIndex: 'sku', key: 'sku', render: (value: string | null) => value || '—' },
+      { title: 'Название', dataIndex: 'title', key: 'title', width: 260, ellipsis: true },
+      { title: 'Категория', key: 'category', width: 180, ellipsis: true, render: (_, record) => record.category?.title ?? '—' },
+      { title: 'SKU', dataIndex: 'sku', key: 'sku', width: 110, render: (value: string | null) => value || '—' },
       {
         title: 'Цена продажи',
         dataIndex: 'retailPrice',
         key: 'retailPrice',
+        width: 170,
         render: (value, record) => `${formatMoney(value)} / ${record.billingUnit || record.writeOffUnit || record.stockUnit || 'шт'}`,
       },
       {
         title: 'Остаток',
         dataIndex: 'stockRest',
         key: 'stockRest',
+        width: 145,
         render: (value, record) => {
           const lowStock = isLowStock(record);
 
@@ -477,10 +479,11 @@ function ProductsTable({
           );
         },
       },
-      { title: 'Мин. остаток', dataIndex: 'minStock', key: 'minStock', render: (value, record) => (value === null || value === undefined ? '—' : `${value} ${record.stockUnit ?? ''}`) },
+      { title: 'Мин. остаток', dataIndex: 'minStock', key: 'minStock', width: 145, render: (value, record) => (value === null || value === undefined ? '—' : `${value} ${record.stockUnit ?? ''}`) },
       {
         title: 'Учёт и списание',
         key: 'units',
+        width: 235,
         render: (_, record) => {
           const stockUnit = record.stockUnit || 'шт';
           const writeOffUnit = record.writeOffUnit || stockUnit;
@@ -489,9 +492,9 @@ function ProductsTable({
             : `Склад: ${stockUnit}; списание: 1 ${stockUnit} = ${record.packageQuantity || '?'} ${writeOffUnit}`;
         },
       },
-      { title: 'Годен до', dataIndex: 'defaultExpiresAt', key: 'defaultExpiresAt', render: formatDate },
-      { title: 'Штрих-код', dataIndex: 'barcode', key: 'barcode', render: (value: string | null) => value || '—' },
-      { title: 'НДС', dataIndex: 'vatRate', key: 'vatRate', render: (value) => (value === null || value === undefined ? 'Без НДС' : `${value}%`) },
+      { title: 'Годен до', dataIndex: 'defaultExpiresAt', key: 'defaultExpiresAt', width: 125, render: formatDate },
+      { title: 'Штрих-код', dataIndex: 'barcode', key: 'barcode', width: 155, render: (value: string | null) => value || '—' },
+      { title: 'НДС', dataIndex: 'vatRate', key: 'vatRate', width: 100, render: (value) => (value === null || value === undefined ? 'Без НДС' : `${value}%`) },
       {
         title: '',
         key: 'actions',
@@ -605,8 +608,8 @@ function ServicesTable({
   });
   const columns = useMemo<ColumnsType<ServiceItem>>(
     () => [
-      { title: 'Название', dataIndex: 'title', key: 'title', width: 360, ellipsis: true },
-      { title: 'Категория', key: 'category', width: 220, ellipsis: true, render: (_, record) => record.category?.title ?? '—' },
+      { title: 'Название', dataIndex: 'title', key: 'title', width: 260, ellipsis: true },
+      { title: 'Категория', key: 'category', width: 180, ellipsis: true, render: (_, record) => record.category?.title ?? '—' },
       { title: 'Цена', key: 'price', width: 190, render: (_, record) => formatServicePrice(record) },
       { title: 'Тип цены', dataIndex: 'priceType', key: 'priceType', width: 150, render: (value: string) => (value === 'FLOATING' ? 'Плавающая' : 'Фиксированная') },
       { title: 'НДС', dataIndex: 'vatRate', key: 'vatRate', width: 100, render: (value) => (value === null || value === undefined ? 'Без НДС' : `${value}%`) },
@@ -644,7 +647,7 @@ function ServicesTable({
     [canManage, onDelete, onEdit, onOpen, onPrint],
   );
 
-  return <StockTable query={servicesQuery} columns={columns} scrollX={1150} />;
+  return <StockTable query={servicesQuery} columns={columns} scrollX={1010} />;
 }
 
 function BatchesTable({

@@ -10,7 +10,7 @@ import {
   VisitStatus,
 } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
-import { rankSearchResults } from '../../common/search-ranking';
+import { rankSearchResults, withRussianSearchVariants } from '../../common/search-ranking';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
@@ -43,14 +43,14 @@ export class AnimalsService {
       ...(query.ownerId ? { ownerId: query.ownerId } : {}),
       ...(search
         ? {
-            OR: [
-              { nickname: { contains: search, mode: 'insensitive' } },
-              { species: { contains: search, mode: 'insensitive' } },
-              { breed: { contains: search, mode: 'insensitive' } },
-              { microchip: { contains: search, mode: 'insensitive' } },
-              { owner: { fullName: { contains: search, mode: 'insensitive' } } },
-              { owner: { phone: { contains: search, mode: 'insensitive' } } },
-            ],
+            OR: withRussianSearchVariants(search, (variant) => [
+              { nickname: { contains: variant, mode: 'insensitive' as const } },
+              { species: { contains: variant, mode: 'insensitive' as const } },
+              { breed: { contains: variant, mode: 'insensitive' as const } },
+              { microchip: { contains: variant, mode: 'insensitive' as const } },
+              { owner: { fullName: { contains: variant, mode: 'insensitive' as const } } },
+              { owner: { phone: { contains: variant, mode: 'insensitive' as const } } },
+            ]),
           }
         : {}),
     };

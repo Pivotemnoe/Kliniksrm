@@ -6,6 +6,7 @@ import {
   StockMovementType,
 } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
+import { withRussianSearchVariants } from '../../common/search-ranking';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CreateStockDocumentDto } from './dto/create-stock-document.dto';
@@ -167,6 +168,26 @@ export class StockDocumentsService {
     if (warehouseIds[0] && warehouseId !== warehouseIds[0]) throw new BadRequestException('Партии не относятся к выбранному складу');
     this.ensureWarehouseAllowed(warehouseId, scope);
 
+    const productsWithoutCost = [...new Set(dto.items
+      .filter((item) => !item.sourceBatchId && item.unitCost === undefined)
+      .map((item) => item.productId))];
+    const latestKnownCosts = productsWithoutCost.length
+      ? await this.prisma.stockBatch.findMany({
+          where: { productId: { in: productsWithoutCost }, purchasePrice: { gt: 0 } },
+          orderBy: { createdAt: 'desc' },
+          select: { productId: true, warehouseId: true, purchasePrice: true },
+        })
+      : [];
+    const latestCostByProduct = new Map<string, Prisma.Decimal>();
+    for (const knownCost of [
+      ...latestKnownCosts.filter((item) => item.warehouseId === warehouseId),
+      ...latestKnownCosts.filter((item) => item.warehouseId !== warehouseId),
+    ]) {
+      if (!latestCostByProduct.has(knownCost.productId)) {
+        latestCostByProduct.set(knownCost.productId, knownCost.purchasePrice);
+      }
+    }
+
     if (dto.type === StockDocumentType.TRANSFER) {
       if (!dto.toWarehouseId || dto.toWarehouseId === warehouseId) {
         throw new BadRequestException('Для перемещения выберите другой склад назначения');
@@ -212,7 +233,7 @@ export class StockDocumentsService {
         expectedQuantity: batch?.rest ?? 0,
         actualQuantity: item.actualQuantity,
         quantity: item.quantity,
-        unitCost: item.unitCost ?? batch?.purchasePrice ?? 0,
+        unitCost: item.unitCost ?? batch?.purchasePrice ?? latestCostByProduct.get(item.productId) ?? 0,
         retailPrice: item.retailPrice,
         comment: clean(item.comment),
       };
@@ -288,10 +309,10 @@ export class StockDocumentsService {
     const where: Prisma.StockMovementWhereInput = {
       AND: [
         ...(warehouseIds ? [{ OR: [{ warehouseId: { in: warehouseIds } }, { toWarehouseId: { in: warehouseIds } }] }] : []),
-        ...(search ? [{ OR: [
-          { product: { title: { contains: search, mode: 'insensitive' as const } } },
-          { comment: { contains: search, mode: 'insensitive' as const } },
-        ] }] : []),
+        ...(search ? [{ OR: withRussianSearchVariants(search, (variant) => [
+          { product: { title: { contains: variant, mode: 'insensitive' as const } } },
+          { comment: { contains: variant, mode: 'insensitive' as const } },
+        ]) }] : []),
       ],
     };
     const [items, total] = await this.prisma.$transaction([

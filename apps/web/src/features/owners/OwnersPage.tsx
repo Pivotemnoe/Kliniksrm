@@ -8,6 +8,7 @@ import { getErrorMessage } from '../../api/errors';
 import { InfiniteTable, useInfiniteListQuery } from '../../shared/ui/InfiniteTable';
 import { LiveSearchInput } from '../../shared/ui/LiveSearchInput';
 import { PageHeader } from '../../shared/ui/PageHeader';
+import { formatDateTime } from '../../shared/utils/date';
 import { createOwner, listOwners } from './owners.api';
 import { OwnerFormDrawer } from './OwnerFormDrawer';
 import { Owner, OwnerMutationInput } from './types';
@@ -73,8 +74,10 @@ export function OwnersPage() {
       },
       {
         title: 'Последний приём',
-        key: 'lastVisit',
-        render: () => '—',
+        dataIndex: 'lastVisitAt',
+        key: 'lastVisitAt',
+        width: 180,
+        render: formatDateTime,
       },
     ],
     [navigate],

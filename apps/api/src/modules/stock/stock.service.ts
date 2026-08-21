@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { randomInt } from 'node:crypto';
 import { HospitalRecordStatus, Prisma, ProductBarcodeType, StockDocumentStatus, StockMovementType } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
-import { rankSearchResults } from '../../common/search-ranking';
+import { rankSearchResults, withRussianSearchVariants } from '../../common/search-ranking';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateSupplyInvoiceDto } from './dto/create-supply-invoice.dto';
@@ -113,14 +113,14 @@ export class StockService {
       ...(query.warehouseId ? { batches: { some: batchWarehouseWhere } } : {}),
       ...(search
         ? {
-            OR: [
-              { title: { contains: search, mode: 'insensitive' } },
-              { sku: { contains: search, mode: 'insensitive' } },
-              { gtin: { contains: search, mode: 'insensitive' } },
-              { barcode: { contains: search, mode: 'insensitive' } },
-              { barcodes: { some: { value: { contains: search, mode: 'insensitive' } } } },
-              { category: { title: { contains: search, mode: 'insensitive' } } },
-            ],
+            OR: withRussianSearchVariants(search, (variant) => [
+              { title: { contains: variant, mode: 'insensitive' as const } },
+              { sku: { contains: variant, mode: 'insensitive' as const } },
+              { gtin: { contains: variant, mode: 'insensitive' as const } },
+              { barcode: { contains: variant, mode: 'insensitive' as const } },
+              { barcodes: { some: { value: { contains: variant, mode: 'insensitive' as const } } } },
+              { category: { title: { contains: variant, mode: 'insensitive' as const } } },
+            ]),
           }
         : {}),
     };
@@ -201,14 +201,14 @@ export class StockService {
       ...(query.categoryId ? { categoryId: query.categoryId } : {}),
       ...(search
         ? {
-            OR: [
-              { title: { contains: search, mode: 'insensitive' } },
-              { sku: { contains: search, mode: 'insensitive' } },
-              { gtin: { contains: search, mode: 'insensitive' } },
-              { barcode: { contains: search, mode: 'insensitive' } },
-              { barcodes: { some: { value: { contains: search, mode: 'insensitive' } } } },
-              { category: { title: { contains: search, mode: 'insensitive' } } },
-            ],
+            OR: withRussianSearchVariants(search, (variant) => [
+              { title: { contains: variant, mode: 'insensitive' as const } },
+              { sku: { contains: variant, mode: 'insensitive' as const } },
+              { gtin: { contains: variant, mode: 'insensitive' as const } },
+              { barcode: { contains: variant, mode: 'insensitive' as const } },
+              { barcodes: { some: { value: { contains: variant, mode: 'insensitive' as const } } } },
+              { category: { title: { contains: variant, mode: 'insensitive' as const } } },
+            ]),
           }
         : {}),
     };
@@ -461,10 +461,10 @@ export class StockService {
       ...(query.categoryId ? { categoryId: query.categoryId } : {}),
       ...(search
         ? {
-            OR: [
-              { title: { contains: search, mode: 'insensitive' } },
-              { category: { title: { contains: search, mode: 'insensitive' } } },
-            ],
+            OR: withRussianSearchVariants(search, (variant) => [
+              { title: { contains: variant, mode: 'insensitive' as const } },
+              { category: { title: { contains: variant, mode: 'insensitive' as const } } },
+            ]),
           }
         : {}),
     };
@@ -596,14 +596,14 @@ export class StockService {
       ...(query.productId ? { productId: query.productId } : {}),
       ...(search
         ? {
-            OR: [
-              { product: { title: { contains: search, mode: 'insensitive' } } },
-              { product: { sku: { contains: search, mode: 'insensitive' } } },
-              { product: { gtin: { contains: search, mode: 'insensitive' } } },
-              { product: { barcode: { contains: search, mode: 'insensitive' } } },
-              { supplier: { title: { contains: search, mode: 'insensitive' } } },
-              { series: { contains: search, mode: 'insensitive' } },
-            ],
+            OR: withRussianSearchVariants(search, (variant) => [
+              { product: { title: { contains: variant, mode: 'insensitive' as const } } },
+              { product: { sku: { contains: variant, mode: 'insensitive' as const } } },
+              { product: { gtin: { contains: variant, mode: 'insensitive' as const } } },
+              { product: { barcode: { contains: variant, mode: 'insensitive' as const } } },
+              { supplier: { title: { contains: variant, mode: 'insensitive' as const } } },
+              { series: { contains: variant, mode: 'insensitive' as const } },
+            ]),
           }
         : {}),
     };
@@ -631,11 +631,11 @@ export class StockService {
       ...(itemWarehouseWhere ? { items: { some: itemWarehouseWhere } } : {}),
       ...(search
         ? {
-            OR: [
-              { number: { contains: search, mode: 'insensitive' } },
-              { supplier: { title: { contains: search, mode: 'insensitive' } } },
-              { items: { some: { product: { title: { contains: search, mode: 'insensitive' } } } } },
-            ],
+            OR: withRussianSearchVariants(search, (variant) => [
+              { number: { contains: variant, mode: 'insensitive' as const } },
+              { supplier: { title: { contains: variant, mode: 'insensitive' as const } } },
+              { items: { some: { product: { title: { contains: variant, mode: 'insensitive' as const } } } } },
+            ]),
           }
         : {}),
     };

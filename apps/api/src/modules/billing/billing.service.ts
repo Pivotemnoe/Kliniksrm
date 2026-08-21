@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { BillSource, PaymentStatus, PaymentType, Prisma, StockMovementType } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
+import { withRussianSearchVariants } from '../../common/search-ranking';
 import { AuditService } from '../audit/audit.service';
 import { FinanceService } from '../finance/finance.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -1142,12 +1143,12 @@ export function buildBillWhere(
       : {}),
     ...(search
       ? {
-          OR: [
-            { owner: { fullName: { contains: search, mode: 'insensitive' } } },
-            { owner: { phone: { contains: search, mode: 'insensitive' } } },
-            { animal: { nickname: { contains: search, mode: 'insensitive' } } },
-            { items: { some: { title: { contains: search, mode: 'insensitive' } } } },
-          ],
+          OR: withRussianSearchVariants(search, (variant) => [
+            { owner: { fullName: { contains: variant, mode: 'insensitive' as const } } },
+            { owner: { phone: { contains: variant, mode: 'insensitive' as const } } },
+            { animal: { nickname: { contains: variant, mode: 'insensitive' as const } } },
+            { items: { some: { title: { contains: variant, mode: 'insensitive' as const } } } },
+          ]),
         }
       : {}),
   };

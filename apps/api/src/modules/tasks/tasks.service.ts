@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, TaskStatus } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
+import { withRussianSearchVariants } from '../../common/search-ranking';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
@@ -41,15 +42,15 @@ export class TasksService {
         ? {
             AND: [
               {
-                OR: [
-                  { title: { contains: search, mode: 'insensitive' } },
-                  { comment: { contains: search, mode: 'insensitive' } },
-                  { taskType: { contains: search, mode: 'insensitive' } },
-                  { owner: { fullName: { contains: search, mode: 'insensitive' } } },
-                  { owner: { phone: { contains: search, mode: 'insensitive' } } },
-                  { animal: { nickname: { contains: search, mode: 'insensitive' } } },
-                  { assignee: { fullName: { contains: search, mode: 'insensitive' } } },
-                ],
+                OR: withRussianSearchVariants(search, (variant) => [
+                  { title: { contains: variant, mode: 'insensitive' as const } },
+                  { comment: { contains: variant, mode: 'insensitive' as const } },
+                  { taskType: { contains: variant, mode: 'insensitive' as const } },
+                  { owner: { fullName: { contains: variant, mode: 'insensitive' as const } } },
+                  { owner: { phone: { contains: variant, mode: 'insensitive' as const } } },
+                  { animal: { nickname: { contains: variant, mode: 'insensitive' as const } } },
+                  { assignee: { fullName: { contains: variant, mode: 'insensitive' as const } } },
+                ]),
               },
             ],
           }

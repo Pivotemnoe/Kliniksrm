@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { Prisma } from '@prisma/client';
 import { randomInt } from 'node:crypto';
 import { parsePagination } from '../../common/pagination';
-import { rankSearchResults } from '../../common/search-ranking';
+import { rankSearchResults, withRussianSearchVariants } from '../../common/search-ranking';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { ListStoreProductsDto } from './dto/list-store-products.dto';
@@ -30,12 +30,12 @@ export class StoreService {
       isActive: true,
       ...(search
         ? {
-            OR: [
-              { title: { contains: search, mode: 'insensitive' } },
-              { categoryTitle: { contains: search, mode: 'insensitive' } },
-              { sku: { contains: search, mode: 'insensitive' } },
-              { barcode: { contains: search, mode: 'insensitive' } },
-            ],
+            OR: withRussianSearchVariants(search, (variant) => [
+              { title: { contains: variant, mode: 'insensitive' as const } },
+              { categoryTitle: { contains: variant, mode: 'insensitive' as const } },
+              { sku: { contains: variant, mode: 'insensitive' as const } },
+              { barcode: { contains: variant, mode: 'insensitive' as const } },
+            ]),
           }
         : {}),
     };

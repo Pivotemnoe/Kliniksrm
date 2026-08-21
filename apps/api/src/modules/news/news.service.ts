@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { NewsPriority, Prisma } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
+import { withRussianSearchVariants } from '../../common/search-ranking';
 import { AuditService } from '../audit/audit.service';
 import { AuthEmployee } from '../auth/auth.types';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -141,10 +142,10 @@ export class NewsService {
         ...(search
           ? [
               {
-                OR: [
-                  { title: { contains: search, mode: 'insensitive' as const } },
-                  { body: { contains: search, mode: 'insensitive' as const } },
-                ],
+                OR: withRussianSearchVariants(search, (variant) => [
+                  { title: { contains: variant, mode: 'insensitive' as const } },
+                  { body: { contains: variant, mode: 'insensitive' as const } },
+                ]),
               },
             ]
           : []),

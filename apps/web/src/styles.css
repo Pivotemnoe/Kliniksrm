@@ -1403,8 +1403,12 @@ body {
 }
 
 .table-top-scroll {
+  position: sticky;
+  top: 0;
+  z-index: 6;
   height: 16px;
   margin: 0 0 6px;
+  background: #fff;
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior-x: contain;

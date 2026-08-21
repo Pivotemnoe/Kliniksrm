@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { LaboratoryOrderItemStatus, LaboratoryOrderStatus, Prisma, VisitStatus } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
+import { withRussianSearchVariants } from '../../common/search-ranking';
 import { PrismaService } from '../../prisma/prisma.service';
 import { servicePricingSelect } from '../stock/service-pricing';
 import { AuditService } from '../audit/audit.service';
@@ -435,14 +436,14 @@ export class LaboratoryService {
       ...(query.species ? { species: { has: query.species } } : {}),
       ...(search
         ? {
-            OR: [
-              { title: { contains: search, mode: 'insensitive' } },
-              { code: { contains: search, mode: 'insensitive' } },
-              { groupName: { contains: search, mode: 'insensitive' } },
-              { material: { contains: search, mode: 'insensitive' } },
-              { method: { contains: search, mode: 'insensitive' } },
-              { service: { title: { contains: search, mode: 'insensitive' } } },
-            ],
+            OR: withRussianSearchVariants(search, (variant) => [
+              { title: { contains: variant, mode: 'insensitive' as const } },
+              { code: { contains: variant, mode: 'insensitive' as const } },
+              { groupName: { contains: variant, mode: 'insensitive' as const } },
+              { material: { contains: variant, mode: 'insensitive' as const } },
+              { method: { contains: variant, mode: 'insensitive' as const } },
+              { service: { title: { contains: variant, mode: 'insensitive' as const } } },
+            ]),
           }
         : {}),
     };
@@ -462,19 +463,19 @@ export class LaboratoryService {
       ...(query.activeOnly === 'true' ? { status: { in: [LaboratoryOrderStatus.ORDERED, LaboratoryOrderStatus.IN_PROGRESS] } } : {}),
       ...(search
         ? {
-            OR: [
-              { comment: { contains: search, mode: 'insensitive' } },
-              { items: { some: { title: { contains: search, mode: 'insensitive' } } } },
-              { items: { some: { code: { contains: search, mode: 'insensitive' } } } },
-              { items: { some: { resultValue: { contains: search, mode: 'insensitive' } } } },
-              { items: { some: { resultText: { contains: search, mode: 'insensitive' } } } },
-              { visit: { owner: { fullName: { contains: search, mode: 'insensitive' } } } },
-              { visit: { owner: { phone: { contains: search, mode: 'insensitive' } } } },
-              { visit: { animal: { nickname: { contains: search, mode: 'insensitive' } } } },
-              { visit: { animal: { species: { contains: search, mode: 'insensitive' } } } },
-              { visit: { animal: { breed: { contains: search, mode: 'insensitive' } } } },
-              { visit: { employee: { fullName: { contains: search, mode: 'insensitive' } } } },
-            ],
+            OR: withRussianSearchVariants(search, (variant) => [
+              { comment: { contains: variant, mode: 'insensitive' as const } },
+              { items: { some: { title: { contains: variant, mode: 'insensitive' as const } } } },
+              { items: { some: { code: { contains: variant, mode: 'insensitive' as const } } } },
+              { items: { some: { resultValue: { contains: variant, mode: 'insensitive' as const } } } },
+              { items: { some: { resultText: { contains: variant, mode: 'insensitive' as const } } } },
+              { visit: { owner: { fullName: { contains: variant, mode: 'insensitive' as const } } } },
+              { visit: { owner: { phone: { contains: variant, mode: 'insensitive' as const } } } },
+              { visit: { animal: { nickname: { contains: variant, mode: 'insensitive' as const } } } },
+              { visit: { animal: { species: { contains: variant, mode: 'insensitive' as const } } } },
+              { visit: { animal: { breed: { contains: variant, mode: 'insensitive' as const } } } },
+              { visit: { employee: { fullName: { contains: variant, mode: 'insensitive' as const } } } },
+            ]),
           }
         : {}),
     };
@@ -488,13 +489,13 @@ export class LaboratoryService {
       ...(query.species ? { species: { has: query.species } } : {}),
       ...(search
         ? {
-            OR: [
-              { title: { contains: search, mode: 'insensitive' } },
-              { code: { contains: search, mode: 'insensitive' } },
-              { description: { contains: search, mode: 'insensitive' } },
-              { service: { title: { contains: search, mode: 'insensitive' } } },
-              { tests: { some: { test: { title: { contains: search, mode: 'insensitive' } } } } },
-            ],
+            OR: withRussianSearchVariants(search, (variant) => [
+              { title: { contains: variant, mode: 'insensitive' as const } },
+              { code: { contains: variant, mode: 'insensitive' as const } },
+              { description: { contains: variant, mode: 'insensitive' as const } },
+              { service: { title: { contains: variant, mode: 'insensitive' as const } } },
+              { tests: { some: { test: { title: { contains: variant, mode: 'insensitive' as const } } } } },
+            ]),
           }
         : {}),
     };

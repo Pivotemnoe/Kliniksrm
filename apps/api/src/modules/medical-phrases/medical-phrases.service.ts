@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { MedicalPhrase, MedicalPhraseSource, Prisma } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
+import { withRussianSearchVariants } from '../../common/search-ranking';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthEmployee } from '../auth/auth.types';
@@ -435,12 +436,12 @@ function buildListWhere(
 
   if (search) {
     and.push({
-      OR: [
-        { title: { contains: search, mode: 'insensitive' } },
-        { text: { contains: search, mode: 'insensitive' } },
-        { category: { contains: search, mode: 'insensitive' } },
-        { diagnosis: { contains: search, mode: 'insensitive' } },
-      ],
+      OR: withRussianSearchVariants(search, (variant) => [
+        { title: { contains: variant, mode: 'insensitive' as const } },
+        { text: { contains: variant, mode: 'insensitive' as const } },
+        { category: { contains: variant, mode: 'insensitive' as const } },
+        { diagnosis: { contains: variant, mode: 'insensitive' as const } },
+      ]),
     });
   }
 
@@ -477,13 +478,13 @@ function buildManageWhere(query: ManageMedicalPhrasesQueryDto): Prisma.MedicalPh
 
   if (search) {
     and.push({
-      OR: [
-        { title: { contains: search, mode: 'insensitive' } },
-        { text: { contains: search, mode: 'insensitive' } },
-        { category: { contains: search, mode: 'insensitive' } },
-        { diagnosis: { contains: search, mode: 'insensitive' } },
-        { employee: { fullName: { contains: search, mode: 'insensitive' } } },
-      ],
+      OR: withRussianSearchVariants(search, (variant) => [
+        { title: { contains: variant, mode: 'insensitive' as const } },
+        { text: { contains: variant, mode: 'insensitive' as const } },
+        { category: { contains: variant, mode: 'insensitive' as const } },
+        { diagnosis: { contains: variant, mode: 'insensitive' as const } },
+        { employee: { fullName: { contains: variant, mode: 'insensitive' as const } } },
+      ]),
     });
   }
 

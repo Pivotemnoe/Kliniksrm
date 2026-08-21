@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { AnimalSex, ClientPortalStatus, Prisma } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
-import { rankSearchResults } from '../../common/search-ranking';
+import { rankSearchResults, withRussianSearchVariants } from '../../common/search-ranking';
 import {
   formatNormalizedRussianPhone,
   normalizeDisplayName,
@@ -36,13 +36,15 @@ export class OwnersService {
     const where: Prisma.OwnerWhereInput = search
       ? {
           OR: [
-            { fullName: { contains: search, mode: 'insensitive' } },
-            { fullNameNormalized: { contains: normalizePersonNameKey(search), mode: 'insensitive' } },
+            ...withRussianSearchVariants(search, (variant) => [
+              { fullName: { contains: variant, mode: 'insensitive' as const } },
+              { fullNameNormalized: { contains: normalizePersonNameKey(variant), mode: 'insensitive' as const } },
+              { animals: { some: { archivedAt: null, nickname: { contains: variant, mode: 'insensitive' as const } } } },
+            ]),
             { phone: { contains: search, mode: 'insensitive' } },
             ...(phoneSearch ? [{ phoneNormalized: { contains: phoneSearch } }] : []),
             { extraPhone: { contains: search, mode: 'insensitive' } },
             { email: { contains: search, mode: 'insensitive' } },
-            { animals: { some: { archivedAt: null, nickname: { contains: search, mode: 'insensitive' } } } },
             { animals: { some: { archivedAt: null, microchip: { contains: search, mode: 'insensitive' } } } },
           ],
         }
@@ -59,7 +61,10 @@ export class OwnersService {
       const pageItems = pageIds.length
         ? await this.prisma.owner.findMany({ where: { id: { in: pageIds } }, include: ownerListInclude })
         : [];
-      const itemsById = new Map(pageItems.map((owner) => [owner.id, owner]));
+      const itemsById = new Map(pageItems.map((owner) => {
+        const item = serializeOwnerListItem(owner);
+        return [item.id, item];
+      }));
       return { items: pageIds.flatMap((id) => itemsById.get(id) ?? []), total: summaries.length, limit, offset };
     }
 
@@ -74,7 +79,7 @@ export class OwnersService {
       this.prisma.owner.count({ where }),
     ]);
 
-    return { items, total, limit, offset };
+    return { items: items.map(serializeOwnerListItem), total, limit, offset };
   }
 
   async createOwner(dto: CreateOwnerDto, actorId: string) {
@@ -481,7 +486,9 @@ export class OwnersService {
 
     const duplicate = await this.prisma.owner.findFirst({
       where: {
-        fullNameNormalized,
+        OR: withRussianSearchVariants(fullNameNormalized, (variant) => [
+          { fullNameNormalized: { equals: variant, mode: 'insensitive' as const } },
+        ]),
         phoneNormalized,
         ...(excludeOwnerId ? { id: { not: excludeOwnerId } } : {}),
       },
@@ -515,7 +522,18 @@ const ownerListInclude = {
       status: true,
     },
   },
+  visits: {
+    where: { status: { not: 'CANCELLED' } },
+    orderBy: { startedAt: 'desc' },
+    take: 1,
+    select: { startedAt: true },
+  },
 } satisfies Prisma.OwnerInclude;
+
+function serializeOwnerListItem(owner: Prisma.OwnerGetPayload<{ include: typeof ownerListInclude }>) {
+  const { visits, ...item } = owner;
+  return { ...item, lastVisitAt: visits[0]?.startedAt ?? null };
+}
 
 function decimal(value: Prisma.Decimal.Value) {
   return new Prisma.Decimal(value);

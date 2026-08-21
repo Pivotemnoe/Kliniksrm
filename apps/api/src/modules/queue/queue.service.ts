@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { AnimalSex, Prisma, QueueStatus, QueueUrgency, VisitStatus, VisitType } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
-import { rankSearchResults } from '../../common/search-ranking';
+import { rankSearchResults, withRussianSearchVariants } from '../../common/search-ranking';
 import { normalizeRussianPhone } from '../../common/phone';
 import { AuditService } from '../audit/audit.service';
 import { AnimalCatalogService } from '../animals/animal-catalog.service';
@@ -39,15 +39,15 @@ export class QueueService {
 
     if (search) {
       filters.push({
-        OR: [
-          { ownerName: { contains: search, mode: 'insensitive' } },
-          { phone: { contains: search, mode: 'insensitive' } },
-          { ownerAddress: { contains: search, mode: 'insensitive' } },
-          { animalNickname: { contains: search, mode: 'insensitive' } },
-          { owner: { fullName: { contains: search, mode: 'insensitive' } } },
-          { owner: { phone: { contains: search, mode: 'insensitive' } } },
-          { animal: { nickname: { contains: search, mode: 'insensitive' } } },
-        ],
+        OR: withRussianSearchVariants(search, (variant) => [
+          { ownerName: { contains: variant, mode: 'insensitive' as const } },
+          { phone: { contains: variant, mode: 'insensitive' as const } },
+          { ownerAddress: { contains: variant, mode: 'insensitive' as const } },
+          { animalNickname: { contains: variant, mode: 'insensitive' as const } },
+          { owner: { fullName: { contains: variant, mode: 'insensitive' as const } } },
+          { owner: { phone: { contains: variant, mode: 'insensitive' as const } } },
+          { animal: { nickname: { contains: variant, mode: 'insensitive' as const } } },
+        ]),
       });
     }
 

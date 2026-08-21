@@ -12,7 +12,7 @@ import {
   VisitStatus,
 } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
-import { rankSearchResults } from '../../common/search-ranking';
+import { rankSearchResults, withRussianSearchVariants } from '../../common/search-ranking';
 import { AuditService } from '../audit/audit.service';
 import { FinanceService } from '../finance/finance.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -50,14 +50,14 @@ export class HospitalService {
       ...(query.status ? { status: query.status } : {}),
       ...(search
         ? {
-            OR: [
-              { owner: { fullName: { contains: search, mode: 'insensitive' } } },
-              { owner: { phone: { contains: search, mode: 'insensitive' } } },
-              { animal: { nickname: { contains: search, mode: 'insensitive' } } },
-              { animal: { species: { contains: search, mode: 'insensitive' } } },
-              { hospitalBox: { name: { contains: search, mode: 'insensitive' } } },
-              { purpose: { contains: search, mode: 'insensitive' } },
-            ],
+            OR: withRussianSearchVariants(search, (variant) => [
+              { owner: { fullName: { contains: variant, mode: 'insensitive' as const } } },
+              { owner: { phone: { contains: variant, mode: 'insensitive' as const } } },
+              { animal: { nickname: { contains: variant, mode: 'insensitive' as const } } },
+              { animal: { species: { contains: variant, mode: 'insensitive' as const } } },
+              { hospitalBox: { name: { contains: variant, mode: 'insensitive' as const } } },
+              { purpose: { contains: variant, mode: 'insensitive' as const } },
+            ]),
           }
         : {}),
     };
@@ -91,16 +91,16 @@ export class HospitalService {
     const productWhere: Prisma.ProductWhereInput = search
       ? {
           isActive: true,
-          OR: [
-            { title: { contains: search, mode: 'insensitive' } },
-            { sku: { contains: search, mode: 'insensitive' } },
-            { barcode: { contains: search, mode: 'insensitive' } },
-            { barcodes: { some: { value: { contains: search, mode: 'insensitive' } } } },
-          ],
+          OR: withRussianSearchVariants(search, (variant) => [
+            { title: { contains: variant, mode: 'insensitive' as const } },
+            { sku: { contains: variant, mode: 'insensitive' as const } },
+            { barcode: { contains: variant, mode: 'insensitive' as const } },
+            { barcodes: { some: { value: { contains: variant, mode: 'insensitive' as const } } } },
+          ]),
         }
       : { isActive: true };
     const serviceWhere: Prisma.ServiceWhereInput = search
-      ? { isActive: true, title: { contains: search, mode: 'insensitive' } }
+      ? { isActive: true, OR: withRussianSearchVariants(search, (variant) => [{ title: { contains: variant, mode: 'insensitive' as const } }]) }
       : { isActive: true };
 
     const [products, services] = await this.prisma.$transaction([

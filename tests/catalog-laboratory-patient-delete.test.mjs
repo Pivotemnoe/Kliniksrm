@@ -33,17 +33,19 @@ test('поиск товара и услуги идёт по полному се�
   }
   assert.doesNotMatch(stock, /normalizedProductSearch\.length >= 3/);
   assert.doesNotMatch(stock, /Введите минимум 3 символа/);
-  assert.match(hospital, /title: \{ contains: search, mode: 'insensitive' \}/);
-  assert.match(hospital, /barcodes: \{ some: \{ value: \{ contains: search/);
+  assert.match(hospital, /withRussianSearchVariants\(search/);
+  assert.match(hospital, /title: \{ contains: variant, mode: 'insensitive'/);
+  assert.match(hospital, /barcodes: \{ some: \{ value: \{ contains: variant/);
 });
 
 test('лабораторный бланк редактируется в документах и печатается из привязанной формы', async () => {
-  const [organizationController, editor, visitDocuments, templatePage, laboratoryPage, laboratoryPrint, laboratoryForm, styles] = await Promise.all([
+  const [organizationController, editor, visitDocuments, templatePage, laboratoryPage, laboratoryResultsDrawer, laboratoryPrint, laboratoryForm, styles] = await Promise.all([
     read('apps/api/src/modules/organization/organization.controller.ts'),
     read('apps/web/src/features/documents/DocumentVisualEditor.tsx'),
     read('apps/web/src/features/visits/VisitDocumentsTab.tsx'),
     read('apps/web/src/features/documents/DocumentTemplatesPage.tsx'),
     read('apps/web/src/features/laboratory/LaboratoryPage.tsx'),
+    read('apps/web/src/features/laboratory/LaboratoryResultsTableDrawer.tsx'),
     read('apps/web/src/features/laboratory/laboratoryPrint.ts'),
     read('apps/api/src/modules/laboratory/laboratory-document-form.ts'),
     read('apps/web/src/styles.css'),
@@ -65,7 +67,7 @@ test('лабораторный бланк редактируется в доку
   assert.match(laboratoryPage, /Печать A5/);
   assert.match(laboratoryPage, /listDocumentTemplates/);
   assert.match(laboratoryPage, /name="documentTemplateId"/);
-  assert.match(laboratoryPage, /Сохранить всю таблицу/);
+  assert.match(laboratoryResultsDrawer, /Сохранить всю таблицу/);
   assert.match(laboratoryPrint, /@page \{ size: A5 portrait; margin: 0; \}/);
   assert.match(laboratoryPrint, /snapshot\.documentTemplateTitle/);
   assert.match(laboratoryPrint, /order\.visit\.owner\.fullName/);

@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { AppointmentStatus, Prisma } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
+import { withRussianSearchVariants } from '../../common/search-ranking';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
@@ -34,12 +35,12 @@ export class AppointmentsService {
         : {}),
       ...(search
         ? {
-            OR: [
-              { owner: { fullName: { contains: search, mode: 'insensitive' } } },
-              { owner: { phone: { contains: search, mode: 'insensitive' } } },
-              { animal: { nickname: { contains: search, mode: 'insensitive' } } },
-              { comment: { contains: search, mode: 'insensitive' } },
-            ],
+            OR: withRussianSearchVariants(search, (variant) => [
+              { owner: { fullName: { contains: variant, mode: 'insensitive' as const } } },
+              { owner: { phone: { contains: variant, mode: 'insensitive' as const } } },
+              { animal: { nickname: { contains: variant, mode: 'insensitive' as const } } },
+              { comment: { contains: variant, mode: 'insensitive' as const } },
+            ]),
           }
         : {}),
     };

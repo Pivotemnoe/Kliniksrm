@@ -12,7 +12,7 @@ import {
   VisitType,
 } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
-import { rankSearchResults } from '../../common/search-ranking';
+import { rankSearchResults, withRussianSearchVariants } from '../../common/search-ranking';
 import { AuditService } from '../audit/audit.service';
 import { AuthEmployee } from '../auth/auth.types';
 import { FinanceService } from '../finance/finance.service';
@@ -72,17 +72,17 @@ export class VisitsService {
         : {}),
       ...(search
         ? {
-            OR: [
-              { owner: { fullName: { contains: search, mode: 'insensitive' } } },
-              { owner: { phone: { contains: search, mode: 'insensitive' } } },
-              { animal: { nickname: { contains: search, mode: 'insensitive' } } },
-              { employee: { fullName: { contains: search, mode: 'insensitive' } } },
-              { exam: { purpose: { contains: search, mode: 'insensitive' } } },
-              { exam: { anamnesis: { contains: search, mode: 'insensitive' } } },
-              { exam: { examination: { contains: search, mode: 'insensitive' } } },
-              { recommendation: { treatmentPlan: { contains: search, mode: 'insensitive' } } },
-              { diagnoses: { some: { title: { contains: search, mode: 'insensitive' } } } },
-            ],
+            OR: withRussianSearchVariants(search, (variant) => [
+              { owner: { fullName: { contains: variant, mode: 'insensitive' as const } } },
+              { owner: { phone: { contains: variant, mode: 'insensitive' as const } } },
+              { animal: { nickname: { contains: variant, mode: 'insensitive' as const } } },
+              { employee: { fullName: { contains: variant, mode: 'insensitive' as const } } },
+              { exam: { purpose: { contains: variant, mode: 'insensitive' as const } } },
+              { exam: { anamnesis: { contains: variant, mode: 'insensitive' as const } } },
+              { exam: { examination: { contains: variant, mode: 'insensitive' as const } } },
+              { recommendation: { treatmentPlan: { contains: variant, mode: 'insensitive' as const } } },
+              { diagnoses: { some: { title: { contains: variant, mode: 'insensitive' as const } } } },
+            ]),
           }
         : {}),
     };
@@ -109,13 +109,13 @@ export class VisitsService {
         where: {
           isActive: true,
           ...(search ? {
-            OR: [
-              { title: { contains: search, mode: 'insensitive' } },
-              { sku: { contains: search, mode: 'insensitive' } },
-              { gtin: { contains: search, mode: 'insensitive' } },
-              { barcode: { contains: search, mode: 'insensitive' } },
-              { barcodes: { some: { value: { contains: search, mode: 'insensitive' } } } },
-            ],
+            OR: withRussianSearchVariants(search, (variant) => [
+              { title: { contains: variant, mode: 'insensitive' as const } },
+              { sku: { contains: variant, mode: 'insensitive' as const } },
+              { gtin: { contains: variant, mode: 'insensitive' as const } },
+              { barcode: { contains: variant, mode: 'insensitive' as const } },
+              { barcodes: { some: { value: { contains: variant, mode: 'insensitive' as const } } } },
+            ]),
           } : {}),
         },
         orderBy: { title: 'asc' },
@@ -144,7 +144,7 @@ export class VisitsService {
       this.prisma.service.findMany({
         where: {
           isActive: true,
-          ...(search ? { title: { contains: search, mode: 'insensitive' } } : {}),
+          ...(search ? { OR: withRussianSearchVariants(search, (variant) => [{ title: { contains: variant, mode: 'insensitive' as const } }]) } : {}),
         },
         orderBy: { title: 'asc' },
         take: search ? 200 : 50,

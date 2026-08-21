@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { ClientPortalStatus, FilePurpose, JobStatus, Prisma } from '@prisma/client';
 import { createHash, randomUUID } from 'node:crypto';
 import { extname } from 'node:path';
+import { withRussianSearchVariants } from '../../common/search-ranking';
 import { AuditService } from '../audit/audit.service';
 import { AuthEmployee } from '../auth/auth.types';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -63,11 +64,11 @@ export class FilesService {
     const search = clean(query.search);
     if (search) {
       filters.push({
-        OR: [
-          { originalName: { contains: search, mode: 'insensitive' } },
-          { note: { contains: search, mode: 'insensitive' } },
-          { sourceLabel: { contains: search, mode: 'insensitive' } },
-        ],
+        OR: withRussianSearchVariants(search, (variant) => [
+          { originalName: { contains: variant, mode: 'insensitive' as const } },
+          { note: { contains: variant, mode: 'insensitive' as const } },
+          { sourceLabel: { contains: variant, mode: 'insensitive' as const } },
+        ]),
       });
     }
     if (query.category) filters.push({ archiveCategory: query.category });

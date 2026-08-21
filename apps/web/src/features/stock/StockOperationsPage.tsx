@@ -25,7 +25,7 @@ import {
   postStockDocument,
   updateStockDocument,
 } from './stock.api';
-import { StockDocument, StockDocumentMutationInput, StockDocumentType, StockMovement, StockResources, Supplier, SupplierBalance } from './types';
+import { Product, StockDocument, StockDocumentMutationInput, StockDocumentType, StockMovement, StockResources, Supplier, SupplierBalance } from './types';
 import { SupplierModal } from './SupplierModal';
 
 const documentTitles: Record<StockDocumentType, string> = {
@@ -180,7 +180,13 @@ function StockDocumentModal({ open, document, correctionSource, initialProductId
     ...visibleBatches.map((batch) => ({ value: batch.id, productId: batch.productId, unitCost: Number(batch.purchasePrice), retailPrice: Number(batch.product?.retailPrice ?? 0), label: `${batch.product?.title ?? batch.productId} · остаток ${batch.rest}${batch.series ? ` · серия ${batch.series}` : ''}` })),
     ...knownItems.filter((item) => item.sourceBatchId && !visibleBatches.some((batch) => batch.id === item.sourceBatchId)).map((item) => ({ value: item.sourceBatchId!, productId: item.productId, unitCost: Number(item.sourceBatch?.purchasePrice ?? item.unitCost ?? 0), retailPrice: Number(item.retailPrice ?? item.product?.retailPrice ?? 0), label: `${item.product?.title ?? item.productId} · остаток ${item.sourceBatch?.rest ?? '—'}${item.sourceBatch?.series ? ` · серия ${item.sourceBatch.series}` : ''}` })),
     ...knownItems.filter((item) => !item.sourceBatchId).map((item) => ({ value: `NEW:${item.productId}`, productId: item.productId, unitCost: Number(item.unitCost ?? 0), retailPrice: Number(item.retailPrice ?? item.product?.retailPrice ?? 0), label: `${item.product?.title ?? item.productId} · новая учётная партия без накладной` })),
-    ...(needsActual ? (productsQuery.data?.items ?? []).map((product) => ({ value: `NEW:${product.id}`, productId: product.id, unitCost: 0, retailPrice: Number(product.retailPrice), label: `${product.title} · новая учётная партия без накладной` })) : []),
+    ...(needsActual ? (productsQuery.data?.items ?? []).map((product) => ({
+      value: `NEW:${product.id}`,
+      productId: product.id,
+      unitCost: getLatestKnownPurchasePrice(product),
+      retailPrice: Number(product.retailPrice),
+      label: `${product.title} · новая учётная партия без накладной`,
+    })) : []),
   ];
   const batchOptions = Array.from(new Map(rawBatchOptions.map((option) => [option.value, option])).values());
   const mutation = useMutation({
@@ -227,7 +233,10 @@ function StockDocumentModal({ open, document, correctionSource, initialProductId
                 <Select
                   showSearch
                   filterOption={false}
-                  onSearch={setBatchSearch}
+                  onSearch={(value) => {
+                    setBatchSearch(value);
+                    setProductSearch(value);
+                  }}
                   onChange={(value) => {
                     const batch = batchOptions.find((candidate) => candidate.value === value);
                     form.setFieldValue(['items', field.name, 'productId'], batch?.productId);
@@ -250,8 +259,8 @@ function StockDocumentModal({ open, document, correctionSource, initialProductId
                 </Form.Item>
               )}
               {needsActual ? (
-                <Form.Item name={[field.name, 'unitCost']} label={index === 0 ? 'Приходная цена' : undefined} rules={[{ required: true, message: 'Укажите приходную цену' }]}>
-                  <InputNumber min={0.01} precision={2} addonAfter="₽" />
+                <Form.Item name={[field.name, 'unitCost']} label={index === 0 ? 'Приходная цена' : undefined}>
+                  <InputNumber min={0} precision={2} addonAfter="₽" placeholder="Можно позже" />
                 </Form.Item>
               ) : null}
               {needsActual ? (
@@ -273,7 +282,7 @@ function StockDocumentModal({ open, document, correctionSource, initialProductId
         <Form.Item name="comment" label="Комментарий" style={{ marginTop: 16 }}><Input.TextArea rows={2} /></Form.Item>
       <Space direction="vertical" size={4}>
         <Typography.Text type="secondary">Черновик не меняет остатки. Изменение произойдёт только после отдельного подтверждения «Провести».</Typography.Text>
-        {needsActual ? <Typography.Text type="secondary">Для каждой позиции проверьте фактический остаток, приходную цену партии и цену продажи клиенту. При проведении инвентаризации эти две цены обновятся вместе с остатком.</Typography.Text> : null}
+        {needsActual ? <Typography.Text type="secondary">Известная приходная цена подставится из последней партии. Если цена неизвестна, её можно оставить пустой.</Typography.Text> : null}
       </Space>
     </Form>
   </Modal>;
@@ -318,6 +327,11 @@ function getDocumentFormValues(document?: StockDocument | null, correctionSource
     };
   }
   return { type: 'INVENTORY', warehouseId: defaultWarehouseId ?? '', occurredAt: dayjs(), items: [{ sourceBatchId: '', productId: initialProductId }] };
+}
+
+function getLatestKnownPurchasePrice(product: Product) {
+  const batch = product.batches?.find((item) => Number(item.purchasePrice) > 0);
+  return batch ? Number(batch.purchasePrice) : undefined;
 }
 
 function StockDocumentDrawer({ document, onClose }: { document: StockDocument | null; onClose: () => void }) {

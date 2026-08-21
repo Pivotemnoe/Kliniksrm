@@ -23,11 +23,42 @@ export function rankSearchResults<T>(
     .map(({ item }) => item);
 }
 
+export function withRussianSearchVariants<T>(
+  search: string,
+  buildConditions: (variant: string) => T[],
+) {
+  return russianSearchVariants(search).flatMap(buildConditions);
+}
+
+export function russianSearchVariants(search: string | null | undefined) {
+  const value = search?.trim();
+  if (!value) return [];
+
+  const maxGeneratedVariants = 64;
+  let variants = [''];
+  for (const character of value) {
+    if (character === 'е' || character === 'ё') {
+      variants = variants.flatMap((prefix) => [`${prefix}е`, `${prefix}ё`]).slice(0, maxGeneratedVariants);
+    } else if (character === 'Е' || character === 'Ё') {
+      variants = variants.flatMap((prefix) => [`${prefix}Е`, `${prefix}Ё`]).slice(0, maxGeneratedVariants);
+    } else {
+      variants = variants.map((prefix) => `${prefix}${character}`);
+    }
+  }
+
+  return [...new Set([
+    value,
+    value.replace(/ё/g, 'е').replace(/Ё/g, 'Е'),
+    value.replace(/е/g, 'ё').replace(/Е/g, 'Ё'),
+    ...variants,
+  ])];
+}
+
 function prefixRank(values: string[], needle: string) {
   const index = values.findIndex((value) => value.startsWith(needle));
   return index === -1 ? values.length : index;
 }
 
 function normalize(value: string | null | undefined) {
-  return value?.trim().toLocaleLowerCase('ru-RU') ?? '';
+  return value?.trim().toLocaleLowerCase('ru-RU').replace(/ё/g, 'е') ?? '';
 }

@@ -5,7 +5,7 @@ export function normalizeDisplayName(value: string) {
 }
 
 export function normalizePersonNameKey(value: string) {
-  return normalizeDisplayName(value).toLocaleLowerCase('ru-RU');
+  return normalizeDisplayName(value).toLocaleLowerCase('ru-RU').replace(/ё/g, 'е');
 }
 
 export function normalizePhoneForLookup(value?: string | null) {

@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { OnlineRequestStatus, Prisma } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
+import { withRussianSearchVariants } from '../../common/search-ranking';
 import { normalizeRussianPhone } from '../../common/phone';
 import { AppointmentsService } from '../appointments/appointments.service';
 import { AuditService } from '../audit/audit.service';
@@ -35,15 +36,15 @@ export class OnlineRequestsService {
         : {}),
       ...(search
         ? {
-            OR: [
-              { ownerName: { contains: search, mode: 'insensitive' } },
-              { phone: { contains: search, mode: 'insensitive' } },
-              { email: { contains: search, mode: 'insensitive' } },
-              { animalNickname: { contains: search, mode: 'insensitive' } },
-              { animalSpecies: { contains: search, mode: 'insensitive' } },
-              { animalBreed: { contains: search, mode: 'insensitive' } },
-              { comment: { contains: search, mode: 'insensitive' } },
-            ],
+            OR: withRussianSearchVariants(search, (variant) => [
+              { ownerName: { contains: variant, mode: 'insensitive' as const } },
+              { phone: { contains: variant, mode: 'insensitive' as const } },
+              { email: { contains: variant, mode: 'insensitive' as const } },
+              { animalNickname: { contains: variant, mode: 'insensitive' as const } },
+              { animalSpecies: { contains: variant, mode: 'insensitive' as const } },
+              { animalBreed: { contains: variant, mode: 'insensitive' as const } },
+              { comment: { contains: variant, mode: 'insensitive' as const } },
+            ]),
           }
         : {}),
     };
