@@ -74,7 +74,14 @@ test('лабораторный экран получает сводку одни
   assert.match(page, /queryFn: getLaboratorySummary/);
   assert.doesNotMatch(page, /summary', 'active'/);
   assert.match(drawer, /shouldCellUpdate/);
-  assert.match(drawer, /useCallback/);
+  assert.match(drawer, /BufferedLaboratoryInput/);
+  assert.match(drawer, /defaultValue=\{value\}/);
+  assert.doesNotMatch(drawer, /setDraft\(/);
+  assert.match(drawer, /rowsRef = useRef/);
+  assert.match(drawer, /onDraftChange=\{\(resultValue\) => updateDraftRow/);
+  assert.match(drawer, /onBlur=\{onCommit\}/);
+  assert.match(drawer, /mutation\.mutate\(rowsRef\.current\.map/);
+  assert.doesNotMatch(drawer, /onChange=\{\(event\) => updateRow\(row\.itemId/);
   assert.match(gatewayNginx, /proxy_cache temichevvet_assets/);
   assert.match(gatewayNginx, /gzip on/);
 });

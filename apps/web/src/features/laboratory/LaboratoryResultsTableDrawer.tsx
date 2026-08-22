@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Alert, App, Button, Drawer, Input, Select, Space, Table, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getErrorMessage } from '../../api/errors';
 import { laboratoryOrderItemStatusLabels } from '../visits/types';
 import type { LaboratoryOrderItem, LaboratoryOrderResultRowInput } from './types';
@@ -13,6 +13,30 @@ type ResultTableRow = LaboratoryOrderResultRowInput & {
   code: string | null;
   disabled: boolean;
 };
+
+const BufferedLaboratoryInput = memo(function BufferedLaboratoryInput({
+  value,
+  disabled,
+  ariaLabel,
+  onDraftChange,
+  onCommit,
+}: {
+  value: string;
+  disabled: boolean;
+  ariaLabel?: string;
+  onDraftChange: (value: string) => void;
+  onCommit: () => void;
+}) {
+  return (
+    <Input
+      defaultValue={value}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      onChange={(event) => onDraftChange(event.target.value)}
+      onBlur={onCommit}
+    />
+  );
+});
 
 export function LaboratoryResultsTableDrawer({
   order,
@@ -28,6 +52,8 @@ export function LaboratoryResultsTableDrawer({
   const queryClient = useQueryClient();
   const { message } = App.useApp();
   const [rows, setRows] = useState<ResultTableRow[]>([]);
+  const rowsRef = useRef<ResultTableRow[]>([]);
+  const rowIndexesRef = useRef(new Map<string, number>());
   const mutation = useMutation({
     mutationFn: (items: LaboratoryOrderResultRowInput[]) => updateLaboratoryOrderResults(order!.id, items),
     onSuccess: () => {
@@ -43,7 +69,7 @@ export function LaboratoryResultsTableDrawer({
   });
 
   useEffect(() => {
-    setRows(order?.items.map((item) => ({
+    const nextRows = order?.items.map((item) => ({
       itemId: item.id,
       title: item.title,
       code: item.code,
@@ -54,12 +80,33 @@ export function LaboratoryResultsTableDrawer({
       referenceRange: item.referenceRange ?? '',
       comment: item.comment ?? '',
       disabled: item.status === 'CANCELLED',
-    })) ?? []);
+    })) ?? [];
+    rowsRef.current = nextRows;
+    rowIndexesRef.current = new Map(nextRows.map((row, index) => [row.itemId, index]));
+    setRows(nextRows);
   }, [order]);
 
-  const updateRow = useCallback((itemId: string, patch: Partial<ResultTableRow>) => {
-    setRows((current) => current.map((row) => (row.itemId === itemId ? { ...row, ...patch } : row)));
+  const updateDraftRow = useCallback((itemId: string, patch: Partial<ResultTableRow>) => {
+    const index = rowIndexesRef.current.get(itemId);
+    if (index === undefined) return;
+    rowsRef.current[index] = { ...rowsRef.current[index], ...patch };
   }, []);
+
+  const commitDraftRow = useCallback((itemId: string, completeFromResult = false) => {
+    const index = rowIndexesRef.current.get(itemId);
+    if (index === undefined) return;
+    const draft = rowsRef.current[index];
+    const next = completeFromResult && draft.resultValue?.trim() && draft.status === 'ORDERED'
+      ? { ...draft, status: 'COMPLETED' as const }
+      : draft;
+    rowsRef.current[index] = next;
+    setRows((current) => current.map((row) => (row.itemId === itemId ? next : row)));
+  }, []);
+
+  const updateRow = useCallback((itemId: string, patch: Partial<ResultTableRow>) => {
+    updateDraftRow(itemId, patch);
+    commitDraftRow(itemId);
+  }, [commitDraftRow, updateDraftRow]);
 
   const columns = useMemo<ColumnsType<ResultTableRow>>(() => [
     {
@@ -72,17 +119,17 @@ export function LaboratoryResultsTableDrawer({
     {
       title: 'Значение', dataIndex: 'resultValue', key: 'resultValue', width: 145,
       shouldCellUpdate: (row, previous) => row.resultValue !== previous.resultValue || row.status !== previous.status || row.disabled !== previous.disabled,
-      render: (value, row) => <Input value={value ?? ''} disabled={row.disabled} aria-label={`Значение ${row.title}`} onChange={(event) => updateRow(row.itemId, { resultValue: event.target.value, ...(event.target.value.trim() && row.status === 'ORDERED' ? { status: 'COMPLETED' } : {}) })} />,
+      render: (value, row) => <BufferedLaboratoryInput value={value ?? ''} disabled={row.disabled} ariaLabel={`Значение ${row.title}`} onDraftChange={(resultValue) => updateDraftRow(row.itemId, { resultValue })} onCommit={() => commitDraftRow(row.itemId, true)} />,
     },
-    { title: 'Ед.', dataIndex: 'unit', key: 'unit', width: 110, shouldCellUpdate: (row, previous) => row.unit !== previous.unit || row.disabled !== previous.disabled, render: (value, row) => <Input value={value ?? ''} disabled={row.disabled} onChange={(event) => updateRow(row.itemId, { unit: event.target.value })} /> },
-    { title: 'Референс', dataIndex: 'referenceRange', key: 'referenceRange', width: 230, shouldCellUpdate: (row, previous) => row.referenceRange !== previous.referenceRange || row.disabled !== previous.disabled, render: (value, row) => <Input value={value ?? ''} disabled={row.disabled} onChange={(event) => updateRow(row.itemId, { referenceRange: event.target.value })} /> },
-    { title: 'Комментарий', dataIndex: 'comment', key: 'comment', width: 210, shouldCellUpdate: (row, previous) => row.comment !== previous.comment || row.disabled !== previous.disabled, render: (value, row) => <Input value={value ?? ''} disabled={row.disabled} onChange={(event) => updateRow(row.itemId, { comment: event.target.value })} /> },
+    { title: 'Ед.', dataIndex: 'unit', key: 'unit', width: 110, shouldCellUpdate: (row, previous) => row.unit !== previous.unit || row.disabled !== previous.disabled, render: (value, row) => <BufferedLaboratoryInput value={value ?? ''} disabled={row.disabled} onDraftChange={(unit) => updateDraftRow(row.itemId, { unit })} onCommit={() => commitDraftRow(row.itemId)} /> },
+    { title: 'Референс', dataIndex: 'referenceRange', key: 'referenceRange', width: 230, shouldCellUpdate: (row, previous) => row.referenceRange !== previous.referenceRange || row.disabled !== previous.disabled, render: (value, row) => <BufferedLaboratoryInput value={value ?? ''} disabled={row.disabled} onDraftChange={(referenceRange) => updateDraftRow(row.itemId, { referenceRange })} onCommit={() => commitDraftRow(row.itemId)} /> },
+    { title: 'Комментарий', dataIndex: 'comment', key: 'comment', width: 210, shouldCellUpdate: (row, previous) => row.comment !== previous.comment || row.disabled !== previous.disabled, render: (value, row) => <BufferedLaboratoryInput value={value ?? ''} disabled={row.disabled} onDraftChange={(comment) => updateDraftRow(row.itemId, { comment })} onCommit={() => commitDraftRow(row.itemId)} /> },
     {
       title: 'Статус', dataIndex: 'status', key: 'status', width: 155,
       shouldCellUpdate: (row, previous) => row.status !== previous.status || row.disabled !== previous.disabled,
       render: (value, row) => <Select value={value} disabled={row.disabled} className="full-width" onChange={(status) => updateRow(row.itemId, { status })} options={Object.entries(laboratoryOrderItemStatusLabels).filter(([status]) => status !== 'CANCELLED').map(([status, label]) => ({ value: status, label }))} />,
     },
-  ], [updateRow]);
+  ], [commitDraftRow, updateDraftRow, updateRow]);
 
   return (
     <Drawer
@@ -91,7 +138,7 @@ export function LaboratoryResultsTableDrawer({
       onClose={onClose}
       width="min(1280px, 96vw)"
       destroyOnHidden
-      extra={<Button type="primary" loading={mutation.isPending} disabled={!canManage || !rows.some((row) => !row.disabled)} onClick={() => mutation.mutate(rows.map(({ title: _title, code: _code, disabled: _disabled, ...row }) => row))}>Сохранить всю таблицу</Button>}
+      extra={<Button type="primary" loading={mutation.isPending} disabled={!canManage || !rows.some((row) => !row.disabled)} onClick={() => mutation.mutate(rowsRef.current.map(({ title: _title, code: _code, disabled: _disabled, ...row }) => row))}>Сохранить всю таблицу</Button>}
     >
       <Alert type="info" showIcon className="form-alert" message="Введите результаты прямо в бланк анализа" description="Показатели взяты из привязанного документа. Вся таблица сохраняется одной операцией, а печать использует тот же бланк A5." />
       {mutation.isError ? <Alert type="error" showIcon message={getErrorMessage(mutation.error)} className="form-alert" /> : null}

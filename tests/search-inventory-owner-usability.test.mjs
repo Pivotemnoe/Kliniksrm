@@ -78,13 +78,18 @@ test('инвентаризация ищет весь каталог и разр�
   assert.match(service, /latestCostByProduct\.get\(item\.productId\) \?\? 0/);
 });
 
-test('широкие складские таблицы имеют компактные колонки и доступную липкую прокрутку', async () => {
+test('широкие складские таблицы имеют компактные фиксированные колонки и заметную липкую прокрутку', async () => {
   const [page, styles] = await Promise.all([
     read('apps/web/src/features/stock/StockPage.tsx'),
     read('apps/web/src/styles.css'),
   ]);
 
-  assert.match(page, /title: 'Название'[\s\S]*?width: 260, ellipsis: true/);
-  assert.match(page, /title: 'Категория'[\s\S]*?width: 180, ellipsis: true/);
+  assert.match(page, /title: 'Название'[\s\S]*?width: 210, ellipsis: \{ showTitle: true \}/);
+  assert.match(page, /title: 'Категория'[\s\S]*?width: 160, ellipsis: \{ showTitle: true \}/);
+  assert.match(page, /StockTable query=\{productsQuery\} columns=\{columns\} scrollX=\{1530\}/);
+  assert.match(page, /tableLayout=\{typeof scrollX === 'number' \? 'fixed' : undefined\}/);
   assert.match(styles, /\.table-top-scroll \{[\s\S]*?position: sticky;[\s\S]*?top: 0;/);
+  assert.match(styles, /\.table-top-scroll::-webkit-scrollbar-thumb \{[\s\S]*?background: #718399;/);
+  assert.match(styles, /scrollbar-color: #718399 #eef2f6/);
+  assert.match(styles, /\.stock-catalog-table \.stock-nowrap \{[\s\S]*?white-space: nowrap;/);
 });

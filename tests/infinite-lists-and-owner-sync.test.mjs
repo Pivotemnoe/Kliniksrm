@@ -51,11 +51,11 @@ test('рабочие списки подгружаются вниз порция
 
 test('таблица услуг ограничивает широкие колонки и не прячет цены за длинным названием', async () => {
   const stockPage = await read('apps/web/src/features/stock/StockPage.tsx');
-  assert.match(stockPage, /title: 'Название'[\s\S]*?width: 260[\s\S]*?ellipsis: true/);
-  assert.match(stockPage, /title: 'Цена'[\s\S]*?width: 190/);
-  assert.match(stockPage, /title: 'Тип цены'[\s\S]*?width: 150/);
+  assert.match(stockPage, /title: 'Название'[\s\S]*?width: 220[\s\S]*?ellipsis: \{ showTitle: true \}/);
+  assert.match(stockPage, /title: 'Цена'[\s\S]*?width: 170/);
+  assert.match(stockPage, /title: 'Тип цены'[\s\S]*?width: 130/);
   assert.match(stockPage, /fixed: 'right'/);
-  assert.match(stockPage, /StockTable query=\{servicesQuery\} columns=\{columns\} scrollX=\{1010\}/);
+  assert.match(stockPage, /StockTable query=\{servicesQuery\} columns=\{columns\} scrollX=\{885\}/);
 });
 
 test('завершение приёма атомарно ставит обновление личного кабинета в долговечную очередь', async () => {
