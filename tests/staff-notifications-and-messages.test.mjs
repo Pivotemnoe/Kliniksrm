@@ -280,6 +280,9 @@ test('активность синхронизируется между вкла�
   assert.match(auth, /document\.visibilityState !== 'visible'/);
   assert.match(auth, /scheduleIdleCheck\(hiddenTabIdleRecheckMs\)/);
   assert.match(auth, /Re-read immediately before logout/);
+  assert.match(auth, /const handleReturnToVisible = \(\) => \{[\s\S]*hasExceededIdleTimeout\(\)[\s\S]*void checkIdle\(\)[\s\S]*publishActivity\(true\)/);
+  assert.match(auth, /window\.addEventListener\('focus', handleReturnToVisible\)/);
+  assert.doesNotMatch(auth, /window\.addEventListener\('focus', publishActivity\)/);
 });
 
 test('ошибка загрузки критических оповещений не маскируется пустым списком', async () => {

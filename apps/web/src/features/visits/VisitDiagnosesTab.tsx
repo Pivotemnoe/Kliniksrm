@@ -116,7 +116,7 @@ export function VisitDiagnosesTab({ visit, canManage, locked, compact = false, s
 
   return (
     <Space direction="vertical" size={compact ? 10 : 16} className={`full-width${compact ? ' visit-diagnoses-inline' : ''}`}>
-      {locked && showLockedAlert ? <Alert type="info" showIcon message="Редактирование закрыто: отменённый приём нельзя менять, завершённый доступен директору или в течение 30 минут после завершения." /> : null}
+      {locked && showLockedAlert ? <Alert type="info" showIcon message="Редактирование закрыто: отменённый приём нельзя менять, завершённый доступен директору или в течение 60 минут после завершения." /> : null}
       {saveMutation.isError ? <Typography.Text type="danger">{getErrorMessage(saveMutation.error)}</Typography.Text> : null}
       {deleteMutation.isError ? <Typography.Text type="danger">{getErrorMessage(deleteMutation.error)}</Typography.Text> : null}
       {quickCreateMutation.isError ? <Typography.Text type="danger">{getErrorMessage(quickCreateMutation.error)}</Typography.Text> : null}

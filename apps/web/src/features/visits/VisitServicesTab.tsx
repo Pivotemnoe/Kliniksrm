@@ -152,7 +152,7 @@ export function VisitServicesTab({ visit, canManage, locked }: VisitServicesTabP
 
   return (
     <Space direction="vertical" size={16} className="full-width">
-      {locked ? <Alert type="info" showIcon message="Редактирование закрыто: отменённый приём нельзя менять, завершённый доступен директору или в течение 30 минут после завершения." /> : null}
+      {locked ? <Alert type="info" showIcon message="Редактирование закрыто: отменённый приём нельзя менять, завершённый доступен директору или в течение 60 минут после завершения." /> : null}
       {visitCancelled ? (
         <Alert type="warning" showIcon message="Финансовые позиции отменённого приёма защищены. Директор должен сначала нажать «Вернуть в работу» и указать причину." />
       ) : null}

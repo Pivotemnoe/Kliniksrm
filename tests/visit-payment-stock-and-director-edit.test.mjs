@@ -88,6 +88,10 @@ test('директор может аудируемо исправлять кли
   assert.match(visitPage, /Вернуть в работу/);
   assert.match(visitPage, /Клиническая карта доступна директору для аудируемого исправления/);
   assert.match(authGuard, /remoteDirectorMutation[\s\S]*remote_access\.director_write/);
+  assert.match(visits, /COMPLETED_VISIT_EDIT_GRACE_MS = 60 \* 60 \* 1000/);
+  assert.match(visits, /в течение 60 минут после завершения/);
+  assert.match(visitPage, /completedVisitEditGraceMs = 60 \* 60 \* 1000/);
+  assert.match(visitPage, /доступен для исправлений в течение 60 минут/);
 });
 
 test('клинический каталог доступен по visits.manage и несколько позиций сохраняются одной транзакцией', async () => {

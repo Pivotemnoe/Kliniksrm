@@ -40,7 +40,7 @@ import { extractLaboratoryDocumentIndicators, LaboratoryFormSnapshot } from '../
 import { assertPrimaryVisitDiagnosesReady } from './visit-diagnosis-rules';
 
 type WarehouseScope = string[] | null;
-const COMPLETED_VISIT_EDIT_GRACE_MS = 30 * 60 * 1000;
+const COMPLETED_VISIT_EDIT_GRACE_MS = 60 * 60 * 1000;
 
 @Injectable()
 export class VisitsService {
@@ -1804,7 +1804,7 @@ function ensureVisitEditable(visit: { status: VisitStatus; completedAt: Date | n
     return;
   }
 
-  throw new BadRequestException('Завершённый приём можно редактировать только директору или в течение 30 минут после завершения');
+  throw new BadRequestException('Завершённый приём можно редактировать только директору или в течение 60 минут после завершения');
 }
 
 function ensureVisitOperational(visit: { status: VisitStatus }) {

@@ -80,7 +80,7 @@ export function VisitExamTab({ visit, canManage, locked }: VisitExamTabProps) {
 
   return (
     <Form layout="vertical" disabled={disabled} className="visit-tab-form">
-      {locked ? <Alert type="info" showIcon message="Редактирование закрыто: отменённый приём нельзя менять, завершённый доступен директору или в течение 30 минут после завершения." className="form-alert" /> : null}
+      {locked ? <Alert type="info" showIcon message="Редактирование закрыто: отменённый приём нельзя менять, завершённый доступен директору или в течение 60 минут после завершения." className="form-alert" /> : null}
       {mutation.isError ? <Alert type="error" showIcon message={getErrorMessage(mutation.error)} className="form-alert" /> : null}
       <div className="form-grid visit-exam-vitals-grid">
         <Controller

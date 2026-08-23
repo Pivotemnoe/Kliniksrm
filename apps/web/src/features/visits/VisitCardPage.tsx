@@ -565,7 +565,7 @@ function showDiagnosisWarning(modal: ReturnType<typeof App.useApp>['modal'], iss
   });
 }
 
-const completedVisitEditGraceMs = 30 * 60 * 1000;
+const completedVisitEditGraceMs = 60 * 60 * 1000;
 
 function isVisitLockedForEditing(visit: Visit, employee?: Employee) {
   if (employee?.roles.includes('director')) {
@@ -599,7 +599,7 @@ function getCompletedEditNotice(visit: Visit, employee: Employee | undefined, lo
   }
 
   if (!locked) {
-    return 'Приём завершён, но доступен для исправлений в течение 30 минут после завершения.';
+    return 'Приём завершён, но доступен для исправлений в течение 60 минут после завершения.';
   }
 
   return null;

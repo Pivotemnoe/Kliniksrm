@@ -112,6 +112,12 @@ export function useIdleLogout(enabled: boolean) {
       scheduleIdleCheck();
     };
 
+    const hasExceededIdleTimeout = () => {
+      const sharedActivityAt = readSharedActivityAt();
+      const effectiveActivityAt = Math.max(lastActivityAt, sharedActivityAt ?? 0);
+      return Date.now() - effectiveActivityAt >= idleMs;
+    };
+
     async function checkIdle() {
       if (logoutStarted) return;
 
@@ -155,17 +161,22 @@ export function useIdleLogout(enabled: boolean) {
       scheduleIdleCheck();
     };
 
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') publishActivity(true);
+    const handleReturnToVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (hasExceededIdleTimeout()) {
+        void checkIdle();
+        return;
+      }
+      publishActivity(true);
     };
 
     const events: Array<keyof WindowEventMap> = ['click', 'keydown', 'mousemove', 'scroll', 'touchstart'];
     for (const eventName of events) {
       window.addEventListener(eventName, publishActivity, { passive: true });
     }
-    window.addEventListener('focus', publishActivity);
+    window.addEventListener('focus', handleReturnToVisible);
     window.addEventListener('storage', handleSharedActivity);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener('visibilitychange', handleReturnToVisible);
     publishActivity(true);
 
     return () => {
@@ -175,9 +186,9 @@ export function useIdleLogout(enabled: boolean) {
       for (const eventName of events) {
         window.removeEventListener(eventName, publishActivity);
       }
-      window.removeEventListener('focus', publishActivity);
+      window.removeEventListener('focus', handleReturnToVisible);
       window.removeEventListener('storage', handleSharedActivity);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.removeEventListener('visibilitychange', handleReturnToVisible);
     };
   }, [enabled, navigate, queryClient]);
 }
