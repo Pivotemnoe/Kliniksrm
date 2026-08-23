@@ -1,6 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Button, Form, Input, InputNumber, Space, Table, Typography } from 'antd';
+import { Alert, Button, Form, Input, Space, Table, Typography } from 'antd';
+import { InputNumber } from '../../shared/ui/DecimalInputNumber';
 import { ColumnsType } from 'antd/es/table';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';

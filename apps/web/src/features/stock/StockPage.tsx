@@ -1,7 +1,8 @@
 import { CreditCardOutlined, DeleteOutlined, DownOutlined, EditOutlined, EyeOutlined, PaperClipOutlined, PlusOutlined, PrinterOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, AutoComplete, Button, Checkbox, DatePicker, Descriptions, Drawer, Dropdown, Form, Input, InputNumber, Modal, Radio, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
+import { Alert, App, AutoComplete, Button, Checkbox, DatePicker, Descriptions, Drawer, Dropdown, Form, Input, Modal, Radio, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
+import { InputNumber } from '../../shared/ui/DecimalInputNumber';
 import { ColumnsType } from 'antd/es/table';
 import dayjs, { Dayjs } from 'dayjs';
 import JsBarcode from 'jsbarcode';

@@ -1,6 +1,7 @@
 import { CheckOutlined, CloseCircleOutlined, EditOutlined, PlusOutlined, ReloadOutlined, SaveOutlined, SendOutlined, SettingOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Card, DatePicker, Input, InputNumber, Select, Space, Statistic, Table, Tag, Typography } from 'antd';
+import { Alert, App, Button, Card, DatePicker, Input, Select, Space, Statistic, Table, Tag, Typography } from 'antd';
+import { InputNumber } from '../../shared/ui/DecimalInputNumber';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';

@@ -1,6 +1,7 @@
 import { CopyOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, App, AutoComplete, Button, Form, Input, InputNumber, Modal, Select, Space, Typography } from 'antd';
+import { Alert, App, AutoComplete, Button, Form, Input, Modal, Select, Space, Typography } from 'antd';
+import { InputNumber } from '../../shared/ui/DecimalInputNumber';
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { getHospitalCatalog } from './hospital.api';
 import type { CreateHospitalTreatmentPlanInput, HospitalCatalog, HospitalRecordType } from './types';

@@ -1,6 +1,7 @@
 import { CheckOutlined, CloseOutlined, EditOutlined, EyeOutlined, PlusOutlined, RetweetOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, DatePicker, Drawer, Form, Input, InputNumber, Modal, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
+import { App, Button, DatePicker, Drawer, Form, Input, Modal, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
+import { InputNumber } from '../../shared/ui/DecimalInputNumber';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { Dayjs } from 'dayjs';
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';

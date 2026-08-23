@@ -1,6 +1,7 @@
 import { DeleteOutlined, PlusOutlined, PrinterOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, App, Button, Checkbox, Form, InputNumber, Radio, Select, Space, Table, Typography } from 'antd';
+import { Alert, App, Button, Checkbox, Form, Radio, Select, Space, Table, Typography } from 'antd';
+import { InputNumber } from './DecimalInputNumber';
 import JsBarcode from 'jsbarcode';
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 

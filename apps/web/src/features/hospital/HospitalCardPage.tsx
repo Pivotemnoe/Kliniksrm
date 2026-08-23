@@ -8,7 +8,8 @@ import {
   SwapOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Descriptions, Form, Input, InputNumber, Modal, Radio, Select, Space, Tag, Typography } from 'antd';
+import { Alert, App, Button, Descriptions, Form, Input, Modal, Radio, Select, Space, Tag, Typography } from 'antd';
+import { InputNumber } from '../../shared/ui/DecimalInputNumber';
 import { useDeferredValue, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';

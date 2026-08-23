@@ -1,6 +1,7 @@
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { useMutation } from '@tanstack/react-query';
-import { Alert, App, Button, Card, DatePicker, Form, Input, InputNumber, Modal, Select, Space, Typography } from 'antd';
+import { Alert, App, Button, Card, DatePicker, Form, Input, Modal, Select, Space, Typography } from 'antd';
+import { InputNumber } from '../../shared/ui/DecimalInputNumber';
 import dayjs, { Dayjs } from 'dayjs';
 import { useEffect } from 'react';
 import { getErrorMessage } from '../../api/errors';

@@ -1,6 +1,7 @@
 import { EditOutlined, PlusOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Form, Input, InputNumber, Modal, Select, Space, Switch, Table, Tag, Typography } from 'antd';
+import { Alert, App, Button, Form, Input, Modal, Select, Space, Switch, Table, Tag, Typography } from 'antd';
+import { InputNumber } from '../../shared/ui/DecimalInputNumber';
 import { useState } from 'react';
 import { getErrorMessage } from '../../api/errors';
 import { listBusinessCategories, saveBusinessCategory } from './business.api';

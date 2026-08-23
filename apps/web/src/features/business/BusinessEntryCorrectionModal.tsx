@@ -1,5 +1,6 @@
 import { useMutation } from '@tanstack/react-query';
-import { Alert, App, Form, Input, InputNumber, Modal, Select, Space } from 'antd';
+import { Alert, App, Form, Input, Modal, Select, Space } from 'antd';
+import { InputNumber } from '../../shared/ui/DecimalInputNumber';
 import { useEffect } from 'react';
 import { getErrorMessage } from '../../api/errors';
 import { correctBusinessEntry } from './business.api';

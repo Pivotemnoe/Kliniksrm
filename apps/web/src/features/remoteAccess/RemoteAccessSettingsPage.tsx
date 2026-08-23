@@ -1,6 +1,7 @@
 import { AuditOutlined, CopyOutlined, LaptopOutlined, LinkOutlined, SafetyCertificateOutlined, StopOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Card, Descriptions, Form, Input, InputNumber, Popconfirm, QRCode, Select, Space, Switch, Table, Tag, Typography } from 'antd';
+import { Alert, App, Button, Card, Descriptions, Form, Input, Popconfirm, QRCode, Select, Space, Switch, Table, Tag, Typography } from 'antd';
+import { InputNumber } from '../../shared/ui/DecimalInputNumber';
 import type { ColumnsType } from 'antd/es/table';
 import { useMemo, useState } from 'react';
 import { getErrorMessage } from '../../api/errors';

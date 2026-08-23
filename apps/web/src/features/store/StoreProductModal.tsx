@@ -1,4 +1,5 @@
-import { App, Button, Checkbox, Form, Input, InputNumber, Modal, Select } from 'antd';
+import { App, Button, Checkbox, Form, Input, Modal, Select } from 'antd';
+import { InputNumber } from '../../shared/ui/DecimalInputNumber';
 import { useEffect, useState } from 'react';
 import { getErrorMessage } from '../../api/errors';
 import { createStoreProduct, updateStoreProduct } from './store.api';

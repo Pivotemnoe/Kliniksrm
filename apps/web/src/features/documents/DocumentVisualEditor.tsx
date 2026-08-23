@@ -8,7 +8,8 @@ import {
   ScissorOutlined,
   TableOutlined,
 } from '@ant-design/icons';
-import { Button, Card, Checkbox, Input, InputNumber, Segmented, Select, Space, Switch, Typography } from 'antd';
+import { Button, Card, Checkbox, Input, Segmented, Select, Space, Switch, Typography } from 'antd';
+import { InputNumber } from '../../shared/ui/DecimalInputNumber';
 import { useEffect, useMemo, useState } from 'react';
 import { DocumentVariablePalette } from './DocumentVariablePalette';
 import {
