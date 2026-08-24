@@ -2,7 +2,8 @@ import { CopyOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, App, AutoComplete, Button, Form, Input, Modal, Select, Space, Typography } from 'antd';
 import { InputNumber } from '../../shared/ui/DecimalInputNumber';
-import { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useDebouncedValue } from '../../shared/hooks/useDebouncedValue';
 import { getHospitalCatalog } from './hospital.api';
 import type { CreateHospitalTreatmentPlanInput, HospitalCatalog, HospitalRecordType } from './types';
 import { formatServicePrice, getServiceDefaultPrice, getServicePriceHelp, getServicePriceRange } from '../stock/service-pricing';
@@ -54,17 +55,17 @@ export function HospitalTreatmentPlanModal({
   const [form] = Form.useForm<TreatmentPlanFormValues>();
   const { message } = App.useApp();
   const [catalogSearch, setCatalogSearch] = useState('');
-  const deferredCatalogSearch = useDeferredValue(catalogSearch);
+  const debouncedCatalogSearch = useDebouncedValue(catalogSearch.trim());
   const items = Form.useWatch('items', form) ?? [];
   const catalogQuery = useQuery({
-    queryKey: ['hospital', 'catalog', 'treatment-plan', deferredCatalogSearch],
-    queryFn: () => getHospitalCatalog(deferredCatalogSearch || undefined),
+    queryKey: ['hospital', 'catalog', 'treatment-plan', debouncedCatalogSearch],
+    queryFn: ({ signal }) => getHospitalCatalog(debouncedCatalogSearch || undefined, signal),
     enabled: open,
   });
 
   useEffect(() => {
-    if (!open) return;
     setCatalogSearch('');
+    if (!open) return;
     form.setFieldsValue({ title: '', items: [newTreatmentPlanItem()] });
   }, [form, open]);
 

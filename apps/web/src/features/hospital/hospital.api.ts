@@ -19,8 +19,8 @@ export function getHospitalResources() {
   return apiRequest<HospitalResources>('/v1/hospital/resources');
 }
 
-export function getHospitalCatalog(search?: string) {
-  return apiRequest<HospitalCatalog>(`/v1/hospital/catalog${buildQuery({ search })}`);
+export function getHospitalCatalog(search?: string, signal?: AbortSignal) {
+  return apiRequest<HospitalCatalog>(`/v1/hospital/catalog${buildQuery({ search })}`, { signal });
 }
 
 export function getHospitalStay(stayId: string) {

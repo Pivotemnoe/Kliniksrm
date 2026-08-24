@@ -10,7 +10,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, App, Button, Descriptions, Form, Input, Modal, Radio, Select, Space, Tag, Typography } from 'antd';
 import { InputNumber } from '../../shared/ui/DecimalInputNumber';
-import { useDeferredValue, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
@@ -39,6 +39,7 @@ import {
 } from './hospital.api';
 import { HospitalSheet } from './HospitalSheet';
 import { HospitalTreatmentPlanModal } from './HospitalTreatmentPlanModal';
+import { useDebouncedValue } from '../../shared/hooks/useDebouncedValue';
 import { printHospitalSheet } from './hospitalPrint';
 import type { CreateHospitalAmendmentInput, CreateHospitalRecordInput, HospitalCatalog, HospitalRecord, HospitalRecordStatus, HospitalRecordType, UpdateHospitalRecordInput } from './types';
 
@@ -432,10 +433,10 @@ function HospitalRecordModal({
   const effectivePlannedCatalog = getEffectivePlannedCatalog(record);
   const hasPlannedCatalog = Boolean(effectivePlannedCatalog.productId || effectivePlannedCatalog.serviceId);
   const [catalogSearch, setCatalogSearch] = useState('');
-  const deferredCatalogSearch = useDeferredValue(catalogSearch);
+  const debouncedCatalogSearch = useDebouncedValue(catalogSearch.trim());
   const catalogQuery = useQuery({
-    queryKey: ['hospital', 'catalog', deferredCatalogSearch],
-    queryFn: () => getHospitalCatalog(deferredCatalogSearch || undefined),
+    queryKey: ['hospital', 'catalog', debouncedCatalogSearch],
+    queryFn: ({ signal }) => getHospitalCatalog(debouncedCatalogSearch || undefined, signal),
     enabled: open && catalogKind !== 'NONE',
   });
   const selectedService = mergeServiceOptions(record, catalogQuery.data?.services).find((service) => service.id === selectedServiceId);
@@ -445,8 +446,8 @@ function HospitalRecordModal({
   const postedBillingLocked = billingLocked && Boolean(record?.billItem);
 
   useEffect(() => {
-    if (!open) return;
     setCatalogSearch('');
+    if (!open) return;
     if (!record) {
       const initialType = recordTypeOptions.find((option) => option.value === initialRecordType) ?? recordTypeOptions[3];
       form.setFieldsValue({
