@@ -129,6 +129,7 @@ const roles = [
       'visits.read',
       'visits.manage',
       'billing.read',
+      'payments.manage',
       'laboratory.read',
       'laboratory.manage',
       'hospital.read',
