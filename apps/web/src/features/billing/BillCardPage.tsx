@@ -865,8 +865,8 @@ function BillItemModal({
 
 const paymentFormSchema = z.object({
   type: z.enum(['CASH', 'CARD', 'BANK_TRANSFER', 'DEPOSIT', 'OTHER']),
-  paymentMethodId: z.string().optional(),
-  cashboxId: z.string().optional(),
+  paymentMethodId: z.string().min(1, 'Выберите способ оплаты'),
+  cashboxId: z.string().min(1, 'Выберите кассу'),
   amount: z.number().min(0.01, 'Введите сумму'),
   paidAt: z.string().optional(),
   comment: z.string().trim().optional(),
@@ -897,6 +897,7 @@ function PaymentModal({
   const activePaymentMethods = financeQuery.data?.paymentMethods.filter((method) => method.isActive) ?? [];
   const activeCashboxes = financeQuery.data?.cashboxes.filter((cashbox) => cashbox.isActive) ?? [];
   const paymentMethodId = useWatch({ control, name: 'paymentMethodId' });
+  const cashboxId = useWatch({ control, name: 'cashboxId' });
   const paymentType = useWatch({ control, name: 'type' });
   const amount = useWatch({ control, name: 'amount' });
   const isDepositOverBalance = paymentType === 'DEPOSIT' && Number(amount ?? 0) > ownerBalance;
@@ -913,6 +914,21 @@ function PaymentModal({
       setValue('type', method.type);
     }
   }, [activePaymentMethods, paymentMethodId, setValue]);
+
+  useEffect(() => {
+    if (!open || financeQuery.isLoading) return;
+
+    if (!paymentMethodId) {
+      const preferredMethod = activePaymentMethods.find((item) => item.type === 'CARD') ?? activePaymentMethods[0];
+      if (preferredMethod) {
+        setValue('paymentMethodId', preferredMethod.id, { shouldValidate: true });
+      }
+    }
+
+    if (!cashboxId && activeCashboxes.length === 1) {
+      setValue('cashboxId', activeCashboxes[0].id, { shouldValidate: true });
+    }
+  }, [activeCashboxes, activePaymentMethods, cashboxId, financeQuery.isLoading, open, paymentMethodId, setValue]);
 
   return (
     <Modal
@@ -931,25 +947,16 @@ function PaymentModal({
         <Controller
           control={control}
           name="paymentMethodId"
-          render={({ field }) => (
-            <Form.Item label="Способ оплаты">
+          render={({ field, fieldState }) => (
+            <Form.Item label="Способ оплаты" required validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
               <Select
                 {...field}
-                allowClear
                 loading={financeQuery.isLoading}
                 placeholder="Выберите способ оплаты"
+                status={financeQuery.isError ? 'error' : undefined}
+                notFoundContent={financeQuery.isError ? 'Не удалось загрузить способы оплаты' : 'Нет активных способов оплаты'}
                 options={activePaymentMethods.map((method) => ({ value: method.id, label: method.title }))}
-                onChange={(value) => field.onChange(value ?? '')}
               />
-            </Form.Item>
-          )}
-        />
-        <Controller
-          control={control}
-          name="type"
-          render={({ field }) => (
-            <Form.Item label="Тип оплаты">
-              <Select {...field} disabled={Boolean(paymentMethodId)} options={Object.entries(paymentTypeLabels).map(([value, label]) => ({ value, label }))} />
             </Form.Item>
           )}
         />
@@ -964,18 +971,18 @@ function PaymentModal({
         <Controller
           control={control}
           name="cashboxId"
-          render={({ field }) => (
-            <Form.Item label="Касса">
+          render={({ field, fieldState }) => (
+            <Form.Item label="Касса" required validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
               <Select
                 {...field}
-                allowClear
                 loading={financeQuery.isLoading}
-                placeholder="Без кассы"
+                placeholder="Выберите кассу"
+                status={financeQuery.isError ? 'error' : undefined}
+                notFoundContent={financeQuery.isError ? 'Не удалось загрузить кассы' : 'Нет активных касс'}
                 options={activeCashboxes.map((cashbox) => ({
                   value: cashbox.id,
                   label: cashbox.office?.name ? `${cashbox.title} · ${cashbox.office.name}` : cashbox.title,
                 }))}
-                onChange={(value) => field.onChange(value ?? '')}
               />
             </Form.Item>
           )}

@@ -2,7 +2,7 @@ import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { AuthEmployee } from '../auth/auth.types';
 import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
-import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { RequireAnyPermissions, RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { FinanceService } from './finance.service';
 import { UpsertCashboxDto } from './dto/upsert-cashbox.dto';
 import { UpsertPaymentMethodDto } from './dto/upsert-payment-method.dto';
@@ -13,7 +13,7 @@ export class FinanceController {
   constructor(private readonly financeService: FinanceService) {}
 
   @Get('settings')
-  @RequirePermissions('settings.read')
+  @RequireAnyPermissions('settings.read', 'settings.manage', 'payments.manage')
   @ApiOkResponse({ description: 'Payment methods and cashboxes.' })
   getSettings() {
     return this.financeService.getSettings();

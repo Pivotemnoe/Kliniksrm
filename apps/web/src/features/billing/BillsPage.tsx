@@ -29,7 +29,6 @@ import {
   billSourceLabels,
   paymentStatusColors,
   paymentStatusLabels,
-  paymentTypeLabels,
 } from './types';
 
 type BillStatusFilter = PaymentStatus | 'DEBT';
@@ -380,6 +379,7 @@ function BulkPaymentModal({
   const [form] = Form.useForm<BulkPaymentFormValues>();
   const financeQuery = useQuery({ queryKey: ['finance', 'settings'], queryFn: getFinanceSettings, enabled: open });
   const paymentMethodId = Form.useWatch('paymentMethodId', form);
+  const cashboxId = Form.useWatch('cashboxId', form);
   const activePaymentMethods = financeQuery.data?.paymentMethods.filter((method) => method.isActive) ?? [];
   const activeCashboxes = financeQuery.data?.cashboxes.filter((cashbox) => cashbox.isActive) ?? [];
 
@@ -391,6 +391,19 @@ function BulkPaymentModal({
     const method = activePaymentMethods.find((item) => item.id === paymentMethodId);
     if (method) form.setFieldValue('type', method.type);
   }, [activePaymentMethods, form, paymentMethodId]);
+
+  useEffect(() => {
+    if (!open || financeQuery.isLoading) return;
+
+    if (!paymentMethodId) {
+      const preferredMethod = activePaymentMethods.find((item) => item.type === 'CARD') ?? activePaymentMethods[0];
+      if (preferredMethod) form.setFieldValue('paymentMethodId', preferredMethod.id);
+    }
+
+    if (!cashboxId && activeCashboxes.length === 1) {
+      form.setFieldValue('cashboxId', activeCashboxes[0].id);
+    }
+  }, [activeCashboxes, activePaymentMethods, cashboxId, financeQuery.isLoading, form, open, paymentMethodId]);
 
   return (
     <Modal
@@ -417,25 +430,22 @@ function BulkPaymentModal({
         initialValues={{ type: 'CASH' satisfies PaymentType }}
         onFinish={onSubmit}
       >
-        <Form.Item name="paymentMethodId" label="Способ оплаты">
+        <Form.Item name="paymentMethodId" label="Способ оплаты" rules={[{ required: true, message: 'Выберите способ оплаты' }]}>
           <Select
-            allowClear
             loading={financeQuery.isLoading}
             placeholder="Выберите способ оплаты"
+            status={financeQuery.isError ? 'error' : undefined}
+            notFoundContent={financeQuery.isError ? 'Не удалось загрузить способы оплаты' : 'Нет активных способов оплаты'}
             options={activePaymentMethods.map((method) => ({ value: method.id, label: method.title }))}
           />
         </Form.Item>
-        <Form.Item name="type" label="Тип оплаты" rules={[{ required: true, message: 'Выберите тип оплаты' }]}>
+        <Form.Item name="type" hidden><Input /></Form.Item>
+        <Form.Item name="cashboxId" label="Касса" rules={[{ required: true, message: 'Выберите кассу' }]}>
           <Select
-            disabled={Boolean(paymentMethodId)}
-            options={Object.entries(paymentTypeLabels).map(([value, label]) => ({ value, label }))}
-          />
-        </Form.Item>
-        <Form.Item name="cashboxId" label="Касса">
-          <Select
-            allowClear
             loading={financeQuery.isLoading}
-            placeholder="Без кассы"
+            placeholder="Выберите кассу"
+            status={financeQuery.isError ? 'error' : undefined}
+            notFoundContent={financeQuery.isError ? 'Не удалось загрузить кассы' : 'Нет активных касс'}
             options={activeCashboxes.map((cashbox) => ({
               value: cashbox.id,
               label: cashbox.office?.name ? `${cashbox.title} · ${cashbox.office.name}` : cashbox.title,
