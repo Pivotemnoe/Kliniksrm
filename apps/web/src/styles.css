@@ -2778,10 +2778,20 @@ body {
 
 .hospital-sheet-day {
   min-width: 0;
-  overflow: hidden;
   border: 1px solid #d9e3e8;
   border-radius: 8px;
   background: #ffffff;
+}
+
+.hospital-sheet-table-scroll {
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+
+.hospital-sheet-table-scroll > .hospital-sheet-grid,
+.hospital-sheet-table-scroll > .hospital-sheet-row-cancelled {
+  min-width: 820px;
 }
 
 .hospital-sheet-day-header {
@@ -3937,6 +3947,11 @@ body {
     grid-template-columns: 1fr;
   }
 
+  .hospital-sheet-table-scroll > .hospital-sheet-grid,
+  .hospital-sheet-table-scroll > .hospital-sheet-row-cancelled {
+    min-width: 0;
+  }
+
   .hospital-sheet-row {
     padding: 10px 0;
   }
@@ -4943,4 +4958,9 @@ body {
   .ant-card-body {
     padding-inline: 12px;
   }
+}
+.bill-items-table .ant-table-cell {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
 }

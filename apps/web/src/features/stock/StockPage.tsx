@@ -44,6 +44,7 @@ import { formatServicePrice } from './service-pricing';
 import { SupplyInvoiceImporter } from './SupplyInvoiceImporter';
 import { SupplierModal } from './SupplierModal';
 import { StockCatalogLabelPrinter, toClinicProductPrintItem, toClinicServicePrintItem, type StockPrintLine } from './StockCatalogLabelPrinter';
+import { useProductCatalogPicker } from './useCatalogPicker';
 
 export function StockPage() {
   const location = useLocation();
@@ -851,6 +852,10 @@ const productSchema = z
     minStock: z.number().min(0).optional(),
     defaultExpiresAt: z.string().optional(),
     description: z.string().trim().optional(),
+    linkedProducts: z.array(z.object({
+      productId: z.string().min(1, 'Выберите товар'),
+      quantity: z.number().min(0.001, 'Укажите количество'),
+    })),
   })
   .superRefine((value, context) => {
     if (value.stockUnit !== value.writeOffUnit && (!value.packageQuantity || value.packageQuantity <= 0)) {
@@ -886,8 +891,10 @@ function ProductModal({
   const { message } = App.useApp();
   const { control, handleSubmit, reset, setValue } = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
-    defaultValues: { title: '', categoryTitle: '', sku: '', retailPrice: 0, stockUnit: 'шт', writeOffUnit: 'шт', billingUnit: 'шт' },
+    defaultValues: { title: '', categoryTitle: '', sku: '', retailPrice: 0, stockUnit: 'шт', writeOffUnit: 'шт', billingUnit: 'шт', linkedProducts: [] },
   });
+  const linkedProductFields = useFieldArray({ control, name: 'linkedProducts' });
+  const linkedProductPicker = useProductCatalogPicker(open, product?.linkedProducts?.map((item) => item.product) ?? []);
   const stockUnit = useWatch({ control, name: 'stockUnit' });
   const writeOffUnit = useWatch({ control, name: 'writeOffUnit' });
   const billingUnit = useWatch({ control, name: 'billingUnit' });
@@ -918,6 +925,7 @@ function ProductModal({
       minStock: product?.minStock === null || product?.minStock === undefined ? 0 : Number(product.minStock),
       defaultExpiresAt: product?.defaultExpiresAt?.slice(0, 10) ?? '',
       description: product?.description ?? '',
+      linkedProducts: product?.linkedProducts?.map((item) => ({ productId: item.productId, quantity: Number(item.quantity) })) ?? [],
     });
   }, [open, product, reset]);
   const mutation = useMutation({
@@ -1074,6 +1082,14 @@ function ProductModal({
           )}
         />
         <FormText control={control} name="description" label="Дополнительная информация" textarea />
+        <LinkedProductsFields
+          control={control}
+          fields={linkedProductFields.fields}
+          append={() => linkedProductFields.append({ productId: '', quantity: 1 })}
+          remove={linkedProductFields.remove}
+          products={linkedProductPicker.items.filter((item) => item.id !== product?.id)}
+          onSearch={linkedProductPicker.onSearch}
+        />
       </Form>
     </Modal>
   );
@@ -1088,6 +1104,10 @@ const serviceSchema = z.object({
   maximumPrice: z.number().min(0).optional(),
   vatRate: z.number().min(0).max(100).optional(),
   description: z.string().trim().optional(),
+  linkedProducts: z.array(z.object({
+    productId: z.string().min(1, 'Выберите товар'),
+    quantity: z.number().min(0.001, 'Укажите количество'),
+  })),
 }).superRefine((value, context) => {
   if (value.priceType === 'FIXED' && value.price === undefined) {
     context.addIssue({ code: 'custom', path: ['price'], message: 'Укажите фиксированную цену' });
@@ -1122,8 +1142,10 @@ function ServiceModal({
   const { message } = App.useApp();
   const { control, handleSubmit, reset } = useForm<ServiceFormValues>({
     resolver: zodResolver(serviceSchema),
-    defaultValues: { title: '', categoryTitle: '', price: 0, priceType: 'FIXED', description: '' },
+    defaultValues: { title: '', categoryTitle: '', price: 0, priceType: 'FIXED', description: '', linkedProducts: [] },
   });
+  const linkedProductFields = useFieldArray({ control, name: 'linkedProducts' });
+  const linkedProductPicker = useProductCatalogPicker(open, service?.linkedProducts?.map((item) => item.product) ?? []);
   const priceType = useWatch({ control, name: 'priceType' });
   const categoryOptions = useMemo(
     () => buildCategoryOptions(defaultServiceCategories, resources?.serviceCategories.map((category) => category.title) ?? []),
@@ -1143,6 +1165,7 @@ function ServiceModal({
       maximumPrice: service?.maximumPrice === null || service?.maximumPrice === undefined ? undefined : Number(service.maximumPrice),
       vatRate: service?.vatRate === null || service?.vatRate === undefined ? undefined : Number(service.vatRate),
       description: service?.description ?? '',
+      linkedProducts: service?.linkedProducts?.map((item) => ({ productId: item.productId, quantity: Number(item.quantity) })) ?? [],
     });
   }, [open, reset, service]);
   const mutation = useMutation({
@@ -1219,8 +1242,92 @@ function ServiceModal({
           <Alert type="info" showIcon message="При добавлении услуги сотрудник выберет фактическую цену только внутри указанного диапазона." />
         ) : null}
         <FormText control={control} name="description" label="Описание" textarea />
+        <LinkedProductsFields
+          control={control}
+          fields={linkedProductFields.fields}
+          append={() => linkedProductFields.append({ productId: '', quantity: 1 })}
+          remove={linkedProductFields.remove}
+          products={linkedProductPicker.items}
+          onSearch={linkedProductPicker.onSearch}
+        />
       </Form>
     </Modal>
+  );
+}
+
+function LinkedProductsFields({
+  control,
+  fields,
+  append,
+  remove,
+  products,
+  onSearch,
+}: {
+  control: any;
+  fields: Array<{ id: string }>;
+  append: () => void;
+  remove: (index: number) => void;
+  products: Product[];
+  onSearch: (value: string) => void;
+}) {
+  return (
+    <div className="linked-products-editor">
+      <Typography.Title level={5}>Связанные расходные материалы</Typography.Title>
+      <Typography.Paragraph type="secondary">
+        Эти товары будут автоматически списаны со склада при выполнении услуги или использовании основного товара. В счёт отдельной строкой они не добавляются.
+      </Typography.Paragraph>
+      <Space direction="vertical" size={8} style={{ width: '100%' }}>
+        {fields.map((field, index) => (
+          <Space key={field.id} align="start" wrap style={{ width: '100%' }}>
+            <Controller
+              control={control}
+              name={`linkedProducts.${index}.productId`}
+              render={({ field: productField, fieldState }) => (
+                <Form.Item
+                  validateStatus={fieldState.error ? 'error' : undefined}
+                  help={fieldState.error?.message}
+                  style={{ width: 390, marginBottom: 0 }}
+                >
+                  <Select
+                    {...productField}
+                    showSearch
+                    filterOption={false}
+                    onSearch={onSearch}
+                    placeholder="Найдите расходный материал"
+                    options={products.map((item) => ({
+                      value: item.id,
+                      label: `${item.title}${item.writeOffUnit || item.stockUnit ? ` · ${item.writeOffUnit ?? item.stockUnit}` : ''}`,
+                    }))}
+                  />
+                </Form.Item>
+              )}
+            />
+            <Controller
+              control={control}
+              name={`linkedProducts.${index}.quantity`}
+              render={({ field: quantityField, fieldState }) => (
+                <Form.Item
+                  validateStatus={fieldState.error ? 'error' : undefined}
+                  help={fieldState.error?.message}
+                  style={{ width: 150, marginBottom: 0 }}
+                >
+                  <InputNumber
+                    {...quantityField}
+                    min={0.001}
+                    step={0.1}
+                    precision={3}
+                    placeholder="Количество"
+                    style={{ width: '100%' }}
+                  />
+                </Form.Item>
+              )}
+            />
+            <Button danger icon={<DeleteOutlined />} aria-label="Удалить связанный товар" onClick={() => remove(index)} />
+          </Space>
+        ))}
+        <Button icon={<PlusOutlined />} onClick={append}>Добавить расходный материал</Button>
+      </Space>
+    </div>
   );
 }
 

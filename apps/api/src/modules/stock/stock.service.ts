@@ -286,6 +286,7 @@ export class StockService {
     const barcodes = normalizeBarcodes([...(barcode ? [barcode] : []), ...(dto.barcodes ?? [])]);
     if (!barcode && barcodes.length) barcode = barcodes[0];
     await this.ensureBarcodesAvailable(barcodes);
+    await this.ensureLinkedProductsAvailable(dto.linkedProducts);
 
     const product = await this.prisma.product.create({
       data: {
@@ -306,6 +307,9 @@ export class StockService {
         description: clean(dto.description),
         barcodes: barcodes.length
           ? { create: barcodes.map((value) => barcodeCreate(value, value === barcode, dto.gtin)) }
+          : undefined,
+        linkedProducts: dto.linkedProducts?.length
+          ? { create: dto.linkedProducts.map((item) => ({ productId: item.productId, quantity: item.quantity })) }
           : undefined,
       },
       include: productInclude,
@@ -366,6 +370,7 @@ export class StockService {
       : undefined;
     if (!barcode && barcodes?.length) barcode = barcodes[0];
     if (barcodes) await this.ensureBarcodesAvailable(barcodes, productId);
+    await this.ensureLinkedProductsAvailable(dto.linkedProducts, productId);
 
     const product = await this.prisma.product.update({
       where: { id: productId },
@@ -393,6 +398,12 @@ export class StockService {
               },
             }
           : {}),
+        ...(dto.linkedProducts !== undefined ? {
+          linkedProducts: {
+            deleteMany: {},
+            create: dto.linkedProducts.map((item) => ({ productId: item.productId, quantity: item.quantity })),
+          },
+        } : {}),
       },
       include: productInclude,
     });
@@ -492,6 +503,7 @@ export class StockService {
   async createService(dto: UpsertServiceDto, actorId: string) {
     const categoryId = await this.resolveServiceCategoryId(dto);
     const pricing = resolveServiceCatalogPricing(dto);
+    await this.ensureLinkedProductsAvailable(dto.linkedProducts);
 
     const service = await this.prisma.service.create({
       data: {
@@ -500,6 +512,9 @@ export class StockService {
         ...pricing,
         vatRate: dto.vatRate,
         description: clean(dto.description),
+        linkedProducts: dto.linkedProducts?.length
+          ? { create: dto.linkedProducts.map((item) => ({ productId: item.productId, quantity: item.quantity })) }
+          : undefined,
       },
       include: serviceInclude,
     });
@@ -535,6 +550,7 @@ export class StockService {
     }
     const categoryId = await this.resolveServiceCategoryId(dto);
     const pricing = resolveServiceCatalogPricing(dto, existing);
+    await this.ensureLinkedProductsAvailable(dto.linkedProducts);
 
     const service = await this.prisma.service.update({
       where: { id: serviceId },
@@ -544,6 +560,12 @@ export class StockService {
         ...pricing,
         ...(dto.vatRate !== undefined ? { vatRate: dto.vatRate } : {}),
         ...(dto.description !== undefined ? { description: clean(dto.description) } : {}),
+        ...(dto.linkedProducts !== undefined ? {
+          linkedProducts: {
+            deleteMany: {},
+            create: dto.linkedProducts.map((item) => ({ productId: item.productId, quantity: item.quantity })),
+          },
+        } : {}),
       },
       include: serviceInclude,
     });
@@ -585,6 +607,25 @@ export class StockService {
     });
 
     return { id: service.id, title: service.title, deleted: true };
+  }
+
+  private async ensureLinkedProductsAvailable(
+    linkedProducts: Array<{ productId: string; quantity: number }> | undefined,
+    sourceProductId?: string,
+  ) {
+    if (linkedProducts === undefined) return;
+    const ids = linkedProducts.map((item) => item.productId);
+    if (new Set(ids).size !== ids.length) {
+      throw new BadRequestException('Один связанный товар нельзя добавить дважды');
+    }
+    if (sourceProductId && ids.includes(sourceProductId)) {
+      throw new BadRequestException('Товар нельзя связать с самим собой');
+    }
+    if (!ids.length) return;
+    const count = await this.prisma.product.count({ where: { id: { in: ids }, isActive: true } });
+    if (count !== ids.length) {
+      throw new BadRequestException('Один из связанных товаров не найден или удалён из каталога');
+    }
   }
 
   async listStockBatches(query: ListStockQueryDto, actorId: string) {
@@ -1300,6 +1341,7 @@ export class StockService {
 
 const productInclude = {
   category: true,
+  linkedProducts: { include: { product: { select: { id: true, title: true, stockUnit: true, writeOffUnit: true } } }, orderBy: { createdAt: 'asc' } },
   barcodes: { orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }] },
   batches: {
     include: {
@@ -1315,6 +1357,7 @@ function getProductInclude(batchWhere?: Prisma.StockBatchWhereInput) {
 
   return {
     category: true,
+    linkedProducts: { include: { product: { select: { id: true, title: true, stockUnit: true, writeOffUnit: true } } }, orderBy: { createdAt: 'asc' } },
     barcodes: { orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }] },
     batches: {
       ...(hasBatchWhere ? { where: batchWhere } : {}),
@@ -1329,6 +1372,7 @@ function getProductInclude(batchWhere?: Prisma.StockBatchWhereInput) {
 
 const serviceInclude = {
   category: true,
+  linkedProducts: { include: { product: { select: { id: true, title: true, stockUnit: true, writeOffUnit: true } } }, orderBy: { createdAt: 'asc' } },
 } satisfies Prisma.ServiceInclude;
 
 type ExistingServicePricing = Pick<Prisma.ServiceGetPayload<object>, 'price' | 'priceType' | 'minimumPrice' | 'maximumPrice'>;

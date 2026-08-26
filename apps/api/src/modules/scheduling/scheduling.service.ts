@@ -352,7 +352,7 @@ export class SchedulingService {
 
     try {
       const box = await this.prisma.hospitalBox.create({
-        data: { officeId, name: requiredName(dto.name, 'Укажите название бокса') },
+        data: { officeId, name: requiredName(dto.name, 'Укажите название бокса'), dailyRate: dto.dailyRate ?? 0 },
         include: { office: { select: { id: true, name: true } } },
       });
 
@@ -380,6 +380,7 @@ export class SchedulingService {
         data: {
           ...(officeId !== undefined ? { officeId } : {}),
           ...(dto.name !== undefined ? { name: requiredName(dto.name, 'Укажите название бокса') } : {}),
+          ...(dto.dailyRate !== undefined ? { dailyRate: dto.dailyRate } : {}),
         },
         include: { office: { select: { id: true, name: true } } },
       });
@@ -540,7 +541,7 @@ export class SchedulingService {
   async ensureHospitalBoxExists(hospitalBoxId: string) {
     const hospitalBox = await this.prisma.hospitalBox.findUnique({
       where: { id: hospitalBoxId },
-      select: { id: true, officeId: true },
+      select: { id: true, officeId: true, dailyRate: true },
     });
 
     if (!hospitalBox) {

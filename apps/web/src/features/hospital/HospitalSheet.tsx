@@ -59,18 +59,19 @@ export function HospitalSheet({
                 ) : null}
               </Space>
             </header>
-            <div className="hospital-sheet-grid hospital-sheet-grid-head" aria-hidden="true">
-              <div>Время</div>
-              <div>Назначение / запись</div>
-              <div>Выполнение / результат</div>
-              <div>Исполнитель и действия</div>
-            </div>
-            {group.records.map((record) => record.recordStatus === 'SKIPPED' ? (
-              <article className="hospital-sheet-row-cancelled" key={record.id} aria-label="Отменено">
-                <Tag>Отменено</Tag>
-              </article>
-            ) : (
-              <article className={`hospital-sheet-grid hospital-sheet-row hospital-sheet-row-${record.recordStatus.toLowerCase()}`} key={record.id}>
+            <div className="hospital-sheet-table-scroll">
+              <div className="hospital-sheet-grid hospital-sheet-grid-head" aria-hidden="true">
+                <div>Время</div>
+                <div>Назначение / запись</div>
+                <div>Выполнение / результат</div>
+                <div>Исполнитель и действия</div>
+              </div>
+              {group.records.map((record) => record.recordStatus === 'SKIPPED' ? (
+                <article className="hospital-sheet-row-cancelled" key={record.id} aria-label="Отменено">
+                  <Tag>Отменено</Tag>
+                </article>
+              ) : (
+                <article className={`hospital-sheet-grid hospital-sheet-row hospital-sheet-row-${record.recordStatus.toLowerCase()}`} key={record.id}>
                 <div className="hospital-sheet-time">
                   <strong>{formatTime(record.recordedAt, timeZone)}</strong>
                   {record.createdAsPlan && record.recordStatus === 'COMPLETED' && record.completedAt ? (
@@ -141,8 +142,9 @@ export function HospitalSheet({
                     </Space>
                   ) : null}
                 </div>
-              </article>
-            ))}
+                </article>
+              ))}
+            </div>
           </section>
         ))}
       </div>

@@ -42,13 +42,22 @@ export function VisitsPage() {
   const queueEntryId = searchParams.get('queueEntryId') ?? undefined;
   const initialOwnerId = searchParams.get('ownerId') ?? undefined;
   const initialAnimalId = searchParams.get('animalId') ?? undefined;
+  const patientHistoryRequested = searchParams.get('history') === '1';
   const createRequested = searchParams.get('create') === '1';
   const employeeId = searchParams.get('employeeId') ?? undefined;
   const isPersonalVisits = Boolean(employeeId && employeeId === auth?.employee.id);
 
   const visitsQuery = useInfiniteListQuery({
-    queryKey: ['visits', { search, status, employeeId }],
-    queryFn: ({ limit, offset }) => listVisits({ search, status, employeeId, limit, offset }),
+    queryKey: ['visits', { search, status, employeeId, ownerId: initialOwnerId, animalId: initialAnimalId }],
+    queryFn: ({ limit, offset }) => listVisits({
+      search,
+      status,
+      employeeId,
+      ownerId: initialOwnerId,
+      animalId: initialAnimalId,
+      limit,
+      offset,
+    }),
   });
   const appointmentQuery = useQuery({
     queryKey: ['appointments', appointmentId],
@@ -118,10 +127,10 @@ export function VisitsPage() {
       return;
     }
 
-    if (createRequested || (appointmentId && appointmentQuery.data) || (queueEntryId && queueQuery.data) || (initialOwnerId && initialAnimalId)) {
+    if (createRequested || (appointmentId && appointmentQuery.data) || (queueEntryId && queueQuery.data) || (!patientHistoryRequested && initialOwnerId && initialAnimalId)) {
       setCreateOpen(true);
     }
-  }, [appointmentId, appointmentQuery.data, createRequested, initialAnimalId, initialOwnerId, navigate, queueEntryId, queueQuery.data]);
+  }, [appointmentId, appointmentQuery.data, createRequested, initialAnimalId, initialOwnerId, navigate, patientHistoryRequested, queueEntryId, queueQuery.data]);
 
   const columns = useMemo<ColumnsType<VisitListItem>>(
     () => [
@@ -170,7 +179,7 @@ export function VisitsPage() {
   return (
     <div className="page visits-page">
       <PageHeader
-        title={isPersonalVisits ? 'Мои приёмы' : 'Приёмы'}
+        title={patientHistoryRequested ? 'Приёмы этого пациента' : isPersonalVisits ? 'Мои приёмы' : 'Приёмы'}
         extra={
           canManage || canCreateQueue ? (
             <Space wrap>

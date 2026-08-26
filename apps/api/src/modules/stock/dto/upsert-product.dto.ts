@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ArrayMaxSize, ArrayUnique, IsArray, IsBoolean, IsDateString, IsNumber, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min } from 'class-validator';
+import { Type } from 'class-transformer';
+import { ArrayMaxSize, ArrayUnique, IsArray, IsBoolean, IsDateString, IsNumber, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, ValidateNested } from 'class-validator';
+import { LinkedProductDto } from './linked-product.dto';
 
 export class UpsertProductDto {
   @ApiProperty()
@@ -109,4 +111,12 @@ export class UpsertProductDto {
   @IsString()
   @MaxLength(2000)
   description?: string;
+
+  @ApiPropertyOptional({ type: [LinkedProductDto], description: 'Расходники, которые списываются вместе с этим товаром.' })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => LinkedProductDto)
+  linkedProducts?: LinkedProductDto[];
 }

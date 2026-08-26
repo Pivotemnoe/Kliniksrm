@@ -9,10 +9,30 @@ export type HospitalBox = {
   id: string;
   officeId: string;
   name: string;
+  dailyRate: DecimalValue;
   office?: {
     id: string;
     name: string;
   };
+};
+
+export type HospitalPreliminaryBillLine = {
+  id: string;
+  kind: 'PRODUCT' | 'SERVICE' | 'STAY';
+  title: string;
+  quantity: DecimalValue;
+  unitPrice: DecimalValue;
+  totalAmount: DecimalValue;
+  completedAt: string | null;
+};
+
+export type HospitalPreliminaryBill = {
+  stayId: string;
+  generatedAt: string;
+  completedDays: number;
+  completedRecords: number;
+  lines: HospitalPreliminaryBillLine[];
+  totalAmount: DecimalValue;
 };
 
 export type HospitalResources = {

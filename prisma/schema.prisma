@@ -777,14 +777,16 @@ model EmployeeWarehouseAccess {
 }
 
 model HospitalBox {
-  id        String         @id @default(uuid())
-  officeId  String
-  office    ClinicOffice   @relation(fields: [officeId], references: [id], onDelete: Cascade)
-  name      String
-  visits    Visit[]
-  stays     HospitalStay[]
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
+  id           String                @id @default(uuid())
+  officeId     String
+  office       ClinicOffice          @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  name         String
+  dailyRate    Decimal               @default(0) @db.Decimal(12, 2)
+  visits       Visit[]
+  stays        HospitalStay[]
+  ratePeriods  HospitalStayRatePeriod[]
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
 
   @@unique([officeId, name])
 }
@@ -1157,6 +1159,8 @@ model HospitalStay {
   purpose       String?
   startedAt     DateTime           @default(now())
   completedAt   DateTime?
+  dailyRateSnapshot Decimal?           @db.Decimal(12, 2)
+  ratePeriods       HospitalStayRatePeriod[]
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
 
@@ -1164,6 +1168,21 @@ model HospitalStay {
   @@index([ownerId])
   @@index([animalId])
   @@index([employeeId])
+  @@index([hospitalBoxId])
+}
+
+model HospitalStayRatePeriod {
+  id             String       @id @default(uuid())
+  hospitalStayId String
+  hospitalStay   HospitalStay @relation(fields: [hospitalStayId], references: [id], onDelete: Cascade)
+  hospitalBoxId  String
+  hospitalBox    HospitalBox  @relation(fields: [hospitalBoxId], references: [id], onDelete: Restrict)
+  dailyRate      Decimal      @db.Decimal(12, 2)
+  startedAt      DateTime
+  endedAt        DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([hospitalStayId, startedAt])
   @@index([hospitalBoxId])
 }
 
@@ -1490,6 +1509,9 @@ model Product {
   supplyItems              SupplyInvoiceItem[]
   billItems                BillItem[]
   plannedHospitalRecords   HospitalRecord[]     @relation("HospitalPlannedProduct")
+  linkedProducts           ProductLinkedProduct[] @relation("SourceProductLinks")
+  usedAsLinkedProduct      ProductLinkedProduct[] @relation("TargetProductLinks")
+  linkedServiceMaterials   ServiceLinkedProduct[] @relation("LinkedServiceProduct")
   saleItems                SaleItem[]
   payrollRules             PayrollProductRule[]
   stockDocumentItems       StockDocumentItem[]  @relation("StockDocumentProduct")
@@ -1541,6 +1563,7 @@ model Service {
   description            String?
   billItems              BillItem[]
   plannedHospitalRecords HospitalRecord[]     @relation("HospitalPlannedService")
+  linkedProducts         ServiceLinkedProduct[]
   saleItems              SaleItem[]
   laboratoryTests        LaboratoryTest[]
   laboratoryProfiles     LaboratoryProfile[]
@@ -1550,6 +1573,34 @@ model Service {
 
   @@index([title])
   @@index([isActive, title])
+}
+
+model ServiceLinkedProduct {
+  id        String   @id @default(uuid())
+  serviceId String
+  service   Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation("LinkedServiceProduct", fields: [productId], references: [id], onDelete: Restrict)
+  quantity  Decimal  @db.Decimal(12, 3)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([serviceId, productId])
+  @@index([productId])
+}
+
+model ProductLinkedProduct {
+  id              String   @id @default(uuid())
+  sourceProductId String
+  sourceProduct   Product  @relation("SourceProductLinks", fields: [sourceProductId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product  @relation("TargetProductLinks", fields: [productId], references: [id], onDelete: Restrict)
+  quantity        Decimal  @db.Decimal(12, 3)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([sourceProductId, productId])
+  @@index([productId])
 }
 
 model StoreProduct {

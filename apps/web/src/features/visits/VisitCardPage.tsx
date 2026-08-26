@@ -111,6 +111,9 @@ export function VisitCardPage() {
   });
 
   const visit = visitQuery.data;
+  const visitsReturnPath = visit
+    ? `/visits?ownerId=${encodeURIComponent(visit.ownerId)}&animalId=${encodeURIComponent(visit.animalId)}&history=1`
+    : '/visits';
   const primaryDiagnosisIssue = visit ? getPrimaryDiagnosisCompletionIssue(visit) : null;
   const locked = visit ? isVisitLockedForEditing(visit, auth?.employee) : false;
   const completedEditNotice = visit ? getCompletedEditNotice(visit, auth?.employee, locked) : null;
@@ -132,7 +135,7 @@ export function VisitCardPage() {
   return (
     <div className="workbench">
       <nav className="visit-mobile-toolbar" aria-label="Быстрая навигация по приёму">
-        <Button size="small" icon={<LeftOutlined />} onClick={() => navigate('/visits')}>
+        <Button size="small" icon={<LeftOutlined />} onClick={() => navigate(visitsReturnPath)}>
           Приёмы
         </Button>
         <Typography.Text strong ellipsis>{visit?.animal.nickname ?? 'Пациент'}</Typography.Text>
@@ -196,7 +199,7 @@ export function VisitCardPage() {
         </div>
         <div className="context-section">
           <div className="context-section-header">
-            <button className="table-link" type="button" onClick={() => navigate('/visits')}>
+            <button className="table-link" type="button" onClick={() => navigate(visitsReturnPath)}>
               <LeftOutlined /> К приёмам
             </button>
           </div>

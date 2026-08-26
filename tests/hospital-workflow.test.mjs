@@ -51,7 +51,7 @@ test('пребывание в стационаре имеет независим
   assert.match(service, /data: \{ status: VisitStatus\.COMPLETED, completedAt \}/);
   assert.match(service, /tx\.hospitalStay\.create/);
   assert.match(service, /status: HospitalStayStatus\.ACTIVE/);
-  assert.match(service, /data: \{ status: HospitalStayStatus\.DISCHARGED, completedAt: new Date\(\) \}/);
+  assert.match(service, /data: \{ status: HospitalStayStatus\.DISCHARGED, completedAt \}/);
   assert.doesNotMatch(service, /data: \{ status: VisitStatus\.COMPLETED, completedAt: new Date\(\) \}/);
 });
 

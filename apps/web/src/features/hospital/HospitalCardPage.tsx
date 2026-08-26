@@ -8,14 +8,14 @@ import {
   SwapOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Descriptions, Form, Input, Modal, Radio, Select, Space, Tag, Typography } from 'antd';
-import { InputNumber } from '../../shared/ui/DecimalInputNumber';
+import { Alert, App, Button, Descriptions, Form, Input, Modal, Radio, Select, Space, Table, Tag, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { AnimalSpeciesLabel } from '../../shared/ui/AnimalSpeciesIcon';
+import { InputNumber } from '../../shared/ui/DecimalInputNumber';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatAnimalAge } from '../../shared/utils/animalBirthDate';
 import { formatDateTime } from '../../shared/utils/date';
@@ -33,6 +33,7 @@ import {
   dischargeHospitalStay,
   getHospitalResources,
   getHospitalCatalog,
+  getHospitalPreliminaryBill,
   getHospitalStay,
   updateHospitalRecord,
   updateHospitalStay,
@@ -41,7 +42,7 @@ import { HospitalSheet } from './HospitalSheet';
 import { HospitalTreatmentPlanModal } from './HospitalTreatmentPlanModal';
 import { useDebouncedValue } from '../../shared/hooks/useDebouncedValue';
 import { printHospitalSheet } from './hospitalPrint';
-import type { CreateHospitalAmendmentInput, CreateHospitalRecordInput, HospitalCatalog, HospitalRecord, HospitalRecordStatus, HospitalRecordType, UpdateHospitalRecordInput } from './types';
+import type { CreateHospitalAmendmentInput, CreateHospitalRecordInput, HospitalCatalog, HospitalPreliminaryBill, HospitalPreliminaryBillLine, HospitalRecord, HospitalRecordStatus, HospitalRecordType, UpdateHospitalRecordInput } from './types';
 
 const recordTypeOptions: Array<{ value: HospitalRecordType; label: string; defaultTitle: string }> = [
   { value: 'TEMPERATURE', label: 'Температура', defaultTitle: 'Измерение температуры' },
@@ -52,6 +53,12 @@ const recordTypeOptions: Array<{ value: HospitalRecordType; label: string; defau
   { value: 'CARE', label: 'Уход', defaultTitle: 'Уход за пациентом' },
   { value: 'OTHER', label: 'Другая запись', defaultTitle: 'Запись стационара' },
 ];
+
+const preliminaryBillKindLabels: Record<HospitalPreliminaryBillLine['kind'], string> = {
+  PRODUCT: 'Товар',
+  SERVICE: 'Услуга',
+  STAY: 'Стационар',
+};
 
 export function HospitalCardPage() {
   const { stayId = '' } = useParams();
@@ -70,6 +77,7 @@ export function HospitalCardPage() {
   const [initialRecordType, setInitialRecordType] = useState<HospitalRecordType>('OBSERVATION');
   const [amendmentRecord, setAmendmentRecord] = useState<HospitalRecord | null>(null);
   const [boxId, setBoxId] = useState<string>();
+  const [preliminaryBill, setPreliminaryBill] = useState<HospitalPreliminaryBill | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const stayQuery = useQuery({
     queryKey: ['hospital', stayId],
@@ -114,6 +122,11 @@ export function HospitalCardPage() {
       await refresh();
       message.success(action === 'discharge' ? 'Пациент выписан из стационара' : 'Госпитализация отменена');
     },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
+  const preliminaryBillMutation = useMutation({
+    mutationFn: () => getHospitalPreliminaryBill(stayId),
+    onSuccess: setPreliminaryBill,
     onError: (error) => message.error(getErrorMessage(error)),
   });
   const recordMutation = useMutation({
@@ -237,7 +250,7 @@ export function HospitalCardPage() {
                 <Descriptions.Item label="Владелец"><Typography.Link onClick={() => navigate(`/owners/${stay.ownerId}`)}>{stay.owner?.fullName ?? '—'}</Typography.Link></Descriptions.Item>
                 <Descriptions.Item label="Ответственный">{stay.employee?.fullName ?? 'Не назначен'}</Descriptions.Item>
                 <Descriptions.Item label="Статус"><Tag color={hospitalStatusColors[stay.status]}>{hospitalStatusLabels[stay.status]}</Tag></Descriptions.Item>
-                <Descriptions.Item label="Счёт">{stay.bill ? `${formatMoney(stay.bill.totalAmount)} · оплачено ${formatMoney(stay.bill.paidAmount)}` : '—'}</Descriptions.Item>
+                <Descriptions.Item label="Основной счёт">{stay.bill ? `${formatMoney(stay.bill.totalAmount)} · оплачено ${formatMoney(stay.bill.paidAmount)}` : formatMoney(0)}</Descriptions.Item>
                 <Descriptions.Item label="Причина помещения" span="filled">{stay.exam?.purpose || 'Не указана'}</Descriptions.Item>
               </Descriptions>
               {canManage && active ? (
@@ -250,6 +263,7 @@ export function HospitalCardPage() {
                     onChange={setBoxId}
                   />
                   <Button icon={<SwapOutlined />} disabled={!boxId || boxId === stay.hospitalBoxId} loading={transferMutation.isPending} onClick={() => boxId && transferMutation.mutate(boxId)}>Перевести</Button>
+                  <Button icon={<FileTextOutlined />} loading={preliminaryBillMutation.isPending} onClick={() => preliminaryBillMutation.mutate()}>Сформировать промежуточный счёт</Button>
                   <Button icon={<CheckOutlined />} loading={actionMutation.isPending} onClick={() => modal.confirm({ title: 'Выписать пациента из стационара?', okText: 'Выписать', cancelText: 'Отмена', onOk: () => actionMutation.mutateAsync('discharge') })}>Выписать</Button>
                   <Button danger icon={<CloseOutlined />} loading={actionMutation.isPending} onClick={() => modal.confirm({ title: 'Отменить госпитализацию?', okText: 'Отменить', cancelText: 'Назад', okButtonProps: { danger: true }, onOk: () => actionMutation.mutateAsync('cancel') })}>Отменить</Button>
                 </div>
@@ -374,6 +388,45 @@ export function HospitalCardPage() {
         onClose={() => setTreatmentPlanOpen(false)}
         onSubmit={(input) => treatmentPlanMutation.mutate(input)}
       />
+      <Modal
+        open={Boolean(preliminaryBill)}
+        title="Промежуточный счёт"
+        width={860}
+        onCancel={() => setPreliminaryBill(null)}
+        footer={<Button type="primary" onClick={() => setPreliminaryBill(null)}>Закрыть</Button>}
+      >
+        {preliminaryBill ? (
+          <Space direction="vertical" size={16} style={{ width: '100%' }}>
+            <Alert
+              type="info"
+              showIcon
+              message="Это только расчёт на текущий момент"
+              description="В основной счёт ничего не добавлено. Учтены только выполненные услуги, использованные товары и завершённые сутки стационара; будущие назначения не включены."
+            />
+            <Table<HospitalPreliminaryBillLine>
+              rowKey="id"
+              pagination={false}
+              size="small"
+              scroll={{ x: 760 }}
+              dataSource={preliminaryBill.lines}
+              columns={[
+                { title: 'Позиция', dataIndex: 'title', key: 'title', width: 310 },
+                { title: 'Что учтено', dataIndex: 'kind', key: 'kind', width: 130, render: (kind: HospitalPreliminaryBillLine['kind']) => preliminaryBillKindLabels[kind] },
+                { title: 'Количество', dataIndex: 'quantity', key: 'quantity', width: 110, align: 'right', render: (value: HospitalPreliminaryBillLine['quantity']) => Number(value).toLocaleString('ru-RU') },
+                { title: 'Цена', dataIndex: 'unitPrice', key: 'unitPrice', width: 110, align: 'right', render: (value: HospitalPreliminaryBillLine['unitPrice']) => formatMoney(value) },
+                { title: 'Сумма', dataIndex: 'totalAmount', key: 'totalAmount', width: 120, align: 'right', render: (value: HospitalPreliminaryBillLine['totalAmount']) => <strong>{formatMoney(value)}</strong> },
+              ]}
+              locale={{ emptyText: 'Пока нет выполненных позиций и завершённых суток' }}
+              summary={() => (
+                <Table.Summary.Row>
+                  <Table.Summary.Cell index={0} colSpan={4}><strong>Итого на {formatDateTime(preliminaryBill.generatedAt)}</strong></Table.Summary.Cell>
+                  <Table.Summary.Cell index={4} align="right"><strong>{formatMoney(preliminaryBill.totalAmount)}</strong></Table.Summary.Cell>
+                </Table.Summary.Row>
+              )}
+            />
+          </Space>
+        ) : null}
+      </Modal>
       <HospitalRecordModal
         open={recordOpen}
         record={editingRecord}

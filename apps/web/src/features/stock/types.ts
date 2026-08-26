@@ -57,6 +57,7 @@ export type Product = {
   shelfLifeDays: number | null;
   defaultExpiresAt: string | null;
   description: string | null;
+  linkedProducts?: LinkedProduct[];
   stockRest?: DecimalValue;
   batches?: StockBatch[];
 };
@@ -73,6 +74,14 @@ export type ServiceItem = {
   maximumPrice: DecimalValue | null;
   vatRate: DecimalValue | null;
   description: string | null;
+  linkedProducts?: LinkedProduct[];
+};
+
+export type LinkedProduct = {
+  id: string;
+  productId: string;
+  quantity: DecimalValue;
+  product: Product;
 };
 
 export type StockBatch = {
@@ -180,6 +189,7 @@ export type ProductMutationInput = {
   defaultExpiresAt?: string | null;
   generateBarcode?: boolean;
   description?: string;
+  linkedProducts?: Array<{ productId: string; quantity: number }>;
 };
 
 export type ServiceMutationInput = {
@@ -192,6 +202,7 @@ export type ServiceMutationInput = {
   maximumPrice?: number;
   vatRate?: number;
   description?: string;
+  linkedProducts?: Array<{ productId: string; quantity: number }>;
 };
 
 export type SupplyInvoiceMutationInput = {

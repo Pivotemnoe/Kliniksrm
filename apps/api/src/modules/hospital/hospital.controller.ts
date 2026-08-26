@@ -47,6 +47,13 @@ export class HospitalController {
     return this.hospitalService.admit(dto, actor.id);
   }
 
+  @Get(':stayId/preliminary-bill')
+  @RequirePermissions('hospital.read')
+  @ApiOkResponse({ description: 'Read-only current hospital cost calculation without creating bill items.' })
+  getPreliminaryBill(@Param('stayId') stayId: string) {
+    return this.hospitalService.getPreliminaryBill(stayId);
+  }
+
   @Get(':stayId')
   @RequirePermissions('hospital.read')
   @ApiOkResponse({ description: 'Hospital stay card.' })

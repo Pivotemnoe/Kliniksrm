@@ -153,6 +153,111 @@ export class HospitalService {
     return serializeHospitalStay(stay);
   }
 
+  async getPreliminaryBill(stayId: string) {
+    const generatedAt = new Date();
+    const stay = await this.prisma.hospitalStay.findFirst({
+      where: { OR: [{ id: stayId }, { sourceVisitId: stayId }] },
+      select: {
+        id: true,
+        sourceVisitId: true,
+        startedAt: true,
+        completedAt: true,
+        dailyRateSnapshot: true,
+        hospitalBox: { select: { id: true, name: true, dailyRate: true } },
+        ratePeriods: {
+          orderBy: { startedAt: 'asc' },
+          select: {
+            hospitalBoxId: true,
+            dailyRate: true,
+            startedAt: true,
+            endedAt: true,
+            hospitalBox: { select: { name: true } },
+          },
+        },
+        sourceVisit: {
+          select: {
+            hospitalRecords: {
+              where: { parentRecordId: null, recordStatus: HospitalRecordStatus.COMPLETED },
+              orderBy: { completedAt: 'asc' },
+              select: {
+                id: true,
+                title: true,
+                completedAt: true,
+                billItem: {
+                  select: {
+                    productId: true,
+                    serviceId: true,
+                    title: true,
+                    quantity: true,
+                    unitPrice: true,
+                    totalAmount: true,
+                  },
+                },
+                ...plannedCatalogSnapshotSelect,
+                amendments: {
+                  where: plannedCatalogAmendmentWhere,
+                  orderBy: { recordedAt: 'desc' },
+                  take: 1,
+                  select: plannedCatalogSnapshotSelect,
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!stay) {
+      throw new NotFoundException('Госпитализация не найдена');
+    }
+
+    const catalogLines = stay.sourceVisit.hospitalRecords.flatMap((record) => {
+      if (record.billItem) {
+        return [{
+          id: `record:${record.id}`,
+          kind: record.billItem.serviceId ? 'SERVICE' as const : 'PRODUCT' as const,
+          title: record.billItem.title,
+          quantity: record.billItem.quantity,
+          unitPrice: record.billItem.unitPrice,
+          totalAmount: record.billItem.totalAmount,
+          completedAt: record.completedAt,
+        }];
+      }
+
+      const snapshot = getEffectivePlannedCatalog(record);
+      if (!snapshot.productId && !snapshot.serviceId) return [];
+      const line = calculateCatalogLine({
+        productId: snapshot.productId ?? undefined,
+        serviceId: snapshot.serviceId ?? undefined,
+        title: record.title,
+        quantity: snapshot.quantity ?? 1,
+        stockQuantity: snapshot.stockQuantity ?? undefined,
+        unitPrice: snapshot.unitPrice ?? 0,
+      });
+      return [{
+        id: `record:${record.id}`,
+        kind: line.serviceId ? 'SERVICE' as const : 'PRODUCT' as const,
+        title: line.title,
+        quantity: line.quantity,
+        unitPrice: line.unitPrice,
+        totalAmount: line.totalAmount,
+        completedAt: record.completedAt,
+      }];
+    });
+    const stayLines = calculateHospitalStayDayLines(stay, stay.completedAt ?? generatedAt);
+    const lines = [...catalogLines, ...stayLines];
+    const totalAmount = lines.reduce((sum, line) => sum.plus(line.totalAmount), decimal(0));
+
+    return {
+      stayId: stay.id,
+      generatedAt,
+      completedDays: stayLines.reduce((sum, line) => sum + decimalToNumber(line.quantity), 0),
+      completedRecords: catalogLines.length,
+      lines,
+      totalAmount,
+    };
+  }
+
   async createRecord(stayId: string, dto: CreateHospitalRecordDto, actorId: string) {
     const stay = await this.getExistingHospitalStay(stayId);
 
@@ -202,6 +307,9 @@ export class HospitalService {
 
       if (line?.productId) {
         await this.writeOffHospitalProduct(tx, stay.sourceVisitId, null, created.id, line, warehouseScope);
+      }
+      if (line) {
+        await this.writeOffLinkedHospitalProducts(tx, stay.sourceVisitId, created.id, line, warehouseScope);
       }
 
       return created;
@@ -400,8 +508,13 @@ export class HospitalService {
       throw new BadRequestException('Начисленную позицию нельзя вернуть в план. Создайте отдельное плановое назначение');
     }
 
-    const warehouseScope = (billingChanged && (existing.billItem?.productId || effectivePlannedCatalog.productId))
-      || (shouldStagePlannedCatalog && plannedProductId)
+    const warehouseScope = (billingChanged && (
+      existing.billItem?.productId
+      || existing.billItem?.serviceId
+      || effectivePlannedCatalog.productId
+      || effectivePlannedCatalog.serviceId
+    ))
+      || (shouldStagePlannedCatalog && hasCatalogItemForCompletion)
       ? await this.getWarehouseScope(actorId)
       : null;
 
@@ -444,6 +557,7 @@ export class HospitalService {
           if (postedLine.productId) {
             await this.writeOffHospitalProduct(tx, stay.sourceVisitId, null, existing.id, postedLine, warehouseScope);
           }
+          await this.writeOffLinkedHospitalProducts(tx, stay.sourceVisitId, existing.id, postedLine, warehouseScope);
         } else if (lockedRecord.recordStatus === HospitalRecordStatus.COMPLETED) {
           return tx.hospitalRecord.findUniqueOrThrow({
             where: { id: existing.id },
@@ -498,6 +612,7 @@ export class HospitalService {
             warehouseScope,
           );
         }
+        await this.syncLinkedHospitalProducts(tx, stay.sourceVisitId, existing.id, line, warehouseScope);
 
         await this.recalculateHospitalBill(tx, existing.billItem.billId, stay.sourceVisitId);
       } else if (billingChanged && !existing.billItem && existing.recordStatus === HospitalRecordStatus.COMPLETED) {
@@ -520,6 +635,7 @@ export class HospitalService {
             warehouseScope,
           );
         }
+        await this.syncLinkedHospitalProducts(tx, stay.sourceVisitId, existing.id, postedLine, warehouseScope);
       }
 
       return tx.hospitalRecord.update({
@@ -840,6 +956,14 @@ export class HospitalService {
           hospitalBoxId: box.id,
           purpose: visit.exam?.purpose,
           startedAt: completedAt,
+          dailyRateSnapshot: box.dailyRate,
+          ratePeriods: {
+            create: {
+              hospitalBoxId: box.id,
+              dailyRate: box.dailyRate,
+              startedAt: completedAt,
+            },
+          },
           status: HospitalStayStatus.ACTIVE,
         },
         select: { id: true },
@@ -888,6 +1012,14 @@ export class HospitalService {
           hospitalBoxId: box.id,
           purpose: dto.purpose?.trim() || null,
           startedAt: admittedAt,
+          dailyRateSnapshot: box.dailyRate,
+          ratePeriods: {
+            create: {
+              hospitalBoxId: box.id,
+              dailyRate: box.dailyRate,
+              startedAt: admittedAt,
+            },
+          },
           status: HospitalStayStatus.ACTIVE,
         },
         select: { id: true },
@@ -914,20 +1046,50 @@ export class HospitalService {
       throw new BadRequestException('Закрытую госпитализацию нельзя переводить или переназначать');
     }
 
-    if (dto.hospitalBoxId) {
-      await this.schedulingService.ensureHospitalBoxExists(dto.hospitalBoxId);
-    }
+    const nextBox = dto.hospitalBoxId
+      ? await this.schedulingService.ensureHospitalBoxExists(dto.hospitalBoxId)
+      : null;
 
     if (dto.employeeId) {
       await this.schedulingService.ensureEmployeeActive(dto.employeeId);
     }
 
-    await this.prisma.hospitalStay.update({
-      where: { id: existing.id },
-      data: {
-        ...(dto.hospitalBoxId !== undefined ? { hospitalBoxId: dto.hospitalBoxId } : {}),
-        ...(dto.employeeId !== undefined ? { employeeId: dto.employeeId } : {}),
-      },
+    const boxChanged = Boolean(nextBox && nextBox.id !== existing.hospitalBoxId);
+    const changedAt = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      if (boxChanged && nextBox) {
+        const closed = await tx.hospitalStayRatePeriod.updateMany({
+          where: { hospitalStayId: existing.id, endedAt: null },
+          data: { endedAt: changedAt },
+        });
+        if (closed.count === 0) {
+          await tx.hospitalStayRatePeriod.create({
+            data: {
+              hospitalStayId: existing.id,
+              hospitalBoxId: existing.hospitalBoxId,
+              dailyRate: existing.dailyRateSnapshot ?? existing.hospitalBox.dailyRate,
+              startedAt: existing.startedAt,
+              endedAt: changedAt,
+            },
+          });
+        }
+        await tx.hospitalStayRatePeriod.create({
+          data: {
+            hospitalStayId: existing.id,
+            hospitalBoxId: nextBox.id,
+            dailyRate: nextBox.dailyRate,
+            startedAt: changedAt,
+          },
+        });
+      }
+
+      await tx.hospitalStay.update({
+        where: { id: existing.id },
+        data: {
+          ...(nextBox ? { hospitalBoxId: nextBox.id, dailyRateSnapshot: nextBox.dailyRate } : {}),
+          ...(dto.employeeId !== undefined ? { employeeId: dto.employeeId } : {}),
+        },
+      });
     });
 
     await this.auditService.log({
@@ -951,9 +1113,26 @@ export class HospitalService {
     const dueAt = await this.financeService.getDefaultBillDueAt();
     await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT "id" FROM "HospitalStay" WHERE "id" = ${existing.id} FOR UPDATE`;
+      const completedAt = new Date();
       const lockedStay = await tx.hospitalStay.findUniqueOrThrow({
         where: { id: existing.id },
-        select: { status: true },
+        select: {
+          status: true,
+          startedAt: true,
+          completedAt: true,
+          dailyRateSnapshot: true,
+          hospitalBox: { select: { id: true, name: true, dailyRate: true } },
+          ratePeriods: {
+            orderBy: { startedAt: 'asc' },
+            select: {
+              hospitalBoxId: true,
+              dailyRate: true,
+              startedAt: true,
+              endedAt: true,
+              hospitalBox: { select: { name: true } },
+            },
+          },
+        },
       });
       if (lockedStay.status === HospitalStayStatus.CANCELLED) {
         throw new BadRequestException('Отменённую госпитализацию нельзя завершить выпиской');
@@ -969,16 +1148,25 @@ export class HospitalService {
           OR: [{ plannedProductId: { not: null } }, { plannedServiceId: { not: null } }],
         },
         orderBy: { recordedAt: 'asc' },
+        include: {
+          amendments: {
+            where: plannedCatalogAmendmentWhere,
+            orderBy: { recordedAt: 'desc' },
+            take: 1,
+            select: plannedCatalogSnapshotSelect,
+          },
+        },
       });
 
       for (const record of pendingRecords) {
+        const snapshot = getEffectivePlannedCatalog(record);
         const line = calculateCatalogLine({
-          productId: record.plannedProductId ?? undefined,
-          serviceId: record.plannedServiceId ?? undefined,
+          productId: snapshot.productId ?? undefined,
+          serviceId: snapshot.serviceId ?? undefined,
           title: record.title,
-          quantity: record.plannedQuantity ?? 1,
-          stockQuantity: record.plannedStockQuantity ?? undefined,
-          unitPrice: record.plannedUnitPrice ?? 0,
+          quantity: snapshot.quantity ?? 1,
+          stockQuantity: snapshot.stockQuantity ?? undefined,
+          unitPrice: snapshot.unitPrice ?? 0,
         });
         const billItem = await tx.billItem.create({
           data: {
@@ -1000,10 +1188,28 @@ export class HospitalService {
         });
       }
 
+      const stayDayLines = calculateHospitalStayDayLines(lockedStay, completedAt);
+      for (const line of stayDayLines) {
+        await tx.billItem.create({
+          data: {
+            billId: bill.id,
+            title: line.title,
+            quantity: line.quantity,
+            unitPrice: line.unitPrice,
+            discount: 0,
+            totalAmount: line.totalAmount,
+          },
+        });
+      }
+
       await this.recalculateHospitalBill(tx, bill.id, existing.sourceVisitId);
+      await tx.hospitalStayRatePeriod.updateMany({
+        where: { hospitalStayId: existing.id, endedAt: null },
+        data: { endedAt: completedAt },
+      });
       await tx.hospitalStay.update({
         where: { id: existing.id },
-        data: { status: HospitalStayStatus.DISCHARGED, completedAt: new Date() },
+        data: { status: HospitalStayStatus.DISCHARGED, completedAt },
       });
     });
 
@@ -1020,11 +1226,18 @@ export class HospitalService {
 
   async cancel(stayId: string, actorId: string) {
     const existing = await this.getExistingHospitalStay(stayId);
+    const completedAt = new Date();
 
-    await this.prisma.hospitalStay.update({
-      where: { id: existing.id },
-      data: { status: HospitalStayStatus.CANCELLED, completedAt: new Date() },
-    });
+    await this.prisma.$transaction([
+      this.prisma.hospitalStayRatePeriod.updateMany({
+        where: { hospitalStayId: existing.id, endedAt: null },
+        data: { endedAt: completedAt },
+      }),
+      this.prisma.hospitalStay.update({
+        where: { id: existing.id },
+        data: { status: HospitalStayStatus.CANCELLED, completedAt },
+      }),
+    ]);
 
     await this.auditService.log({
       actorId,
@@ -1207,6 +1420,82 @@ export class HospitalService {
     }
   }
 
+  private async writeOffLinkedHospitalProducts(
+    tx: Prisma.TransactionClient,
+    visitId: string,
+    hospitalRecordId: string,
+    line: HospitalCatalogLine,
+    warehouseScope: WarehouseScope,
+  ) {
+    const linkedProducts = line.serviceId
+      ? await tx.serviceLinkedProduct.findMany({
+          where: { serviceId: line.serviceId },
+          select: { quantity: true, product: { select: { id: true, title: true } } },
+        })
+      : line.productId
+        ? await tx.productLinkedProduct.findMany({
+            where: { sourceProductId: line.productId },
+            select: { quantity: true, product: { select: { id: true, title: true } } },
+          })
+        : [];
+
+    for (const linked of linkedProducts) {
+      const stockQuantity = decimal(linked.quantity).mul(line.quantity);
+      await this.writeOffHospitalProduct(
+        tx,
+        visitId,
+        null,
+        hospitalRecordId,
+        calculateCatalogLine({
+          productId: linked.product.id,
+          title: linked.product.title,
+          quantity: stockQuantity,
+          stockQuantity,
+          unitPrice: 0,
+        }),
+        warehouseScope,
+      );
+    }
+  }
+
+  private async syncLinkedHospitalProducts(
+    tx: Prisma.TransactionClient,
+    visitId: string,
+    hospitalRecordId: string,
+    line: HospitalCatalogLine,
+    warehouseScope: WarehouseScope,
+  ) {
+    const linkedProducts = line.serviceId
+      ? await tx.serviceLinkedProduct.findMany({
+          where: { serviceId: line.serviceId },
+          select: { quantity: true, product: { select: { id: true, title: true } } },
+        })
+      : line.productId
+        ? await tx.productLinkedProduct.findMany({
+            where: { sourceProductId: line.productId },
+            select: { quantity: true, product: { select: { id: true, title: true } } },
+          })
+        : [];
+
+    for (const linked of linkedProducts) {
+      const stockQuantity = decimal(linked.quantity).mul(line.quantity);
+      await this.syncHospitalProductWriteOff(
+        tx,
+        visitId,
+        null,
+        hospitalRecordId,
+        calculateCatalogLine({
+          productId: linked.product.id,
+          title: linked.product.title,
+          quantity: stockQuantity,
+          stockQuantity,
+          unitPrice: 0,
+        }),
+        warehouseScope,
+      );
+    }
+  }
+
   private async syncHospitalProductWriteOff(
     tx: Prisma.TransactionClient,
     visitId: string,
@@ -1357,10 +1646,17 @@ export class HospitalService {
       select: {
         id: true,
         sourceVisitId: true,
+        hospitalBoxId: true,
         status: true,
         startedAt: true,
         completedAt: true,
-        hospitalBox: { select: { office: { select: { timezone: true } } } },
+        dailyRateSnapshot: true,
+        hospitalBox: {
+          select: {
+            dailyRate: true,
+            office: { select: { timezone: true } },
+          },
+        },
       },
     });
 
@@ -1471,6 +1767,7 @@ const hospitalStayInclude = {
       id: true,
       name: true,
       officeId: true,
+      dailyRate: true,
       office: { select: { timezone: true } },
     },
   },
@@ -1512,6 +1809,7 @@ function serializeHospitalStay(stay: HospitalStayWithRelations) {
       id: stay.hospitalBox.id,
       name: stay.hospitalBox.name,
       officeId: stay.hospitalBox.officeId,
+      dailyRate: stay.hospitalBox.dailyRate,
     },
     timezone: stay.hospitalBox.office.timezone,
     exam: stay.sourceVisit.exam,
@@ -1537,6 +1835,62 @@ function dateKeyInTimeZone(value: Date, timeZone: string) {
   }).formatToParts(value);
   const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   return `${values.year}-${values.month}-${values.day}`;
+}
+
+type HospitalStayRateSource = {
+  startedAt: Date;
+  dailyRateSnapshot: Prisma.Decimal | null;
+  hospitalBox: { id: string; name: string; dailyRate: Prisma.Decimal };
+  ratePeriods: Array<{
+    hospitalBoxId: string;
+    dailyRate: Prisma.Decimal;
+    startedAt: Date;
+    endedAt: Date | null;
+    hospitalBox: { name: string };
+  }>;
+};
+
+function calculateHospitalStayDayLines(stay: HospitalStayRateSource, asOf: Date) {
+  const dayMs = 24 * 60 * 60 * 1000;
+  const completedDays = Math.max(0, Math.floor((asOf.getTime() - stay.startedAt.getTime()) / dayMs));
+  const grouped = new Map<string, {
+    id: string;
+    kind: 'STAY';
+    title: string;
+    quantity: Prisma.Decimal;
+    unitPrice: Prisma.Decimal;
+    totalAmount: Prisma.Decimal;
+    completedAt: Date;
+  }>();
+
+  for (let dayIndex = 0; dayIndex < completedDays; dayIndex += 1) {
+    const dayStartedAt = new Date(stay.startedAt.getTime() + dayIndex * dayMs);
+    const period = stay.ratePeriods.find((candidate) =>
+      candidate.startedAt.getTime() <= dayStartedAt.getTime()
+      && (!candidate.endedAt || candidate.endedAt.getTime() > dayStartedAt.getTime()));
+    const hospitalBoxId = period?.hospitalBoxId ?? stay.hospitalBox.id;
+    const hospitalBoxName = period?.hospitalBox.name ?? stay.hospitalBox.name;
+    const unitPrice = decimal(period?.dailyRate ?? stay.dailyRateSnapshot ?? stay.hospitalBox.dailyRate);
+    const key = `${hospitalBoxId}:${unitPrice.toString()}`;
+    const current = grouped.get(key);
+    if (current) {
+      current.quantity = current.quantity.plus(1);
+      current.totalAmount = current.quantity.mul(current.unitPrice);
+      current.completedAt = new Date(dayStartedAt.getTime() + dayMs);
+    } else {
+      grouped.set(key, {
+        id: `stay:${key}`,
+        kind: 'STAY',
+        title: `Стационар: ${hospitalBoxName}`,
+        quantity: decimal(1),
+        unitPrice,
+        totalAmount: unitPrice,
+        completedAt: new Date(dayStartedAt.getTime() + dayMs),
+      });
+    }
+  }
+
+  return [...grouped.values()];
 }
 
 function calculateCatalogLine(input: {

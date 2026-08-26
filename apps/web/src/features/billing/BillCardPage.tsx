@@ -351,10 +351,11 @@ function BillItemsTab({ bill, canEdit }: { bill: Bill; canEdit: boolean }) {
   });
   const columns = useMemo<ColumnsType<BillItem>>(
     () => [
-      { title: 'Позиция', dataIndex: 'title', key: 'title' },
+      { title: 'Позиция', dataIndex: 'title', key: 'title', width: 320 },
       {
         title: 'Начислено / списано',
         key: 'quantity',
+        width: 230,
         render: (_, record) => {
           if (!record.productId) {
             return String(record.quantity);
@@ -376,12 +377,13 @@ function BillItemsTab({ bill, canEdit }: { bill: Bill; canEdit: boolean }) {
           );
         },
       },
-      { title: 'Цена за начисление', dataIndex: 'unitPrice', key: 'unitPrice', render: formatMoney },
-      { title: 'Скидка', dataIndex: 'discount', key: 'discount', render: formatMoney },
-      { title: 'Итого', dataIndex: 'totalAmount', key: 'totalAmount', render: formatMoney },
+      { title: 'Цена за начисление', dataIndex: 'unitPrice', key: 'unitPrice', width: 170, render: formatMoney },
+      { title: 'Скидка', dataIndex: 'discount', key: 'discount', width: 120, render: formatMoney },
+      { title: 'Итого', dataIndex: 'totalAmount', key: 'totalAmount', width: 130, render: formatMoney },
       {
         title: 'Склад',
         key: 'stock',
+        width: 180,
         render: (_, record) => {
           const hasNetWriteOff = getNetStockWriteOffQuantity(record.stockMovements) > 0 || bill.source === 'SALE';
           return record.productId ? (
@@ -445,10 +447,11 @@ function BillItemsTab({ bill, canEdit }: { bill: Bill; canEdit: boolean }) {
       ) : null}
       <Table<BillItem>
         rowKey="id"
-        className="dense-table"
+        className="dense-table bill-items-table"
         columns={columns}
         dataSource={bill.items}
         pagination={false}
+        scroll={{ x: 1270 }}
         summary={() => (
           <Table.Summary fixed>
             <Table.Summary.Row>

@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
+import { Type } from 'class-transformer';
+import { ArrayMaxSize, IsArray, IsIn, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min, ValidateNested } from 'class-validator';
+import { LinkedProductDto } from './linked-product.dto';
 
 export class UpsertServiceDto {
   @ApiProperty()
@@ -54,4 +56,12 @@ export class UpsertServiceDto {
   @IsString()
   @MaxLength(2000)
   description?: string;
+
+  @ApiPropertyOptional({ type: [LinkedProductDto], description: 'Расходники, которые списываются при выполнении услуги.' })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => LinkedProductDto)
+  linkedProducts?: LinkedProductDto[];
 }

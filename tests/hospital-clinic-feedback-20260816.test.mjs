@@ -105,6 +105,46 @@ test('выполнения накапливаются без счёта и пе�
   assert.match(card, /const postedBillingLocked = billingLocked && Boolean\(record\?\.billItem\)/);
 });
 
+test('промежуточный счёт считает выполненное, но не создаёт финансовых записей', async () => {
+  const [service, controller, card, api] = await Promise.all([
+    read('apps/api/src/modules/hospital/hospital.service.ts'),
+    read('apps/api/src/modules/hospital/hospital.controller.ts'),
+    read('apps/web/src/features/hospital/HospitalCardPage.tsx'),
+    read('apps/web/src/features/hospital/hospital.api.ts'),
+  ]);
+
+  const preview = service.slice(service.indexOf('async getPreliminaryBill'), service.indexOf('async createRecord'));
+  const discharge = service.slice(service.indexOf('async discharge'), service.indexOf('async cancel('));
+  assert.match(controller, /:stayId\/preliminary-bill/);
+  assert.match(api, /getHospitalPreliminaryBill/);
+  assert.match(preview, /recordStatus: HospitalRecordStatus\.COMPLETED/);
+  assert.match(preview, /snapshot\.serviceId/);
+  assert.match(preview, /calculateHospitalStayDayLines/);
+  assert.doesNotMatch(preview, /\.create\(|\.update\(|getEditableHospitalBill/);
+  assert.match(discharge, /const snapshot = getEffectivePlannedCatalog\(record\)/);
+  assert.match(discharge, /serviceId: snapshot\.serviceId/);
+  assert.match(card, /Сформировать промежуточный счёт/);
+  assert.match(card, /В основной счёт ничего не добавлено/);
+});
+
+test('суточный тариф хранится по боксу, а связанные расходники списываются при выполнении', async () => {
+  const [schema, migration, scheduling, hospital, stockPage] = await Promise.all([
+    read('prisma/schema.prisma'),
+    read('prisma/migrations/20260826000100_hospital_daily_rates_and_linked_products/migration.sql'),
+    read('apps/api/src/modules/scheduling/scheduling.service.ts'),
+    read('apps/api/src/modules/hospital/hospital.service.ts'),
+    read('apps/web/src/features/stock/StockPage.tsx'),
+  ]);
+
+  assert.match(schema, /model HospitalStayRatePeriod/);
+  assert.match(migration, /ADD COLUMN "dailyRate"/);
+  assert.match(scheduling, /select: \{ id: true, officeId: true, dailyRate: true \}/);
+  assert.match(hospital, /writeOffLinkedHospitalProducts/);
+  assert.match(hospital, /serviceLinkedProduct\.findMany/);
+  assert.match(stockPage, /Связанные расходные материалы/);
+  assert.doesNotMatch(migration, /^\s*(?:DROP\b|DELETE\s+FROM\b|TRUNCATE\b|UPDATE\s+)/im);
+});
+
 test('температуры всех сотрудников видны, а прошлые дни идут перед будущими', async () => {
   const [sheet, card, styles] = await Promise.all([
     read('apps/web/src/features/hospital/HospitalSheet.tsx'),

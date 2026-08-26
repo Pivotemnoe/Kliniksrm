@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
+import { InputNumber } from '../../shared/ui/DecimalInputNumber';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDateTime } from '../../shared/utils/date';
 import { listQueueWorkstations, updateQueueWorkstation } from '../queue/queue.api';
@@ -45,6 +46,7 @@ const officeSchema = z.object({
 const resourceSchema = z.object({
   officeId: z.string().trim().min(1, 'Выберите филиал'),
   name: z.string().trim().min(2, 'Укажите название').max(160),
+  dailyRate: z.number().min(0, 'Цена не может быть отрицательной').optional(),
 });
 
 type OfficeFormValues = z.infer<typeof officeSchema>;
@@ -628,12 +630,12 @@ function ResourceTable({
   const [editingItem, setEditingItem] = useState<ResourceItem | null>(null);
   const { control, handleSubmit, reset } = useForm<ResourceFormValues>({
     resolver: zodResolver(resourceSchema),
-    defaultValues: { officeId: selectedOfficeId ?? '', name: '' },
+    defaultValues: { officeId: selectedOfficeId ?? '', name: '', dailyRate: 0 },
   });
 
   useEffect(() => {
     if (!modalOpen) {
-      reset({ officeId: selectedOfficeId ?? '', name: '' });
+      reset({ officeId: selectedOfficeId ?? '', name: '', dailyRate: 0 });
     }
   }, [modalOpen, reset, selectedOfficeId]);
 
@@ -663,6 +665,12 @@ function ResourceTable({
         width: 240,
         render: (officeId: string) => <Tag>{offices.find((office) => office.id === officeId)?.name ?? 'Филиал'}</Tag>,
       },
+      ...(kind === 'hospitalBoxes' ? [{
+        title: 'Цена за 24 часа',
+        key: 'dailyRate',
+        width: 180,
+        render: (_: unknown, record: ResourceItem) => `${Number((record as SchedulingHospitalBox).dailyRate ?? 0).toLocaleString('ru-RU')} ₽`,
+      }] : []),
       {
         title: '',
         key: 'actions',
@@ -675,25 +683,29 @@ function ResourceTable({
           ) : null,
       },
     ],
-    [canManage, offices],
+    [canManage, kind, offices],
   );
 
   function openCreate() {
     setEditingItem(null);
-    reset({ officeId: selectedOfficeId ?? offices[0]?.id ?? '', name: '' });
+    reset({ officeId: selectedOfficeId ?? offices[0]?.id ?? '', name: '', dailyRate: 0 });
     setModalOpen(true);
   }
 
   function openEdit(item: ResourceItem) {
     setEditingItem(item);
-    reset({ officeId: item.officeId, name: item.name });
+    reset({
+      officeId: item.officeId,
+      name: item.name,
+      dailyRate: kind === 'hospitalBoxes' ? Number((item as SchedulingHospitalBox).dailyRate ?? 0) : undefined,
+    });
     setModalOpen(true);
   }
 
   function closeModal() {
     setModalOpen(false);
     setEditingItem(null);
-    reset({ officeId: selectedOfficeId ?? offices[0]?.id ?? '', name: '' });
+    reset({ officeId: selectedOfficeId ?? offices[0]?.id ?? '', name: '', dailyRate: 0 });
   }
 
   return (
@@ -748,6 +760,21 @@ function ResourceTable({
               </Form.Item>
             )}
           />
+          {kind === 'hospitalBoxes' ? (
+            <Controller
+              control={control}
+              name="dailyRate"
+              render={({ field, fieldState }) => (
+                <Form.Item
+                  label="Цена за каждые полные 24 часа, ₽"
+                  validateStatus={fieldState.error ? 'error' : undefined}
+                  help={fieldState.error?.message ?? 'Цена фиксируется для пациента при поступлении или переводе в этот бокс.'}
+                >
+                  <InputNumber {...field} min={0} precision={2} className="full-width" />
+                </Form.Item>
+              )}
+            />
+          ) : null}
         </Form>
       </Modal>
     </div>
