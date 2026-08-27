@@ -54,20 +54,23 @@ test('тип назначения управляет каталогом и по�
   assert.doesNotMatch(hospitalCatalogBlock, /take:\s*100/);
 });
 
-test('вакцинация из очереди не создаёт обычный приём', async () => {
-  const [schema, queueForm, queuePage, visitService, animalCard] = await Promise.all([
+test('вакцинация из очереди создаёт специализированный приём и открывает его вкладку вакцинации', async () => {
+  const [schema, queueForm, queuePage, visitService, visitCard] = await Promise.all([
     read('prisma/schema.prisma'),
     read('apps/web/src/features/queue/QueueFormDrawer.tsx'),
     read('apps/web/src/features/queue/QueuePage.tsx'),
     read('apps/api/src/modules/visits/visits.service.ts'),
-    read('apps/web/src/features/animals/AnimalCardPage.tsx'),
+    read('apps/web/src/features/visits/VisitCardPage.tsx'),
   ]);
 
   assert.match(schema, /isVaccination\s+Boolean\s+@default\(false\)/);
   assert.match(queueForm, /'VACCINATION'/);
-  assert.match(queuePage, /tab=vaccinations&new=vaccination/);
-  assert.match(visitService, /обычный приём создавать не нужно/);
-  assert.match(animalCard, /autoOpen=\{searchParams\.get\('new'\) === 'vaccination'\}/);
+  assert.match(schema, /enum VisitType[\s\S]*VACCINATION/);
+  assert.match(queuePage, /visitType: record\.isVaccination \? 'VACCINATION'/);
+  assert.match(queuePage, /tab=vaccination&new=vaccination/);
+  assert.match(visitService, /queueEntry\.isVaccination \? VisitType\.VACCINATION/);
+  assert.match(visitCard, /key: 'vaccination'/);
+  assert.match(visitCard, /visitId=\{visit\.id\}/);
 });
 
 test('перевод в стационар сохраняет и открывает исходный приём', async () => {

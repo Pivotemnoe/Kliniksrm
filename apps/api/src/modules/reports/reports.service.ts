@@ -156,7 +156,7 @@ export class ReportsService {
       }),
       this.prisma.owner.count({ where: { createdAt: dateWhere } }),
       this.prisma.vaccination.findMany({
-        where: { vaccinatedAt: dateWhere },
+        where: { vaccinatedAt: dateWhere, cancelledAt: null },
         orderBy: { vaccinatedAt: 'desc' },
         select: {
           id: true,
@@ -176,7 +176,7 @@ export class ReportsService {
         },
       }),
       this.prisma.vaccination.findMany({
-        where: { expiresAt: { not: null }, animal: { archivedAt: null } },
+        where: { expiresAt: { not: null }, cancelledAt: null, animal: { archivedAt: null } },
         orderBy: { expiresAt: 'desc' },
         select: {
           id: true,

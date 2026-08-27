@@ -64,8 +64,9 @@ function useCatalogPicker<T extends { id: string; title: string }>({
   const items = useMemo(() => {
     const currentItems = [...initialItems, ...(query.data?.items ?? [])]
       .filter((item): item is T => Boolean(item));
-    return [...new Map(currentItems.map((item) => [item.id, item])).values()]
-      .sort((left, right) => left.title.localeCompare(right.title, 'ru'));
+    // The API already returns exact/prefix matches first and only then sorts ties
+    // alphabetically. Preserve that order instead of destroying relevance here.
+    return [...new Map(currentItems.map((item) => [item.id, item])).values()];
   }, [initialItems, query.data?.items]);
 
   return {

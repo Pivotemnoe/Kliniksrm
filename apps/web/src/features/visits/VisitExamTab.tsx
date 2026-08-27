@@ -1,10 +1,13 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Form, Input, Select, Space } from 'antd';
+import { Alert, App, Button, Form, Input, Select, Space, Typography } from 'antd';
+import { useEffect, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
 import { nullToEmpty, optionalString } from '../../shared/utils/forms';
+import { animalStatusOptions } from '../animals/animalStatus';
+import { updateAnimal } from '../animals/animals.api';
 import { MedicalTextArea } from './MedicalTextArea';
 import { VisitDiagnosesTab } from './VisitDiagnosesTab';
 import { updateVisit, upsertVisitExam } from './visits.api';
@@ -13,7 +16,7 @@ import { Visit, VisitType, visitTypeLabels } from './types';
 const examSchema = z.object({
   weightKg: optionalNumber(0, 300),
   temperatureC: optionalNumber(30, 45),
-  visitType: z.enum(['PRIMARY', 'FOLLOW_UP', 'OPERATION', 'POST_OPERATION']).optional(),
+  visitType: z.enum(['PRIMARY', 'FOLLOW_UP', 'OPERATION', 'POST_OPERATION', 'VACCINATION']).optional(),
   purpose: optionalString(1000),
   anamnesis: optionalString(4000),
   examination: optionalString(4000),
@@ -34,33 +37,104 @@ type VisitExamTabProps = {
 export function VisitExamTab({ visit, canManage, locked }: VisitExamTabProps) {
   const queryClient = useQueryClient();
   const { message, modal } = App.useApp();
-  const { control, handleSubmit, reset } = useForm<ExamInput, unknown, ExamValues>({
+  const { control, getValues, handleSubmit, reset, watch } = useForm<ExamInput, unknown, ExamValues>({
     resolver: zodResolver(examSchema),
     defaultValues: getDefaultValues(visit),
   });
+  const disabled = locked || !canManage;
+  const draftKey = `temichevvet:visit-exam-draft:${visit.id}`;
+  const saveChainRef = useRef<Promise<unknown>>(Promise.resolve());
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [autoSaveState, setAutoSaveState] = useState<'idle' | 'local' | 'saving' | 'saved'>('idle');
   const mutation = useMutation({
-    mutationFn: async (values: ExamValues) => {
-      const { visitType, ...examValues } = values;
+    mutationFn: (request: { values: ExamValues; silent: boolean; snapshot: string }) => {
+      const run = saveChainRef.current.then(async () => {
+        const { visitType, ...examValues } = request.values;
 
-      if (visitType && visitType !== visit.visitType) {
-        await updateVisit(visit.id, { visitType });
+        if (visitType && visitType !== visit.visitType) {
+          await updateVisit(visit.id, { visitType });
+        }
+
+        const exam = await upsertVisitExam(visit.id, examValues);
+        return { exam, visitType };
+      });
+      saveChainRef.current = run.then(() => undefined, () => undefined);
+      return run;
+    },
+    onMutate: (request) => {
+      if (request.silent) setAutoSaveState('saving');
+    },
+    onSuccess: async (result, request) => {
+      queryClient.setQueryData<Visit>(['visits', visit.id], (current) => current ? {
+        ...current,
+        exam: result.exam,
+        visitType: result.visitType ?? current.visitType,
+      } : current);
+      clearDraftIfCurrent(draftKey, request.snapshot);
+
+      if (request.silent) {
+        setAutoSaveState('saved');
+        return;
       }
 
-      return upsertVisitExam(visit.id, examValues);
-    },
-    onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['visits', visit.id] }),
         queryClient.invalidateQueries({ queryKey: ['visits'] }),
         queryClient.invalidateQueries({ queryKey: ['animals', visit.animalId] }),
         queryClient.invalidateQueries({ queryKey: ['medical-phrases'] }),
       ]);
+      setAutoSaveState('saved');
       message.success('Лист осмотра сохранён');
     },
+    onError: () => setAutoSaveState('local'),
   });
-  const disabled = locked || !canManage;
-  const species = visit.animal?.species ?? undefined;
-  const diagnoses = visit.diagnoses.map((diagnosis) => diagnosis.title);
+  const statusMutation = useMutation({
+    mutationFn: (status: string) => updateAnimal(visit.animalId, { status }),
+    onSuccess: async (animal) => {
+      queryClient.setQueryData<Visit>(['visits', visit.id], (current) => current ? {
+        ...current,
+        animal: { ...current.animal, status: animal.status },
+      } : current);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['animals', visit.animalId] }),
+        queryClient.invalidateQueries({ queryKey: ['animals'] }),
+      ]);
+    },
+  });
+
+  useEffect(() => {
+    const serverValues = getDefaultValues(visit);
+    const draft = readExamDraft(draftKey);
+    const serverUpdatedAt = visit.exam?.updatedAt ? new Date(visit.exam.updatedAt).getTime() : 0;
+    if (draft && draft.updatedAt > serverUpdatedAt && examSchema.safeParse(draft.values).success) {
+      reset(draft.values);
+      setAutoSaveState('local');
+    } else {
+      reset(serverValues);
+    }
+  // The form must only be rehydrated when another visit is opened.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visit.id]);
+
+  useEffect(() => {
+    if (disabled) return;
+    const subscription = watch((values) => {
+      const snapshot = JSON.stringify(values);
+      const snapshotValues = JSON.parse(snapshot) as ExamInput;
+      writeExamDraft(draftKey, values);
+      setAutoSaveState('local');
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = setTimeout(() => {
+        const parsed = examSchema.safeParse(snapshotValues);
+        if (parsed.success) mutation.mutate({ values: parsed.data, silent: true, snapshot });
+      }, 900);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  }, [disabled, draftKey, watch]);
 
   function submit(values: ExamValues) {
     const effectiveVisitType = values.visitType ?? visit.visitType;
@@ -75,13 +149,16 @@ export function VisitExamTab({ visit, canManage, locked }: VisitExamTabProps) {
       return;
     }
 
-    mutation.mutate(values);
+    mutation.mutate({ values, silent: false, snapshot: JSON.stringify(getValues()) });
   }
+  const species = visit.animal?.species ?? undefined;
+  const diagnoses = visit.diagnoses.map((diagnosis) => diagnosis.title);
 
   return (
     <Form layout="vertical" disabled={disabled} className="visit-tab-form">
       {locked ? <Alert type="info" showIcon message="Редактирование закрыто: отменённый приём нельзя менять, завершённый доступен директору или в течение 60 минут после завершения." className="form-alert" /> : null}
       {mutation.isError ? <Alert type="error" showIcon message={getErrorMessage(mutation.error)} className="form-alert" /> : null}
+      {statusMutation.isError ? <Alert type="error" showIcon message={getErrorMessage(statusMutation.error)} className="form-alert" /> : null}
       <div className="form-grid visit-exam-vitals-grid">
         <Controller
           control={control}
@@ -101,6 +178,15 @@ export function VisitExamTab({ visit, canManage, locked }: VisitExamTabProps) {
             </Form.Item>
           )}
         />
+        <Form.Item label="Состояние">
+          <Select
+            value={visit.animal.status ?? undefined}
+            loading={statusMutation.isPending}
+            placeholder="Выберите состояние"
+            options={animalStatusOptions.map(({ value, label }) => ({ value, label }))}
+            onChange={(value) => statusMutation.mutate(value)}
+          />
+        </Form.Item>
         {visit.hospitalStay ? (
           <Form.Item label="Тип обращения">
             <Input value="Стационар" readOnly />
@@ -232,6 +318,7 @@ export function VisitExamTab({ visit, canManage, locked }: VisitExamTabProps) {
         <Button onClick={() => reset(getDefaultValues(visit))} disabled={disabled}>
           Сбросить
         </Button>
+        <Typography.Text type="secondary">{autoSaveLabel(autoSaveState)}</Typography.Text>
       </Space>
     </Form>
   );
@@ -313,4 +400,42 @@ function optionalNumber(min: number, max: number) {
 
       return parsed;
     });
+}
+
+function autoSaveLabel(state: 'idle' | 'local' | 'saving' | 'saved') {
+  if (state === 'saving') return 'Сохраняется…';
+  if (state === 'saved') return 'Сохранено автоматически';
+  if (state === 'local') return 'Черновик сохранён на этом компьютере';
+  return 'Автосохранение включено';
+}
+
+function writeExamDraft(key: string, values: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify({ updatedAt: Date.now(), values }));
+  } catch {
+    // Server autosave remains available when browser storage is unavailable.
+  }
+}
+
+function readExamDraft(key: string): { updatedAt: number; values: ExamInput } | null {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { updatedAt?: unknown; values?: unknown };
+    if (typeof parsed.updatedAt !== 'number' || !parsed.values || typeof parsed.values !== 'object') return null;
+    return { updatedAt: parsed.updatedAt, values: parsed.values as ExamInput };
+  } catch {
+    return null;
+  }
+}
+
+function clearDraftIfCurrent(key: string, snapshot: string) {
+  const draft = readExamDraft(key);
+  if (draft && JSON.stringify(draft.values) === snapshot) {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // A saved CRM copy already exists; an inaccessible local draft is harmless.
+    }
+  }
 }

@@ -21,6 +21,7 @@ import { formatDateTime } from '../../shared/utils/date';
 import { AnimalMutationInput } from '../animals/types';
 import { createOwner, createOwnerAnimal } from '../owners/owners.api';
 import { OwnerMutationInput } from '../owners/types';
+import { createVisit } from '../visits/visits.api';
 import {
   cancelQueueEntry,
   completeQueueEntry,
@@ -66,18 +67,31 @@ export function QueueCardPage() {
     onError: (error) => message.error(getErrorMessage(error)),
   });
   const actionMutation = useMutation({
-    mutationFn: (action: 'start' | 'repeat' | 'complete' | 'cancel') => {
+    mutationFn: async (action: 'start' | 'repeat' | 'complete' | 'cancel') => {
       if (action === 'start' || action === 'repeat') {
-        return startQueueEntry(queueEntryId!);
+        return { queueEntry: await startQueueEntry(queueEntryId!) };
       }
 
       if (action === 'complete') {
-        return completeQueueEntry(queueEntryId!);
+        const completed = await completeQueueEntry(queueEntryId!);
+        if (queueEntry?.isVaccination && queueEntry.ownerId && queueEntry.animalId) {
+          const visit = queueEntry.visit ?? await createVisit({
+            queueEntryId: queueEntry.id,
+            ownerId: queueEntry.ownerId,
+            animalId: queueEntry.animalId,
+            employeeId: queueEntry.employeeId ?? undefined,
+            startedAt: new Date().toISOString(),
+            status: 'IN_PROGRESS',
+            visitType: 'VACCINATION',
+          });
+          return { queueEntry: completed, visit };
+        }
+        return { queueEntry: completed };
       }
 
-      return cancelQueueEntry(queueEntryId!);
+      return { queueEntry: await cancelQueueEntry(queueEntryId!) };
     },
-    onSuccess: async (_, action) => {
+    onSuccess: async (result, action) => {
       await invalidate();
       const successText = {
         start: 'Клиент вызван на приём',
@@ -86,8 +100,8 @@ export function QueueCardPage() {
         cancel: 'Запись удалена из очереди',
       }[action];
       message.success(successText);
-      if (action === 'complete' && queueEntry?.isVaccination && queueEntry.animalId) {
-        navigate(`/patients/${queueEntry.animalId}?tab=vaccinations&new=vaccination`);
+      if (action === 'complete' && result.visit) {
+        navigate(`/visits/${result.visit.id}?tab=vaccination&new=vaccination`);
       }
     },
     onError: (error) => message.error(getErrorMessage(error)),
@@ -197,9 +211,7 @@ export function QueueCardPage() {
                     Открыть приём
                   </Button>
                 ) : canManageVisits && queueEntry.ownerId && queueEntry.animalId && ['WAITING', 'IN_PROGRESS', 'COMPLETED'].includes(queueEntry.status) ? (
-                  <Button icon={<FileTextOutlined />} onClick={() => navigate(queueEntry.isVaccination
-                    ? `/patients/${queueEntry.animalId}?tab=vaccinations&new=vaccination`
-                    : `/visits?queueEntryId=${queueEntry.id}`)}>
+                  <Button icon={<FileTextOutlined />} onClick={() => navigate(`/visits?queueEntryId=${queueEntry.id}`)}>
                     {queueEntry.isVaccination ? 'Открыть вакцинацию' : 'Создать приём'}
                   </Button>
                 ) : null}

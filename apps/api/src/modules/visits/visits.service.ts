@@ -25,6 +25,7 @@ import { AddVisitServicesDto } from './dto/add-visit-services.dto';
 import { CreateVisitLaboratoryOrderDto } from './dto/create-visit-laboratory-order.dto';
 import { CreateVisitDiagnosisDto } from './dto/create-visit-diagnosis.dto';
 import { CreateVisitDto } from './dto/create-visit.dto';
+import { CopyPreviousVisitServicesDto } from './dto/copy-previous-visit-services.dto';
 import { ListVisitsQueryDto } from './dto/list-visits-query.dto';
 import { ListVisitCatalogQueryDto } from './dto/list-visit-catalog-query.dto';
 import { RestoreVisitDto } from './dto/restore-visit.dto';
@@ -611,6 +612,70 @@ export class VisitsService {
     return { items: billItems, count: billItems.length };
   }
 
+  async getPreviousServices(visitId: string) {
+    const current = await this.prisma.visit.findUnique({
+      where: { id: visitId },
+      select: { id: true, animalId: true, startedAt: true },
+    });
+    if (!current) throw new NotFoundException('Visit not found');
+
+    const previous = await this.findPreviousVisitServices(this.prisma, current);
+    return previous ? serializePreviousVisitServices(previous) : null;
+  }
+
+  async copyPreviousServices(visitId: string, dto: CopyPreviousVisitServicesDto, actor: AuthEmployee) {
+    const selectedIds = uniqueIds(dto.itemIds);
+    const result = await this.prisma.$transaction(async (tx) => {
+      const visit = await this.getVisitForBilling(tx, visitId);
+      ensureVisitEditable(visit, actor);
+      ensureVisitOperational(visit);
+
+      const current = await tx.visit.findUniqueOrThrow({
+        where: { id: visitId },
+        select: { id: true, animalId: true, startedAt: true },
+      });
+      const previous = await this.findPreviousVisitServices(tx, current);
+      if (!previous) throw new BadRequestException('У пациента нет предыдущего приёма с товарами и услугами');
+
+      const available = new Map(previous.bill!.items.map((item) => [item.id, item]));
+      const selected = selectedIds.map((id) => available.get(id));
+      if (selected.some((item) => !item)) {
+        throw new BadRequestException('Одна из выбранных позиций отсутствует в предыдущем приёме');
+      }
+      const blocked = selected.find((item) => !isPreviousVisitItemCopyable(item!));
+      if (blocked) throw new BadRequestException(`Позиция «${blocked.title}» больше недоступна в каталоге`);
+
+      const bill = await this.getOrCreateVisitBill(tx, visit);
+      const created = [];
+      for (const item of selected) {
+        created.push(await tx.billItem.create({
+          data: {
+            billId: bill.id,
+            productId: item!.productId,
+            serviceId: item!.serviceId,
+            title: item!.title,
+            quantity: item!.quantity,
+            stockQuantity: item!.stockQuantity,
+            unitPrice: item!.unitPrice,
+            discount: item!.discount,
+            totalAmount: item!.totalAmount,
+          },
+        }));
+      }
+      await this.recalculateVisitTotals(tx, visitId);
+      return { sourceVisitId: previous.id, items: created, count: created.length };
+    });
+
+    await this.auditService.log({
+      actorId: actor.id,
+      action: 'visit_service.copy_previous',
+      entityType: 'Visit',
+      entityId: visitId,
+      metadata: { sourceVisitId: result.sourceVisitId, billItemIds: result.items.map((item) => item.id) },
+    });
+    return result;
+  }
+
   async updateService(visitId: string, billItemId: string, dto: UpdateVisitServiceDto, actor: AuthEmployee) {
     const billItem = await this.prisma.$transaction(async (tx) => {
       const visit = await this.getVisitForBilling(tx, visitId);
@@ -1044,10 +1109,6 @@ export class VisitsService {
         throw new BadRequestException('Queue entry already has a visit');
       }
 
-      if (queueEntry.isVaccination) {
-        throw new BadRequestException('Для этой очереди откройте карточку вакцинации пациента; обычный приём создавать не нужно');
-      }
-
       if (!queueEntry.ownerId || !queueEntry.animalId) {
         throw new BadRequestException('Queue entry must be linked to existing owner and animal before visit');
       }
@@ -1055,7 +1116,7 @@ export class VisitsService {
       ownerId = queueEntry.ownerId;
       animalId = queueEntry.animalId;
       employeeId = employeeId ?? queueEntry.employeeId ?? actor.id;
-      visitType = visitType ?? queueEntry.visitType ?? undefined;
+      visitType = queueEntry.isVaccination ? VisitType.VACCINATION : visitType ?? queueEntry.visitType ?? undefined;
     }
 
     if (!ownerId || !animalId) {
@@ -1132,6 +1193,43 @@ export class VisitsService {
     }
 
     return visit;
+  }
+
+  private findPreviousVisitServices(
+    client: Prisma.TransactionClient | PrismaService,
+    current: { id: string; animalId: string; startedAt: Date },
+  ) {
+    return client.visit.findFirst({
+      where: {
+        id: { not: current.id },
+        animalId: current.animalId,
+        startedAt: { lt: current.startedAt },
+        status: { not: VisitStatus.CANCELLED },
+        bill: {
+          is: {
+            status: { not: PaymentStatus.CANCELLED },
+            items: { some: { vaccination: null, vaccinationService: null } },
+          },
+        },
+      },
+      orderBy: { startedAt: 'desc' },
+      select: {
+        id: true,
+        startedAt: true,
+        bill: {
+          select: {
+            items: {
+              where: { vaccination: null, vaccinationService: null },
+              orderBy: { createdAt: 'asc' },
+              include: {
+                product: { select: { id: true, title: true, isActive: true, stockUnit: true, writeOffUnit: true, billingUnit: true } },
+                service: { select: { id: true, title: true, isActive: true } },
+              },
+            },
+          },
+        },
+      },
+    });
   }
 
   private async syncLaboratoryOrderStatus(tx: Prisma.TransactionClient, orderId: string) {
@@ -1530,6 +1628,7 @@ const visitInclude = {
         take: 5,
       },
       vaccinations: {
+        where: { cancelledAt: null },
         orderBy: [{ expiresAt: 'asc' }, { createdAt: 'desc' }],
         take: 5,
       },
@@ -1849,6 +1948,35 @@ function resolvePaymentStatus(totalAmount: Prisma.Decimal, paidAmount: Prisma.De
 
 function decimal(value: Prisma.Decimal.Value) {
   return new Prisma.Decimal(value);
+}
+
+type PreviousVisitServiceItem = {
+  id: string;
+  productId: string | null;
+  serviceId: string | null;
+  title: string;
+  product: { isActive: boolean } | null;
+  service: { isActive: boolean } | null;
+};
+
+function isPreviousVisitItemCopyable(item: PreviousVisitServiceItem) {
+  return (!item.productId || Boolean(item.product?.isActive)) && (!item.serviceId || Boolean(item.service?.isActive));
+}
+
+function serializePreviousVisitServices(previous: {
+  id: string;
+  startedAt: Date;
+  bill: { items: PreviousVisitServiceItem[] } | null;
+}) {
+  return {
+    sourceVisitId: previous.id,
+    startedAt: previous.startedAt,
+    items: (previous.bill?.items ?? []).map((item) => ({
+      ...item,
+      copyable: isPreviousVisitItemCopyable(item),
+      unavailableReason: isPreviousVisitItemCopyable(item) ? null : 'Позиция больше недоступна в каталоге',
+    })),
+  };
 }
 
 function decimalToNumber(value: Prisma.Decimal.Value) {

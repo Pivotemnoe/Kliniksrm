@@ -1,25 +1,29 @@
-import { EditOutlined, PlusOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Space, Table, Tag, Typography } from 'antd';
+import { App, Button, Input, Modal, Space, Table, Tag, Typography } from 'antd';
 import { ColumnsType } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { getErrorMessage } from '../../api/errors';
 import { taskStatusColors, taskStatusLabels, TaskStatus } from '../tasks/types';
-import { createVaccination, listVaccinations, updateVaccination } from './animals.api';
+import { createVaccination, deleteVaccination, listVaccinations, updateVaccination } from './animals.api';
 import { Vaccination, VaccinationMutationInput } from './types';
 import { VaccinationFormDrawer } from './VaccinationFormDrawer';
 
 type AnimalVaccinationsTabProps = {
   animalId: string;
+  visitId?: string;
   readOnly?: boolean;
   autoOpen?: boolean;
+  onCreated?: () => void;
 };
 
-export function AnimalVaccinationsTab({ animalId, readOnly = false, autoOpen = false }: AnimalVaccinationsTabProps) {
+export function AnimalVaccinationsTab({ animalId, visitId, readOnly = false, autoOpen = false, onCreated }: AnimalVaccinationsTabProps) {
   const queryClient = useQueryClient();
   const { message } = App.useApp();
   const [createOpen, setCreateOpen] = useState(false);
   const [editingVaccination, setEditingVaccination] = useState<Vaccination | null>(null);
+  const [deletingVaccination, setDeletingVaccination] = useState<Vaccination | null>(null);
+  const [deleteReason, setDeleteReason] = useState('');
   useEffect(() => {
     if (autoOpen && !readOnly) setCreateOpen(true);
   }, [autoOpen, readOnly]);
@@ -32,6 +36,7 @@ export function AnimalVaccinationsTab({ animalId, readOnly = false, autoOpen = f
     onSuccess: async () => {
       await invalidate();
       setCreateOpen(false);
+      onCreated?.();
       message.success('Вакцинация добавлена');
     },
     onError: (error) => message.error(getErrorMessage(error)),
@@ -45,11 +50,22 @@ export function AnimalVaccinationsTab({ animalId, readOnly = false, autoOpen = f
     },
     onError: (error) => message.error(getErrorMessage(error)),
   });
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteVaccination(animalId, deletingVaccination!.id, deleteReason.trim()),
+    onSuccess: async () => {
+      await invalidate();
+      setDeletingVaccination(null);
+      setDeleteReason('');
+      message.success('Ошибочная вакцинация удалена');
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
 
   async function invalidate() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['animals', animalId] }),
         queryClient.invalidateQueries({ queryKey: ['animals', animalId, 'vaccinations'] }),
+        ...(visitId ? [queryClient.invalidateQueries({ queryKey: ['visits', visitId] })] : []),
         queryClient.invalidateQueries({ queryKey: ['tasks'] }),
       ]);
     }
@@ -84,9 +100,20 @@ export function AnimalVaccinationsTab({ animalId, readOnly = false, autoOpen = f
       ...(!readOnly ? [{
         title: '',
         key: 'actions',
-        width: 80,
+        width: 112,
         render: (_, record) => (
-          <Button icon={<EditOutlined />} onClick={() => setEditingVaccination(record)} aria-label="Редактировать вакцинацию" />
+          <Space size={4}>
+            <Button icon={<EditOutlined />} onClick={() => setEditingVaccination(record)} aria-label="Редактировать вакцинацию" />
+            <Button
+              danger
+              icon={<DeleteOutlined />}
+              onClick={() => {
+                setDeleteReason('');
+                setDeletingVaccination(record);
+              }}
+              aria-label="Удалить ошибочную вакцинацию"
+            />
+          </Space>
         ),
       }] as ColumnsType<Vaccination> : []),
     ],
@@ -116,6 +143,7 @@ export function AnimalVaccinationsTab({ animalId, readOnly = false, autoOpen = f
       {!readOnly ? <VaccinationFormDrawer
         open={createOpen}
         title="Добавить вакцинацию"
+        visitId={visitId}
         onClose={() => setCreateOpen(false)}
         onSubmit={(values) => createMutation.mutate(values)}
         isSubmitting={createMutation.isPending}
@@ -130,6 +158,29 @@ export function AnimalVaccinationsTab({ animalId, readOnly = false, autoOpen = f
         isSubmitting={updateMutation.isPending}
         submitError={updateMutation.error}
       /> : null}
+      <Modal
+        open={Boolean(deletingVaccination)}
+        title="Удалить ошибочную вакцинацию?"
+        okText="Удалить"
+        okButtonProps={{ danger: true, disabled: deleteReason.trim().length < 2 }}
+        cancelText="Отмена"
+        confirmLoading={deleteMutation.isPending}
+        onCancel={() => {
+          setDeletingVaccination(null);
+          setDeleteReason('');
+        }}
+        onOk={() => deleteMutation.mutate()}
+      >
+        <Typography.Paragraph>
+          Запись исчезнет из активной истории. Неоплаченные связанные позиции приёма будут удалены, действие останется в аудите.
+        </Typography.Paragraph>
+        <Input.TextArea
+          rows={3}
+          value={deleteReason}
+          onChange={(event) => setDeleteReason(event.target.value)}
+          placeholder="Причина удаления"
+        />
+      </Modal>
     </Space>
   );
 }

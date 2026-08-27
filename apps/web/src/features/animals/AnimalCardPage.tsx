@@ -138,7 +138,7 @@ export function AnimalCardPage() {
       <aside className="context-panel">
         <div className="context-section">
           <div className="context-section-header">
-            <button className="table-link" type="button" onClick={() => animal && navigate(`/owners/${animal.ownerId}`)} disabled={!animal}>
+            <button className="table-link" type="button" onClick={() => animal && navigate(`/owners/${animal.ownerId}?tab=animals`)} disabled={!animal}>
               <LeftOutlined /> К пациентам
             </button>
           </div>

@@ -17,6 +17,7 @@ import {
   VisitRecommendation,
   VisitRecommendationInput,
   VisitServiceLineInput,
+  PreviousVisitServices,
 } from './types';
 import { Product, ServiceItem } from '../stock/types';
 
@@ -111,6 +112,17 @@ export function addVisitServices(visitId: string, items: VisitServiceLineInput[]
     method: 'POST',
     body: { items },
   });
+}
+
+export function getPreviousVisitServices(visitId: string) {
+  return apiRequest<PreviousVisitServices | null>(`/v1/visits/${visitId}/services/previous`);
+}
+
+export function copyPreviousVisitServices(visitId: string, itemIds: string[]) {
+  return apiRequest<{ sourceVisitId: string; items: VisitBillItem[]; count: number }>(
+    `/v1/visits/${visitId}/services/copy-previous`,
+    { method: 'POST', body: { itemIds } },
+  );
 }
 
 export function updateVisitService(visitId: string, billItemId: string, input: VisitServiceLineInput) {

@@ -1,9 +1,11 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import {
   AppointmentStatus,
+  BillSource,
   HospitalStayStatus,
   NotificationChannel,
   NotificationStatus,
+  PaymentStatus,
   Prisma,
   QueueStatus,
   TaskStatus,
@@ -14,7 +16,10 @@ import { rankSearchResults, withRussianSearchVariants } from '../../common/searc
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
+import { FinanceService } from '../finance/finance.service';
+import { resolveServiceUnitPrice, servicePricingSelect } from '../stock/service-pricing';
 import { AnimalArchiveReason, ArchiveAnimalDto } from './dto/archive-animal.dto';
+import { CancelVaccinationDto } from './dto/cancel-vaccination.dto';
 import { CreateVaccinationDto } from './dto/create-vaccination.dto';
 import { CreateWeightRecordDto } from './dto/create-weight-record.dto';
 import { ListAnimalsQueryDto } from './dto/list-animals-query.dto';
@@ -29,6 +34,7 @@ export class AnimalsService {
     private readonly auditService: AuditService,
     private readonly animalCatalogService: AnimalCatalogService,
     private readonly schedulingService: SchedulingService,
+    private readonly financeService: FinanceService,
   ) {}
 
   listCatalog() {
@@ -94,7 +100,9 @@ export class AnimalsService {
           take: 20,
         },
         vaccinations: {
+          where: { cancelledAt: null },
           orderBy: [{ expiresAt: 'asc' }, { createdAt: 'desc' }],
+          include: vaccinationInclude,
         },
         _count: {
           select: {
@@ -102,7 +110,7 @@ export class AnimalsService {
             visits: true,
             tasks: true,
             bills: true,
-            vaccinations: true,
+            vaccinations: { where: { cancelledAt: null } },
             weights: true,
             queueEntries: true,
             hospitalStays: true,
@@ -392,13 +400,17 @@ export class AnimalsService {
     await this.ensureAnimalExists(animalId);
 
     return this.prisma.vaccination.findMany({
-      where: { animalId },
+      where: { animalId, cancelledAt: null },
       orderBy: [{ expiresAt: 'asc' }, { createdAt: 'desc' }],
       include: vaccinationInclude,
     });
   }
 
   async createVaccination(animalId: string, dto: CreateVaccinationDto, actorId: string) {
+    if (dto.visitId) {
+      return this.createVisitVaccination(animalId, dto, actorId);
+    }
+
     const animal = await this.getAnimalForVaccination(animalId);
     await this.validateRevaccinationAssignment(dto);
     let taskAudit: TaskAudit | null = null;
@@ -440,6 +452,152 @@ export class AnimalsService {
     await this.logTaskAudit(taskAudit, actorId);
 
     return vaccination;
+  }
+
+  private async createVisitVaccination(animalId: string, dto: CreateVaccinationDto, actorId: string) {
+    if (!dto.visitId || !dto.productId) {
+      throw new BadRequestException('Для вакцинации в приёме выберите препарат из товаров');
+    }
+
+    const animal = await this.getAnimalForVaccination(animalId);
+    await this.validateRevaccinationAssignment(dto);
+    const dueAt = await this.financeService.getDefaultBillDueAt();
+    let taskAudit: TaskAudit | null = null;
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const visit = await tx.visit.findUnique({
+        where: { id: dto.visitId },
+        select: { id: true, ownerId: true, animalId: true, status: true },
+      });
+      if (!visit || visit.animalId !== animalId) {
+        throw new NotFoundException('Приём этого пациента не найден');
+      }
+      if (visit.status !== VisitStatus.DRAFT && visit.status !== VisitStatus.IN_PROGRESS) {
+        throw new BadRequestException('Вакцинацию с начислением можно добавить только в открытый приём');
+      }
+
+      const product = await tx.product.findFirst({
+        where: { id: dto.productId, isActive: true },
+        select: { id: true, title: true, retailPrice: true },
+      });
+      if (!product) {
+        throw new NotFoundException('Выбранный препарат не найден в активных товарах');
+      }
+
+      const service = dto.serviceId
+        ? await tx.service.findFirst({ where: { id: dto.serviceId, isActive: true }, select: servicePricingSelect })
+        : null;
+      if (dto.serviceId && !service) {
+        throw new NotFoundException('Выбранная услуга вакцинации не найдена');
+      }
+
+      await tx.$queryRaw`SELECT "id" FROM "Bill" WHERE "visitId" = ${visit.id} FOR UPDATE`;
+      let bill = await tx.bill.findUnique({
+        where: { visitId: visit.id },
+        select: { id: true, status: true, paidAmount: true },
+      });
+      if (bill?.status === PaymentStatus.CANCELLED) {
+        throw new BadRequestException('Отменённый счёт нельзя менять. Сначала откройте счёт повторно');
+      }
+      if (bill && decimal(bill.paidAmount).greaterThan(0)) {
+        throw new BadRequestException('Оплаченный счёт нельзя менять до оформления возврата');
+      }
+      if (!bill) {
+        bill = await tx.bill.create({
+          data: {
+            ownerId: visit.ownerId,
+            animalId,
+            visitId: visit.id,
+            source: BillSource.VISIT,
+            status: PaymentStatus.UNPAID,
+            dueAt,
+          },
+          select: { id: true, status: true, paidAmount: true },
+        });
+      }
+
+      const productLine = resolveVaccinationBillLine({
+        quantity: dto.quantity ?? 1,
+        stockQuantity: dto.stockQuantity ?? dto.quantity ?? 1,
+        unitPrice: dto.unitPrice ?? decimal(product.retailPrice).toNumber(),
+        discount: dto.discount ?? 0,
+      });
+      const productBillItem = await tx.billItem.create({
+        data: {
+          billId: bill.id,
+          productId: product.id,
+          title: product.title,
+          quantity: productLine.quantity,
+          stockQuantity: productLine.stockQuantity,
+          unitPrice: productLine.unitPrice,
+          discount: productLine.discount,
+          totalAmount: productLine.totalAmount,
+        },
+      });
+
+      const serviceBillItem = service
+        ? await tx.billItem.create({
+            data: {
+              billId: bill.id,
+              serviceId: service.id,
+              title: service.title,
+              quantity: 1,
+              unitPrice: resolveServiceUnitPrice(service, dto.serviceUnitPrice),
+              discount: 0,
+              totalAmount: resolveServiceUnitPrice(service, dto.serviceUnitPrice),
+            },
+          })
+        : null;
+
+      const createdVaccination = await tx.vaccination.create({
+        data: {
+          animalId,
+          visitId: visit.id,
+          productId: product.id,
+          billItemId: productBillItem.id,
+          serviceBillItemId: serviceBillItem?.id,
+          title: product.title,
+          status: emptyToNull(dto.status),
+          vaccinatedAt: dateOrNull(dto.vaccinatedAt) ?? new Date(),
+          expiresAt: dateOrNull(dto.expiresAt),
+          vaccineBatch: emptyToNull(dto.vaccineBatch),
+          vaccineSeries: emptyToNull(dto.vaccineSeries),
+          vaccineExpiresAt: dateOrNull(dto.vaccineExpiresAt),
+          smsReminder: dto.smsReminder ?? false,
+          ownerReminderEnabled: dto.ownerReminderEnabled ?? false,
+          notes: emptyToNull(dto.notes),
+        },
+        include: vaccinationInclude,
+      });
+
+      taskAudit = await this.syncRevaccinationTask(tx, animal, createdVaccination, dto, actorId);
+      await this.syncOwnerVaccinationReminders(tx, animal, createdVaccination, actorId);
+
+      const billItems = await tx.billItem.findMany({ where: { billId: bill.id }, select: { totalAmount: true } });
+      const totalAmount = billItems.reduce((sum, item) => sum.plus(item.totalAmount), decimal(0));
+      await tx.bill.update({ where: { id: bill.id }, data: { totalAmount, status: PaymentStatus.UNPAID } });
+      await tx.visit.update({ where: { id: visit.id }, data: { totalAmount } });
+
+      return { vaccination: createdVaccination, productBillItemId: productBillItem.id, serviceBillItemId: serviceBillItem?.id ?? null };
+    });
+
+    await this.auditService.log({
+      actorId,
+      action: 'vaccination.create',
+      entityType: 'Vaccination',
+      entityId: result.vaccination.id,
+      metadata: {
+        animalId,
+        visitId: dto.visitId,
+        productId: dto.productId,
+        billItemId: result.productBillItemId,
+        serviceBillItemId: result.serviceBillItemId,
+        revaccinationTaskId: result.vaccination.revaccinationTask?.id ?? null,
+      },
+    });
+    await this.logTaskAudit(taskAudit, actorId);
+
+    return result.vaccination;
   }
 
   async updateVaccination(animalId: string, vaccinationId: string, dto: UpdateVaccinationDto, actorId: string) {
@@ -496,6 +654,86 @@ export class AnimalsService {
     await this.logTaskAudit(taskAudit, actorId);
 
     return updatedVaccination;
+  }
+
+  async cancelVaccination(animalId: string, vaccinationId: string, dto: CancelVaccinationDto, actorId: string) {
+    const vaccination = await this.prisma.vaccination.findFirst({
+      where: { id: vaccinationId, animalId, cancelledAt: null },
+      include: {
+        ...vaccinationInclude,
+        billItem: { include: { bill: { select: { id: true, status: true, paidAmount: true, visitId: true } } } },
+        serviceBillItem: { include: { bill: { select: { id: true, status: true, paidAmount: true, visitId: true } } } },
+      },
+    });
+    if (!vaccination) {
+      throw new NotFoundException('Вакцинация не найдена');
+    }
+
+    let taskAudit: TaskAudit | null = null;
+    await this.prisma.$transaction(async (tx) => {
+      const linkedItems = [vaccination.billItem, vaccination.serviceBillItem].filter((item): item is NonNullable<typeof item> => Boolean(item));
+      const billIds = [...new Set(linkedItems.map((item) => item.bill.id))];
+
+      for (const billId of billIds) {
+        await tx.$queryRaw`SELECT "id" FROM "Bill" WHERE "id" = ${billId} FOR UPDATE`;
+      }
+      for (const item of linkedItems) {
+        if (decimal(item.bill.paidAmount).greaterThan(0) || item.bill.status === PaymentStatus.PAID || item.bill.status === PaymentStatus.PARTIAL) {
+          throw new BadRequestException('Сначала оформите возврат оплаты, затем удаляйте ошибочную вакцинацию');
+        }
+      }
+
+      taskAudit = await this.cancelOpenRevaccinationTask(tx, vaccination.revaccinationTask, vaccination.id);
+      await tx.notificationOutbox.updateMany({
+        where: {
+          dedupeKey: { startsWith: `vaccination:${vaccination.id}:` },
+          status: { in: [NotificationStatus.QUEUED, NotificationStatus.FAILED, NotificationStatus.CANCELLED] },
+        },
+        data: { status: NotificationStatus.CANCELLED },
+      });
+
+      await tx.vaccination.update({
+        where: { id: vaccination.id },
+        data: {
+          billItemId: null,
+          serviceBillItemId: null,
+          cancelledAt: new Date(),
+          cancelledById: actorId,
+          cancellationReason: dto.reason.trim(),
+        },
+      });
+
+      const itemIds = linkedItems.map((item) => item.id);
+      if (itemIds.length) {
+        await tx.billItem.deleteMany({ where: { id: { in: itemIds } } });
+      }
+
+      for (const billId of billIds) {
+        const billItems = await tx.billItem.findMany({ where: { billId }, select: { totalAmount: true } });
+        const totalAmount = billItems.reduce((sum, item) => sum.plus(item.totalAmount), decimal(0));
+        const bill = linkedItems.find((item) => item.bill.id === billId)?.bill;
+        await tx.bill.update({ where: { id: billId }, data: { totalAmount, status: resolvePaymentStatus(totalAmount, decimal(bill?.paidAmount ?? 0)) } });
+        if (bill?.visitId) {
+          await tx.visit.update({ where: { id: bill.visitId }, data: { totalAmount } });
+        }
+      }
+    });
+
+    await this.auditService.log({
+      actorId,
+      action: 'vaccination.cancel',
+      entityType: 'Vaccination',
+      entityId: vaccinationId,
+      metadata: {
+        animalId,
+        visitId: vaccination.visitId,
+        reason: dto.reason.trim(),
+        removedBillItemIds: [vaccination.billItemId, vaccination.serviceBillItemId].filter(Boolean),
+      },
+    });
+    await this.logTaskAudit(taskAudit, actorId);
+
+    return { deleted: true };
   }
 
   private async getAnimalForVaccination(animalId: string) {
@@ -799,6 +1037,7 @@ const animalListInclude = {
     take: 1,
   },
   vaccinations: {
+    where: { cancelledAt: null },
     orderBy: { expiresAt: 'asc' },
     take: 3,
   },
@@ -806,12 +1045,21 @@ const animalListInclude = {
     select: {
       visits: true,
       tasks: true,
-      vaccinations: true,
+      vaccinations: { where: { cancelledAt: null } },
     },
   },
 } satisfies Prisma.AnimalInclude;
 
 const vaccinationInclude = {
+  product: {
+    select: { id: true, title: true, retailPrice: true, stockUnit: true, writeOffUnit: true, billingUnit: true },
+  },
+  billItem: {
+    select: { id: true, title: true, quantity: true, stockQuantity: true, unitPrice: true, discount: true, totalAmount: true },
+  },
+  serviceBillItem: {
+    select: { id: true, title: true, quantity: true, unitPrice: true, totalAmount: true, serviceId: true },
+  },
   revaccinationTask: {
     select: {
       id: true,
@@ -867,4 +1115,35 @@ function dateOrNull(value: string | null | undefined) {
   }
 
   return date;
+}
+
+function resolveVaccinationBillLine(input: {
+  quantity: Prisma.Decimal.Value;
+  stockQuantity: Prisma.Decimal.Value;
+  unitPrice: Prisma.Decimal.Value;
+  discount: Prisma.Decimal.Value;
+}) {
+  const quantity = decimal(input.quantity);
+  const stockQuantity = decimal(input.stockQuantity);
+  const unitPrice = decimal(input.unitPrice);
+  const discount = decimal(input.discount);
+  if (quantity.lessThanOrEqualTo(0) || stockQuantity.lessThanOrEqualTo(0)) {
+    throw new BadRequestException('Количество вакцины должно быть больше нуля');
+  }
+  if (unitPrice.lessThan(0) || discount.lessThan(0)) {
+    throw new BadRequestException('Цена и скидка не могут быть отрицательными');
+  }
+  const calculatedTotal = quantity.mul(unitPrice).minus(discount);
+  const totalAmount = calculatedTotal.lessThan(0) ? decimal(0) : calculatedTotal;
+  return { quantity, stockQuantity, unitPrice, discount, totalAmount };
+}
+
+function resolvePaymentStatus(totalAmount: Prisma.Decimal, paidAmount: Prisma.Decimal) {
+  if (paidAmount.greaterThanOrEqualTo(totalAmount) && totalAmount.greaterThan(0)) return PaymentStatus.PAID;
+  if (paidAmount.greaterThan(0)) return PaymentStatus.PARTIAL;
+  return PaymentStatus.UNPAID;
+}
+
+function decimal(value: Prisma.Decimal.Value) {
+  return new Prisma.Decimal(value);
 }

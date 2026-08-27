@@ -5,7 +5,7 @@ import { App, Alert, Button, Card, Descriptions, Form, Input, Modal, Select, Spa
 import { InputNumber } from '../../shared/ui/DecimalInputNumber';
 import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
@@ -29,6 +29,7 @@ import { Owner, OwnerBalanceOperationInput, OwnerMutationInput } from './types';
 export function OwnerCardPage() {
   const { ownerId } = useParams<{ ownerId: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const { message } = App.useApp();
   const { data: auth } = useCurrentEmployee();
@@ -151,6 +152,13 @@ export function OwnerCardPage() {
         <div className="work-surface">
           {owner ? (
             <Tabs
+              activeKey={ownerCardTabKeys.has(searchParams.get('tab') ?? '') ? searchParams.get('tab')! : 'animals'}
+              onChange={(key) => {
+                const nextSearchParams = new URLSearchParams(searchParams);
+                if (key === 'animals') nextSearchParams.delete('tab');
+                else nextSearchParams.set('tab', key);
+                setSearchParams(nextSearchParams, { replace: true });
+              }}
               items={[
                 {
                   key: 'animals',
@@ -675,3 +683,5 @@ function ContextRow({ label, value }: { label: string; value?: string | null }) 
 function formatDate(value?: string | null) {
   return value ? new Date(value).toLocaleString('ru-RU') : '—';
 }
+
+const ownerCardTabKeys = new Set(['animals', 'profile', 'appointments', 'visits', 'bills', 'balance', 'communication', 'trusted']);

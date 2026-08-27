@@ -34,7 +34,6 @@ type VisitCreationType = z.infer<typeof visitCreationTypeSchema>;
 
 const visitCreationTypeLabels: Record<VisitCreationType, string> = {
   ...visitTypeLabels,
-  VACCINATION: 'Вакцинация',
 };
 
 const visitSchema = z
@@ -77,7 +76,6 @@ type VisitFormDrawerProps = {
   isSubmitting?: boolean;
   onClose: () => void;
   onSubmit: (values: CreateVisitInput) => void;
-  onOpenVaccination: (animalId: string) => void;
 };
 
 export function VisitFormDrawer({
@@ -89,7 +87,6 @@ export function VisitFormDrawer({
   isSubmitting,
   onClose,
   onSubmit,
-  onOpenVaccination,
 }: VisitFormDrawerProps) {
   const { control, handleSubmit, reset, setValue } = useForm<VisitFormInput, unknown, VisitFormValues>({
     resolver: zodResolver(visitSchema),
@@ -148,13 +145,6 @@ export function VisitFormDrawer({
   }
 
   function submit(values: VisitFormValues) {
-    if (values.visitType === 'VACCINATION') {
-      if (values.animalId) {
-        onOpenVaccination(values.animalId);
-      }
-      return;
-    }
-
     onSubmit({
       ownerId: values.ownerId,
       animalId: values.animalId,
@@ -179,11 +169,7 @@ export function VisitFormDrawer({
         <Space>
           <Button onClick={onClose}>Отмена</Button>
           <Button type="primary" loading={isSubmitting} disabled={sourceBlocked} onClick={handleSubmit(submit)}>
-            {visitCreationType === 'VACCINATION'
-              ? 'Открыть вакцинацию'
-              : sourceContext
-                ? 'Создать приём'
-                : 'Добавить на приём'}
+            {sourceContext ? 'Создать приём' : 'Добавить на приём'}
           </Button>
         </Space>
       }
@@ -404,7 +390,7 @@ function SourceDescription({ sourceContext }: { sourceContext: NonNullable<Visit
         <Tag color={visitStatusColors.DRAFT}>Через очередь</Tag>
       </Descriptions.Item>
       <Descriptions.Item label="Прием">
-        {queueEntry.visitType ? visitTypeLabels[queueEntry.visitType] : visitTypeLabels.PRIMARY}
+        {visitTypeLabels[getSourceVisitType(sourceContext) ?? 'PRIMARY']}
       </Descriptions.Item>
     </Descriptions>
   );
@@ -478,7 +464,7 @@ function getSourceEmployeeId(sourceContext: VisitSourceContext) {
 
 function getSourceVisitType(sourceContext: VisitSourceContext) {
   if (sourceContext?.type === 'queue') {
-    return sourceContext.queueEntry.visitType;
+    return sourceContext.queueEntry.isVaccination ? 'VACCINATION' : sourceContext.queueEntry.visitType;
   }
 
   return undefined;

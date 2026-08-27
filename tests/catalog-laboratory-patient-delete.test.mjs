@@ -119,7 +119,8 @@ test('пациент архивируется с причиной без уда�
   assert.doesNotMatch(service, /tx\.animal\.delete/);
   assert.match(api, /\/archive/);
   assert.match(api, /\/restore/);
-  assert.doesNotMatch(api, /method: 'DELETE'/);
+  const archiveApi = api.slice(api.indexOf('export function archiveAnimal'), api.indexOf('export function listWeightRecords'));
+  assert.doesNotMatch(archiveApi, /method: 'DELETE'/);
   assert.match(card, /Убрать из активных/);
   assert.match(card, /История лечения, документов и оплат не удаляется/);
   assert.match(ownerAnimals, /Показать архив/);

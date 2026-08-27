@@ -83,7 +83,7 @@ test('кнопка пациента возвращает в карточку е�
     read('apps/web/src/features/animals/AnimalCardPage.tsx'),
     read('apps/web/src/features/visits/VisitExamTab.tsx'),
   ]);
-  assert.match(animalCard, /navigate\(`\/owners\/\$\{animal\.ownerId\}`\)/);
+  assert.match(animalCard, /navigate\(`\/owners\/\$\{animal\.ownerId\}\?tab=animals`\)/);
   assert.match(examTab, /name="manipulations"[\s\S]*rows=\{10\}/);
   assert.match(examTab, /name="symptoms"[\s\S]*rows=\{4\}/);
   assert.match(examTab, /name="comment"[\s\S]*rows=\{2\}/);

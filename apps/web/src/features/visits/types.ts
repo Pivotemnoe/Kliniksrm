@@ -6,7 +6,7 @@ import type { DocumentLayout } from '../documents/documentLayout';
 export type DecimalValue = string | number;
 
 export type VisitStatus = 'DRAFT' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
-export type VisitType = 'PRIMARY' | 'FOLLOW_UP' | 'OPERATION' | 'POST_OPERATION';
+export type VisitType = 'PRIMARY' | 'FOLLOW_UP' | 'OPERATION' | 'POST_OPERATION' | 'VACCINATION';
 export type VisitDiagnosisType = 'Предварительный' | 'Дифференциальный' | 'Клинический' | 'Окончательный';
 
 export type VisitSummary = {
@@ -230,6 +230,15 @@ export type VisitBillItem = {
   }>;
 };
 
+export type PreviousVisitServices = {
+  sourceVisitId: string;
+  startedAt: string;
+  items: Array<VisitBillItem & {
+    copyable: boolean;
+    unavailableReason: string | null;
+  }>;
+};
+
 export type VisitPayment = {
   id: string;
   billId: string;
@@ -341,6 +350,7 @@ export const visitTypeLabels: Record<VisitType, string> = {
   FOLLOW_UP: 'Повторный',
   OPERATION: 'Операция',
   POST_OPERATION: 'Послеоперационный',
+  VACCINATION: 'Вакцинация',
 };
 
 export const laboratoryOrderStatusLabels: Record<VisitLaboratoryOrderStatus, string> = {

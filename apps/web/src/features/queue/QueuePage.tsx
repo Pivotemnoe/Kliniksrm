@@ -93,13 +93,6 @@ export function QueuePage() {
         throw new Error('Сначала заведите карточки владельца и пациента');
       }
 
-      if (record.isVaccination) {
-        if (action === 'accept') {
-          await completeQueueEntry(record.id);
-        }
-        return { action, vaccinationAnimalId: record.animalId };
-      }
-
       if (action === 'accept') {
         await completeQueueEntry(record.id);
       }
@@ -111,7 +104,7 @@ export function QueuePage() {
         employeeId: record.employeeId ?? undefined,
         startedAt: new Date().toISOString(),
         status: 'IN_PROGRESS',
-        visitType: record.visitType ?? 'PRIMARY',
+        visitType: record.isVaccination ? 'VACCINATION' : record.visitType ?? 'PRIMARY',
       });
 
       return { action, visit };
@@ -125,14 +118,14 @@ export function QueuePage() {
       const successText = {
         call: 'Клиент вызван на приём',
         repeat: 'Вызов повторён',
-        accept: result.vaccinationAnimalId ? 'Открыта карточка вакцинации' : 'Приём создан и открыт',
-        createVisit: result.vaccinationAnimalId ? 'Открыта карточка вакцинации' : 'Приём создан и открыт',
+        accept: 'Приём создан и открыт',
+        createVisit: 'Приём создан и открыт',
       }[variables.action];
       message.success(successText);
       if ((result.action === 'accept' || result.action === 'createVisit') && result.visit) {
-        navigate(`/visits/${result.visit.id}`);
-      } else if (result.vaccinationAnimalId) {
-        navigate(`/patients/${result.vaccinationAnimalId}?tab=vaccinations&new=vaccination`);
+        navigate(variables.record.isVaccination
+          ? `/visits/${result.visit.id}?tab=vaccination&new=vaccination`
+          : `/visits/${result.visit.id}`);
       }
     },
     onError: (error) => message.error(getErrorMessage(error)),

@@ -193,6 +193,7 @@ export class ClientPortalService {
                 select: { id: true, weightKg: true, measuredAt: true },
               },
               vaccinations: {
+                where: { cancelledAt: null },
                 orderBy: [{ expiresAt: 'asc' }, { vaccinatedAt: 'desc' }],
                 take: 20,
                 select: {

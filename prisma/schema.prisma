@@ -64,6 +64,7 @@ enum VisitType {
   FOLLOW_UP
   OPERATION
   POST_OPERATION
+  VACCINATION
 }
 
 enum TaskStatus {
@@ -369,6 +370,7 @@ model Employee {
   hospitalRecords               HospitalRecord[]             @relation("HospitalRecordAuthor")
   performedHospitalRecords      HospitalRecord[]             @relation("HospitalRecordPerformer")
   cancelledHospitalRecords      HospitalRecord[]             @relation("HospitalRecordCanceller")
+  cancelledVaccinations         Vaccination[]                 @relation("VaccinationCanceller")
   hospitalPlans                 HospitalTreatmentPlan[]      @relation("HospitalTreatmentPlanAuthor")
   assignedTasks                 Task[]                       @relation("TaskAssignee")
   createdTasks                  Task[]                       @relation("TaskCreator")
@@ -990,6 +992,14 @@ model Vaccination {
   id                   String    @id @default(uuid())
   animalId             String
   animal               Animal    @relation(fields: [animalId], references: [id], onDelete: Cascade)
+  visitId              String?
+  visit                Visit?    @relation(fields: [visitId], references: [id], onDelete: SetNull)
+  productId            String?
+  product              Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+  billItemId           String?   @unique
+  billItem             BillItem? @relation("VaccinationProductBillItem", fields: [billItemId], references: [id], onDelete: SetNull)
+  serviceBillItemId    String?   @unique
+  serviceBillItem      BillItem? @relation("VaccinationServiceBillItem", fields: [serviceBillItemId], references: [id], onDelete: SetNull)
   title                String
   status               String?
   vaccinatedAt         DateTime?
@@ -1000,11 +1010,18 @@ model Vaccination {
   smsReminder          Boolean   @default(false)
   ownerReminderEnabled Boolean   @default(false)
   notes                String?
+  cancelledAt          DateTime?
+  cancelledById        String?
+  cancelledBy          Employee? @relation("VaccinationCanceller", fields: [cancelledById], references: [id], onDelete: SetNull)
+  cancellationReason   String?
   revaccinationTask    Task?     @relation("VaccinationRevaccinationTask")
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
   @@index([animalId])
+  @@index([visitId])
+  @@index([productId])
+  @@index([cancelledAt])
   @@index([vaccinatedAt])
   @@index([expiresAt])
 }
@@ -1134,6 +1151,7 @@ model Visit {
   hospitalPlans    HospitalTreatmentPlan[]
   hospitalStay     HospitalStay?
   overdueAlert     VisitOverdueAlert?
+  vaccinations     Vaccination[]
   createdAt        DateTime                @default(now())
   updatedAt        DateTime                @updatedAt
 
@@ -1508,6 +1526,7 @@ model Product {
   stockMovements           StockMovement[]
   supplyItems              SupplyInvoiceItem[]
   billItems                BillItem[]
+  vaccinations             Vaccination[]
   plannedHospitalRecords   HospitalRecord[]     @relation("HospitalPlannedProduct")
   linkedProducts           ProductLinkedProduct[] @relation("SourceProductLinks")
   usedAsLinkedProduct      ProductLinkedProduct[] @relation("TargetProductLinks")
@@ -1905,6 +1924,8 @@ model BillItem {
   totalAmount          Decimal               @default(0) @db.Decimal(12, 2)
   laboratoryOrderItems LaboratoryOrderItem[]
   hospitalRecord       HospitalRecord?
+  vaccination         Vaccination? @relation("VaccinationProductBillItem")
+  vaccinationService  Vaccination? @relation("VaccinationServiceBillItem")
   stockMovements       StockMovement[]
   createdAt            DateTime              @default(now())
 

@@ -96,6 +96,10 @@ export type AnimalWeightRecord = {
 export type Vaccination = {
   id: string;
   animalId: string;
+  visitId: string | null;
+  productId: string | null;
+  billItemId: string | null;
+  serviceBillItemId: string | null;
   title: string;
   status: string | null;
   vaccinatedAt: string | null;
@@ -106,6 +110,14 @@ export type Vaccination = {
   smsReminder: boolean;
   ownerReminderEnabled: boolean;
   notes: string | null;
+  product?: {
+    id: string;
+    title: string;
+    retailPrice: number | string;
+    stockUnit: string | null;
+    writeOffUnit: string | null;
+    billingUnit: string | null;
+  } | null;
   revaccinationTask?: {
     id: string;
     status: string;
@@ -125,6 +137,14 @@ export type WeightMutationInput = {
 
 export type VaccinationMutationInput = {
   title: string;
+  visitId?: string;
+  productId?: string;
+  quantity?: number;
+  stockQuantity?: number;
+  unitPrice?: number;
+  discount?: number;
+  serviceId?: string;
+  serviceUnitPrice?: number;
   status?: string | null;
   vaccinatedAt?: string | null;
   expiresAt?: string | null;

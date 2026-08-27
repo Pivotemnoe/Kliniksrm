@@ -8,11 +8,20 @@ import { getErrorMessage } from '../../api/errors';
 import { nullToEmpty } from '../../shared/utils/forms';
 import { listRoles } from '../employees/employees.api';
 import { getSchedulingResources } from '../scheduling/scheduling.api';
+import { formatServicePrice, getServiceDefaultPrice, getServicePriceHelp } from '../stock/service-pricing';
+import { useVisitProductCatalogPicker, useVisitServiceCatalogPicker } from '../stock/useCatalogPicker';
 import { Vaccination, VaccinationMutationInput } from './types';
 
 const vaccinationSchema = z
   .object({
     title: z.string().trim().min(2, 'Введите название').max(200),
+    productId: nullableString(),
+    quantity: numberText(0.001, 1000000),
+    stockQuantity: numberText(0.001, 1000000),
+    unitPrice: numberText(0, 1000000000),
+    discount: numberText(0, 1000000000),
+    serviceId: nullableString(),
+    serviceUnitPrice: numberText(0, 1000000000),
     status: nullableString(80),
     vaccinatedAt: nullableDateString(),
     expiresAt: nullableDateString(),
@@ -57,6 +66,7 @@ type VaccinationFormInput = z.input<typeof vaccinationSchema>;
 type VaccinationFormDrawerProps = {
   open: boolean;
   title: string;
+  visitId?: string;
   initialVaccination?: Vaccination | null;
   submitError?: unknown;
   isSubmitting?: boolean;
@@ -67,21 +77,29 @@ type VaccinationFormDrawerProps = {
 export function VaccinationFormDrawer({
   open,
   title,
+  visitId,
   initialVaccination,
   submitError,
   isSubmitting,
   onClose,
   onSubmit,
 }: VaccinationFormDrawerProps) {
-  const { control, handleSubmit, reset, setValue } = useForm<VaccinationFormInput, unknown, VaccinationFormValues>({
+  const { control, handleSubmit, reset, setError, setValue } = useForm<VaccinationFormInput, unknown, VaccinationFormValues>({
     resolver: zodResolver(vaccinationSchema),
-    defaultValues: getDefaultValues(initialVaccination),
+    defaultValues: getDefaultValues(initialVaccination, visitId),
   });
+  const productId = useWatch({ control, name: 'productId' });
+  const serviceId = useWatch({ control, name: 'serviceId' });
   const expiresAt = useWatch({ control, name: 'expiresAt' });
   const vaccinatedAt = useWatch({ control, name: 'vaccinatedAt' });
   const createRevaccinationTask = useWatch({ control, name: 'createRevaccinationTask' });
   const revaccinationAssigneeMode = useWatch({ control, name: 'revaccinationAssigneeMode' });
   const showTaskFields = Boolean(expiresAt && createRevaccinationTask);
+  const integratedBilling = Boolean(visitId && !initialVaccination);
+  const productsQuery = useVisitProductCatalogPicker(open && integratedBilling);
+  const servicesQuery = useVisitServiceCatalogPicker(open && integratedBilling);
+  const activeProduct = productsQuery.items.find((item) => item.id === productId) ?? initialVaccination?.product ?? null;
+  const activeService = servicesQuery.items.find((item) => item.id === serviceId) ?? null;
 
   const resourcesQuery = useQuery({
     queryKey: ['scheduling', 'resources'],
@@ -103,15 +121,30 @@ export function VaccinationFormDrawer({
 
   function handleOpenChange(nextOpen: boolean) {
     if (nextOpen) {
-      reset(getDefaultValues(initialVaccination));
+      reset(getDefaultValues(initialVaccination, visitId));
+      productsQuery.resetSearch();
+      servicesQuery.resetSearch();
     }
   }
 
   function submit(values: VaccinationFormValues) {
+    if (integratedBilling && !values.productId) {
+      setError('productId', { message: 'Выберите вакцину из товаров' });
+      return;
+    }
     const shouldCreateTask = Boolean(values.expiresAt && values.createRevaccinationTask);
 
     onSubmit({
       title: values.title,
+      ...(integratedBilling && visitId && values.productId ? {
+        visitId,
+        productId: values.productId,
+        quantity: values.quantity,
+        stockQuantity: values.stockQuantity,
+        unitPrice: values.unitPrice,
+        discount: values.discount,
+        ...(values.serviceId ? { serviceId: values.serviceId, serviceUnitPrice: values.serviceUnitPrice } : {}),
+      } : {}),
       status: values.status,
       vaccinatedAt: values.vaccinatedAt,
       expiresAt: values.expiresAt,
@@ -149,15 +182,105 @@ export function VaccinationFormDrawer({
         {submitError ? <Alert type="error" showIcon message={getErrorMessage(submitError)} className="form-alert" /> : null}
         {resourcesQuery.isError ? <Alert type="error" showIcon message={getErrorMessage(resourcesQuery.error)} className="form-alert" /> : null}
         {rolesQuery.isError ? <Alert type="error" showIcon message={getErrorMessage(rolesQuery.error)} className="form-alert" /> : null}
-        <Controller
-          control={control}
-          name="title"
-          render={({ field, fieldState }) => (
-            <Form.Item label="Название вакцины" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
-              <Input {...field} autoFocus />
-            </Form.Item>
-          )}
-        />
+        {productsQuery.isError ? <Alert type="error" showIcon message={getErrorMessage(productsQuery.error)} className="form-alert" /> : null}
+        {servicesQuery.isError ? <Alert type="error" showIcon message={getErrorMessage(servicesQuery.error)} className="form-alert" /> : null}
+        {integratedBilling ? (
+          <>
+            <Alert
+              type="info"
+              showIcon
+              className="form-alert"
+              message="Вакцина и выбранная услуга добавятся в товары и услуги этого приёма. Складское списание произойдёт после полной оплаты счёта."
+            />
+            <Controller
+              control={control}
+              name="productId"
+              render={({ field, fieldState }) => (
+                <Form.Item label="Вакцина из товаров" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+                  <Select
+                    {...field}
+                    showSearch
+                    filterOption={false}
+                    loading={productsQuery.isLoading}
+                    onSearch={productsQuery.onSearch}
+                    notFoundContent={productsQuery.isFetching ? 'Идёт поиск…' : 'Вакцина не найдена во всём каталоге'}
+                    options={productsQuery.items.map((product) => ({
+                      value: product.id,
+                      label: `${product.title} · ${product.writeOffUnit || product.stockUnit || 'шт'}`,
+                    }))}
+                    placeholder="Начните вводить название вакцины"
+                    onChange={(value) => {
+                      field.onChange(value);
+                      const product = productsQuery.items.find((item) => item.id === value);
+                      if (product) {
+                        setValue('title', product.title, { shouldValidate: true });
+                        setValue('unitPrice', String(product.retailPrice));
+                        setValue('quantity', '1');
+                        setValue('stockQuantity', '1');
+                      }
+                    }}
+                  />
+                </Form.Item>
+              )}
+            />
+            <div className="form-grid two-columns">
+              <Controller control={control} name="stockQuantity" render={({ field, fieldState }) => (
+                <Form.Item label={`Списать со склада, ${activeProduct?.writeOffUnit || activeProduct?.stockUnit || 'ед.'}`} validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+                  <Input inputMode="decimal" {...field} />
+                </Form.Item>
+              )} />
+              <Controller control={control} name="quantity" render={({ field, fieldState }) => (
+                <Form.Item label={`Начислить клиенту, ${activeProduct?.billingUnit || activeProduct?.writeOffUnit || activeProduct?.stockUnit || 'ед.'}`} validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+                  <Input inputMode="decimal" {...field} />
+                </Form.Item>
+              )} />
+              <Controller control={control} name="unitPrice" render={({ field, fieldState }) => (
+                <Form.Item label="Цена за начисление" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+                  <Input inputMode="decimal" {...field} />
+                </Form.Item>
+              )} />
+              <Controller control={control} name="discount" render={({ field, fieldState }) => (
+                <Form.Item label="Скидка" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+                  <Input inputMode="decimal" {...field} />
+                </Form.Item>
+              )} />
+            </div>
+            <Controller control={control} name="serviceId" render={({ field }) => (
+              <Form.Item label="Услуга вакцинации, если нужна">
+                <Select
+                  {...field}
+                  allowClear
+                  showSearch
+                  filterOption={false}
+                  loading={servicesQuery.isLoading}
+                  onSearch={servicesQuery.onSearch}
+                  options={servicesQuery.items.map((service) => ({ value: service.id, label: `${service.title} · ${formatServicePrice(service)}` }))}
+                  placeholder="Не выбрана"
+                  onChange={(value) => {
+                    field.onChange(value ?? '');
+                    const service = servicesQuery.items.find((item) => item.id === value);
+                    setValue('serviceUnitPrice', String(service ? getServiceDefaultPrice(service) : 0));
+                  }}
+                />
+              </Form.Item>
+            )} />
+            {serviceId ? <Controller control={control} name="serviceUnitPrice" render={({ field, fieldState }) => (
+              <Form.Item label="Цена услуги" extra={getServicePriceHelp(activeService)} validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+                <Input inputMode="decimal" {...field} />
+              </Form.Item>
+            )} /> : null}
+          </>
+        ) : (
+          <Controller
+            control={control}
+            name="title"
+            render={({ field, fieldState }) => (
+              <Form.Item label="Название вакцины" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+                <Input {...field} autoFocus />
+              </Form.Item>
+            )}
+          />
+        )}
         <div className="form-grid two-columns">
           <Controller
             control={control}
@@ -330,13 +453,21 @@ export function VaccinationFormDrawer({
   );
 }
 
-function getDefaultValues(vaccination?: Vaccination | null): VaccinationFormInput {
+function getDefaultValues(vaccination?: Vaccination | null, visitId?: string): VaccinationFormInput {
   const task = vaccination?.revaccinationTask;
+  const integratedBilling = Boolean(visitId && !vaccination);
 
   return {
     title: vaccination?.title ?? '',
+    productId: vaccination?.productId ?? '',
+    quantity: '1',
+    stockQuantity: '1',
+    unitPrice: vaccination?.product?.retailPrice ? String(vaccination.product.retailPrice) : '0',
+    discount: '0',
+    serviceId: '',
+    serviceUnitPrice: '0',
     status: nullToEmpty(vaccination?.status),
-    vaccinatedAt: dateToInput(vaccination?.vaccinatedAt),
+    vaccinatedAt: dateToInput(vaccination?.vaccinatedAt) || (integratedBilling ? todayInput() : ''),
     expiresAt: dateToInput(vaccination?.expiresAt),
     vaccineBatch: nullToEmpty(vaccination?.vaccineBatch),
     vaccineSeries: nullToEmpty(vaccination?.vaccineSeries),
@@ -349,6 +480,20 @@ function getDefaultValues(vaccination?: Vaccination | null): VaccinationFormInpu
     revaccinationAssigneeId: task?.assigneeId ?? '',
     revaccinationAssigneeRoleCode: task?.assigneeRoleCode ?? 'doctor',
   };
+}
+
+function numberText(min: number, max: number) {
+  return z
+    .string()
+    .trim()
+    .transform((value) => Number(value.replace(',', '.')))
+    .refine((value) => Number.isFinite(value) && value >= min && value <= max, `Введите число от ${min} до ${max}`);
+}
+
+function todayInput() {
+  const now = new Date();
+  const offset = now.getTimezoneOffset() * 60_000;
+  return new Date(now.getTime() - offset).toISOString().slice(0, 10);
 }
 
 function dateToInput(value: string | null | undefined) {

@@ -8,6 +8,7 @@ import { AddVisitServicesDto } from './dto/add-visit-services.dto';
 import { CreateVisitLaboratoryOrderDto } from './dto/create-visit-laboratory-order.dto';
 import { CreateVisitDiagnosisDto } from './dto/create-visit-diagnosis.dto';
 import { CreateVisitDto } from './dto/create-visit.dto';
+import { CopyPreviousVisitServicesDto } from './dto/copy-previous-visit-services.dto';
 import { ListVisitsQueryDto } from './dto/list-visits-query.dto';
 import { ListVisitCatalogQueryDto } from './dto/list-visit-catalog-query.dto';
 import { RestoreVisitDto } from './dto/restore-visit.dto';
@@ -151,6 +152,24 @@ export class VisitsController {
   @ApiCreatedResponse({ description: 'Multiple visit bill positions added atomically.' })
   addServices(@Param('visitId') visitId: string, @Body() dto: AddVisitServicesDto, @CurrentEmployee() actor: AuthEmployee) {
     return this.visitsService.addServices(visitId, dto, actor);
+  }
+
+  @Get(':visitId/services/previous')
+  @RequirePermissions('visits.manage')
+  @ApiOkResponse({ description: 'Copyable positions from the immediately preceding visit of the same patient.' })
+  getPreviousServices(@Param('visitId') visitId: string) {
+    return this.visitsService.getPreviousServices(visitId);
+  }
+
+  @Post(':visitId/services/copy-previous')
+  @RequirePermissions('visits.manage')
+  @ApiCreatedResponse({ description: 'Selected previous-visit positions copied without old payments or stock movements.' })
+  copyPreviousServices(
+    @Param('visitId') visitId: string,
+    @Body() dto: CopyPreviousVisitServicesDto,
+    @CurrentEmployee() actor: AuthEmployee,
+  ) {
+    return this.visitsService.copyPreviousServices(visitId, dto, actor);
   }
 
   @Patch(':visitId/services/:billItemId')

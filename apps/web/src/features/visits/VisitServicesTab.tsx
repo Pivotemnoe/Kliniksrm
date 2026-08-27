@@ -1,7 +1,7 @@
-import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
+import { CopyOutlined, DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Alert, Button, Drawer, Form, Input, List, Popconfirm, Select, Space, Statistic, Table, Tag, Typography } from 'antd';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Alert, Button, Checkbox, Drawer, Form, Input, List, Modal, Popconfirm, Select, Space, Statistic, Table, Tag, Typography } from 'antd';
 import { ColumnsType } from 'antd/es/table';
 import { useMemo, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
@@ -12,7 +12,7 @@ import { getNetStockWriteOffQuantity } from '../../shared/utils/stockMovement';
 import { formatServicePrice, getServiceDefaultPrice, getServicePriceHelp, validateServicePrice } from '../stock/service-pricing';
 import { useVisitProductCatalogPicker, useVisitServiceCatalogPicker } from '../stock/useCatalogPicker';
 import { Visit, VisitBillItem, VisitServiceLineInput } from './types';
-import { addVisitService, addVisitServices, deleteVisitService, updateVisitService } from './visits.api';
+import { addVisitService, addVisitServices, copyPreviousVisitServices, deleteVisitService, getPreviousVisitServices, updateVisitService } from './visits.api';
 
 const serviceLineSchema = z.object({
   lineType: z.enum(['PRODUCT', 'SERVICE', 'MANUAL']),
@@ -50,12 +50,19 @@ export function VisitServicesTab({ visit, canManage, locked }: VisitServicesTabP
   const queryClient = useQueryClient();
   const [editingLine, setEditingLine] = useState<VisitBillItem | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [copyOpen, setCopyOpen] = useState(false);
+  const [selectedPreviousItemIds, setSelectedPreviousItemIds] = useState<string[]>([]);
   const billFinanciallyLocked = Boolean(
     visit.bill && (visit.bill.status === 'CANCELLED' || toMoneyNumber(visit.bill.paidAmount) > 0),
   );
   const visitCancelled = visit.status === 'CANCELLED';
   const disabled = locked || !canManage || billFinanciallyLocked || visitCancelled;
   const items = visit.bill?.items ?? [];
+  const previousServicesQuery = useQuery({
+    queryKey: ['visits', visit.id, 'services', 'previous'],
+    queryFn: () => getPreviousVisitServices(visit.id),
+    enabled: canManage && !visitCancelled,
+  });
   const saveMutation = useMutation<unknown, unknown, VisitServiceLineInput[]>({
     mutationFn: async (values) => {
       if (editingLine) return updateVisitService(visit.id, editingLine.id, values[0]);
@@ -73,6 +80,17 @@ export function VisitServicesTab({ visit, canManage, locked }: VisitServicesTabP
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['visits', visit.id] });
       await queryClient.invalidateQueries({ queryKey: ['visits'] });
+    },
+  });
+  const copyMutation = useMutation({
+    mutationFn: () => copyPreviousVisitServices(visit.id, selectedPreviousItemIds),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['visits', visit.id] }),
+        queryClient.invalidateQueries({ queryKey: ['visits'] }),
+      ]);
+      setCopyOpen(false);
+      setSelectedPreviousItemIds([]);
     },
   });
   const columns = useMemo<ColumnsType<VisitBillItem>>(
@@ -165,22 +183,36 @@ export function VisitServicesTab({ visit, canManage, locked }: VisitServicesTabP
       ) : null}
       {saveMutation.isError ? <Typography.Text type="danger">{getErrorMessage(saveMutation.error)}</Typography.Text> : null}
       {deleteMutation.isError ? <Typography.Text type="danger">{getErrorMessage(deleteMutation.error)}</Typography.Text> : null}
+      {copyMutation.isError ? <Typography.Text type="danger">{getErrorMessage(copyMutation.error)}</Typography.Text> : null}
       <div className="toolbar-row">
         <Space size={24} wrap>
           <Typography.Text type="secondary">Товары и услуги приёма</Typography.Text>
           <Statistic title="Сумма приёма" value={toMoneyNumber(visit.totalAmount)} precision={2} suffix="₽" />
         </Space>
         {!disabled ? (
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => {
-              setEditingLine(null);
-              setDrawerOpen(true);
-            }}
-          >
-            Добавить позицию
-          </Button>
+          <Space wrap>
+            {previousServicesQuery.data?.items.length ? (
+              <Button
+                icon={<CopyOutlined />}
+                onClick={() => {
+                  setSelectedPreviousItemIds(previousServicesQuery.data!.items.filter((item) => item.copyable).map((item) => item.id));
+                  setCopyOpen(true);
+                }}
+              >
+                Скопировать прошлые товары и услуги
+              </Button>
+            ) : null}
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => {
+                setEditingLine(null);
+                setDrawerOpen(true);
+              }}
+            >
+              Добавить позицию
+            </Button>
+          </Space>
         ) : null}
       </div>
       <Table<VisitBillItem> rowKey="id" columns={columns} dataSource={items} pagination={false} />
@@ -192,6 +224,34 @@ export function VisitServicesTab({ visit, canManage, locked }: VisitServicesTabP
         onClose={() => setDrawerOpen(false)}
         onSubmit={(values) => saveMutation.mutate(values)}
       />
+      <Modal
+        open={copyOpen}
+        title="Скопировать товары и услуги прошлого приёма"
+        okText="Добавить выбранные"
+        cancelText="Отмена"
+        confirmLoading={copyMutation.isPending}
+        okButtonProps={{ disabled: selectedPreviousItemIds.length === 0 }}
+        onCancel={() => setCopyOpen(false)}
+        onOk={() => copyMutation.mutate()}
+      >
+        <Typography.Paragraph type="secondary">
+          Будут добавлены только выбранные позиции. Оплата и складские списания прошлого приёма не копируются.
+        </Typography.Paragraph>
+        <Checkbox.Group
+          className="full-width"
+          value={selectedPreviousItemIds}
+          onChange={(values) => setSelectedPreviousItemIds(values as string[])}
+        >
+          <Space direction="vertical" className="full-width">
+            {previousServicesQuery.data?.items.map((item) => (
+              <Checkbox key={item.id} value={item.id} disabled={!item.copyable}>
+                {item.title} · {Number(item.quantity).toLocaleString('ru-RU')} × {formatMoney(item.unitPrice)}
+                {!item.copyable ? ` — ${item.unavailableReason}` : ''}
+              </Checkbox>
+            ))}
+          </Space>
+        </Checkbox.Group>
+      </Modal>
     </Space>
   );
 }

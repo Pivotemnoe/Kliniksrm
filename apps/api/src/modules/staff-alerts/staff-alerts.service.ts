@@ -204,7 +204,7 @@ export class StaffAlertsService {
           }))
         : Promise.resolve([]),
       this.prisma.vaccination.findMany({
-        where: { expiresAt: { not: null }, animal: { archivedAt: null } },
+        where: { expiresAt: { not: null }, cancelledAt: null, animal: { archivedAt: null } },
         orderBy: [{ expiresAt: 'desc' }, { createdAt: 'desc' }],
         take: 2000,
         select: {

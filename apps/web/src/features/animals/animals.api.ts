@@ -77,3 +77,10 @@ export function updateVaccination(animalId: string, vaccinationId: string, input
     body: input,
   });
 }
+
+export function deleteVaccination(animalId: string, vaccinationId: string, reason: string) {
+  return apiRequest<{ deleted: true }>(`/v1/animals/${animalId}/vaccinations/${vaccinationId}`, {
+    method: 'DELETE',
+    body: { reason },
+  });
+}

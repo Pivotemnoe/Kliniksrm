@@ -135,7 +135,7 @@ export class DirectorBriefingService implements OnApplicationBootstrap, OnModule
       this.prisma.businessEntry.findMany({ where: { occurredAt: { gte: range.start, lte: range.end }, status: BusinessEntryStatus.ACTIVE }, select: { type: true, source: true, amount: true, category: { select: { code: true } } } }),
       this.prisma.businessEntry.count({ where: { status: BusinessEntryStatus.ACTIVE, requiresResolution: true } }),
       this.prisma.businessDailyClose.count({ where: { status: BusinessDailyCloseStatus.SUBMITTED } }),
-      this.prisma.vaccination.findMany({ where: { expiresAt: { not: null }, animal: { archivedAt: null } }, orderBy: { expiresAt: 'desc' }, select: { id: true, title: true, expiresAt: true, animal: { select: { id: true, nickname: true, owner: { select: { id: true, fullName: true, phone: true } } } } } }),
+      this.prisma.vaccination.findMany({ where: { expiresAt: { not: null }, cancelledAt: null, animal: { archivedAt: null } }, orderBy: { expiresAt: 'desc' }, select: { id: true, title: true, expiresAt: true, animal: { select: { id: true, nickname: true, owner: { select: { id: true, fullName: true, phone: true } } } } } }),
       this.prisma.product.findMany({ where: { isActive: true, minStock: { not: null } }, select: { minStock: true, batches: { where: { rest: { gt: 0 } }, select: { rest: true } } } }),
       this.prisma.employee.findMany({ where: { status: EmployeeStatus.ACTIVE, roles: { some: { role: { code: 'director' } } } }, select: { id: true } }),
       this.prisma.bill.findMany({ where: { status: { in: [PaymentStatus.UNPAID, PaymentStatus.PARTIAL] } }, select: { totalAmount: true, paidAmount: true } }),

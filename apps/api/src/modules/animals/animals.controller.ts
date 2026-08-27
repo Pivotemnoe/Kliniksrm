@@ -1,11 +1,12 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { AuthEmployee } from '../auth/auth.types';
 import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
 import { Public } from '../auth/decorators/public.decorator';
-import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { RequireAnyPermissions, RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { AnimalsService } from './animals.service';
 import { ArchiveAnimalDto } from './dto/archive-animal.dto';
+import { CancelVaccinationDto } from './dto/cancel-vaccination.dto';
 import { CreateVaccinationDto } from './dto/create-vaccination.dto';
 import { CreateWeightRecordDto } from './dto/create-weight-record.dto';
 import { ListAnimalsQueryDto } from './dto/list-animals-query.dto';
@@ -89,7 +90,7 @@ export class AnimalsController {
   }
 
   @Post(':animalId/vaccinations')
-  @RequirePermissions('animals.manage')
+  @RequireAnyPermissions('animals.manage', 'visits.manage')
   @ApiCreatedResponse({ description: 'Vaccination created.' })
   createVaccination(
     @Param('animalId') animalId: string,
@@ -100,7 +101,7 @@ export class AnimalsController {
   }
 
   @Patch(':animalId/vaccinations/:vaccinationId')
-  @RequirePermissions('animals.manage')
+  @RequireAnyPermissions('animals.manage', 'visits.manage')
   @ApiOkResponse({ description: 'Vaccination updated.' })
   updateVaccination(
     @Param('animalId') animalId: string,
@@ -109,5 +110,17 @@ export class AnimalsController {
     @CurrentEmployee() actor: AuthEmployee,
   ) {
     return this.animalsService.updateVaccination(animalId, vaccinationId, dto, actor.id);
+  }
+
+  @Delete(':animalId/vaccinations/:vaccinationId')
+  @RequireAnyPermissions('animals.manage', 'visits.manage')
+  @ApiOkResponse({ description: 'Erroneous vaccination removed from active history with audit preservation.' })
+  cancelVaccination(
+    @Param('animalId') animalId: string,
+    @Param('vaccinationId') vaccinationId: string,
+    @Body() dto: CancelVaccinationDto,
+    @CurrentEmployee() actor: AuthEmployee,
+  ) {
+    return this.animalsService.cancelVaccination(animalId, vaccinationId, dto, actor.id);
   }
 }

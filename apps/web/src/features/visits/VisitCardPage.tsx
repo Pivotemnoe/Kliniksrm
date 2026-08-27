@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, App, Button, Card, Descriptions, Input, Modal, Select, Space, Tabs, Tag, Typography } from 'antd';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
@@ -14,6 +14,7 @@ import { formatAnimalAge } from '../../shared/utils/animalBirthDate';
 import { formatDate, formatDateTime } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
 import { AnimalStatusTag } from '../animals/animalStatus';
+import { AnimalVaccinationsTab } from '../animals/AnimalVaccinationsTab';
 import { admitExistingHospitalStay, getHospitalResources } from '../hospital/hospital.api';
 import { getOrganizationSettings } from '../organization/organization.api';
 import { VisitDocumentsTab } from './VisitDocumentsTab';
@@ -29,6 +30,7 @@ import { printVisitRecommendation, printVisitSheet } from './visitPrint';
 export function VisitCardPage() {
   const { visitId } = useParams<{ visitId: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const { message, modal } = App.useApp();
   const { data: auth } = useCurrentEmployee();
@@ -120,6 +122,9 @@ export function VisitCardPage() {
   const latestWeight = visit?.animal.weights?.[0];
   const latestVaccination = getLatestVaccination(visit?.animal.vaccinations);
   const nextRevaccination = getNextRevaccination(visit?.animal.vaccinations);
+  const requestedTab = searchParams.get('tab');
+  const defaultTab = visit?.visitType === 'VACCINATION' ? 'vaccination' : 'exam';
+  const activeTab = visitCardTabKeys.has(requestedTab ?? '') ? requestedTab! : defaultTab;
 
   if (visitQuery.isError) {
     return (
@@ -396,11 +401,39 @@ export function VisitCardPage() {
             <>
               {completedEditNotice ? <Alert type="info" showIcon message={completedEditNotice} className="form-alert" /> : null}
               <Tabs
+                activeKey={activeTab}
+                onChange={(key) => {
+                  const nextSearchParams = new URLSearchParams(searchParams);
+                  if (key === defaultTab) {
+                    nextSearchParams.delete('tab');
+                  } else {
+                    nextSearchParams.set('tab', key);
+                  }
+                  nextSearchParams.delete('new');
+                  setSearchParams(nextSearchParams, { replace: true });
+                }}
                 items={[
                   {
                     key: 'exam',
                     label: 'Лист осмотра',
                     children: <VisitExamTab visit={visit} canManage={canManage} locked={Boolean(locked)} />,
+                  },
+                  {
+                    key: 'vaccination',
+                    label: 'Вакцинация',
+                    children: (
+                      <AnimalVaccinationsTab
+                        animalId={visit.animalId}
+                        visitId={visit.id}
+                        readOnly={!canManage || Boolean(locked)}
+                        autoOpen={searchParams.get('new') === 'vaccination'}
+                        onCreated={() => {
+                          const nextSearchParams = new URLSearchParams(searchParams);
+                          nextSearchParams.delete('new');
+                          setSearchParams(nextSearchParams, { replace: true });
+                        }}
+                      />
+                    ),
                   },
                 {
                   key: 'recommendation',
@@ -615,6 +648,8 @@ const sexLabel: Record<string, string> = {
 };
 
 type VisitVaccination = NonNullable<Visit['animal']['vaccinations']>[number];
+
+const visitCardTabKeys = new Set(['exam', 'vaccination', 'recommendation', 'services', 'laboratory', 'history', 'documents', 'profile']);
 
 function getLatestVaccination(vaccinations?: VisitVaccination[]) {
   return [...(vaccinations ?? [])]
