@@ -393,6 +393,32 @@ export class DashboardService {
       },
     });
   }
+
+  async getSiteAnalytics(actor: AuthEmployee, daysValue?: string) {
+    if (!actor.roles.includes('director')) {
+      throw new ForbiddenException('Статистика сайта клиники доступна только директору');
+    }
+    const days = normalizeSiteAnalyticsDays(daysValue);
+    const gateway = await this.ownerGatewayClient.getClinicSiteAnalytics(days);
+    if (gateway) return { ...gateway, gatewayAvailable: true };
+
+    const now = new Date();
+    return {
+      gatewayAvailable: false,
+      generatedAt: now.toISOString(),
+      range: { days, from: new Date(now.getTime() - days * 86_400_000).toISOString(), to: now.toISOString() },
+      dataLimited: false,
+      privacy: { anonymous: true, storesIpAddresses: false, storesFormContents: false },
+      totals: { sessions: 0, events: 0, engagedSessions: 0, contactSessions: 0, inquirySessions: 0, contactRate: 0 },
+      actions: {},
+      funnel: [],
+      sources: [],
+      sections: [],
+      devices: [],
+      daily: [],
+      recentSessions: [],
+    };
+  }
 }
 
 function resolveWorkspaceMode(roles: string[]) {
@@ -409,6 +435,12 @@ function resolveWorkspaceMode(roles: string[]) {
   }
 
   return 'employee' as const;
+}
+
+function normalizeSiteAnalyticsDays(value?: string) {
+  const parsed = Number(value ?? 30);
+  if (!Number.isFinite(parsed)) return 30;
+  return Math.max(1, Math.min(Math.round(parsed), 90));
 }
 
 function resolveDayBounds(value?: string) {

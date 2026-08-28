@@ -1,7 +1,12 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
-import { OwnerGatewayBookingRequest, OwnerGatewayClient } from '../notifications/providers/owner-gateway.client';
+import { normalizeRussianPhone } from '../../common/phone';
+import {
+  OwnerGatewayBookingRequest,
+  OwnerGatewayClient,
+  OwnerGatewayClinicInquiry,
+} from '../notifications/providers/owner-gateway.client';
 
 @Injectable()
 export class OwnerGatewayBookingSyncService implements OnApplicationBootstrap, OnModuleDestroy {
@@ -41,14 +46,23 @@ export class OwnerGatewayBookingSyncService implements OnApplicationBootstrap, O
 
     try {
       const requests = await this.ownerGatewayClient.pullPendingBookingRequests();
-      if (requests === null) {
+      const inquiries = await this.ownerGatewayClient.pullPendingClinicInquiries();
+      if (requests === null && inquiries === null) {
         return { status: 'not_configured_or_unavailable' as const, imported, acknowledged };
       }
 
-      for (const request of requests) {
+      for (const request of requests ?? []) {
         const result = await this.importOne(request);
         imported += result.created ? 1 : 0;
         if (await this.ownerGatewayClient.acknowledgeBookingRequest(request.id, result.crmRequestId)) {
+          acknowledged += 1;
+        }
+      }
+
+      for (const inquiry of inquiries ?? []) {
+        const result = await this.importClinicInquiry(inquiry);
+        imported += result.created ? 1 : 0;
+        if (await this.ownerGatewayClient.acknowledgeClinicInquiry(inquiry.id, result.crmRequestId)) {
           acknowledged += 1;
         }
       }
@@ -108,6 +122,37 @@ export class OwnerGatewayBookingSyncService implements OnApplicationBootstrap, O
       entityType: 'OnlineAppointmentRequest',
       entityId: created.id,
       metadata: { ownerId: owner.id, externalRequestId: input.id, source: input.source },
+    });
+    return { crmRequestId: created.id, created: true };
+  }
+
+  private async importClinicInquiry(input: OwnerGatewayClinicInquiry) {
+    const existing = await this.prisma.onlineAppointmentRequest.findUnique({
+      where: { externalRequestId: input.id },
+      select: { id: true },
+    });
+    if (existing) return { crmRequestId: existing.id, created: false };
+
+    const phone = normalizeRussianPhone(input.phone);
+    if (!phone) throw new Error(`Сообщение ${input.id} содержит некорректный телефон`);
+
+    const created = await this.prisma.onlineAppointmentRequest.create({
+      data: {
+        externalRequestId: input.id,
+        source: input.source || 'CLINIC_SITE_CHAT',
+        ownerName: input.contactName.trim(),
+        phone,
+        animalNickname: input.animalNickname.trim(),
+        comment: input.message.trim(),
+      },
+      select: { id: true },
+    });
+
+    await this.auditService.log({
+      action: 'online_request.clinic_site_chat_import',
+      entityType: 'OnlineAppointmentRequest',
+      entityId: created.id,
+      metadata: { externalRequestId: input.id, source: input.source },
     });
     return { crmRequestId: created.id, created: true };
   }

@@ -75,3 +75,28 @@ test('контракт сайта не открывает клиническую
   assert.match(concept, /не в API клинической CRM/);
   assert.match(concept, /ограничение частоты запросов/);
 });
+
+test('чат клиники отвечает сам и передаёт сложные вопросы через owner-gateway', async () => {
+  const gatewaySchema = await read('apps/owner-gateway/prisma/schema.prisma');
+  const publicController = await read('apps/owner-gateway/src/public-clinic.controller.ts');
+  const publicService = await read('apps/owner-gateway/src/public-clinic.service.ts');
+  const migration = await read('apps/owner-gateway/prisma/migrations/20260822000100_public_clinic_inquiries/migration.sql');
+  const gatewayController = await read('apps/owner-gateway/src/internal-sync.controller.ts');
+  const syncService = await read('apps/api/src/modules/online-requests/owner-gateway-booking-sync.service.ts');
+  const contract = await read('docs/product/COMMUNICATIONS_BOOKING_AND_SITE_INTEGRATION_RU.md');
+
+  assert.match(contract, /собственный помощник TemichevVET/);
+  assert.match(contract, /POST \/v1\/public\/clinic\/inquiries/);
+  assert.doesNotMatch(contract, /wa\.me|WhatsApp/i);
+  assert.match(gatewaySchema, /model PublicClinicInquiry/);
+  assert.match(publicController, /@Post\('inquiries'\)/);
+  assert.match(publicService, /assertRateLimit/);
+  assert.match(publicService, /clean\(dto\.website\)/);
+  assert.match(publicService, /!dto\.contactConsent/);
+  assert.match(publicService, /publicClinicInquiry\.upsert/);
+  assert.match(migration, /CREATE TABLE "PublicClinicInquiry"/);
+  assert.doesNotMatch(migration, /DROP TABLE|TRUNCATE|DELETE FROM/i);
+  assert.match(gatewayController, /clinic-inquiries\/pending/);
+  assert.match(syncService, /pullPendingClinicInquiries/);
+  assert.match(syncService, /online_request\.clinic_site_chat_import/);
+});

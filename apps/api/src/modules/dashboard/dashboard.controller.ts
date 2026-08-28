@@ -24,4 +24,11 @@ export class DashboardController {
   getPortalStatistics(@CurrentEmployee() actor: AuthEmployee) {
     return this.dashboardService.getPortalStatistics(actor);
   }
+
+  @Get('site-analytics')
+  @RequirePermissions('dashboard.read')
+  @ApiOkResponse({ description: 'Обезличенная воронка публичного сайта клиники для директора.' })
+  getSiteAnalytics(@Query('days') days: string | undefined, @CurrentEmployee() actor: AuthEmployee) {
+    return this.dashboardService.getSiteAnalytics(actor, days);
+  }
 }

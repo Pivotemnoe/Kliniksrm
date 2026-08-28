@@ -107,6 +107,37 @@ export type DirectorPortalStatistics = {
   items: DirectorPortalOwnerItem[];
 };
 
+export type DirectorSiteAnalytics = {
+  gatewayAvailable: boolean;
+  generatedAt: string;
+  range: { days: number; from: string; to: string };
+  dataLimited: boolean;
+  privacy: { anonymous: boolean; storesIpAddresses: boolean; storesFormContents: boolean };
+  totals: {
+    sessions: number;
+    events: number;
+    engagedSessions: number;
+    contactSessions: number;
+    inquirySessions: number;
+    contactRate: number;
+  };
+  actions: Record<string, { count: number; sessions: number }>;
+  funnel: Array<{ key: string; sessions: number }>;
+  sources: Array<{ label: string; sessions: number }>;
+  sections: Array<{ section: string; views: number; sessions: number }>;
+  devices: Array<{ label: string; sessions: number }>;
+  daily: Array<{ date: string; sessions: number; contacts: number; inquiries: number }>;
+  recentSessions: Array<{
+    visitor: string;
+    startedAt: string;
+    lastSeenAt: string;
+    source: string;
+    deviceType: string;
+    sections: string[];
+    actions: string[];
+  }>;
+};
+
 export type DirectorPortalOwnerItem = {
   ownerId: string;
   fullName: string;
