@@ -7,6 +7,7 @@ import {
   MedicineBoxOutlined,
   OrderedListOutlined,
   PlusOutlined,
+  RiseOutlined,
   ShopOutlined,
   UserOutlined,
   WalletOutlined,
@@ -26,8 +27,8 @@ import { appointmentStatusColors, appointmentStatusLabels } from '../appointment
 import { queueStatusColors, queueStatusLabels, queueUrgencyColors, queueUrgencyLabels } from '../queue/types';
 import { getTaskTypeLabel } from '../tasks/types';
 import { visitStatusColors, visitStatusLabels } from '../visits/types';
-import { getDashboardToday, getDirectorPortalStatistics } from './dashboard.api';
-import { DashboardQueueItem, DashboardSummary, DirectorPortalOwnerItem, DirectorPortalStatistics } from './types';
+import { getDashboardToday, getDirectorPortalStatistics, getDirectorSiteAnalytics } from './dashboard.api';
+import { DashboardQueueItem, DashboardSummary, DirectorPortalOwnerItem, DirectorPortalStatistics, DirectorSiteAnalytics } from './types';
 
 const hospitalStatusLabels = { ACTIVE: 'В стационаре', DISCHARGED: 'Выписан', CANCELLED: 'Отменён' } as const;
 const hospitalStatusColors = { ACTIVE: 'blue', DISCHARGED: 'green', CANCELLED: 'default' } as const;
@@ -39,6 +40,23 @@ const portalStatusLabels = {
   DISABLED: 'Доступ выключен',
 } as const;
 const portalStatusColors = { ACTIVATED: 'green', INVITED: 'gold', ENABLED: 'blue', BLOCKED: 'red', DISABLED: 'default' } as const;
+const siteSectionLabels: Record<string, string> = {
+  home: 'Главная',
+  about: 'О клинике',
+  services: 'Услуги',
+  team: 'Команда',
+  inpatient: 'Стационар',
+  contacts: 'Контакты',
+};
+const siteActionLabels: Record<string, string> = {
+  booking_open: 'Открыли запись',
+  phone_click: 'Нажали «Позвонить»',
+  chat_open: 'Открыли чат',
+  chat_handoff_open: 'Начали сообщение',
+  chat_handoff_sent: 'Отправили сообщение',
+  route_click: 'Построили маршрут',
+  offer_click: 'Открыли предложение',
+};
 
 type PortalStatusFilter = 'ALL' | 'NOT_ACTIVATED' | DirectorPortalOwnerItem['status'];
 type PortalActivityFilter = 'ALL' | 'SEEN' | 'NEVER_SEEN' | 'ACTIVE_30_DAYS' | 'INACTIVE_30_DAYS';
@@ -49,6 +67,8 @@ type PortalSort = 'LAST_SEEN_DESC' | 'LAST_SEEN_ASC' | 'INVITED_DESC' | 'INVITED
 export function DashboardPage() {
   const navigate = useNavigate();
   const [portalStatisticsOpen, setPortalStatisticsOpen] = useState(false);
+  const [siteAnalyticsOpen, setSiteAnalyticsOpen] = useState(false);
+  const [siteAnalyticsDays, setSiteAnalyticsDays] = useState(30);
   const { data: auth } = useCurrentEmployee();
   const employee = auth?.employee;
   const today = useMemo(() => toDateInput(new Date()), []);
@@ -61,6 +81,12 @@ export function DashboardPage() {
   const portalStatisticsQuery = useQuery({
     queryKey: ['dashboard', 'portal-statistics'],
     queryFn: getDirectorPortalStatistics,
+    enabled: summary?.workspace.mode === 'director',
+    refetchInterval: 60_000,
+  });
+  const siteAnalyticsQuery = useQuery({
+    queryKey: ['dashboard', 'site-analytics', siteAnalyticsDays],
+    queryFn: () => getDirectorSiteAnalytics(siteAnalyticsDays),
     enabled: summary?.workspace.mode === 'director',
     refetchInterval: 60_000,
   });
@@ -185,18 +211,32 @@ export function DashboardPage() {
           onClick={() => navigate('/laboratory?status=active')}
         />
         {summary?.workspace.mode === 'director' ? (
-          <DashboardActionTile
-            title="Личные кабинеты"
-            value={portalStatisticsQuery.isError ? '—' : formatGatewayMetric(portalStatisticsQuery.data, 'registered')}
-            hint={getPortalStatisticsHint(portalStatisticsQuery.data, portalStatisticsQuery.isError)}
-            icon={<UserOutlined />}
-            loading={portalStatisticsQuery.isLoading}
-            variant="portal"
-            onClick={() => {
-              setPortalStatisticsOpen(true);
-              void portalStatisticsQuery.refetch();
-            }}
-          />
+          <>
+            <DashboardActionTile
+              title="Личные кабинеты"
+              value={portalStatisticsQuery.isError ? '—' : formatGatewayMetric(portalStatisticsQuery.data, 'registered')}
+              hint={getPortalStatisticsHint(portalStatisticsQuery.data, portalStatisticsQuery.isError)}
+              icon={<UserOutlined />}
+              loading={portalStatisticsQuery.isLoading}
+              variant="portal"
+              onClick={() => {
+                setPortalStatisticsOpen(true);
+                void portalStatisticsQuery.refetch();
+              }}
+            />
+            <DashboardActionTile
+              title="Сайт клиники"
+              value={siteAnalyticsQuery.isError || !siteAnalyticsQuery.data?.gatewayAvailable ? '—' : siteAnalyticsQuery.data.totals.sessions}
+              hint={getSiteAnalyticsHint(siteAnalyticsQuery.data, siteAnalyticsQuery.isError)}
+              icon={<RiseOutlined />}
+              loading={siteAnalyticsQuery.isLoading}
+              variant="portal"
+              onClick={() => {
+                setSiteAnalyticsOpen(true);
+                void siteAnalyticsQuery.refetch();
+              }}
+            />
+          </>
         ) : null}
       </div>
       <div className="dashboard-grid dashboard-grid-expanded">
@@ -447,6 +487,15 @@ export function DashboardPage() {
           navigate(`/owners/${ownerId}`);
         }}
       />
+      <SiteAnalyticsDrawer
+        open={siteAnalyticsOpen}
+        loading={siteAnalyticsQuery.isLoading}
+        error={siteAnalyticsQuery.error}
+        analytics={siteAnalyticsQuery.data}
+        days={siteAnalyticsDays}
+        onDaysChange={setSiteAnalyticsDays}
+        onClose={() => setSiteAnalyticsOpen(false)}
+      />
     </div>
   );
 }
@@ -683,6 +732,188 @@ function PortalStatisticsDrawer({
           Показаны последние {statistics.items.length} из {statistics.listedOwners} владельцев с личным кабинетом.
         </Typography.Text>
       ) : null}
+    </Drawer>
+  );
+}
+
+function SiteAnalyticsDrawer({
+  open,
+  loading,
+  error,
+  analytics,
+  days,
+  onDaysChange,
+  onClose,
+}: {
+  open: boolean;
+  loading: boolean;
+  error: unknown;
+  analytics: DirectorSiteAnalytics | undefined;
+  days: number;
+  onDaysChange: (days: number) => void;
+  onClose: () => void;
+}) {
+  const actionRows = Object.entries(analytics?.actions ?? {})
+    .filter(([, value]) => value.count > 0)
+    .map(([action, value]) => ({ action, ...value }));
+
+  return (
+    <Drawer
+      title="Сайт клиники"
+      open={open}
+      onClose={onClose}
+      width={1080}
+      destroyOnHidden
+    >
+      {error ? <Alert type="error" showIcon message={getErrorMessage(error)} className="form-alert" /> : null}
+      {analytics && !analytics.gatewayAvailable ? (
+        <Alert
+          type="warning"
+          showIcon
+          className="form-alert"
+          message="Статистика сайта пока недоступна"
+          description="CRM не получила данные от публичного шлюза. Это не означает, что посетителей не было."
+        />
+      ) : null}
+      {analytics?.dataLimited ? (
+        <Alert
+          type="info"
+          showIcon
+          className="form-alert"
+          message="Показана выборка из последних 50 000 событий"
+        />
+      ) : null}
+      <Space wrap align="center" className="portal-statistics-filters">
+        <Typography.Text strong>Период</Typography.Text>
+        <Select<number>
+          value={days}
+          onChange={onDaysChange}
+          style={{ width: 170 }}
+          options={[
+            { value: 7, label: 'Последние 7 дней' },
+            { value: 30, label: 'Последние 30 дней' },
+            { value: 90, label: 'Последние 90 дней' },
+          ]}
+        />
+        {analytics?.gatewayAvailable ? <Typography.Text type="secondary">Обновлено {formatDateTime(analytics.generatedAt)}</Typography.Text> : null}
+      </Space>
+
+      <Descriptions bordered size="small" column={{ xs: 1, sm: 2, lg: 3 }} className="portal-statistics-summary">
+        <Descriptions.Item label="Посещения">{loading ? '…' : analytics?.totals.sessions ?? '—'}</Descriptions.Item>
+        <Descriptions.Item label="Посмотрели несколько разделов">{loading ? '…' : analytics?.totals.engagedSessions ?? '—'}</Descriptions.Item>
+        <Descriptions.Item label="Выбрали способ связи">{loading ? '…' : analytics?.totals.contactSessions ?? '—'}</Descriptions.Item>
+        <Descriptions.Item label="Доля обращений">{loading ? '…' : `${analytics?.totals.contactRate ?? 0}%`}</Descriptions.Item>
+        <Descriptions.Item label="Отправили сообщение">{loading ? '…' : analytics?.totals.inquirySessions ?? '—'}</Descriptions.Item>
+        <Descriptions.Item label="Всего учтённых действий">{loading ? '…' : analytics?.totals.events ?? '—'}</Descriptions.Item>
+      </Descriptions>
+      <Typography.Paragraph type="secondary" className="portal-statistics-note">
+        Считаются только посетители, разрешившие обезличенную статистику. Сайт не сохраняет IP-адреса, имя, телефон и текст сообщений в аналитике. Строка «Посетитель» ниже — случайный номер сессии, а не личность человека.
+      </Typography.Paragraph>
+
+      <Typography.Title level={4}>Как люди переходят к обращению</Typography.Title>
+      <Table
+        rowKey="key"
+        size="small"
+        pagination={false}
+        loading={loading}
+        dataSource={analytics?.funnel ?? []}
+        columns={[
+          {
+            title: 'Шаг',
+            dataIndex: 'key',
+            render: (key: string) => ({ visit: 'Зашли на сайт', services: 'Посмотрели услуги', contact: 'Выбрали связь', inquiry: 'Отправили сообщение' }[key] ?? key),
+          },
+          { title: 'Посещений', dataIndex: 'sessions', width: 140 },
+        ]}
+      />
+
+      <div className="dashboard-grid dashboard-grid-expanded site-analytics-grid">
+        <section className="list-panel">
+          <Typography.Title level={4}>Откуда пришли</Typography.Title>
+          <Table
+            rowKey="label"
+            size="small"
+            pagination={false}
+            loading={loading}
+            dataSource={analytics?.sources ?? []}
+            columns={[
+              { title: 'Источник', dataIndex: 'label', ellipsis: true },
+              { title: 'Посещений', dataIndex: 'sessions', width: 110 },
+            ]}
+          />
+        </section>
+        <section className="list-panel">
+          <Typography.Title level={4}>Что открывали</Typography.Title>
+          <Table
+            rowKey="section"
+            size="small"
+            pagination={false}
+            loading={loading}
+            dataSource={analytics?.sections ?? []}
+            columns={[
+              { title: 'Раздел', dataIndex: 'section', render: (section: string) => siteSectionLabels[section] ?? section },
+              { title: 'Посещений', dataIndex: 'sessions', width: 110 },
+            ]}
+          />
+        </section>
+        <section className="list-panel">
+          <Typography.Title level={4}>Что нажимали</Typography.Title>
+          <Table
+            rowKey="action"
+            size="small"
+            pagination={false}
+            loading={loading}
+            dataSource={actionRows}
+            columns={[
+              { title: 'Действие', dataIndex: 'action', render: (action: string) => siteActionLabels[action] ?? action },
+              { title: 'Нажатий', dataIndex: 'count', width: 90 },
+              { title: 'Посещений', dataIndex: 'sessions', width: 105 },
+            ]}
+          />
+        </section>
+        <section className="list-panel">
+          <Typography.Title level={4}>По дням</Typography.Title>
+          <Table
+            rowKey="date"
+            size="small"
+            pagination={false}
+            scroll={{ y: 320 }}
+            loading={loading}
+            dataSource={[...(analytics?.daily ?? [])].reverse()}
+            columns={[
+              { title: 'Дата', dataIndex: 'date', render: (date: string) => formatDate(date) },
+              { title: 'Посещения', dataIndex: 'sessions', width: 100 },
+              { title: 'Связь', dataIndex: 'contacts', width: 75 },
+            ]}
+          />
+        </section>
+      </div>
+
+      <Typography.Title level={4}>Последние анонимные посещения</Typography.Title>
+      <ProgressiveTable<DirectorSiteAnalytics['recentSessions'][number]>
+        rowKey={(row) => `${row.visitor}-${row.startedAt}`}
+        loading={loading}
+        dataSource={analytics?.recentSessions ?? []}
+        scroll={{ x: 900 }}
+        locale={{ emptyText: analytics?.gatewayAvailable ? 'За выбранный период посещений нет' : 'Нет данных от шлюза' }}
+        columns={[
+          { title: 'Посетитель', dataIndex: 'visitor', width: 145 },
+          { title: 'Начало', dataIndex: 'startedAt', width: 160, render: (value: string) => formatDateTime(value) },
+          { title: 'Источник', dataIndex: 'source', width: 190, ellipsis: true },
+          {
+            title: 'Разделы',
+            dataIndex: 'sections',
+            width: 230,
+            render: (sections: string[]) => sections.length ? sections.map((section) => siteSectionLabels[section] ?? section).join(' → ') : 'Главная',
+          },
+          {
+            title: 'Действия',
+            dataIndex: 'actions',
+            width: 230,
+            render: (actions: string[]) => actions.length ? actions.map((action) => siteActionLabels[action] ?? action).join(', ') : 'Только просмотр',
+          },
+        ]}
+      />
     </Drawer>
   );
 }
@@ -1096,6 +1327,13 @@ function getPortalStatisticsHint(statistics: DirectorPortalStatistics | undefine
     return `Сегодня приглашений ${statistics.today.invitationsCreated} · шлюз недоступен`;
   }
   return `Сегодня приглашений ${statistics.today.invitationsCreated} · активаций ${statistics.today.activated}`;
+}
+
+function getSiteAnalyticsHint(analytics: DirectorSiteAnalytics | undefined, isError: boolean) {
+  if (isError) return 'Не удалось получить статистику';
+  if (!analytics) return 'Загрузка данных';
+  if (!analytics.gatewayAvailable) return 'Шлюз аналитики недоступен';
+  return `Связь ${analytics.totals.contactSessions} · сообщения ${analytics.totals.inquirySessions}`;
 }
 
 function formatGatewayMetric(

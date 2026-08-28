@@ -13,6 +13,8 @@ import { TelegramBotClient } from './telegram-bot.client';
 import { TelegramWebhookController } from './telegram-webhook.controller';
 import { TelegramWebhookService } from './telegram-webhook.service';
 import { WebPushService } from './web-push.service';
+import { PublicClinicController } from './public-clinic.controller';
+import { PublicClinicService } from './public-clinic.service';
 
 @Module({
   controllers: [
@@ -22,6 +24,7 @@ import { WebPushService } from './web-push.service';
     PortalPageController,
     MaxWebhookController,
     TelegramWebhookController,
+    PublicClinicController,
   ],
   providers: [
     PrismaService,
@@ -32,6 +35,7 @@ import { WebPushService } from './web-push.service';
     TelegramBotClient,
     TelegramWebhookService,
     WebPushService,
+    PublicClinicService,
   ],
 })
 export class AppModule {}

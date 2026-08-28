@@ -31,16 +31,22 @@ enum PortalBookingRequestStatus {
   CANCELLED
 }
 
+enum PublicClinicInquiryStatus {
+  NEW
+  IMPORTED
+  CANCELLED
+}
+
 model OwnerSnapshot {
-  ownerId         String             @id
-  displayName     String
-  payload         Json
-  sourceVersion   String
-  sourceUpdatedAt DateTime
-  syncedAt        DateTime           @default(now())
-  invitations     PortalInvitation[]
-  bindings        MessengerBinding[]
-  sessions        PortalSession[]
+  ownerId           String                   @id
+  displayName       String
+  payload           Json
+  sourceVersion     String
+  sourceUpdatedAt   DateTime
+  syncedAt          DateTime                 @default(now())
+  invitations       PortalInvitation[]
+  bindings          MessengerBinding[]
+  sessions          PortalSession[]
   pushSubscriptions PortalPushSubscription[]
   bookingRequests   PortalBookingRequest[]
   documents         PortalDocument[]
@@ -49,64 +55,107 @@ model OwnerSnapshot {
 }
 
 model PortalDocument {
-  id               String        @id @default(uuid())
-  ownerId          String
-  owner            OwnerSnapshot @relation(fields: [ownerId], references: [ownerId], onDelete: Cascade)
-  sourceFileId     String
-  animalId         String?
-  animalName       String?
-  fileName         String
-  mimeType         String?
-  sizeBytes        Int?
-  checksumSha256   String?
-  archiveCategory  String?
-  documentDate     DateTime?
-  sourceLabel      String?
-  content          Bytes?
-  contentStoredAt  DateTime?
-  sourceCreatedAt  DateTime
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  id              String        @id @default(uuid())
+  ownerId         String
+  owner           OwnerSnapshot @relation(fields: [ownerId], references: [ownerId], onDelete: Cascade)
+  sourceFileId    String
+  animalId        String?
+  animalName      String?
+  fileName        String
+  mimeType        String?
+  sizeBytes       Int?
+  checksumSha256  String?
+  archiveCategory String?
+  documentDate    DateTime?
+  sourceLabel     String?
+  content         Bytes?
+  contentStoredAt DateTime?
+  sourceCreatedAt DateTime
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   @@unique([ownerId, sourceFileId])
   @@index([ownerId, sourceCreatedAt])
 }
 
 model PortalBookingRequest {
-  id                String                     @id @default(uuid())
-  ownerId           String
-  owner             OwnerSnapshot              @relation(fields: [ownerId], references: [ownerId], onDelete: Cascade)
-  clientRequestId   String
-  animalId          String?
-  animalNickname    String
-  animalSpecies     String?
-  preferredAt       DateTime?
-  comment           String?
-  contactConsent    Boolean
-  source            String                     @default("OWNER_PORTAL")
-  status            PortalBookingRequestStatus @default(NEW)
-  crmRequestId      String?
-  importedAt        DateTime?
-  cancelledAt       DateTime?
-  createdAt         DateTime                   @default(now())
-  updatedAt         DateTime                   @updatedAt
+  id              String                     @id @default(uuid())
+  ownerId         String
+  owner           OwnerSnapshot              @relation(fields: [ownerId], references: [ownerId], onDelete: Cascade)
+  clientRequestId String
+  animalId        String?
+  animalNickname  String
+  animalSpecies   String?
+  preferredAt     DateTime?
+  comment         String?
+  contactConsent  Boolean
+  source          String                     @default("OWNER_PORTAL")
+  status          PortalBookingRequestStatus @default(NEW)
+  crmRequestId    String?
+  importedAt      DateTime?
+  cancelledAt     DateTime?
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
 
   @@unique([ownerId, clientRequestId])
   @@index([status, createdAt])
   @@index([ownerId, createdAt])
 }
 
+model PublicClinicInquiry {
+  id              String                    @id @default(uuid())
+  clientRequestId String                    @unique
+  contactName     String
+  phone           String
+  animalNickname  String
+  message         String
+  contactConsent  Boolean
+  source          String                    @default("CLINIC_SITE_CHAT")
+  status          PublicClinicInquiryStatus @default(NEW)
+  crmRequestId    String?
+  importedAt      DateTime?
+  cancelledAt     DateTime?
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  @@index([status, createdAt])
+  @@index([phone, createdAt])
+}
+
+model PublicClinicAnalyticsEvent {
+  id            String   @id @default(uuid())
+  eventId       String   @unique
+  sessionId     String
+  eventName     String
+  section       String?
+  target        String?
+  path          String
+  referrerHost  String?
+  utmSource     String?
+  utmMedium     String?
+  utmCampaign   String?
+  utmContent    String?
+  deviceType    String?
+  viewportWidth Int?
+  createdAt     DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([eventName, createdAt])
+  @@index([sessionId, createdAt])
+  @@index([utmSource, createdAt])
+}
+
 model PortalInvitation {
-  id         String             @id @default(uuid())
+  id         String              @id @default(uuid())
   ownerId    String
-  owner      OwnerSnapshot      @relation(fields: [ownerId], references: [ownerId], onDelete: Cascade)
-  tokenHash  String             @unique
+  owner      OwnerSnapshot       @relation(fields: [ownerId], references: [ownerId], onDelete: Cascade)
+  tokenHash  String              @unique
   channel    PortalInviteChannel
-  status     PortalInviteStatus @default(ACTIVE)
+  status     PortalInviteStatus  @default(ACTIVE)
   expiresAt  DateTime
   redeemedAt DateTime?
-  createdAt  DateTime           @default(now())
-  updatedAt  DateTime           @updatedAt
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
   sessions   PortalSession[]
 
   @@index([ownerId, status])
@@ -128,16 +177,16 @@ model MessengerBinding {
 }
 
 model PortalSession {
-  id         String            @id @default(uuid())
-  ownerId    String
-  owner      OwnerSnapshot     @relation(fields: [ownerId], references: [ownerId], onDelete: Cascade)
-  inviteId   String?
-  invitation PortalInvitation? @relation(fields: [inviteId], references: [id], onDelete: SetNull)
-  tokenHash  String            @unique
-  expiresAt  DateTime
-  lastSeenAt DateTime          @default(now())
-  revokedAt  DateTime?
-  createdAt  DateTime          @default(now())
+  id                String                   @id @default(uuid())
+  ownerId           String
+  owner             OwnerSnapshot            @relation(fields: [ownerId], references: [ownerId], onDelete: Cascade)
+  inviteId          String?
+  invitation        PortalInvitation?        @relation(fields: [inviteId], references: [id], onDelete: SetNull)
+  tokenHash         String                   @unique
+  expiresAt         DateTime
+  lastSeenAt        DateTime                 @default(now())
+  revokedAt         DateTime?
+  createdAt         DateTime                 @default(now())
   pushSubscriptions PortalPushSubscription[]
 
   @@index([ownerId, expiresAt])

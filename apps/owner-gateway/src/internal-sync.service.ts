@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { MessengerChannel, PortalInviteChannel, PortalInviteStatus, Prisma } from './generated/client';
 import { createHash } from 'node:crypto';
 import { PrismaService } from './prisma.service';
+import { PublicClinicService } from './public-clinic.service';
 import { hashToken, normalizeBaseUrl } from './security';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
 import { UpsertOwnerSnapshotDto } from './dto/upsert-owner-snapshot.dto';
@@ -21,6 +22,7 @@ export class InternalSyncService {
     private readonly maxBotClient: MaxBotClient,
     private readonly telegramBotClient: TelegramBotClient,
     private readonly webPushService: WebPushService,
+    private readonly publicClinicService: PublicClinicService,
   ) {}
 
   async upsertSnapshot(ownerId: string, dto: UpsertOwnerSnapshotDto) {
@@ -241,6 +243,10 @@ export class InternalSyncService {
     };
   }
 
+  getClinicSiteAnalytics(days?: string) {
+    return this.publicClinicService.getAnalyticsSummary(days);
+  }
+
   async createInvitation(ownerId: string, dto: CreateInvitationDto) {
     const owner = await this.prisma.ownerSnapshot.findUnique({ where: { ownerId }, select: { ownerId: true } });
 
@@ -405,6 +411,38 @@ export class InternalSyncService {
     }
 
     return this.prisma.portalBookingRequest.update({
+      where: { id: requestId },
+      data: { status: 'IMPORTED', crmRequestId: crmRequestId.trim(), importedAt: new Date() },
+      select: { id: true, status: true, crmRequestId: true, importedAt: true },
+    });
+  }
+
+  listPendingClinicInquiries() {
+    return this.prisma.publicClinicInquiry.findMany({
+      where: { status: 'NEW' },
+      orderBy: { createdAt: 'asc' },
+      take: 100,
+      select: {
+        id: true,
+        contactName: true,
+        phone: true,
+        animalNickname: true,
+        message: true,
+        source: true,
+        createdAt: true,
+      },
+    });
+  }
+
+  async markClinicInquiryImported(requestId: string, crmRequestId: string) {
+    const inquiry = await this.prisma.publicClinicInquiry.findUnique({
+      where: { id: requestId },
+      select: { id: true, status: true, crmRequestId: true },
+    });
+    if (!inquiry) throw new NotFoundException('Сообщение с сайта клиники не найдено');
+    if (inquiry.status === 'IMPORTED') return inquiry;
+
+    return this.prisma.publicClinicInquiry.update({
       where: { id: requestId },
       data: { status: 'IMPORTED', crmRequestId: crmRequestId.trim(), importedAt: new Date() },
       select: { id: true, status: true, crmRequestId: true, importedAt: true },

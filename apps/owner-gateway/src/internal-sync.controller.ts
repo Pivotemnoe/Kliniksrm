@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Headers, Param, Post, Put } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, Param, Post, Put, Query } from '@nestjs/common';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
 import { UpsertOwnerSnapshotDto } from './dto/upsert-owner-snapshot.dto';
 import { SendOwnerMessageDto } from './dto/send-owner-message.dto';
@@ -17,6 +17,15 @@ export class InternalSyncController {
   ) {
     this.assertSyncSecret(secret);
     return this.internalSyncService.getPortalStatistics();
+  }
+
+  @Get('clinic-site-analytics')
+  getClinicSiteAnalytics(
+    @Headers('x-owner-gateway-secret') secret: string | undefined,
+    @Query('days') days?: string,
+  ) {
+    this.assertSyncSecret(secret);
+    return this.internalSyncService.getClinicSiteAnalytics(days);
   }
 
   @Put(':ownerId/snapshot')
@@ -123,6 +132,24 @@ export class InternalSyncController {
   ) {
     this.assertSyncSecret(secret);
     return this.internalSyncService.markBookingRequestImported(requestId, dto.crmRequestId);
+  }
+
+  @Get('clinic-inquiries/pending')
+  listPendingClinicInquiries(
+    @Headers('x-owner-gateway-secret') secret: string | undefined,
+  ) {
+    this.assertSyncSecret(secret);
+    return this.internalSyncService.listPendingClinicInquiries();
+  }
+
+  @Post('clinic-inquiries/:requestId/imported')
+  markClinicInquiryImported(
+    @Param('requestId') requestId: string,
+    @Headers('x-owner-gateway-secret') secret: string | undefined,
+    @Body() dto: MarkBookingRequestImportedDto,
+  ) {
+    this.assertSyncSecret(secret);
+    return this.internalSyncService.markClinicInquiryImported(requestId, dto.crmRequestId);
   }
 
   @Get('connections/:channel')

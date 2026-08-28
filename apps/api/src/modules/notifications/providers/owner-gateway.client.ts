@@ -58,6 +58,46 @@ export type OwnerGatewayBookingRequest = {
   createdAt: string;
 };
 
+export type OwnerGatewayClinicInquiry = {
+  id: string;
+  contactName: string;
+  phone: string;
+  animalNickname: string;
+  message: string;
+  source: string;
+  createdAt: string;
+};
+
+export type OwnerGatewayClinicSiteAnalytics = {
+  generatedAt: string;
+  range: { days: number; from: string; to: string };
+  dataLimited: boolean;
+  privacy: { anonymous: boolean; storesIpAddresses: boolean; storesFormContents: boolean };
+  totals: {
+    sessions: number;
+    events: number;
+    engagedSessions: number;
+    contactSessions: number;
+    inquirySessions: number;
+    contactRate: number;
+  };
+  actions: Record<string, { count: number; sessions: number }>;
+  funnel: Array<{ key: string; sessions: number }>;
+  sources: Array<{ label: string; sessions: number }>;
+  sections: Array<{ section: string; views: number; sessions: number }>;
+  devices: Array<{ label: string; sessions: number }>;
+  daily: Array<{ date: string; sessions: number; contacts: number; inquiries: number }>;
+  recentSessions: Array<{
+    visitor: string;
+    startedAt: string;
+    lastSeenAt: string;
+    source: string;
+    deviceType: string;
+    sections: string[];
+    actions: string[];
+  }>;
+};
+
 const DEFAULT_GATEWAY_REQUEST_TIMEOUT_MS = 30_000;
 const GATEWAY_RETRY_DELAY_MS = 400;
 
@@ -291,6 +331,23 @@ export class OwnerGatewayClient {
     }
   }
 
+  async getClinicSiteAnalytics(days: number): Promise<OwnerGatewayClinicSiteAnalytics | null> {
+    const baseUrl = normalizeBaseUrl(process.env.OWNER_GATEWAY_URL);
+    const syncSecret = process.env.OWNER_GATEWAY_SYNC_SECRET?.trim();
+
+    if (!baseUrl || !syncSecret) return null;
+
+    try {
+      return await requestGatewayWithRetry<OwnerGatewayClinicSiteAnalytics>(
+        `${baseUrl}/internal/v1/owners/clinic-site-analytics?days=${encodeURIComponent(String(days))}`,
+        syncSecret,
+        { method: 'GET' },
+      );
+    } catch {
+      return null;
+    }
+  }
+
   async pullPendingBookingRequests(): Promise<OwnerGatewayBookingRequest[] | null> {
     const baseUrl = normalizeBaseUrl(process.env.OWNER_GATEWAY_URL);
     const syncSecret = process.env.OWNER_GATEWAY_SYNC_SECRET?.trim();
@@ -319,6 +376,39 @@ export class OwnerGatewayClient {
     try {
       await requestGateway(
         `${baseUrl}/internal/v1/owners/booking-requests/${encodeURIComponent(requestId)}/imported`,
+        syncSecret,
+        { method: 'POST', body: { crmRequestId } },
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async pullPendingClinicInquiries(): Promise<OwnerGatewayClinicInquiry[] | null> {
+    const baseUrl = normalizeBaseUrl(process.env.OWNER_GATEWAY_URL);
+    const syncSecret = process.env.OWNER_GATEWAY_SYNC_SECRET?.trim();
+    if (!baseUrl || !syncSecret) return null;
+
+    try {
+      return await requestGatewayWithRetry<OwnerGatewayClinicInquiry[]>(
+        `${baseUrl}/internal/v1/owners/clinic-inquiries/pending`,
+        syncSecret,
+        { method: 'GET' },
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  async acknowledgeClinicInquiry(requestId: string, crmRequestId: string): Promise<boolean> {
+    const baseUrl = normalizeBaseUrl(process.env.OWNER_GATEWAY_URL);
+    const syncSecret = process.env.OWNER_GATEWAY_SYNC_SECRET?.trim();
+    if (!baseUrl || !syncSecret) return false;
+
+    try {
+      await requestGateway(
+        `${baseUrl}/internal/v1/owners/clinic-inquiries/${encodeURIComponent(requestId)}/imported`,
         syncSecret,
         { method: 'POST', body: { crmRequestId } },
       );
