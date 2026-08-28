@@ -48,13 +48,14 @@ test('сводка сайта считает сессии, источники и
 });
 
 test('контракт аналитики не сохраняет IP и поля формы', async () => {
-  const [dto, service, schema, migration, controller, dashboard] = await Promise.all([
+  const [dto, service, schema, migration, controller, dashboard, compose] = await Promise.all([
     readFile(new URL('../apps/owner-gateway/src/dto/create-public-clinic-analytics-event.dto.ts', import.meta.url), 'utf8'),
     readFile(new URL('../apps/owner-gateway/src/public-clinic.service.ts', import.meta.url), 'utf8'),
     readFile(new URL('../apps/owner-gateway/prisma/schema.prisma', import.meta.url), 'utf8'),
     readFile(new URL('../apps/owner-gateway/prisma/migrations/20260827000100_public_clinic_analytics/migration.sql', import.meta.url), 'utf8'),
     readFile(new URL('../apps/owner-gateway/src/public-clinic.controller.ts', import.meta.url), 'utf8'),
     readFile(new URL('../apps/api/src/modules/dashboard/dashboard.controller.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../deploy/owner-gateway/docker-compose.yml', import.meta.url), 'utf8'),
   ]);
 
   assert.match(dto, /PUBLIC_CLINIC_ANALYTICS_EVENTS/);
@@ -66,4 +67,6 @@ test('контракт аналитики не сохраняет IP и поля
   assert.doesNotMatch(migration, /DROP TABLE|TRUNCATE|DELETE FROM/i);
   assert.match(controller, /@Post\('analytics\/events'\)/);
   assert.match(dashboard, /@Get\('site-analytics'\)/);
+  assert.match(compose, /OWNER_GATEWAY_PUBLIC_SITE_ORIGINS:/);
+  assert.match(compose, /OWNER_GATEWAY_TRUST_PROXY:/);
 });
