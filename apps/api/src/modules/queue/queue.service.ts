@@ -11,8 +11,9 @@ import { CreateQueueEntryDto } from './dto/create-queue-entry.dto';
 import { ListQueueQueryDto } from './dto/list-queue-query.dto';
 import { UpdateQueueEntryDto } from './dto/update-queue-entry.dto';
 import { RegisterQueueWorkstationDto, UpdateQueueWorkstationDto } from './dto/register-queue-workstation.dto';
+import { QUEUE_ACCEPT_DELAY_MS, resolveQueueAcceptWaitSeconds } from './queue-accept';
 
-const QUEUE_ACCEPT_DELAY_MS = 15_000;
+export { resolveQueueAcceptWaitSeconds } from './queue-accept';
 
 @Injectable()
 export class QueueService {
@@ -458,26 +459,7 @@ const queueScreenSelect = {
 
 type QueueScreenRecord = Prisma.QueueEntryGetPayload<{ select: typeof queueScreenSelect }>;
 
-type QueueAcceptTiming = {
-  status: QueueStatus;
-  startedAt: Date | null;
-  lastCalledAt: Date | null;
-};
-
-export function resolveQueueAcceptWaitSeconds(entry: QueueAcceptTiming, now = Date.now()) {
-  if (entry.status !== QueueStatus.IN_PROGRESS) {
-    return 0;
-  }
-
-  const lastCallAt = entry.lastCalledAt ?? entry.startedAt;
-  if (!lastCallAt) {
-    return Math.ceil(QUEUE_ACCEPT_DELAY_MS / 1000);
-  }
-
-  return Math.max(0, Math.ceil((lastCallAt.getTime() + QUEUE_ACCEPT_DELAY_MS - now) / 1000));
-}
-
-function toQueueEntryResponse<T extends QueueAcceptTiming>(entry: T, now = Date.now()) {
+function toQueueEntryResponse<T extends { status: QueueStatus; startedAt: Date | null; lastCalledAt: Date | null }>(entry: T, now = Date.now()) {
   return {
     ...entry,
     acceptWaitSeconds: resolveQueueAcceptWaitSeconds(entry, now),

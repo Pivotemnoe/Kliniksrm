@@ -15,7 +15,7 @@ import { formatAnimalAge } from '../../shared/utils/animalBirthDate';
 import { formatDateTime } from '../../shared/utils/date';
 import { createVisit } from '../visits/visits.api';
 import { visitStatusColors, visitStatusLabels } from '../visits/types';
-import { cancelQueueEntry, completeQueueEntry, listQueue, startQueueEntry } from './queue.api';
+import { cancelQueueEntry, listQueue, startQueueEntry } from './queue.api';
 import { createQueueEntryFromForm } from './createQueueEntryFromForm';
 import { QueueFormDrawer, QueueFormSubmitInput } from './QueueFormDrawer';
 import {
@@ -93,10 +93,6 @@ export function QueuePage() {
         throw new Error('Сначала заведите карточки владельца и пациента');
       }
 
-      if (action === 'accept') {
-        await completeQueueEntry(record.id);
-      }
-
       const visit = await createVisit({
         queueEntryId: record.id,
         ownerId: record.ownerId,
@@ -112,6 +108,7 @@ export function QueuePage() {
     onSuccess: async (result, variables) => {
       await queryClient.invalidateQueries({ queryKey: ['queue'] });
       await queryClient.invalidateQueries({ queryKey: ['visits'] });
+      await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       if (result.action === 'call') {
         setStatus('IN_PROGRESS');
       }

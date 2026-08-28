@@ -20,6 +20,7 @@ import { MedicalPhrasesService } from '../medical-phrases/medical-phrases.servic
 import { OwnerGatewaySnapshotSyncService } from '../notifications/owner-gateway-snapshot-sync.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
+import { resolveQueueAcceptWaitSeconds } from '../queue/queue-accept';
 import { AddVisitServiceDto } from './dto/add-visit-service.dto';
 import { AddVisitServicesDto } from './dto/add-visit-services.dto';
 import { CreateVisitLaboratoryOrderDto } from './dto/create-visit-laboratory-order.dto';
@@ -171,10 +172,45 @@ export class VisitsService {
   }
 
   async createVisit(dto: CreateVisitDto, actor: AuthEmployee) {
+    if (dto.queueEntryId) {
+      const existingQueueVisit = await this.prisma.visit.findUnique({
+        where: { queueEntryId: dto.queueEntryId },
+        select: { id: true, status: true, queueEntry: { select: { status: true } } },
+      });
+      if (existingQueueVisit) {
+        const queueStatus = mapVisitStatusToQueueStatus(existingQueueVisit.status);
+        if (queueStatus && existingQueueVisit.queueEntry?.status !== queueStatus) {
+          await this.prisma.queueEntry.update({
+            where: { id: dto.queueEntryId },
+            data: resolveQueueSourceStatusData(queueStatus, existingQueueVisit.status),
+          });
+        }
+        return this.getVisit(existingQueueVisit.id);
+      }
+    }
+
     const data = await this.resolveVisitCreationData(dto, actor);
     const dueAt = await this.financeService.getDefaultBillDueAt();
 
-    const visit = await this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
+      if (data.queueEntryId) {
+        await tx.$queryRaw`SELECT "id" FROM "QueueEntry" WHERE "id" = ${data.queueEntryId} FOR UPDATE`;
+        const existingQueueVisit = await tx.visit.findUnique({
+          where: { queueEntryId: data.queueEntryId },
+          select: { id: true, status: true },
+        });
+        if (existingQueueVisit) {
+          const queueStatus = mapVisitStatusToQueueStatus(existingQueueVisit.status);
+          if (queueStatus) {
+            await tx.queueEntry.update({
+              where: { id: data.queueEntryId },
+              data: resolveQueueSourceStatusData(queueStatus, existingQueueVisit.status),
+            });
+          }
+          return { visit: existingQueueVisit, created: false };
+        }
+      }
+
       const createdVisit = await tx.visit.create({
         data: {
           ownerId: data.ownerId,
@@ -202,14 +238,18 @@ export class VisitsService {
 
       await this.syncVisitSourceStatus(tx, createdVisit, data.status);
 
-      return createdVisit;
+      return { visit: createdVisit, created: true };
     });
+
+    if (!result.created) {
+      return this.getVisit(result.visit.id);
+    }
 
     await this.auditService.log({
       actorId: actor.id,
       action: 'visit.create',
       entityType: 'Visit',
-      entityId: visit.id,
+      entityId: result.visit.id,
       metadata: {
         ownerId: data.ownerId,
         animalId: data.animalId,
@@ -220,7 +260,7 @@ export class VisitsService {
       },
     });
 
-    return this.getVisit(visit.id);
+    return this.getVisit(result.visit.id);
   }
 
   async getVisit(visitId: string) {
@@ -1098,7 +1138,17 @@ export class VisitsService {
     if (dto.queueEntryId) {
       const queueEntry = await this.prisma.queueEntry.findUnique({
         where: { id: dto.queueEntryId },
-        select: { ownerId: true, animalId: true, employeeId: true, visitType: true, isVaccination: true, visit: { select: { id: true } } },
+        select: {
+          ownerId: true,
+          animalId: true,
+          employeeId: true,
+          visitType: true,
+          isVaccination: true,
+          status: true,
+          startedAt: true,
+          lastCalledAt: true,
+          visit: { select: { id: true } },
+        },
       });
 
       if (!queueEntry) {
@@ -1107,6 +1157,17 @@ export class VisitsService {
 
       if (queueEntry.visit) {
         throw new BadRequestException('Queue entry already has a visit');
+      }
+
+      if (queueEntry.status === QueueStatus.WAITING) {
+        throw new BadRequestException('Сначала вызовите клиента на приём');
+      }
+      if (queueEntry.status === QueueStatus.CANCELLED) {
+        throw new BadRequestException('Отменённую запись очереди нельзя направить на приём');
+      }
+      const waitSeconds = resolveQueueAcceptWaitSeconds(queueEntry);
+      if (waitSeconds > 0) {
+        throw new BadRequestException(`Начать приём можно через ${waitSeconds} сек.`);
       }
 
       if (!queueEntry.ownerId || !queueEntry.animalId) {

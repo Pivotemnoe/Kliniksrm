@@ -24,7 +24,6 @@ import { OwnerMutationInput } from '../owners/types';
 import { createVisit } from '../visits/visits.api';
 import {
   cancelQueueEntry,
-  completeQueueEntry,
   getQueueEntry,
   startQueueEntry,
   updateQueueEntry,
@@ -73,26 +72,31 @@ export function QueueCardPage() {
       }
 
       if (action === 'complete') {
-        const completed = await completeQueueEntry(queueEntryId!);
-        if (queueEntry?.isVaccination && queueEntry.ownerId && queueEntry.animalId) {
-          const visit = queueEntry.visit ?? await createVisit({
-            queueEntryId: queueEntry.id,
-            ownerId: queueEntry.ownerId,
-            animalId: queueEntry.animalId,
-            employeeId: queueEntry.employeeId ?? undefined,
-            startedAt: new Date().toISOString(),
-            status: 'IN_PROGRESS',
-            visitType: 'VACCINATION',
-          });
-          return { queueEntry: completed, visit };
+        if (!queueEntry?.ownerId || !queueEntry.animalId) {
+          throw new Error('Сначала заведите карточки владельца и пациента');
         }
-        return { queueEntry: completed };
+        const visit = queueEntry.visit ?? await createVisit({
+          queueEntryId: queueEntry.id,
+          ownerId: queueEntry.ownerId,
+          animalId: queueEntry.animalId,
+          employeeId: queueEntry.employeeId ?? undefined,
+          startedAt: new Date().toISOString(),
+          status: 'IN_PROGRESS',
+          visitType: queueEntry.isVaccination ? 'VACCINATION' : queueEntry.visitType ?? 'PRIMARY',
+        });
+        return { queueEntry, visit };
       }
 
       return { queueEntry: await cancelQueueEntry(queueEntryId!) };
     },
     onSuccess: async (result, action) => {
       await invalidate();
+      if (action === 'complete') {
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['visits'] }),
+          queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+        ]);
+      }
       const successText = {
         start: 'Клиент вызван на приём',
         repeat: 'Вызов повторён',
@@ -101,7 +105,9 @@ export function QueueCardPage() {
       }[action];
       message.success(successText);
       if (action === 'complete' && result.visit) {
-        navigate(`/visits/${result.visit.id}?tab=vaccination&new=vaccination`);
+        navigate(queueEntry?.isVaccination
+          ? `/visits/${result.visit.id}?tab=vaccination&new=vaccination`
+          : `/visits/${result.visit.id}`);
       }
     },
     onError: (error) => message.error(getErrorMessage(error)),

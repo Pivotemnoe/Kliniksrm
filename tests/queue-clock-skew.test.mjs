@@ -5,12 +5,13 @@ import test from 'node:test';
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
 test('задержка очереди равна 15 секундам и рассчитывается на сервере', async () => {
-  const [service, types] = await Promise.all([
+  const [service, accept, types] = await Promise.all([
     read('apps/api/src/modules/queue/queue.service.ts'),
+    read('apps/api/src/modules/queue/queue-accept.ts'),
     read('apps/web/src/features/queue/types.ts'),
   ]);
 
-  assert.match(service, /QUEUE_ACCEPT_DELAY_MS = 15_000/);
+  assert.match(accept, /QUEUE_ACCEPT_DELAY_MS = 15_000/);
   assert.match(service, /acceptWaitSeconds: resolveQueueAcceptWaitSeconds/);
   assert.match(service, /items\.map\(\(item\) => toQueueEntryResponse\(item, responseTime\)\)/);
   assert.match(types, /acceptWaitSeconds: number/);

@@ -18,6 +18,15 @@ test('поиск ставит совпадение с начала имени в
   assert.deepEqual(result.map((item) => item.title), ['Бульдогова Мария', 'Анна Бульварная', 'Школа Буль']);
 });
 
+test('глобальный поиск без фонового опроса ищет владельцев и пациентов после короткой паузы', async () => {
+  const search = await read('apps/web/src/layouts/GlobalSearch.tsx');
+
+  assert.match(search, /useDebouncedValue\(term, 250\)/);
+  assert.match(search, /listOwners\(\{ search: debouncedTerm/);
+  assert.match(search, /listAnimals\(\{ search: debouncedTerm/);
+  assert.doesNotMatch(search, /setInterval|querySelector\('input'\)/);
+});
+
 test('очередь работает без привязки компьютера, кабинет выбирается вручную и запись можно убрать', async () => {
   const [page, card, form, controller, service, queueApi, routes] = await Promise.all([
     read('apps/web/src/features/queue/QueuePage.tsx'),
@@ -39,6 +48,21 @@ test('очередь работает без привязки компьютер
   assert.doesNotMatch(service, /workstationDeviceId|workstationRoom/);
   assert.match(queueApi, /startQueueEntry\(queueEntryId: string\)/);
   assert.doesNotMatch(routes, /settings\/office\/workstations/);
+});
+
+test('направление из очереди создаёт или повторно открывает один приём без промежуточного состояния', async () => {
+  const [page, card, visitsService] = await Promise.all([
+    read('apps/web/src/features/queue/QueuePage.tsx'),
+    read('apps/web/src/features/queue/QueueCardPage.tsx'),
+    read('apps/api/src/modules/visits/visits.service.ts'),
+  ]);
+
+  assert.doesNotMatch(page, /completeQueueEntry/);
+  assert.doesNotMatch(card, /completeQueueEntry/);
+  assert.match(visitsService, /WHERE "id" = \$\{data\.queueEntryId\} FOR UPDATE/);
+  assert.match(visitsService, /where: \{ queueEntryId: data\.queueEntryId \}/);
+  assert.match(visitsService, /return \{ visit: existingQueueVisit, created: false \}/);
+  assert.match(visitsService, /await this\.syncVisitSourceStatus\(tx, createdVisit, data\.status\)/);
 });
 
 test('архив пациента имеет кнопку просмотра, а личные кабинеты получают и открывают файлы', async () => {
