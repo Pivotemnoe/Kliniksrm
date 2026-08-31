@@ -1,5 +1,4 @@
 import { appConfig } from '../../app/config';
-import { formatAnimalAge } from '../../shared/utils/animalBirthDate';
 import type { OrganizationSettings } from '../organization/types';
 import type { HospitalRecord, HospitalStay } from './types';
 
@@ -98,15 +97,10 @@ export function printHospitalBoxSheet(stay: HospitalStay, organization?: Organiz
   const records = stay.hospitalRecords ?? [];
   const assignments = groupHospitalBoxAssignments(records, timeZone, printedAt);
   const clinicName = organization?.displayName?.trim() || appConfig.brandName;
-  const logoUrl = organization?.logoUrl ? new URL(organization.logoUrl, window.location.href).href : null;
-  const boxName = stay.hospitalBox?.name?.trim() || 'Бокс не указан';
-  const patientName = stay.animal?.nickname?.trim() || 'Пациент';
-  const patientDetails = [
-    formatSpecies(stay.animal?.species),
-    stay.animal?.breed,
-    formatSex(stay.animal?.sex),
-    formatAnimalAge(stay.animal?.birthDate),
-  ].filter(Boolean).join(' · ');
+  const boxName = stay.hospitalBox?.name?.trim() || 'Не указан';
+  const patientName = stay.animal?.nickname?.trim() || 'Не указана';
+  const ownerName = stay.owner?.fullName?.trim() || 'Не указан';
+  const diagnosis = stay.diagnoses?.map((item) => item.title.trim()).filter(Boolean).join('; ') || 'Не указан';
   const occurrences = assignments.flatMap((group) => group.occurrences);
   const assignmentMarkup = assignments.length
     ? `<section class="assignment-list">${assignments.map(renderHospitalBoxAssignment).join('')}</section>`
@@ -125,63 +119,49 @@ export function printHospitalBoxSheet(stay: HospitalStay, organization?: Organiz
   <title>${escapeHtml(`Лист для бокса — ${patientName}`)}</title>
   <style>
     * { box-sizing: border-box; }
-    @page { size: A5 portrait; margin: 6mm; }
-    body { margin: 0; color: #102a43; background: #fff; font: 9.5px/1.2 Arial, sans-serif; }
-    .page { width: 100%; max-width: 136mm; margin: 0 auto; }
-    .top { display: grid; grid-template-columns: minmax(0, 1fr) 38mm; gap: 2mm; align-items: stretch; }
-    .patient-card { min-width: 0; border: 1.2px solid #173a5e; padding: 2mm; }
-    .clinic-line { display: flex; gap: 2mm; align-items: center; padding-bottom: 1.3mm; border-bottom: 1px solid #c8d5df; }
-    .logo { width: 8mm; height: 8mm; object-fit: contain; }
-    .clinic { font-size: 9.5px; font-weight: 700; }
-    .document-name { color: #5f7385; font-size: 7.5px; }
-    .patient-name { margin-top: 1.5mm; font-size: 18px; line-height: 1.05; font-weight: 800; color: #173a5e; overflow-wrap: anywhere; }
-    .patient-details { margin-top: 1mm; font-size: 9px; font-weight: 700; }
-    .owner { margin-top: .7mm; color: #5f7385; font-size: 8px; }
-    .box-card { min-width: 0; display: grid; place-items: center; align-content: center; border: 1.5px solid #173a5e; text-align: center; padding: 1.5mm; }
-    .box-label { color: #5f7385; font-size: 8px; text-transform: uppercase; letter-spacing: .06em; }
-    .box-name { margin-top: 1mm; font-size: 17px; line-height: 1.05; font-weight: 900; color: #173a5e; overflow-wrap: anywhere; }
-    .section-title { display: flex; justify-content: space-between; align-items: baseline; gap: 3mm; margin: 2mm 0 1mm; padding-bottom: .8mm; border-bottom: 1.2px solid #173a5e; }
-    .section-title h1 { margin: 0; font-size: 12px; color: #173a5e; }
-    .section-summary { color: #5f7385; font-size: 8px; }
-    .assignment-list { border: 1px solid #9fb2c1; }
-    .assignment-row { display: grid; grid-template-columns: 20mm minmax(0, 1fr) 5mm; gap: 2mm; align-items: center; min-height: 7mm; padding: 1mm 1.5mm; border-bottom: 1px solid #d6e0e8; break-inside: avoid; }
+    @page { size: A5 portrait; margin: 7mm; }
+    body { margin: 0; color: #000; background: #fff; font: 15px/1.3 Arial, sans-serif; }
+    .page { width: 100%; max-width: 134mm; margin: 0 auto; }
+    .document-header { display: flex; justify-content: space-between; gap: 5mm; align-items: baseline; padding-bottom: 2mm; border-bottom: 1.5px solid #000; }
+    .clinic { font-size: 14px; font-weight: 700; }
+    .document-name { color: #000; font-size: 13px; font-weight: 700; }
+    .identity { margin-top: 3mm; border: 1.5px solid #000; }
+    .identity-row { display: grid; grid-template-columns: 38mm minmax(0, 1fr); gap: 3mm; padding: 2.4mm 3mm; border-bottom: 1px solid #777; align-items: baseline; }
+    .identity-row:last-child { border-bottom: 0; }
+    .identity-label { color: #000; font-size: 14px; font-weight: 700; }
+    .identity-value { min-width: 0; font-size: 16px; font-weight: 700; overflow-wrap: anywhere; }
+    .box-row { background: #f2f2f2; }
+    .box-row .identity-label { font-size: 15px; }
+    .box-row .identity-value { font-size: 25px; line-height: 1.05; font-weight: 800; }
+    .patient-row .identity-value { font-size: 20px; }
+    .section-title { display: flex; justify-content: space-between; align-items: baseline; gap: 3mm; margin: 4mm 0 1.5mm; padding-bottom: 1mm; border-bottom: 1.5px solid #000; }
+    .section-title h1 { margin: 0; font-size: 18px; color: #000; }
+    .section-summary { color: #000; font-size: 13px; font-weight: 700; }
+    .assignment-list { border: 1.2px solid #000; }
+    .assignment-row { display: grid; grid-template-columns: 21mm minmax(0, 1fr) 7mm; gap: 3mm; align-items: center; min-height: 11mm; padding: 1.8mm 2mm; border-bottom: 1px solid #999; break-inside: avoid; }
     .assignment-row:last-child { border-bottom: 0; }
-    .assignment-time { font-size: 9px; }
-    .assignment-title { min-width: 0; font-size: 10px; font-weight: 700; overflow-wrap: anywhere; }
-    .paper-check { width: 4.2mm; height: 4.2mm; margin: 0; accent-color: #173a5e; }
-    .empty { margin-top: 2mm; padding: 8mm; border: 1px solid #c8d5df; text-align: center; font-size: 11px; }
-    .footer { margin-top: 1.5mm; color: #5f7385; font-size: 7px; }
+    .assignment-time { font-size: 15px; }
+    .assignment-title { min-width: 0; font-size: 16px; font-weight: 700; overflow-wrap: anywhere; }
+    .paper-check { width: 6mm; height: 6mm; margin: 0; accent-color: #000; }
+    .empty { margin-top: 2mm; padding: 8mm; border: 1px solid #777; text-align: center; font-size: 16px; }
   </style>
 </head>
 <body>
   <main class="page">
-    <section class="top">
-      <div class="patient-card">
-        <div class="clinic-line">
-          ${logoUrl ? `<img class="logo" src="${escapeHtml(logoUrl)}" alt="Логотип" />` : ''}
-          <div><div class="clinic">${escapeHtml(clinicName)}</div><div class="document-name">Внутренний лист стационара — не для клиента</div></div>
-        </div>
-        <div class="patient-name">${escapeHtml(patientName)}</div>
-        <div class="patient-details">${escapeHtml(patientDetails || 'Данные пациента не указаны')}</div>
-        <div class="owner">Владелец: ${escapeHtml(stay.owner?.fullName ?? '—')}</div>
-      </div>
-      <div class="box-card"><div class="box-label">Бокс / место</div><div class="box-name">${escapeHtml(boxName)}</div></div>
+    <header class="document-header"><div class="clinic">${escapeHtml(clinicName)}</div><div class="document-name">Лист стационара</div></header>
+    <section class="identity">
+      <div class="identity-row box-row"><span class="identity-label">Номер бокса</span><strong class="identity-value">${escapeHtml(boxName)}</strong></div>
+      <div class="identity-row"><span class="identity-label">ФИО владельца</span><strong class="identity-value">${escapeHtml(ownerName)}</strong></div>
+      <div class="identity-row patient-row"><span class="identity-label">Кличка животного</span><strong class="identity-value">${escapeHtml(patientName)}</strong></div>
+      <div class="identity-row"><span class="identity-label">Диагноз животного</span><strong class="identity-value">${escapeHtml(diagnosis)}</strong></div>
     </section>
     <div class="section-title">
       <h1>Назначения на ${escapeHtml(sheetDate)}</h1>
       <div class="section-summary">${occurrences.length} поз.</div>
     </div>
     ${assignmentMarkup}
-    <footer class="footer">Галочка показывает только факт выполнения. Подробности сохраняются в CRM.</footer>
   </main>
-  <script>
-    (() => {
-      const logo = document.querySelector('.logo');
-      const print = () => window.setTimeout(() => window.print(), 100);
-      if (!logo || logo.complete) print();
-      else { logo.addEventListener('load', print, { once: true }); logo.addEventListener('error', print, { once: true }); }
-    })();
-  </script>
+  <script>window.setTimeout(() => window.print(), 100);</script>
 </body>
 </html>`);
   printWindow.document.close();
@@ -333,20 +313,6 @@ function formatBoxDateTime(value: string, timeZone: string) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(value)).replace(',', '');
-}
-
-function formatSpecies(value?: string | null) {
-  const normalized = value?.trim().toUpperCase();
-  if (!normalized) return '';
-  if (normalized === 'DOG') return 'Собака';
-  if (normalized === 'CAT') return 'Кошка';
-  return value?.trim() ?? '';
-}
-
-function formatSex(value?: string | null) {
-  if (value === 'MALE') return 'Самец';
-  if (value === 'FEMALE') return 'Самка';
-  return '';
 }
 
 function escapeHtml(value: string) {

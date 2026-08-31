@@ -1,6 +1,6 @@
 import { Animal } from '../animals/types';
 import { Owner } from '../owners/types';
-import { DecimalValue, VisitExam, VisitRecommendation } from '../visits/types';
+import { DecimalValue, VisitDiagnosis, VisitExam, VisitRecommendation } from '../visits/types';
 
 export type HospitalStayStatus = 'ACTIVE' | 'DISCHARGED' | 'CANCELLED';
 export type HospitalRecordStatus = 'PLANNED' | 'COMPLETED' | 'SKIPPED' | 'AMENDMENT';
@@ -82,6 +82,7 @@ export type HospitalStay = {
   } | null;
   hospitalBox?: HospitalBox | null;
   exam?: VisitExam | null;
+  diagnoses?: VisitDiagnosis[];
   recommendation?: VisitRecommendation | null;
   bill?: {
     id: string;

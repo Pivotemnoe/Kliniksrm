@@ -1774,6 +1774,10 @@ const hospitalStayInclude = {
   sourceVisit: {
     include: {
       exam: true,
+      diagnoses: {
+        orderBy: { createdAt: 'asc' as const },
+        select: { id: true, diagnosisType: true, title: true, description: true, status: true },
+      },
       recommendation: true,
       bill: { select: { id: true, status: true, totalAmount: true, paidAmount: true } },
       hospitalRecords: {
@@ -1813,6 +1817,7 @@ function serializeHospitalStay(stay: HospitalStayWithRelations) {
     },
     timezone: stay.hospitalBox.office.timezone,
     exam: stay.sourceVisit.exam,
+    diagnoses: stay.sourceVisit.diagnoses,
     recommendation: stay.sourceVisit.recommendation,
     bill: stay.sourceVisit.bill,
     hospitalRecords: stay.sourceVisit.hospitalRecords.map((record) => ({
