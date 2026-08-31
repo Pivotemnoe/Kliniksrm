@@ -17,20 +17,18 @@ test('карта стационара печатает отдельный вну
   assert.match(print, /@page \{ size: A5 portrait; margin: 6mm; \}/);
   assert.match(print, /Внутренний лист стационара — не для клиента/);
   assert.match(print, /Бокс \/ место/);
-  assert.match(print, /Причина помещения/);
-  assert.match(print, /Состояние пациента/);
-  assert.match(print, /Ответственный/);
-  assert.match(print, /Назначения и выполнения/);
+  assert.match(print, /Назначения на \$\{escapeHtml\(sheetDate\)\}/);
   assert.match(print, /recordStatus === 'PLANNED' \|\| record\.recordStatus === 'COMPLETED'/);
-  assert.match(print, /recordStatus === 'PLANNED' &&/);
+  assert.match(print, /dateKey\(new Date\(record\.recordedAt\), timeZone\) === dateKey\(now, timeZone\)/);
   assert.match(print, /groupHospitalBoxAssignments/);
   assert.match(print, /class="paper-check" type="checkbox"/);
   assert.match(print, /occurrence\.status === 'COMPLETED' \? ' checked' : ''/);
-  assert.match(print, /факт\. время \/ инициалы/);
-  assert.match(print, /record\.billItem\?\.productId/);
-  assert.match(print, /record\.billItem\?\.serviceId/);
-  assert.match(print, /Бумажная отметка не заменяет запись выполнения в CRM/);
+  assert.match(print, /class="assignment-time"/);
+  assert.match(print, /Подробности сохраняются в CRM/);
   assert.doesNotMatch(print, /stay\.owner\?\.phone/);
+
+  const boxSheetSource = print.split('export function printHospitalBoxSheet')[1].split('type OwnerReportGroup')[0];
+  assert.doesNotMatch(boxSheetSource, /Причина помещения|Состояние пациента|Ответственный|Назначил:|количество|факт\. время|completion:/);
 });
 
 test('заголовок карты стационара не сжимается по буквам на рабочем ноутбуке', async () => {
