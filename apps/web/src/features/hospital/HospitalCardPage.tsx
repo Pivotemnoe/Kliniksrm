@@ -41,7 +41,7 @@ import {
 import { HospitalSheet } from './HospitalSheet';
 import { HospitalTreatmentPlanModal } from './HospitalTreatmentPlanModal';
 import { useDebouncedValue } from '../../shared/hooks/useDebouncedValue';
-import { printHospitalSheet } from './hospitalPrint';
+import { printHospitalBoxSheet, printHospitalSheet } from './hospitalPrint';
 import type { CreateHospitalAmendmentInput, CreateHospitalRecordInput, HospitalCatalog, HospitalPreliminaryBill, HospitalPreliminaryBillLine, HospitalRecord, HospitalRecordStatus, HospitalRecordType, UpdateHospitalRecordInput } from './types';
 
 const recordTypeOptions: Array<{ value: HospitalRecordType; label: string; defaultTitle: string }> = [
@@ -231,6 +231,9 @@ export function HospitalCardPage() {
           <Space wrap>
             <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/hospital')}>К стационару</Button>
             {stay ? <Button icon={<FileTextOutlined />} onClick={() => navigate(`/visits/${stay.sourceVisitId}`)}>Открыть исходный приём</Button> : null}
+            {stay && canPrint ? <Button icon={<PrinterOutlined />} onClick={() => {
+              if (!printHospitalBoxSheet(stay, organizationQuery.data)) message.warning('Браузер заблокировал окно печати');
+            }}>Лист для бокса</Button> : null}
             {stay && canPrint ? <Button icon={<PrinterOutlined />} onClick={() => {
               if (!printHospitalSheet(stay, organizationQuery.data)) message.warning('Браузер заблокировал окно печати');
             }}>Отчёт владельцу / PDF</Button> : null}

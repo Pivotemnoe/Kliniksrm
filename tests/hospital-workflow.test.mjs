@@ -212,6 +212,7 @@ test('врач видит полный лист, назначения и вып�
     read('apps/web/src/features/help/HelpPage.tsx'),
     read('apps/web/src/styles.css'),
   ]);
+  const ownerReportPrint = print.slice(0, print.indexOf('export function printHospitalBoxSheet'));
 
   assert.match(card, /Полный лист стационара/);
   assert.match(card, /Назначить план лечения/);
@@ -239,7 +240,7 @@ test('врач видит полный лист, назначения и вып�
   assert.match(print, /formatDecimalAmount/);
   assert.doesNotMatch(print, /Выполнено \$\{.*count.*\} раза/);
   assert.doesNotMatch(print, /Температура за всё пребывание|renderTemperatureChart/);
-  assert.doesNotMatch(print, /Назначение \/ выполнение|Исполнитель|recordedBy|class="time"|Выполнено:.*formatTime/);
+  assert.doesNotMatch(ownerReportPrint, /Назначение \/ выполнение|Исполнитель|recordedBy|class="time"|Выполнено:.*formatTime/);
   assert.doesNotMatch(`${card}\n${sheet}\n${print}`, /Добавить факт|План \/ факт|Факт \/ результат|План выполнен/);
   assert.match(help, /Запись текущих суток можно изменить напрямую/);
   assert.match(styles, /\.hospital-sheet-day \{\s+min-width: 0;/);
