@@ -2579,6 +2579,87 @@ body {
   background: #fa8c16;
 }
 
+.visit-exam-assistant {
+  display: grid;
+  gap: 10px;
+  margin: 4px 0 14px;
+  padding: 14px;
+  border: 1px solid #d9e4ef;
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.visit-exam-assistant-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.visit-exam-assistant-count {
+  margin-top: 2px;
+  color: #d46b08;
+  font-size: 12px;
+}
+
+.visit-exam-assistant-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.visit-exam-assistant-list {
+  overflow: hidden;
+  border: 1px solid #edf0f4;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.visit-exam-assistant-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 42px;
+  padding: 7px 10px;
+  border-bottom: 1px solid #edf0f4;
+}
+
+.visit-exam-assistant-row:last-child {
+  border-bottom: 0;
+}
+
+.visit-exam-assistant-warning {
+  color: #fa8c16;
+}
+
+.visit-exam-assistant-row-success {
+  grid-template-columns: auto minmax(0, 1fr);
+  color: #389e0d;
+}
+
+.visit-exam-assistant-note.ant-typography {
+  font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .visit-exam-assistant-controls {
+    justify-content: flex-start;
+  }
+
+  .visit-exam-assistant-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .visit-exam-assistant-row .ant-btn {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
+
 .visit-exam-vitals-grid {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(160px, 0.64fr);
 }

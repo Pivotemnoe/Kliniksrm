@@ -126,6 +126,17 @@ export function VisitCardPage() {
   const defaultTab = visit?.visitType === 'VACCINATION' ? 'vaccination' : 'exam';
   const activeTab = visitCardTabKeys.has(requestedTab ?? '') ? requestedTab! : defaultTab;
 
+  function selectVisitTab(key: string) {
+    const nextSearchParams = new URLSearchParams(searchParams);
+    if (key === defaultTab) {
+      nextSearchParams.delete('tab');
+    } else {
+      nextSearchParams.set('tab', key);
+    }
+    nextSearchParams.delete('new');
+    setSearchParams(nextSearchParams, { replace: true });
+  }
+
   if (visitQuery.isError) {
     return (
       <div className="page">
@@ -402,21 +413,19 @@ export function VisitCardPage() {
               {completedEditNotice ? <Alert type="info" showIcon message={completedEditNotice} className="form-alert" /> : null}
               <Tabs
                 activeKey={activeTab}
-                onChange={(key) => {
-                  const nextSearchParams = new URLSearchParams(searchParams);
-                  if (key === defaultTab) {
-                    nextSearchParams.delete('tab');
-                  } else {
-                    nextSearchParams.set('tab', key);
-                  }
-                  nextSearchParams.delete('new');
-                  setSearchParams(nextSearchParams, { replace: true });
-                }}
+                onChange={selectVisitTab}
                 items={[
                   {
                     key: 'exam',
                     label: 'Лист осмотра',
-                    children: <VisitExamTab visit={visit} canManage={canManage} locked={Boolean(locked)} />,
+                    children: (
+                      <VisitExamTab
+                        visit={visit}
+                        canManage={canManage}
+                        locked={Boolean(locked)}
+                        onOpenRecommendations={() => selectVisitTab('recommendation')}
+                      />
+                    ),
                   },
                   {
                     key: 'vaccination',

@@ -1,3 +1,4 @@
+import { CheckCircleOutlined, CloseOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Alert, App, Button, Form, Input, Select, Space, Typography } from 'antd';
@@ -32,9 +33,10 @@ type VisitExamTabProps = {
   visit: Visit;
   canManage: boolean;
   locked: boolean;
+  onOpenRecommendations?: () => void;
 };
 
-export function VisitExamTab({ visit, canManage, locked }: VisitExamTabProps) {
+export function VisitExamTab({ visit, canManage, locked, onOpenRecommendations }: VisitExamTabProps) {
   const queryClient = useQueryClient();
   const { message, modal } = App.useApp();
   const { control, getValues, handleSubmit, reset, watch } = useForm<ExamInput, unknown, ExamValues>({
@@ -43,9 +45,14 @@ export function VisitExamTab({ visit, canManage, locked }: VisitExamTabProps) {
   });
   const disabled = locked || !canManage;
   const draftKey = `temichevvet:visit-exam-draft:${visit.id}`;
+  const assistantSuppressionKey = `temichevvet:visit-exam-assistant-suppressed:${visit.id}`;
   const saveChainRef = useRef<Promise<unknown>>(Promise.resolve());
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const assistantTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [autoSaveState, setAutoSaveState] = useState<'idle' | 'local' | 'saving' | 'saved'>('idle');
+  const [assistantVisible, setAssistantVisible] = useState(false);
+  const [assistantManuallyHidden, setAssistantManuallyHidden] = useState(false);
+  const [assistantSuppressed, setAssistantSuppressed] = useState(() => readAssistantSuppression(assistantSuppressionKey));
   const mutation = useMutation({
     mutationFn: (request: { values: ExamValues; silent: boolean; snapshot: string }) => {
       const run = saveChainRef.current.then(async () => {
@@ -117,6 +124,12 @@ export function VisitExamTab({ visit, canManage, locked }: VisitExamTabProps) {
   }, [visit.id]);
 
   useEffect(() => {
+    setAssistantVisible(false);
+    setAssistantManuallyHidden(false);
+    setAssistantSuppressed(readAssistantSuppression(assistantSuppressionKey));
+  }, [assistantSuppressionKey]);
+
+  useEffect(() => {
     if (disabled) return;
     const subscription = watch((values) => {
       const snapshot = JSON.stringify(values);
@@ -135,6 +148,31 @@ export function VisitExamTab({ visit, canManage, locked }: VisitExamTabProps) {
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     };
   }, [disabled, draftKey, watch]);
+
+  const watchedExamValues = watch();
+  const assistantReview = buildVisitExamAssistantReview(watchedExamValues, visit);
+  const assistantReviewSignature = JSON.stringify({
+    values: watchedExamValues,
+    recommendationUpdatedAt: visit.recommendation?.updatedAt ?? null,
+    recommendationTreatmentPlan: visit.recommendation?.treatmentPlan ?? '',
+    recommendationCareNotes: visit.recommendation?.careNotes ?? '',
+  });
+
+  useEffect(() => {
+    if (assistantTimerRef.current) clearTimeout(assistantTimerRef.current);
+    setAssistantVisible(false);
+    setAssistantManuallyHidden(false);
+
+    if (disabled || assistantSuppressed || assistantReview.issues.length === 0) return;
+
+    assistantTimerRef.current = setTimeout(() => {
+      setAssistantVisible(true);
+    }, 1400);
+
+    return () => {
+      if (assistantTimerRef.current) clearTimeout(assistantTimerRef.current);
+    };
+  }, [assistantReviewSignature, assistantSuppressed, disabled]);
 
   function submit(values: ExamValues) {
     const effectiveVisitType = values.visitType ?? visit.visitType;
@@ -174,7 +212,7 @@ export function VisitExamTab({ visit, canManage, locked }: VisitExamTabProps) {
           name="temperatureC"
           render={({ field, fieldState }) => (
             <Form.Item label="Температура, °C" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
-              <Input inputMode="decimal" {...field} />
+              <Input id="visit-exam-temperature" inputMode="decimal" {...field} />
             </Form.Item>
           )}
         />
@@ -311,6 +349,70 @@ export function VisitExamTab({ visit, canManage, locked }: VisitExamTabProps) {
           </Form.Item>
         )}
       />
+      {assistantVisible && !assistantSuppressed && assistantReview.issues.length ? (
+        <section className="visit-exam-assistant" aria-live="polite" aria-label="Проверка заполнения помощником">
+          <div className="visit-exam-assistant-header">
+            <div>
+              <Typography.Text strong>Помощник проверил заполнение</Typography.Text>
+              <div className="visit-exam-assistant-count">{formatAttentionCount(assistantReview.issues.length)}</div>
+            </div>
+            <div className="visit-exam-assistant-controls">
+              <Typography.Text type="secondary">Можно пропустить — сохранение осмотра доступно</Typography.Text>
+              <Button
+                type="text"
+                size="small"
+                icon={<CloseOutlined />}
+                onClick={() => {
+                  setAssistantVisible(false);
+                  setAssistantManuallyHidden(true);
+                }}
+              >
+                Скрыть
+              </Button>
+              <Button
+                type="link"
+                size="small"
+                onClick={() => {
+                  writeAssistantSuppression(assistantSuppressionKey);
+                  setAssistantVisible(false);
+                  setAssistantSuppressed(true);
+                }}
+              >
+                Не показывать до конца приёма
+              </Button>
+            </div>
+          </div>
+          <div className="visit-exam-assistant-list">
+            {assistantReview.issues.map((issue) => (
+              <div className="visit-exam-assistant-row" key={issue.key}>
+                <ExclamationCircleOutlined className="visit-exam-assistant-warning" />
+                <span>{issue.label}</span>
+                <Button
+                  size="small"
+                  onClick={() => {
+                    if (issue.key === 'temperature') {
+                      focusVisitExamField('visit-exam-temperature');
+                    } else {
+                      onOpenRecommendations?.();
+                    }
+                  }}
+                >
+                  {issue.actionLabel}
+                </Button>
+              </div>
+            ))}
+            {assistantReview.coreCompleted ? (
+              <div className="visit-exam-assistant-row visit-exam-assistant-row-success">
+                <CheckCircleOutlined />
+                <span>Основные данные пациента заполнены</span>
+              </div>
+            ) : null}
+          </div>
+          <Typography.Text type="secondary" className="visit-exam-assistant-note">
+            Помощник ничего не исправляет и не сохраняет сам.
+          </Typography.Text>
+        </section>
+      ) : null}
       <Space>
         <Button type="primary" loading={mutation.isPending} onClick={handleSubmit(submit)} disabled={disabled}>
           Сохранить осмотр
@@ -319,6 +421,11 @@ export function VisitExamTab({ visit, canManage, locked }: VisitExamTabProps) {
           Сбросить
         </Button>
         <Typography.Text type="secondary">{autoSaveLabel(autoSaveState)}</Typography.Text>
+        {!assistantVisible && !assistantSuppressed && assistantManuallyHidden && assistantReview.issues.length ? (
+          <Button type="link" size="small" onClick={() => setAssistantVisible(true)}>
+            Показать подсказки ({assistantReview.issues.length})
+          </Button>
+        ) : null}
       </Space>
     </Form>
   );
@@ -437,5 +544,68 @@ function clearDraftIfCurrent(key: string, snapshot: string) {
     } catch {
       // A saved CRM copy already exists; an inaccessible local draft is harmless.
     }
+  }
+}
+
+type VisitExamAssistantIssue = {
+  key: 'temperature' | 'recommendation';
+  label: string;
+  actionLabel: string;
+};
+
+function buildVisitExamAssistantReview(values: ExamInput, visit: Visit): {
+  issues: VisitExamAssistantIssue[];
+  coreCompleted: boolean;
+} {
+  const issues: VisitExamAssistantIssue[] = [];
+  if (!hasText(values.temperatureC)) {
+    issues.push({ key: 'temperature', label: 'Не указана температура', actionLabel: 'Заполнить' });
+  }
+
+  const recommendationText = [visit.recommendation?.treatmentPlan, visit.recommendation?.careNotes]
+    .filter(Boolean)
+    .join(' ');
+  if (!/(?:повторн|контрол|динамик)/iu.test(recommendationText)) {
+    issues.push({
+      key: 'recommendation',
+      label: 'В рекомендациях не указан повторный контроль',
+      actionLabel: 'Перейти',
+    });
+  }
+
+  const coreCompleted = [values.purpose, values.anamnesis, values.examination, values.symptoms, values.manipulations]
+    .every(hasText);
+  return { issues, coreCompleted };
+}
+
+function hasText(value: unknown) {
+  return typeof value === 'string' ? value.trim().length > 0 : value !== null && value !== undefined && value !== '';
+}
+
+function formatAttentionCount(count: number) {
+  if (count === 1) return '1 пункт требует внимания';
+  if (count >= 2 && count <= 4) return `${count} пункта требуют внимания`;
+  return `${count} пунктов требуют внимания`;
+}
+
+function focusVisitExamField(id: string) {
+  const element = document.getElementById(id);
+  element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  window.setTimeout(() => element?.focus(), 250);
+}
+
+function readAssistantSuppression(key: string) {
+  try {
+    return localStorage.getItem(key) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeAssistantSuppression(key: string) {
+  try {
+    localStorage.setItem(key, '1');
+  } catch {
+    // Suppression still applies until the current page is closed.
   }
 }
