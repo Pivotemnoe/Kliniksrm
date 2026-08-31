@@ -2720,6 +2720,33 @@ body {
   margin-top: 16px;
 }
 
+@media (max-width: 1500px) {
+  .hospital-card-page .page-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .hospital-card-page .page-header > div:first-child {
+    width: 100%;
+  }
+
+  .hospital-card-page .page-header h2 {
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+
+  .hospital-card-page .page-header-extra,
+  .hospital-card-page .page-header-extra > .ant-space {
+    width: 100%;
+    min-width: 0;
+    justify-content: flex-start;
+  }
+
+  .hospital-card-page .page-header-extra > .ant-space {
+    flex-wrap: wrap;
+  }
+}
+
 .hospital-treatment-overview-alert {
   margin-bottom: 16px;
 }
