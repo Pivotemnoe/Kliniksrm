@@ -25,9 +25,10 @@ type VisitRecommendationTabProps = {
   canManage: boolean;
   locked: boolean;
   organization?: OrganizationSettings | null;
+  onDraftChange?: (values: VisitRecommendationInput) => void;
 };
 
-export function VisitRecommendationTab({ visit, canManage, locked, organization }: VisitRecommendationTabProps) {
+export function VisitRecommendationTab({ visit, canManage, locked, organization, onDraftChange }: VisitRecommendationTabProps) {
   const queryClient = useQueryClient();
   const { control, getValues, handleSubmit, reset } = useForm<RecommendationInput, unknown, RecommendationValues>({
     resolver: zodResolver(recommendationSchema),
@@ -50,6 +51,16 @@ export function VisitRecommendationTab({ visit, canManage, locked, organization 
     mutation.mutate(values);
   }
 
+  function updateDraft(field: keyof VisitRecommendationInput, value: string) {
+    onDraftChange?.({ ...getValues(), [field]: value });
+  }
+
+  function resetToSaved() {
+    const values = getDefaultValues(visit);
+    reset(values);
+    onDraftChange?.(values);
+  }
+
   return (
     <Form layout="vertical" className="visit-tab-form">
       {locked ? <Alert type="info" showIcon message="Редактирование закрыто: отменённый приём нельзя менять, завершённый доступен директору или в течение 60 минут после завершения." className="form-alert" /> : null}
@@ -68,6 +79,10 @@ export function VisitRecommendationTab({ visit, canManage, locked, organization 
               species={species}
               diagnoses={diagnoses}
               {...field}
+              onChange={(value) => {
+                field.onChange(value);
+                updateDraft('treatmentPlan', value);
+              }}
             />
           </Form.Item>
         )}
@@ -85,6 +100,10 @@ export function VisitRecommendationTab({ visit, canManage, locked, organization 
               species={species}
               diagnoses={diagnoses}
               {...field}
+              onChange={(value) => {
+                field.onChange(value);
+                updateDraft('careNotes', value);
+              }}
             />
           </Form.Item>
         )}
@@ -93,7 +112,7 @@ export function VisitRecommendationTab({ visit, canManage, locked, organization 
         <Button type="primary" loading={mutation.isPending} onClick={handleSubmit(submit)} disabled={disabled}>
           Сохранить рекомендации
         </Button>
-        <Button onClick={() => reset(getDefaultValues(visit))} disabled={disabled}>
+        <Button onClick={resetToSaved} disabled={disabled}>
           Сбросить
         </Button>
         <Button icon={<PrinterOutlined />} onClick={() => printVisitRecommendation(visit, recommendationSchema.parse(getValues()), organization)}>

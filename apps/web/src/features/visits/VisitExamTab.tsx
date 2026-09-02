@@ -12,7 +12,7 @@ import { updateAnimal } from '../animals/animals.api';
 import { MedicalTextArea } from './MedicalTextArea';
 import { VisitDiagnosesTab } from './VisitDiagnosesTab';
 import { updateVisit, upsertVisitExam } from './visits.api';
-import { Visit, VisitType, visitTypeLabels } from './types';
+import { Visit, VisitRecommendationInput, VisitType, visitTypeLabels } from './types';
 
 const examSchema = z.object({
   weightKg: optionalNumber(0, 300),
@@ -33,10 +33,11 @@ type VisitExamTabProps = {
   visit: Visit;
   canManage: boolean;
   locked: boolean;
+  recommendationDraft?: VisitRecommendationInput;
   onOpenRecommendations?: () => void;
 };
 
-export function VisitExamTab({ visit, canManage, locked, onOpenRecommendations }: VisitExamTabProps) {
+export function VisitExamTab({ visit, canManage, locked, recommendationDraft, onOpenRecommendations }: VisitExamTabProps) {
   const queryClient = useQueryClient();
   const { message, modal } = App.useApp();
   const { control, getValues, handleSubmit, reset, watch } = useForm<ExamInput, unknown, ExamValues>({
@@ -150,12 +151,12 @@ export function VisitExamTab({ visit, canManage, locked, onOpenRecommendations }
   }, [disabled, draftKey, watch]);
 
   const watchedExamValues = watch();
-  const assistantReview = buildVisitExamAssistantReview(watchedExamValues, visit);
+  const assistantReview = buildVisitExamAssistantReview(watchedExamValues, visit, recommendationDraft);
+  const currentRecommendation = recommendationDraft ?? visit.recommendation;
   const assistantReviewSignature = JSON.stringify({
     values: watchedExamValues,
-    recommendationUpdatedAt: visit.recommendation?.updatedAt ?? null,
-    recommendationTreatmentPlan: visit.recommendation?.treatmentPlan ?? '',
-    recommendationCareNotes: visit.recommendation?.careNotes ?? '',
+    recommendationTreatmentPlan: currentRecommendation?.treatmentPlan ?? '',
+    recommendationCareNotes: currentRecommendation?.careNotes ?? '',
   });
 
   useEffect(() => {
@@ -553,7 +554,11 @@ type VisitExamAssistantIssue = {
   actionLabel: string;
 };
 
-function buildVisitExamAssistantReview(values: ExamInput, visit: Visit): {
+function buildVisitExamAssistantReview(
+  values: ExamInput,
+  visit: Visit,
+  recommendationDraft?: VisitRecommendationInput,
+): {
   issues: VisitExamAssistantIssue[];
   coreCompleted: boolean;
 } {
@@ -562,13 +567,11 @@ function buildVisitExamAssistantReview(values: ExamInput, visit: Visit): {
     issues.push({ key: 'temperature', label: 'Не указана температура', actionLabel: 'Заполнить' });
   }
 
-  const recommendationText = [visit.recommendation?.treatmentPlan, visit.recommendation?.careNotes]
-    .filter(Boolean)
-    .join(' ');
-  if (!/(?:повторн|контрол|динамик)/iu.test(recommendationText)) {
+  const currentRecommendation = recommendationDraft ?? visit.recommendation;
+  if (!hasText(currentRecommendation?.careNotes)) {
     issues.push({
       key: 'recommendation',
-      label: 'В рекомендациях не указан повторный контроль',
+      label: 'Не заполнены рекомендации владельцу',
       actionLabel: 'Перейти',
     });
   }

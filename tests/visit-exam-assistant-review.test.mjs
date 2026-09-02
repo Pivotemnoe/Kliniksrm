@@ -4,9 +4,10 @@ import test from 'node:test';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('помощник осмотра появляется после паузы и не блокирует сохранение', async () => {
-  const [exam, card, styles] = await Promise.all([
+test('помощник осмотра появляется после паузы, следит за текущими полями и не блокирует сохранение', async () => {
+  const [exam, recommendation, card, styles] = await Promise.all([
     read('apps/web/src/features/visits/VisitExamTab.tsx'),
+    read('apps/web/src/features/visits/VisitRecommendationTab.tsx'),
     read('apps/web/src/features/visits/VisitCardPage.tsx'),
     read('apps/web/src/styles.css'),
   ]);
@@ -20,6 +21,13 @@ test('помощник осмотра появляется после паузы
   assert.match(exam, /Помощник ничего не исправляет и не сохраняет сам/);
   assert.match(exam, /Сохранить осмотр/);
   assert.doesNotMatch(exam, /disabled=\{disabled \|\| assistantReview/);
+  assert.match(exam, /recommendationDraft \?\? visit\.recommendation/);
+  assert.match(exam, /!hasText\(currentRecommendation\?\.careNotes\)/);
+  assert.doesNotMatch(exam, /повторн\|контрол\|динамик/);
+  assert.match(recommendation, /updateDraft\('careNotes', value\)/);
+  assert.match(recommendation, /onDraftChange\?\.\(values\)/);
+  assert.match(card, /recommendationDraft=\{recommendationDraft\?\.visitId === visit\.id/);
+  assert.match(card, /onDraftChange=\{\(values\) => setRecommendationDraft/);
   assert.match(card, /onOpenRecommendations=\{\(\) => selectVisitTab\('recommendation'\)\}/);
   assert.match(styles, /\.visit-exam-assistant \{/);
   assert.match(styles, /@media \(max-width: 900px\)/);

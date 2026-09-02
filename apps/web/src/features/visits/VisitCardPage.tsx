@@ -24,7 +24,7 @@ import { VisitLaboratoryTab } from './VisitLaboratoryTab';
 import { VisitRecommendationTab } from './VisitRecommendationTab';
 import { VisitServicesTab } from './VisitServicesTab';
 import { cancelVisit, completeVisit, getVisit, restoreVisit, startVisit } from './visits.api';
-import { Visit, visitStatusColors, visitStatusLabels, visitTypeLabels } from './types';
+import { Visit, VisitRecommendationInput, visitStatusColors, visitStatusLabels, visitTypeLabels } from './types';
 import { printVisitRecommendation, printVisitSheet } from './visitPrint';
 
 export function VisitCardPage() {
@@ -46,6 +46,7 @@ export function VisitCardPage() {
   const [hospitalBoxId, setHospitalBoxId] = useState<string>();
   const [restoreModalOpen, setRestoreModalOpen] = useState(false);
   const [restoreReason, setRestoreReason] = useState('');
+  const [recommendationDraft, setRecommendationDraft] = useState<{ visitId: string; values: VisitRecommendationInput }>();
   const visitQuery = useQuery({
     queryKey: ['visits', visitId],
     queryFn: () => getVisit(visitId!),
@@ -423,6 +424,7 @@ export function VisitCardPage() {
                         visit={visit}
                         canManage={canManage}
                         locked={Boolean(locked)}
+                        recommendationDraft={recommendationDraft?.visitId === visit.id ? recommendationDraft.values : undefined}
                         onOpenRecommendations={() => selectVisitTab('recommendation')}
                       />
                     ),
@@ -447,7 +449,15 @@ export function VisitCardPage() {
                 {
                   key: 'recommendation',
                   label: 'Рекомендации',
-                  children: <VisitRecommendationTab visit={visit} canManage={canManage} locked={Boolean(locked)} organization={organizationQuery.data} />,
+                  children: (
+                    <VisitRecommendationTab
+                      visit={visit}
+                      canManage={canManage}
+                      locked={Boolean(locked)}
+                      organization={organizationQuery.data}
+                      onDraftChange={(values) => setRecommendationDraft({ visitId: visit.id, values })}
+                    />
+                  ),
                 },
                 {
                   key: 'services',
