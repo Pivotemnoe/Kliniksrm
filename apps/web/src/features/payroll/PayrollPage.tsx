@@ -1,6 +1,6 @@
 import { CheckOutlined, CalculatorOutlined, EditOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, DatePicker, Descriptions, Form, Input, Modal, Select, Space, Switch, Table, Tabs, Tag, Typography } from 'antd';
+import { Alert, App, Button, DatePicker, Descriptions, Form, Input, Modal, Select, Space, Switch, Table, Tabs, Tag, Typography } from 'antd';
 import { InputNumber } from '../../shared/ui/DecimalInputNumber';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { Dayjs } from 'dayjs';
@@ -21,6 +21,7 @@ import {
   listPayrollPeriods,
   recalculatePayrollPeriod,
   savePayrollProfile,
+  setPayrollUndistributedAmount,
 } from './payroll.api';
 import { PayrollAdjustment, PayrollEmployee, PayrollEntry, PayrollPeriod, PayrollProfileInput } from './types';
 
@@ -77,6 +78,7 @@ export function PayrollPage() {
     { title: 'Период', dataIndex: 'title', key: 'title' },
     { title: 'Даты', key: 'dates', render: (_, row) => `${formatDate(row.startsAt)} — ${formatDate(row.endsAt)}` },
     { title: 'Сотрудников', key: 'count', render: (_, row) => row._count?.entries ?? 0 },
+    { title: 'Без распределения', dataIndex: 'undistributedAmount', key: 'undistributedAmount', render: (value) => formatMoney(value ?? 0) },
     { title: 'Итого', dataIndex: 'totalAmount', key: 'totalAmount', render: formatMoney },
     { title: 'Статус', dataIndex: 'status', key: 'status', render: (value) => value === 'APPROVED' ? <Tag color="green">Утверждён</Tag> : <Tag color="blue">Черновик</Tag> },
     {
@@ -96,18 +98,18 @@ export function PayrollPage() {
     <div className="page payroll-page">
       <PageHeader
         title="Зарплата"
-        description="Прозрачный расчёт по сменам и фактически оплаченным услугам и товарам. Утверждённые периоды не изменяются."
+        description="Прозрачный расчёт по сменам и фактически оплаченным услугам и товарам. Расчёт можно вести по сотрудникам или одной общей суммой за месяц. Утверждённые периоды не изменяются, кроме аудируемой корректировки общей суммы."
         extra={canManage ? <Button type="primary" icon={<PlusOutlined />} onClick={() => setPeriodOpen(true)}>Новый расчёт</Button> : null}
       />
       <div className="list-panel">
         <Tabs items={[
-          { key: 'periods', label: 'Расчётные периоды', children: <Table className="responsive-data-table" rowKey="id" columns={periodColumns} dataSource={periodsQuery.data ?? []} loading={periodsQuery.isLoading} pagination={false} scroll={{ x: 980 }} /> },
+          { key: 'periods', label: 'Расчётные периоды', children: <Table className="responsive-data-table" rowKey="id" columns={periodColumns} dataSource={periodsQuery.data ?? []} loading={periodsQuery.isLoading} pagination={false} scroll={{ x: 1120 }} /> },
           { key: 'profiles', label: 'Правила начисления', children: <Table className="responsive-data-table" rowKey="id" columns={employeeColumns} dataSource={resourcesQuery.data?.employees ?? []} loading={resourcesQuery.isLoading} pagination={false} scroll={{ x: 900 }} /> },
         ]} />
       </div>
       <ProfileModal employee={profileEmployee} resources={resourcesQuery.data} onClose={() => setProfileEmployee(null)} onSaved={refresh} />
       <CreatePeriodModal open={periodOpen} onClose={() => setPeriodOpen(false)} onSaved={refresh} />
-      <PeriodDetailsModal period={periodQuery.data} loading={periodQuery.isLoading} employees={resourcesQuery.data?.employees ?? []} canManage={canManage} onClose={() => setSelectedPeriodId(null)} onChanged={refresh} />
+      <PeriodDetailsModal period={periodQuery.data} loading={periodQuery.isLoading} employees={resourcesQuery.data?.employees ?? []} canManage={canManage} canApprove={canApprove} onClose={() => setSelectedPeriodId(null)} onChanged={refresh} />
     </div>
   );
 }
@@ -157,11 +159,13 @@ function CreatePeriodModal({ open, onClose, onSaved }: { open: boolean; onClose:
   return <Modal open={open} title="Новый расчётный период" onCancel={onClose} okText="Рассчитать" cancelText="Отмена" confirmLoading={mutation.isPending} onOk={() => form.submit()} destroyOnHidden><Form form={form} layout="vertical" initialValues={{ title: `Зарплата за ${dayjs().format('MM.YYYY')}`, range: [dayjs().startOf('month'), dayjs().endOf('month')] }} onFinish={(values) => mutation.mutate({ title: values.title, startsAt: values.range[0].startOf('day').toISOString(), endsAt: values.range[1].endOf('day').toISOString() })}><Form.Item name="title" label="Название" rules={[{ required: true }]}><Input /></Form.Item><Form.Item name="range" label="Период" rules={[{ required: true }]}><RangePicker format="DD.MM.YYYY" /></Form.Item><Typography.Text type="secondary">Суммы считаются с фактически оплаченной доли счетов. Черновик можно пересчитать до утверждения директором.</Typography.Text></Form></Modal>;
 }
 
-function PeriodDetailsModal({ period, loading, employees, canManage, onClose, onChanged }: { period?: PayrollPeriod; loading: boolean; employees: PayrollEmployee[]; canManage: boolean; onClose: () => void; onChanged: () => Promise<void> }) {
+function PeriodDetailsModal({ period, loading, employees, canManage, canApprove, onClose, onChanged }: { period?: PayrollPeriod; loading: boolean; employees: PayrollEmployee[]; canManage: boolean; canApprove: boolean; onClose: () => void; onChanged: () => Promise<void> }) {
   const { message } = App.useApp();
   const [salaryOpen, setSalaryOpen] = useState(false);
+  const [undistributedOpen, setUndistributedOpen] = useState(false);
   const [adjustmentForm] = Form.useForm<{ employeeId: string; amount: number; reason: string }>();
   const [salaryForm] = Form.useForm<{ employeeId: string; amount: number; accruedAt: Dayjs; reason: string }>();
+  const [undistributedForm] = Form.useForm<{ amount: number; reason: string }>();
   const adjustmentMutation = useMutation({
     mutationFn: (input: { employeeId: string; amount: number; reason: string }) => addPayrollAdjustment(period!.id, input),
     onSuccess: async () => {
@@ -181,6 +185,15 @@ function PeriodDetailsModal({ period, loading, employees, canManage, onClose, on
     },
     onError: (error) => message.error(getErrorMessage(error)),
   });
+  const undistributedMutation = useMutation({
+    mutationFn: (input: { amount: number; reason: string }) => setPayrollUndistributedAmount(period!.id, input),
+    onSuccess: async () => {
+      await onChanged();
+      setUndistributedOpen(false);
+      message.success('Общая сумма зарплаты учтена');
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
 
   useEffect(() => {
     if (!salaryOpen || !period) return;
@@ -192,6 +205,14 @@ function PeriodDetailsModal({ period, loading, employees, canManage, onClose, on
       reason: 'Зарплата за рабочий день',
     });
   }, [period, salaryForm, salaryOpen]);
+
+  useEffect(() => {
+    if (!undistributedOpen || !period) return;
+    undistributedForm.setFieldsValue({
+      amount: Number(period.undistributedAmount ?? 0),
+      reason: period.undistributedReason ?? 'Общая зарплата за месяц без распределения по сотрудникам',
+    });
+  }, [period, undistributedForm, undistributedOpen]);
 
   const entryColumns: ColumnsType<PayrollEntry> = [
     { title: 'Сотрудник', dataIndex: 'employeeName', key: 'employeeName', fixed: 'left' },
@@ -217,7 +238,13 @@ function PeriodDetailsModal({ period, loading, employees, canManage, onClose, on
       <Modal open={Boolean(period) || loading} title={period?.title ?? 'Расчёт зарплаты'} onCancel={onClose} footer={<Button onClick={onClose}>Закрыть</Button>} width={1240} loading={loading}>
         {period ? (
           <>
-            <Descriptions column={{ xs: 1, sm: 2, lg: 4 }} size="small" bordered items={[{ key: 'dates', label: 'Период', children: `${formatDate(period.startsAt)} — ${formatDate(period.endsAt)}` }, { key: 'status', label: 'Статус', children: period.status === 'APPROVED' ? 'Утверждён' : 'Черновик' }, { key: 'total', label: 'Итого', children: formatMoney(period.totalAmount) }, { key: 'approved', label: 'Утвердил', children: period.approvedBy?.fullName ?? '—' }]} />
+            <Descriptions column={{ xs: 1, sm: 2, lg: 5 }} size="small" bordered items={[{ key: 'dates', label: 'Период', children: `${formatDate(period.startsAt)} — ${formatDate(period.endsAt)}` }, { key: 'status', label: 'Статус', children: period.status === 'APPROVED' ? 'Утверждён' : 'Черновик' }, { key: 'undistributed', label: 'Без распределения', children: formatMoney(period.undistributedAmount ?? 0) }, { key: 'total', label: 'Итого', children: formatMoney(period.totalAmount) }, { key: 'approved', label: 'Утвердил', children: period.approvedBy?.fullName ?? '—' }]} />
+            {canApprove ? (
+              <Space wrap style={{ marginTop: 16 }}>
+                <Button icon={<CalculatorOutlined />} onClick={() => setUndistributedOpen(true)}>Внести общую сумму без распределения</Button>
+                <Typography.Text type="secondary">Уже выданную через закрытие дня зарплату сюда повторно не включайте.</Typography.Text>
+              </Space>
+            ) : null}
             {period.status === 'DRAFT' && canManage ? (
               <Space wrap style={{ marginTop: 16 }}>
                 <Button type="primary" icon={<PlusOutlined />} onClick={() => setSalaryOpen(true)}>Внести зарплату</Button>
@@ -239,6 +266,33 @@ function PeriodDetailsModal({ period, loading, employees, canManage, onClose, on
             ) : null}
           </>
         ) : null}
+      </Modal>
+
+      <Modal
+        open={undistributedOpen && Boolean(period)}
+        title="Общая сумма зарплаты без распределения"
+        okText="Сохранить сумму"
+        cancelText="Отмена"
+        confirmLoading={undistributedMutation.isPending}
+        onCancel={() => setUndistributedOpen(false)}
+        onOk={() => undistributedForm.submit()}
+        destroyOnHidden
+      >
+        <Alert
+          type="warning"
+          showIcon
+          message="Укажите только недостающую сумму"
+          description="Суммы, уже внесённые как «Зарплата, выданная за день», уже уменьшили прибыль. Эта сумма не списывает деньги из кассы. Изменение утверждённого периода сохраняется в аудите."
+          style={{ marginBottom: 16 }}
+        />
+        <Form form={undistributedForm} layout="vertical" onFinish={(values) => undistributedMutation.mutate(values)}>
+          <Form.Item name="amount" label="Сумма к доначислению" rules={[{ required: true, message: 'Укажите сумму' }]}>
+            <InputNumber min={0} precision={2} addonAfter="₽" style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item name="reason" label="Пояснение" rules={[{ required: true, min: 2, message: 'Укажите причину' }]}>
+            <Input.TextArea rows={3} maxLength={500} />
+          </Form.Item>
+        </Form>
       </Modal>
 
       <Modal

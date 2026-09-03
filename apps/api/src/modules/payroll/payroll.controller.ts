@@ -6,6 +6,7 @@ import { RequirePermissions } from '../auth/decorators/require-permissions.decor
 import { CreatePayrollAdjustmentDto } from './dto/create-payroll-adjustment.dto';
 import { CreatePayrollManualAccrualDto } from './dto/create-payroll-manual-accrual.dto';
 import { CreatePayrollPeriodDto } from './dto/create-payroll-period.dto';
+import { SetPayrollUndistributedAmountDto } from './dto/set-payroll-undistributed-amount.dto';
 import { UpsertPayrollProfileDto } from './dto/upsert-payroll-profile.dto';
 import { PayrollService } from './payroll.service';
 
@@ -80,6 +81,17 @@ export class PayrollController {
     @CurrentEmployee() actor: AuthEmployee,
   ) {
     return this.payrollService.addManualAccrual(periodId, dto, actor.id);
+  }
+
+  @Post('periods/:periodId/undistributed-amount')
+  @RequirePermissions('payroll.approve')
+  @ApiOkResponse({ description: 'Undistributed salary amount saved with an audit trail.' })
+  setUndistributedAmount(
+    @Param('periodId') periodId: string,
+    @Body() dto: SetPayrollUndistributedAmountDto,
+    @CurrentEmployee() actor: AuthEmployee,
+  ) {
+    return this.payrollService.setUndistributedAmount(periodId, dto, actor.id);
   }
 
   @Post('periods/:periodId/approve')

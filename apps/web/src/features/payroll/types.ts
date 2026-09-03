@@ -36,6 +36,8 @@ export type PayrollPeriod = {
   endsAt: string;
   status: PayrollPeriodStatus;
   totalAmount: DecimalValue;
+  undistributedAmount: DecimalValue;
+  undistributedReason: string | null;
   approvedAt: string | null;
   createdBy?: { id: string; fullName: string } | null;
   approvedBy?: { id: string; fullName: string } | null;

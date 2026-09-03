@@ -53,6 +53,28 @@ test('ручная зарплата отделена от премий в обы
   assert.equal(entry.totalAmount.toString(), '3400');
 });
 
+test('общая зарплата без распределения добавляется к расчёту и не дублирует кассу', async () => {
+  const { Prisma } = require('@prisma/client');
+  const { calculatePayrollPeriodTotal } = require('../apps/api/dist/modules/payroll/payroll.service.js');
+  const decimal = (value) => new Prisma.Decimal(value);
+  assert.equal(calculatePayrollPeriodTotal([{ totalAmount: decimal(1000) }], 2500).toString(), '3500');
+
+  const [schema, migration, controller, service, page] = await Promise.all([
+    read('prisma/schema.prisma'),
+    read('prisma/migrations/20260903000100_payroll_undistributed_amount/migration.sql'),
+    read('apps/api/src/modules/payroll/payroll.controller.ts'),
+    read('apps/api/src/modules/payroll/payroll.service.ts'),
+    read('apps/web/src/features/payroll/PayrollPage.tsx'),
+  ]);
+  assert.match(schema, /undistributedAmount\s+Decimal\s+@default\(0\)/);
+  assert.match(migration, /ADD COLUMN "undistributedAmount"/);
+  assert.doesNotMatch(migration, /DROP|TRUNCATE|DELETE FROM/i);
+  assert.match(controller, /undistributed-amount/);
+  assert.match(service, /payroll\.period\.undistributed_amount_correct/);
+  assert.match(page, /Внести общую сумму без распределения/);
+  assert.match(page, /сюда повторно не включайте/);
+});
+
 test('финансовые массовые действия атомарны и видимы в интерфейсе', async () => {
   const [service, controller, page] = await Promise.all([
     read('apps/api/src/modules/billing/billing.service.ts'),

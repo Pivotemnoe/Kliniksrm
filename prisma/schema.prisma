@@ -2000,22 +2000,24 @@ model PayrollProductRule {
 }
 
 model PayrollPeriod {
-  id              String              @id @default(uuid())
-  title           String
-  startsAt        DateTime
-  endsAt          DateTime
-  status          PayrollPeriodStatus @default(DRAFT)
-  totalAmount     Decimal             @default(0) @db.Decimal(12, 2)
-  createdById     String?
-  createdBy       Employee?           @relation("PayrollPeriodCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  approvedById    String?
-  approvedBy      Employee?           @relation("PayrollPeriodApprover", fields: [approvedById], references: [id], onDelete: SetNull)
-  approvedAt      DateTime?
-  entries         PayrollEntry[]
-  adjustments     PayrollAdjustment[]
-  businessEntries BusinessEntry[]
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
+  id                  String              @id @default(uuid())
+  title               String
+  startsAt            DateTime
+  endsAt              DateTime
+  status              PayrollPeriodStatus @default(DRAFT)
+  totalAmount         Decimal             @default(0) @db.Decimal(12, 2)
+  undistributedAmount Decimal             @default(0) @db.Decimal(12, 2)
+  undistributedReason String?
+  createdById         String?
+  createdBy           Employee?           @relation("PayrollPeriodCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  approvedById        String?
+  approvedBy          Employee?           @relation("PayrollPeriodApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt          DateTime?
+  entries             PayrollEntry[]
+  adjustments         PayrollAdjustment[]
+  businessEntries     BusinessEntry[]
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
 
   @@index([status, startsAt])
   @@index([startsAt, endsAt])

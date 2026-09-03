@@ -33,6 +33,10 @@ export function addPayrollManualAccrual(periodId: string, input: { employeeId: s
   return apiRequest<PayrollPeriod>(`/v1/payroll/periods/${periodId}/manual-accruals`, { method: 'POST', body: input });
 }
 
+export function setPayrollUndistributedAmount(periodId: string, input: { amount: number; reason: string }) {
+  return apiRequest<PayrollPeriod>(`/v1/payroll/periods/${periodId}/undistributed-amount`, { method: 'POST', body: input });
+}
+
 export function approvePayrollPeriod(periodId: string) {
   return apiRequest<PayrollPeriod>(`/v1/payroll/periods/${periodId}/approve`, { method: 'POST' });
 }

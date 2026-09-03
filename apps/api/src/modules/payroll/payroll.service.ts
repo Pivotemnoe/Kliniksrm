@@ -5,6 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CreatePayrollAdjustmentDto } from './dto/create-payroll-adjustment.dto';
 import { CreatePayrollManualAccrualDto } from './dto/create-payroll-manual-accrual.dto';
 import { CreatePayrollPeriodDto } from './dto/create-payroll-period.dto';
+import { SetPayrollUndistributedAmountDto } from './dto/set-payroll-undistributed-amount.dto';
 import { UpsertPayrollProfileDto } from './dto/upsert-payroll-profile.dto';
 
 type PayrollSourceBill = {
@@ -185,7 +186,7 @@ export class PayrollService {
       }
       const period = await tx.payrollPeriod.findUniqueOrThrow({ where: { id: periodId } });
       const entries = await this.calculateEntries(period.id, period.startsAt, period.endsAt, tx);
-      const totalAmount = entries.reduce((total, entry) => total.plus(entry.totalAmount), decimal(0));
+      const totalAmount = calculatePayrollPeriodTotal(entries, period.undistributedAmount);
       await tx.payrollEntry.deleteMany({ where: { periodId } });
       for (const entry of entries) {
         await tx.payrollEntry.create({ data: { periodId, ...entry } });
@@ -264,7 +265,7 @@ export class PayrollService {
         },
       });
       const entries = await this.calculateEntries(period.id, period.startsAt, period.endsAt, tx);
-      const totalAmount = entries.reduce((total, entry) => total.plus(entry.totalAmount), decimal(0));
+      const totalAmount = calculatePayrollPeriodTotal(entries, period.undistributedAmount);
       await tx.payrollEntry.deleteMany({ where: { periodId } });
       for (const entry of entries) {
         await tx.payrollEntry.create({ data: { periodId, ...entry } });
@@ -282,6 +283,47 @@ export class PayrollService {
         reason: input.reason.trim(),
         type: input.type,
         accruedAt: input.accruedAt?.toISOString() ?? null,
+      },
+    });
+    return this.getPeriod(periodId);
+  }
+
+  async setUndistributedAmount(periodId: string, dto: SetPayrollUndistributedAmountDto, actorId: string) {
+    const reason = dto.reason.trim();
+    const result = await this.prisma.$transaction(async (tx) => {
+      const period = await tx.payrollPeriod.findUnique({
+        where: { id: periodId },
+        select: { id: true, status: true, undistributedAmount: true },
+      });
+      if (!period) throw new NotFoundException('Расчётный период не найден');
+
+      const entries = await tx.payrollEntry.findMany({ where: { periodId }, select: { totalAmount: true } });
+      const totalAmount = calculatePayrollPeriodTotal(entries, dto.amount);
+      await tx.payrollPeriod.update({
+        where: { id: periodId },
+        data: { undistributedAmount: dto.amount, undistributedReason: reason, totalAmount },
+      });
+      return {
+        previousAmount: decimal(period.undistributedAmount),
+        amount: decimal(dto.amount),
+        totalAmount,
+        status: period.status,
+      };
+    });
+
+    await this.auditService.log({
+      actorId,
+      action: result.status === PayrollPeriodStatus.APPROVED
+        ? 'payroll.period.undistributed_amount_correct'
+        : 'payroll.period.undistributed_amount_set',
+      entityType: 'PayrollPeriod',
+      entityId: periodId,
+      metadata: {
+        previousAmount: result.previousAmount.toString(),
+        amount: result.amount.toString(),
+        totalAmount: result.totalAmount.toString(),
+        status: result.status,
+        reason,
       },
     });
     return this.getPeriod(periodId);
@@ -454,6 +496,13 @@ export function calculateEmployeePayroll(
       calculatedAt: new Date().toISOString(),
     } satisfies Prisma.InputJsonObject,
   };
+}
+
+export function calculatePayrollPeriodTotal(
+  entries: Array<{ totalAmount: Prisma.Decimal }>,
+  undistributedAmount: Prisma.Decimal | number | string,
+) {
+  return entries.reduce((total, entry) => total.plus(entry.totalAmount), decimal(undistributedAmount));
 }
 
 export function calculateManualPayrollEntry(
