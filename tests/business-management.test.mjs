@@ -32,6 +32,22 @@ test('управленческий результат разделяет при�
   assert.equal(result.marginPercent, 40_000 / 105_000 * 100);
 });
 
+test('дневная себестоимость учитывает возвраты со знаком и сходится с месяцем', () => {
+  const { StockMovementType, Prisma } = require('@prisma/client');
+  const { aggregateBusinessDaily } = require('../apps/api/dist/modules/business/business.service.js');
+  const decimal = (value) => new Prisma.Decimal(value);
+  const daily = aggregateBusinessDaily({
+    bills: [], payments: [], entries: [], supplierPayments: [],
+    movements: [
+      { createdAt: new Date('2026-08-01T10:00:00Z'), type: StockMovementType.SALE, quantity: decimal(-2), unitCost: decimal(100), stockBatch: null, billItemId: 'bill-1', visitId: null, saleId: null },
+      { createdAt: new Date('2026-08-02T10:00:00Z'), type: StockMovementType.CORRECTION, quantity: decimal(1), unitCost: decimal(100), stockBatch: null, billItemId: 'bill-1', visitId: null, saleId: null },
+    ],
+  }, 180);
+
+  assert.deepEqual(daily.map((row) => row.costOfGoods), [200, -100]);
+  assert.equal(daily.reduce((sum, row) => sum + row.costOfGoods, 0), 100);
+});
+
 test('миграция этапа 3.5 добавочная и не меняет клинические данные', async () => {
   const migration = await read('prisma/migrations/20260726000200_business_management/migration.sql');
   for (const table of ['BusinessCategory', 'BusinessEntry', 'BusinessDailyClose', 'BusinessDailyCloseLine']) {

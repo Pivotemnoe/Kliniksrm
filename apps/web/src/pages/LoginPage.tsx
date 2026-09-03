@@ -6,7 +6,7 @@ import { Controller, useForm } from 'react-hook-form';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { appConfig } from '../app/config';
-import { getErrorMessage } from '../api/errors';
+import { ApiError, getErrorMessage } from '../api/errors';
 import { logout } from '../auth/auth.api';
 import { authQueryKey, useCurrentEmployee, useLoginMutation } from '../auth/useAuth';
 import { getEmployeeDefaultRoute } from '../shared/routes/defaultRoutes';
@@ -37,6 +37,8 @@ export function LoginPage() {
   const [isClearingSession, setIsClearingSession] = useState(forceLogin);
   const { data, isLoading } = useCurrentEmployee();
   const loginMutation = useLoginMutation();
+  const remoteDeviceNotTrusted = loginMutation.error instanceof ApiError
+    && loginMutation.error.payload?.code === 'REMOTE_DEVICE_NOT_TRUSTED';
   const { control, handleSubmit } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
@@ -138,7 +140,15 @@ export function LoginPage() {
               />
             ) : null}
             {loginMutation.isError ? (
-              <Alert type="error" showIcon message={getErrorMessage(loginMutation.error)} className="form-alert" />
+              <Alert
+                type="error"
+                showIcon
+                message={getErrorMessage(loginMutation.error)}
+                description={remoteDeviceNotTrusted
+                  ? 'Откройте «Настройки → Удалённый доступ» на другом доверенном устройстве директора и создайте ссылку для себя.'
+                  : undefined}
+                className="form-alert"
+              />
             ) : null}
             <Button type="primary" htmlType="submit" size="large" block loading={loginMutation.isPending || isClearingSession}>
               Войти

@@ -117,7 +117,10 @@ export class AuthService {
           metadata: { reason: 'device_not_trusted' },
           ipAddress,
         });
-        throw new UnauthorizedException('Это устройство не привязано к учётной записи сотрудника');
+        throw new UnauthorizedException({
+          code: 'REMOTE_DEVICE_NOT_TRUSTED',
+          message: 'Это устройство не привязано к учётной записи сотрудника',
+        });
       }
 
       remoteDeviceId = device.id;

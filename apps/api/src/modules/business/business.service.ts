@@ -768,7 +768,7 @@ function attachDailyLineBreakdown<T extends { lines: Array<{ lineKey: string; sy
   };
 }
 
-function aggregateBusinessDaily(
+export function aggregateBusinessDaily(
   input: {
     bills: Array<{ createdAt: Date; totalAmount: Prisma.Decimal }>;
     payments: Array<{ paidAt: Date; amount: Prisma.Decimal }>;
@@ -804,7 +804,9 @@ function aggregateBusinessDaily(
   input.movements.forEach((item) => {
     const documentedCorrection = item.type === StockMovementType.CORRECTION && Boolean(item.billItemId || item.visitId || item.saleId);
     if (item.type === StockMovementType.CORRECTION && !documentedCorrection) return;
-    row(item.createdAt).costOfGoods += Math.max(-number(item.quantity) * number(item.unitCost ?? item.stockBatch?.purchasePrice), 0);
+    // Keep returns and documented corrections signed. This makes the sum of
+    // daily cost of goods reconcile with the monthly management total.
+    row(item.createdAt).costOfGoods += -number(item.quantity) * number(item.unitCost ?? item.stockBatch?.purchasePrice);
   });
   return [...rows.values()].sort((left, right) => left.date.localeCompare(right.date)).map((item) => ({
     ...item,

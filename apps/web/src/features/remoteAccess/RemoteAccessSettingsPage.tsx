@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, App, Button, Card, Descriptions, Form, Input, Popconfirm, QRCode, Select, Space, Switch, Table, Tag, Typography } from 'antd';
 import { InputNumber } from '../../shared/ui/DecimalInputNumber';
 import type { ColumnsType } from 'antd/es/table';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
@@ -34,11 +34,22 @@ export function RemoteAccessSettingsPage() {
     && auth?.employee.roles.includes('director')
     && hasPermission(auth.employee, 'remote_access.manage'),
   );
+  const canCreateInvitation = Boolean(
+    auth?.employee.roles.includes('director')
+    && hasPermission(auth.employee, 'remote_access.manage'),
+  );
+  const remoteSelfRecovery = auth?.accessType === 'REMOTE';
   const [form] = Form.useForm<InvitationForm>();
   const [freshInvitation, setFreshInvitation] = useState<RemoteAccessInvitationResult | null>(null);
   const overviewQuery = useQuery({ queryKey: ['remote-access'], queryFn: getRemoteAccessOverview });
   const overview = overviewQuery.data;
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['remote-access'] });
+
+  useEffect(() => {
+    if (remoteSelfRecovery && auth?.employee.id) {
+      form.setFieldValue('employeeId', auth.employee.id);
+    }
+  }, [auth?.employee.id, form, remoteSelfRecovery]);
 
   const policyMutation = useMutation({
     mutationFn: updateRemoteAccessPolicy,
@@ -126,7 +137,7 @@ export function RemoteAccessSettingsPage() {
       <Space direction="vertical" size={16} className="full-width">
         {overviewQuery.isError ? <Alert type="error" showIcon message={getErrorMessage(overviewQuery.error)} /> : null}
         {auth?.accessType === 'REMOTE' ? (
-          <Alert type="info" showIcon message="Удалённый режим: только просмотр" description="Выдавать, изменять и отзывать доступ можно только из локальной сети клиники." />
+          <Alert type="info" showIcon message="Удалённый режим" description="Директор может создать ссылку только для своего нового устройства. Выдача доступа другим сотрудникам и отзыв устройств остаются доступны только в клинике." />
         ) : null}
         <Alert
           type={overview?.gateway.configured ? 'success' : 'warning'}
@@ -153,7 +164,7 @@ export function RemoteAccessSettingsPage() {
             </Descriptions.Item>
           </Descriptions>
           <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>
-            Новое устройство разрешается только из локальной CRM. Каждый сотрудник входит под своей учётной записью, видит только разделы своей роли и не может изменять рабочие данные удалённо. Все входы и отзывы записываются в журнал аудита.
+            В клинике директор может подключить любого сотрудника. С уже доверенного удалённого устройства директор может перепривязать только себя. Каждый вход и перепривязка записываются в журнал аудита.
           </Typography.Paragraph>
         </Card>
 
@@ -163,11 +174,14 @@ export function RemoteAccessSettingsPage() {
               <Select
                 style={{ width: 310 }}
                 placeholder="Выберите активного сотрудника"
-                options={(overview?.eligibleEmployees ?? []).map((employee) => ({ value: employee.id, label: `${employee.fullName}${employee.position ? ` · ${employee.position}` : ''}` }))}
+                disabled={remoteSelfRecovery}
+                options={(overview?.eligibleEmployees ?? [])
+                  .filter((employee) => !remoteSelfRecovery || employee.id === auth?.employee.id)
+                  .map((employee) => ({ value: employee.id, label: `${employee.fullName}${employee.position ? ` · ${employee.position}` : ''}` }))}
               />
             </Form.Item>
             <Form.Item name="deviceName" label="Название"><Input style={{ width: 230 }} placeholder="Например, iPhone врача" maxLength={120} /></Form.Item>
-            <Form.Item><Button type="primary" htmlType="submit" disabled={!canManage || !overview?.policy.enabled || !overview?.gateway.configured} loading={invitationMutation.isPending}>Создать одноразовую ссылку</Button></Form.Item>
+            <Form.Item><Button type="primary" htmlType="submit" disabled={!canCreateInvitation || !overview?.policy.enabled || !overview?.gateway.configured} loading={invitationMutation.isPending}>Создать одноразовую ссылку</Button></Form.Item>
           </Form>
           {freshInvitation ? (
             <Alert

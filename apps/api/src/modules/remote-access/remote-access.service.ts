@@ -147,8 +147,8 @@ export class RemoteAccessService {
   }
 
   async createInvitation(dto: CreateRemoteAccessInvitationDto, actorId: string, ipAddress?: string | null, isRemote = false) {
-    if (isRemote) {
-      throw new ForbiddenException('Новое устройство можно подключить только из локальной сети клиники');
+    if (isRemote && dto.employeeId !== actorId) {
+      throw new ForbiddenException('С удалённого доверенного устройства можно перепривязать только своё устройство');
     }
 
     const organization = await this.getOrganization();
@@ -192,7 +192,7 @@ export class RemoteAccessService {
       action: 'remote_access.invitation_create',
       entityType: 'RemoteAccessInvitation',
       entityId: invitation.id,
-      metadata: { employeeId: employee.id, expiresAt: expiresAt.toISOString() },
+      metadata: { employeeId: employee.id, expiresAt: expiresAt.toISOString(), remoteAction: isRemote, selfRecovery: isRemote },
       ipAddress,
     });
 

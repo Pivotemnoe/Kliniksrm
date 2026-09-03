@@ -113,6 +113,34 @@ test('одноразовое подключение не содержит отк
   assert.doesNotMatch(migration, /DROP TABLE|TRUNCATE|DELETE FROM "(Owner|Animal|Visit|Bill|Product)"/i);
 });
 
+test('удалённый директор может перепривязать только собственное устройство', async () => {
+  const auditEntries = [];
+  const prisma = {
+    organization: { findFirst: async () => ({ id: 'organization-1', displayName: 'Клиника' }) },
+    remoteAccessPolicy: { upsert: async () => ({ id: 'policy-1', organizationId: 'organization-1', enabled: true, enrollmentTtlMinutes: 15 }) },
+    employee: { findFirst: async ({ where }) => where.id === 'director-1' ? { id: 'director-1', fullName: 'Директор' } : null },
+    remoteAccessInvitation: {
+      updateMany: async () => ({ count: 0 }),
+      create: async ({ data }) => ({ id: 'invitation-1', ...data }),
+    },
+  };
+  const previousUrl = process.env.REMOTE_STAFF_PUBLIC_URL;
+  process.env.REMOTE_STAFF_PUBLIC_URL = 'https://staff.temichevvet.ru';
+  try {
+    const service = new RemoteAccessService(prisma, { log: async (entry) => auditEntries.push(entry) });
+    const result = await service.createInvitation({ employeeId: 'director-1', deviceName: 'MacBook' }, 'director-1', '203.0.113.10', true);
+    assert.match(result.enrollmentUrl, /^https:\/\/staff\.temichevvet\.ru\/remote\/enroll\?code=/);
+    assert.equal(auditEntries[0].metadata.selfRecovery, true);
+    await assert.rejects(
+      service.createInvitation({ employeeId: 'doctor-1' }, 'director-1', '203.0.113.10', true),
+      /только своё устройство/,
+    );
+  } finally {
+    if (previousUrl === undefined) delete process.env.REMOTE_STAFF_PUBLIC_URL;
+    else process.env.REMOTE_STAFF_PUBLIC_URL = previousUrl;
+  }
+});
+
 test('директор может выбрать любого активного сотрудника, а администратор не видит управление удалённым доступом', async () => {
   let eligibleWhere;
   const prisma = {
