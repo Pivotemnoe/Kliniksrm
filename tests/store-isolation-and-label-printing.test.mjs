@@ -55,6 +55,9 @@ test('массовая печать задаёт отдельное количе
   assert.match(printer, /Этикетка 58 × 40 мм/);
   assert.match(printer, /Лист A4 \(сетка\)/);
   assert.match(printer, /renderBarcodeSvg/);
+  assert.match(printer, /const \[selectedItem, setSelectedItem\]/);
+  assert.match(printer, /const item = selectedItem/);
+  assert.doesNotMatch(printer, /availableItems\.find\(\(candidate\) => candidate\.key === selectedKey\)/);
   assert.match(storePrinter, /STORE_PRODUCT/);
   assert.match(clinicPrinter, /PRODUCT/);
   assert.match(clinicPrinter, /SERVICE/);

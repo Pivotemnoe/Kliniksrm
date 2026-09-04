@@ -49,7 +49,7 @@ export function CatalogLabelPrinter({
   const { message } = App.useApp();
   const [search, setSearch] = useState('');
   const deferredSearch = useDeferredValue(search.trim());
-  const [selectedKey, setSelectedKey] = useState<string>();
+  const [selectedItem, setSelectedItem] = useState<PrintableCatalogItem>();
   const [settings, setSettings] = useState<PrintSettings>({
     paper: 'LABEL_58_40',
     showOrganization: true,
@@ -69,13 +69,13 @@ export function CatalogLabelPrinter({
   const printItems = useMemo(() => lines.flatMap((line) => Array.from({ length: line.copies }, () => line.item)), [lines]);
 
   function addSelected() {
-    const item = availableItems.find((candidate) => candidate.key === selectedKey);
+    const item = selectedItem;
     if (!item) return;
     const existing = lines.find((line) => line.item.key === item.key);
     onChange(existing
       ? lines.map((line) => line.item.key === item.key ? { ...line, copies: line.copies + 1 } : line)
       : [...lines, { item, copies: 1 }]);
-    setSelectedKey(undefined);
+    setSelectedItem(undefined);
     setSearch('');
   }
 
@@ -96,16 +96,16 @@ export function CatalogLabelPrinter({
           showSearch
           allowClear
           filterOption={false}
-          value={selectedKey}
+          value={selectedItem?.key}
           searchValue={search}
           onSearch={setSearch}
-          onChange={setSelectedKey}
+          onChange={(value) => setSelectedItem(availableItems.find((candidate) => candidate.key === value))}
           loading={itemsQuery.isLoading}
           placeholder="Найдите позицию по названию, артикулу или штрих-коду"
           style={{ minWidth: 360, flex: 1 }}
           options={availableItems.map((item) => ({ value: item.key, label: `${item.kindTitle}: ${item.title} · ${item.priceText}${item.barcode ? ` · ${item.barcode}` : ''}` }))}
         />
-        <Button type="primary" icon={<PlusOutlined />} disabled={!selectedKey} onClick={addSelected}>Добавить в печать</Button>
+        <Button type="primary" icon={<PlusOutlined />} disabled={!selectedItem} onClick={addSelected}>Добавить в печать</Button>
       </div>
 
       <Table
