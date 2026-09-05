@@ -20,11 +20,13 @@ test('every page includes real favicon assets with valid image dimensions',async
 test('real image logos appear on every public page without technical copy',async()=>{
  for(const route of routes){
   const html=await fs.readFile(new URL(`../dist/client${route==='/'?'':route}/index.html`,import.meta.url),'utf8');
-  assert.match(html,/<img[^>]+src="\/brand\/temichevvet-wordmark.png"/);
+  assert.match(html,/<a href="\/" class="brand"[^>]*><img src="\/brand\/temichevvet-logo.jpg"[^>]*width="820" height="820"/);
+  assert.equal([...html.matchAll(/<img[^>]+src="\/brand\/temichevvet-logo.jpg"/g)].length,2);
+  assert.doesNotMatch(html,/temichevvet-wordmark/);
   assert.match(html,/<img[^>]+src="\/brand\/temichevvet-logo.jpg"/);
   assert.doesNotMatch(html,/ОТЗЫВЫ ИЗ ИСТОЧНИКА|При загрузке блока браузер|Загрузить отзывы|Показать отзывы|Данные проверены|Отметки остаются только|Отметки в чек-листе сами|Мы собрали услуги на отдельных страницах/);
  }
- for(const name of ['temichevvet-wordmark.png','temichevvet-logo.jpg'])await fs.access(new URL(`../dist/client/brand/${name}`,import.meta.url));
+ await fs.access(new URL('../dist/client/brand/temichevvet-logo.jpg',import.meta.url));
 });
 test('home and reviews embed official reviews without a click gate',async()=>{
  for(const route of ['','/reviews']){

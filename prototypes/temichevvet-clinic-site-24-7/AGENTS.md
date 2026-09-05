@@ -12,6 +12,8 @@ User correction (2026-09-05): show existing TemichevVET image logos in the heade
 
 The browser-tab favicon must also use the existing clinic logo. Preserve favicon links in the shared HTML template and include favicon assets in release checks, including /favicon.ico for browsers that request it automatically.
 
+Explicit logo decision (2026-09-05): the user rejected the low-resolution horizontal `temichevvet-wordmark.png` from the old prototype and approved using the same square `/brand/temichevvet-logo.jpg` as the footer in the header. Use that exact image, unchanged, at a square aspect ratio with object-fit:contain. Do not reintroduce the horizontal version or invent a replacement.
+
 Run the local server yourself and open the preview in the browser available to this environment. Do not give the user server-start instructions when you can run it.
 
 Before making substantial visual changes, use the Product Design plugin's `get-context` skill when the visual source is unclear or no longer matches the current goal. When the user gives durable prototype-specific design feedback, preferences, or decisions, record them in `AGENTS.md`.

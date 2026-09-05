@@ -18,7 +18,7 @@ export function Header({ path }) {
     window.addEventListener('keydown', close); return () => window.removeEventListener('keydown', close);
   }, []);
   return <><a className="skip" href="#main">Перейти к содержанию</a><header className="header">
-    <a href="/" className="brand" aria-label="TemichevVET — главная"><img src="/brand/temichevvet-wordmark.png" alt="TemichevVET" width="230" height="70" /></a>
+    <a href="/" className="brand" aria-label="TemichevVET — главная"><img src="/brand/temichevvet-logo.jpg" alt="TemichevVET" width="820" height="820" /></a>
     <button className="menu" aria-expanded={open} aria-controls="main-menu" onClick={() => setOpen(!open)}>{open ? 'Закрыть' : 'Меню'}</button>
     <nav id="main-menu" aria-label="Главное меню" className={open ? 'expanded' : ''}>{navItems.map(([href, title]) => <a key={href} href={href} aria-current={path === href ? 'page' : undefined}>{title}</a>)}</nav>
     <a className="header-phone" href={clinic.tel}>{clinic.phone}</a>
