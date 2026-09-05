@@ -510,6 +510,7 @@ export class StockService {
         categoryId,
         title: dto.title.trim(),
         ...pricing,
+        publicOnWebsite: dto.publicOnWebsite ?? false,
         vatRate: dto.vatRate,
         description: clean(dto.description),
         linkedProducts: dto.linkedProducts?.length
@@ -556,6 +557,7 @@ export class StockService {
       where: { id: serviceId },
       data: {
         ...(dto.title !== undefined ? { title: dto.title.trim() } : {}),
+        ...(dto.publicOnWebsite !== undefined ? { publicOnWebsite: dto.publicOnWebsite } : {}),
         ...(categoryId !== undefined ? { categoryId } : {}),
         ...pricing,
         ...(dto.vatRate !== undefined ? { vatRate: dto.vatRate } : {}),

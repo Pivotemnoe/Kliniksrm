@@ -15,6 +15,8 @@ import { TelegramWebhookService } from './telegram-webhook.service';
 import { WebPushService } from './web-push.service';
 import { PublicClinicController } from './public-clinic.controller';
 import { PublicClinicService } from './public-clinic.service';
+import { PublicClinicCatalogController } from './public-clinic-catalog.controller';
+import { PublicClinicCatalogService } from './public-clinic-catalog.service';
 
 @Module({
   controllers: [
@@ -25,6 +27,7 @@ import { PublicClinicService } from './public-clinic.service';
     MaxWebhookController,
     TelegramWebhookController,
     PublicClinicController,
+    PublicClinicCatalogController,
   ],
   providers: [
     PrismaService,
@@ -36,6 +39,7 @@ import { PublicClinicService } from './public-clinic.service';
     TelegramWebhookService,
     WebPushService,
     PublicClinicService,
+    PublicClinicCatalogService,
   ],
 })
 export class AppModule {}

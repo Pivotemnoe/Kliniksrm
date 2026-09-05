@@ -1,9 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { ArrayMaxSize, IsArray, IsIn, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min, ValidateNested } from 'class-validator';
 import { LinkedProductDto } from './linked-product.dto';
 
 export class UpsertServiceDto {
+  @ApiPropertyOptional({ description: 'Publish the service title, category and price on the clinic website.' })
+  @IsOptional()
+  @IsBoolean()
+  publicOnWebsite?: boolean;
+
   @ApiProperty()
   @IsString()
   @MaxLength(240)

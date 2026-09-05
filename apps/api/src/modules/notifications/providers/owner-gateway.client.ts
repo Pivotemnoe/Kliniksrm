@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ClientPortalService } from '../../client-portal/client-portal.service';
 import { ObjectStorageService } from '../../files/object-storage.service';
 import { PortalInviteChannel } from '../dto/create-portal-invite.dto';
+import type { PublicCatalogSnapshot } from '../public-clinic-catalog-sync.service';
 
 export type OwnerGatewaySyncStatus = 'synced' | 'skipped_not_configured' | 'failed';
 export type OwnerGatewayAutomaticDelivery = 'sent' | 'failed' | 'manual_required' | 'not_implemented';
@@ -107,6 +108,15 @@ export class OwnerGatewayClient {
     private readonly clientPortalService: ClientPortalService,
     private readonly objectStorageService: ObjectStorageService,
   ) {}
+
+  async syncPublicCatalog(snapshot: PublicCatalogSnapshot): Promise<void> {
+    const baseUrl = normalizeBaseUrl(process.env.OWNER_GATEWAY_URL);
+    const syncSecret = process.env.OWNER_GATEWAY_SYNC_SECRET?.trim();
+    if (!baseUrl || !syncSecret) throw new Error('Public catalog gateway is not configured');
+    await requestGatewayWithRetry(`${baseUrl}/internal/v1/clinic/catalog`, syncSecret, {
+      method: 'PUT', body: snapshot,
+    });
+  }
 
   async syncInvitation(input: {
     ownerId: string;

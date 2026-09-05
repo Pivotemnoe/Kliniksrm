@@ -65,6 +65,7 @@ export type Product = {
 export type ServiceItem = {
   id: string;
   isActive: boolean;
+  publicOnWebsite?: boolean;
   categoryId: string | null;
   category?: ServiceCategory | null;
   title: string;
@@ -194,6 +195,7 @@ export type ProductMutationInput = {
 
 export type ServiceMutationInput = {
   title: string;
+  publicOnWebsite?: boolean;
   categoryId?: string;
   categoryTitle?: string;
   price?: number;

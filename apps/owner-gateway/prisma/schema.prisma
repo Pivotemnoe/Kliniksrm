@@ -8,6 +8,13 @@ datasource db {
   url      = env("OWNER_GATEWAY_DATABASE_URL")
 }
 
+model PublicClinicCatalog {
+  id         String   @id
+  capturedAt DateTime
+  receivedAt DateTime @default(now())
+  payload    Json
+}
+
 enum PortalInviteChannel {
   WEB
   MAX

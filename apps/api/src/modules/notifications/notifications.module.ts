@@ -8,11 +8,12 @@ import { NotificationsController } from './notifications.controller';
 import { NotificationsService } from './notifications.service';
 import { NotificationDispatcherService } from './notification-dispatcher.service';
 import { OwnerGatewaySnapshotSyncService } from './owner-gateway-snapshot-sync.service';
+import { PublicClinicCatalogSyncService } from './public-clinic-catalog-sync.service';
 
 @Module({
   imports: [AuditModule, ClientPortalModule, FilesModule],
   controllers: [NotificationsController],
-  providers: [NotificationsService, NotificationDispatcherService, OwnerGatewaySnapshotSyncService, MaxBotClient, OwnerGatewayClient],
+  providers: [NotificationsService, NotificationDispatcherService, OwnerGatewaySnapshotSyncService, PublicClinicCatalogSyncService, MaxBotClient, OwnerGatewayClient],
   exports: [OwnerGatewayClient, OwnerGatewaySnapshotSyncService],
 })
 export class NotificationsModule {}

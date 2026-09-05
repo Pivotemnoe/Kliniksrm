@@ -1097,6 +1097,7 @@ function ProductModal({
 
 const serviceSchema = z.object({
   title: z.string().trim().min(2, 'Введите название'),
+  publicOnWebsite: z.boolean(),
   categoryTitle: z.string().trim().optional(),
   price: z.number().min(0).optional(),
   priceType: z.enum(['FIXED', 'FLOATING']),
@@ -1142,7 +1143,7 @@ function ServiceModal({
   const { message } = App.useApp();
   const { control, handleSubmit, reset } = useForm<ServiceFormValues>({
     resolver: zodResolver(serviceSchema),
-    defaultValues: { title: '', categoryTitle: '', price: 0, priceType: 'FIXED', description: '', linkedProducts: [] },
+    defaultValues: { title: '', publicOnWebsite: false, categoryTitle: '', price: 0, priceType: 'FIXED', description: '', linkedProducts: [] },
   });
   const linkedProductFields = useFieldArray({ control, name: 'linkedProducts' });
   const linkedProductPicker = useProductCatalogPicker(open, service?.linkedProducts?.map((item) => item.product) ?? []);
@@ -1158,6 +1159,7 @@ function ServiceModal({
 
     reset({
       title: service?.title ?? '',
+      publicOnWebsite: service?.publicOnWebsite ?? false,
       categoryTitle: service?.category?.title ?? '',
       price: Number(service?.price ?? 0),
       priceType: service?.priceType === 'FLOATING' ? 'FLOATING' : 'FIXED',
@@ -1196,6 +1198,11 @@ function ServiceModal({
     >
       <Form layout="vertical">
         <FormText control={control} name="title" label="Название" autoFocus />
+        <Controller control={control} name="publicOnWebsite" render={({ field }) => (
+          <Form.Item help="На сайте появятся название, категория и цена. Описание и расходные материалы остаются в CRM. Обновление работает после подключения синхронизации сайта.">
+            <Checkbox checked={field.value} onChange={(event) => field.onChange(event.target.checked)}>Показывать в прейскуранте на сайте</Checkbox>
+          </Form.Item>
+        )} />
         <Controller
           control={control}
           name="categoryTitle"

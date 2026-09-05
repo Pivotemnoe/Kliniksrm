@@ -1571,6 +1571,7 @@ model ServiceCategory {
 model Service {
   id                     String               @id @default(uuid())
   isActive               Boolean              @default(true)
+  publicOnWebsite        Boolean              @default(false)
   categoryId             String?
   category               ServiceCategory?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   title                  String
