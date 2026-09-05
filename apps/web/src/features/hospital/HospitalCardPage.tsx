@@ -1,6 +1,5 @@
 import {
   ArrowLeftOutlined,
-  CheckOutlined,
   CloseOutlined,
   FileTextOutlined,
   PlusOutlined,
@@ -39,6 +38,7 @@ import {
   updateHospitalStay,
 } from './hospital.api';
 import { HospitalSheet } from './HospitalSheet';
+import { HospitalDischargeButton } from './HospitalDischargeButton';
 import { HospitalTreatmentPlanModal } from './HospitalTreatmentPlanModal';
 import { useDebouncedValue } from '../../shared/hooks/useDebouncedValue';
 import { printHospitalBoxSheet, printHospitalSheet } from './hospitalPrint';
@@ -267,7 +267,7 @@ export function HospitalCardPage() {
                   />
                   <Button icon={<SwapOutlined />} disabled={!boxId || boxId === stay.hospitalBoxId} loading={transferMutation.isPending} onClick={() => boxId && transferMutation.mutate(boxId)}>Перевести</Button>
                   <Button icon={<FileTextOutlined />} loading={preliminaryBillMutation.isPending} onClick={() => preliminaryBillMutation.mutate()}>Сформировать промежуточный счёт</Button>
-                  <Button icon={<CheckOutlined />} loading={actionMutation.isPending} onClick={() => modal.confirm({ title: 'Выписать пациента из стационара?', okText: 'Выписать', cancelText: 'Отмена', onOk: () => actionMutation.mutateAsync('discharge') })}>Выписать</Button>
+                  <HospitalDischargeButton onConfirm={() => actionMutation.mutateAsync('discharge')} />
                   <Button danger icon={<CloseOutlined />} loading={actionMutation.isPending} onClick={() => modal.confirm({ title: 'Отменить госпитализацию?', okText: 'Отменить', cancelText: 'Назад', okButtonProps: { danger: true }, onOk: () => actionMutation.mutateAsync('cancel') })}>Отменить</Button>
                 </div>
               ) : null}

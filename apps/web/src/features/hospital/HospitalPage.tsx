@@ -1,4 +1,4 @@
-import { CheckOutlined, CloseOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
+import { CloseOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, App, Button, Form, Input, Modal, Select, Space, Tag, Typography } from 'antd';
@@ -26,6 +26,7 @@ import {
   getHospitalResources,
   listHospital,
 } from './hospital.api';
+import { HospitalDischargeButton } from './HospitalDischargeButton';
 import { HospitalStay, HospitalStayStatus } from './types';
 
 export function HospitalPage() {
@@ -125,9 +126,10 @@ export function HospitalPage() {
             </Button>
             {canManage && record.status === 'ACTIVE' ? (
               <>
-              <Button size="small" icon={<CheckOutlined />} onClick={() => actionMutation.mutate({ id: record.id, action: 'discharge' })}>
-                Выписать
-              </Button>
+              <HospitalDischargeButton
+                size="small"
+                onConfirm={() => actionMutation.mutateAsync({ id: record.id, action: 'discharge' })}
+              />
               <Button size="small" danger icon={<CloseOutlined />} onClick={() => actionMutation.mutate({ id: record.id, action: 'cancel' })}>
                 Отменить
               </Button>
