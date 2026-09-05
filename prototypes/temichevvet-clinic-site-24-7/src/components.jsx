@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { clinic, services } from './content.js';
 export const Arrow = () => <span aria-hidden="true" className="arrow">↗</span>;
 export function DevelopmentNotice({ title }) {
-  return <section className="section two-columns warm development-notice" aria-label={`${title}: раздел в разработке`}><div><span className="eyebrow">РАЗДЕЛ В РАЗРАБОТКЕ</span><h2>{title}</h2></div><div><p>Этот раздел сайта ещё не готов. Клиника работает в обычном режиме.</p><p>Информацию о специалистах, приёме и услугах можно уточнить по телефону.</p><a className="text-link" href={clinic.tel}>{clinic.phone} <Arrow /></a></div></section>;
+  return <section className="section two-columns warm development-notice" aria-label={`${title}: раздел в разработке`}><div><span className="eyebrow">РАЗДЕЛ В РАЗРАБОТКЕ</span><h2>{title}</h2></div><div><p>Клиника работает в обычном режиме.</p><p>Информацию о специалистах, приёме и услугах можно уточнить по телефону.</p><a className="text-link" href={clinic.tel}>{clinic.phone} <Arrow /></a></div></section>;
 }
 export function Button({ href = clinic.tel, children = 'Позвонить в клинику', light = false, ...props }) {
   return <a className={`button ${light ? 'lime' : ''}`} href={href} {...props}>{children}<Arrow /></a>;
@@ -18,14 +18,17 @@ export function Header({ path }) {
     window.addEventListener('keydown', close); return () => window.removeEventListener('keydown', close);
   }, []);
   return <><a className="skip" href="#main">Перейти к содержанию</a><header className="header">
-    <a href="/" className="brand" aria-label="TemichevVET — главная">Temichev<b>VET</b></a>
+    <a href="/" className="brand" aria-label="TemichevVET — главная"><img src="/brand/temichevvet-wordmark.png" alt="TemichevVET" width="230" height="70" /></a>
     <button className="menu" aria-expanded={open} aria-controls="main-menu" onClick={() => setOpen(!open)}>{open ? 'Закрыть' : 'Меню'}</button>
     <nav id="main-menu" aria-label="Главное меню" className={open ? 'expanded' : ''}>{navItems.map(([href, title]) => <a key={href} href={href} aria-current={path === href ? 'page' : undefined}>{title}</a>)}</nav>
     <a className="header-phone" href={clinic.tel}>{clinic.phone}</a>
   </header></>;
 }
 export function Footer() {
-  return <><footer><div><span className="eyebrow">TEMICHEVVET · АРМАВИР</span><h2>Мы здесь.<br />Днём и ночью.</h2><a className="footer-phone" href={clinic.tel}>{clinic.phone}</a><p>Ночью перед приездом позвоните.</p></div><div className="footer-right"><p>{clinic.address}<br />Круглосуточно</p><a href="/visit">Плановый приём <Arrow /></a><a href={clinic.route} target="_blank" rel="noopener noreferrer">Построить маршрут <Arrow /></a><a href="/night">Ночной приём <Arrow /></a></div><div className="footer-base"><span>TemichevVET · Ветеринарная клиника</span><a href="/contacts">Контакты</a><a href="/prices">Прейскурант</a><a href={clinic.reviews} target="_blank" rel="noopener noreferrer">Яндекс Карты</a></div></footer><nav className="mobile-actions" aria-label="Быстрые действия"><a href={clinic.tel}>Позвонить</a><a href="/visit">На приём</a><a href={clinic.route} target="_blank" rel="noopener noreferrer">Маршрут</a></nav></>;
+  return <><footer><div><a className="footer-brand" href="/" aria-label="TemichevVET — главная"><img src="/brand/temichevvet-logo.jpg" alt="Логотип TemichevVET" width="820" height="820" loading="lazy" /></a><h2>Мы здесь.<br />Днём и ночью.</h2><a className="footer-phone" href={clinic.tel}>{clinic.phone}</a><p>Ночью перед приездом позвоните.</p></div><div className="footer-right"><p>{clinic.address}<br />Круглосуточно</p><a href="/visit">Плановый приём <Arrow /></a><a href={clinic.route} target="_blank" rel="noopener noreferrer">Построить маршрут <Arrow /></a><a href="/night">Ночной приём <Arrow /></a></div><div className="footer-base"><span>TemichevVET · Ветеринарная клиника</span><a href="/contacts">Контакты</a><a href="/prices">Прейскурант</a><a href={clinic.reviews} target="_blank" rel="noopener noreferrer">Яндекс Карты</a></div></footer><nav className="mobile-actions" aria-label="Быстрые действия"><a href={clinic.tel}>Позвонить</a><a href="/visit">На приём</a><a href={clinic.route} target="_blank" rel="noopener noreferrer">Маршрут</a></nav></>;
+}
+export function ReviewsWidget({ eager = false }) {
+  return <div className="review-widget"><iframe src={clinic.widget} title="Отзывы о клинике на Яндекс Картах" loading={eager ? 'eager' : 'lazy'} referrerPolicy="strict-origin-when-cross-origin" /></div>;
 }
 export function Breadcrumb({ title, parent }) {
   return <nav className="breadcrumbs" aria-label="Хлебные крошки"><a href="/">Главная</a><span>/</span>{parent && <><a href={parent[0]}>{parent[1]}</a><span>/</span></>}<span aria-current="page">{title}</span></nav>;
