@@ -10,6 +10,8 @@ Public unfinished sections must say «РАЗДЕЛ В РАЗРАБОТКЕ», no
 
 User correction (2026-09-05): show existing TemichevVET image logos in the header and footer. Keep the main header/navigation visible during scrolling on desktop and mobile. Embed official Yandex reviews automatically on the home and reviews pages, with optional Maps links, not a load/open-browser gate. Remove developer-facing explanations from public copy; retain the explicitly requested unfinished-section labels.
 
+The browser-tab favicon must also use the existing clinic logo. Preserve favicon links in the shared HTML template and include favicon assets in release checks, including /favicon.ico for browsers that request it automatically.
+
 Run the local server yourself and open the preview in the browser available to this environment. Do not give the user server-start instructions when you can run it.
 
 Before making substantial visual changes, use the Product Design plugin's `get-context` skill when the visual source is unclear or no longer matches the current goal. When the user gives durable prototype-specific design feedback, preferences, or decisions, record them in `AGENTS.md`.

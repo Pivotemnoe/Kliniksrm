@@ -3,6 +3,20 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { routes } from '../src/content.js';
 import { validatePublicCatalog, formatPrice } from '../src/catalog.js';
+test('every page includes real favicon assets with valid image dimensions',async()=>{
+ for(const route of routes){
+  const html=await fs.readFile(new URL(`../dist/client${route==='/'?'':route}/index.html`,import.meta.url),'utf8');
+  assert.match(html,/<link rel="icon" type="image\/png" sizes="32x32" href="\/brand\/temichevvet-favicon-32.png\?v=20260905"/);
+  assert.match(html,/<link rel="apple-touch-icon" sizes="180x180"/);
+ }
+ for(const [size,name] of [[32,'temichevvet-favicon-32'],[192,'temichevvet-favicon-192'],[180,'temichevvet-apple-touch-icon']]){
+  const png=await fs.readFile(new URL(`../dist/client/brand/${name}.png`,import.meta.url));
+  assert.equal(png.subarray(1,4).toString(),'PNG');assert.equal(png.readUInt32BE(16),size);assert.equal(png.readUInt32BE(20),size);
+ }
+ const ico=await fs.readFile(new URL('../dist/client/favicon.ico',import.meta.url));
+ assert.equal(ico.readUInt16LE(2),1);assert.equal(ico.readUInt16LE(4),1);assert.equal(ico.readUInt32LE(18),22);
+ const png=await fs.readFile(new URL('../dist/client/brand/temichevvet-favicon-32.png',import.meta.url));assert.deepEqual(ico.subarray(22),png);
+});
 test('real image logos appear on every public page without technical copy',async()=>{
  for(const route of routes){
   const html=await fs.readFile(new URL(`../dist/client${route==='/'?'':route}/index.html`,import.meta.url),'utf8');
