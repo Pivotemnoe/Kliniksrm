@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { clinic, services } from './content.js';
 export const Arrow = () => <span aria-hidden="true" className="arrow">↗</span>;
+export function DevelopmentNotice({ title }) {
+  return <section className="section two-columns warm development-notice" aria-label={`${title}: раздел в разработке`}><div><span className="eyebrow">РАЗДЕЛ В РАЗРАБОТКЕ</span><h2>{title}</h2></div><div><p>Этот раздел сайта ещё не готов. Клиника работает в обычном режиме.</p><p>Информацию о специалистах, приёме и услугах можно уточнить по телефону.</p><a className="text-link" href={clinic.tel}>{clinic.phone} <Arrow /></a></div></section>;
+}
 export function Button({ href = clinic.tel, children = 'Позвонить в клинику', light = false, ...props }) {
   return <a className={`button ${light ? 'lime' : ''}`} href={href} {...props}>{children}<Arrow /></a>;
 }

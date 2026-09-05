@@ -69,3 +69,6 @@ Scope: local design implementation and browser behaviour. This is not production
 P3: remove the remaining small vertical metric differences if exact raster parity across browser engines is later required; replace missing team and equipment photography after a real shoot; clinic editor to approve the draft copy. These are not blockers for reviewing the implemented local direction.
 
 final result: passed
+# Production acceptance, 2026-09-05
+
+Published to https://clinic.temichevvet.ru/ . Real CRM catalog (272 reviewed services), Yandex widget, all 16 desktop/mobile routes accepted. Five incomplete photo sections visibly say «РАЗДЕЛ В РАЗРАБОТКЕ». Public forms remain contact-only pending the approved privacy document; analytics is not enabled. Evidence and exact limitations: `../../docs/product/CLINIC_SITE_RELEASE_2026_09_05_RU.md`. Earlier sections below describe the pre-publication review.

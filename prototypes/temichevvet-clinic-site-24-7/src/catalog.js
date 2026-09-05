@@ -13,6 +13,6 @@ export function validatePublicCatalog(data, now = Date.now()) {
 const rub = new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 2 });
 export function formatPrice(s) {
   if (s.priceType === 'FIXED') return rub.format(s.price);
-  if (s.priceType === 'RANGE') return `${rub.format(s.minimumPrice)} – ${rub.format(s.maximumPrice)}`;
+  if (s.priceType === 'RANGE') return s.minimumPrice === s.maximumPrice ? rub.format(s.minimumPrice) : `${rub.format(s.minimumPrice)} – ${rub.format(s.maximumPrice)}`;
   return 'Уточните в клинике';
 }
