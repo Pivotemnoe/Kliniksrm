@@ -56,10 +56,10 @@ test('catalog handles missing/stale snapshots, price edits, opt-out and reordere
   assert.equal((await service.upsert(edited)).accepted,false);
   await service.upsert(snapshot(1000,[])); assert.deepEqual((await service.get()).items,[]);
 });
-test('CRM sync is opt-in, filters active published services, includes empty snapshots and recovers after failure', async () => {
+test('CRM sync is opt-in, excludes zero prices, filters active published services, includes empty snapshots and recovers after failure', async () => {
   const previous = process.env.CLINIC_SITE_CATALOG_SYNC_ENABLED;
   let fail=false, count=0; const sent=[];
-  const prisma = {service:{async findMany(query){count++;assert.deepEqual(query.where,{isActive:true,publicOnWebsite:true});return count===1?[fixed]:[];}}};
+  const prisma = {service:{async findMany(query){count++;assert.deepEqual(query.where,{isActive:true,publicOnWebsite:true,price:{gt:0}});return count===1?[fixed]:[];}}};
   const runner = new PublicClinicCatalogSyncService(prisma,{async syncPublicCatalog(value){if(fail) throw Error('network');sent.push(value);}});
   try {
     delete process.env.CLINIC_SITE_CATALOG_SYNC_ENABLED; assert.equal(await runner.syncOnce(),'disabled');assert.equal(count,0);

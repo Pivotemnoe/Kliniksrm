@@ -57,7 +57,7 @@ export class PublicClinicCatalogSyncService implements OnApplicationBootstrap, O
     try {
       const capturedAt = new Date().toISOString();
       const services = await this.prisma.service.findMany({
-        where: { isActive: true, publicOnWebsite: true }, select: publicCatalogSelect, orderBy: { id: 'asc' }, take: 5001,
+        where: { isActive: true, publicOnWebsite: true, price: { gt: 0 } }, select: publicCatalogSelect, orderBy: { id: 'asc' }, take: 5001,
       });
       if (services.length > 5000) throw new Error('Public catalog exceeds limit');
       await this.gateway.syncPublicCatalog({ capturedAt, currency: 'RUB', items: services.map(toPublicCatalogItem) });
