@@ -715,7 +715,7 @@ type PortalInvitePrintInput = {
   maxQrSvg: string;
 };
 
-function printPortalInvite(input: PortalInvitePrintInput) {
+export function printPortalInvite(input: PortalInvitePrintInput) {
   const printWindow = window.open('', '_blank', 'width=880,height=760');
   if (!printWindow) {
     return false;

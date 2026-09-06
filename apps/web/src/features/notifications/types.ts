@@ -123,7 +123,10 @@ export type ClientPortalInvite = ClientPortalAccess & {
 
 export type CreatePortalInviteInput = {
   channel: PortalInviteChannel;
+  onlyIfNotActivated?: boolean;
 };
+
+export type PortalActivationStatus = 'ACTIVATED' | 'NOT_ACTIVATED' | 'BLOCKED' | 'SUSPENDED' | 'UNKNOWN';
 
 export type TelegramBroadcastDraft = {
   subject?: string | null;

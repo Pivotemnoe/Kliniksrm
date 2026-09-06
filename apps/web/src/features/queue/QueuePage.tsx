@@ -18,6 +18,7 @@ import { visitStatusColors, visitStatusLabels } from '../visits/types';
 import { cancelQueueEntry, listQueue, startQueueEntry } from './queue.api';
 import { createQueueEntryFromForm } from './createQueueEntryFromForm';
 import { QueueFormDrawer, QueueFormSubmitInput } from './QueueFormDrawer';
+import { QueuePortalInvitationButton, useQueuePortalInvitations } from './QueuePortalInvitation';
 import {
   QueueEntry,
   QueueMutationInput,
@@ -51,6 +52,7 @@ export function QueuePage() {
     queryFn: ({ limit, offset }) => listQueue({ search, status, urgency, employeeId, limit, offset, ...dateRange }),
   });
   const queueItems = useMemo(() => queueQuery.data?.pages.flatMap((page) => page.items) ?? [], [queueQuery.data]);
+  const portal = useQueuePortalInvitations(queueItems);
 
   useEffect(() => {
     if (!queueItems.some((item) => item.status === 'IN_PROGRESS' && item.acceptWaitSeconds > 0)) return;
@@ -168,9 +170,10 @@ export function QueuePage() {
       {
         title: 'Действие',
         key: 'action',
-        width: 210,
-        render: (_, record) =>
-          canCallQueue || canManageVisits ? (
+        width: 280,
+        render: (_, record) => (
+          <Space direction="vertical" size={6}>
+            {canCallQueue || canManageVisits ? (
             <QueueActionButton
               record={record}
               loading={actionMutation.isPending}
@@ -184,7 +187,14 @@ export function QueuePage() {
               onCreateVisit={() => actionMutation.mutate({ record, action: 'createVisit' })}
               onCancel={() => cancelMutation.mutate(record.id)}
             />
-          ) : null,
+            ) : null}
+            {portal.canRead ? <QueuePortalInvitationButton
+              ownerId={record.ownerId} status={record.ownerId ? portal.statuses?.[record.ownerId] : undefined}
+              loading={portal.loading} canInvite={portal.canInvite} compact
+              onClick={() => portal.openInvitation(record)}
+            /> : null}
+          </Space>
+        ),
       },
       {
         title: 'Срочность',
@@ -242,11 +252,12 @@ export function QueuePage() {
       { title: 'Сотрудник', key: 'employee', width: 150, render: (_, record) => record.employee?.fullName ?? '—', responsive: ['xl'] },
       { title: 'Кабинет', key: 'room', width: 120, render: (_, record) => record.room?.name ?? '—', responsive: ['xl'] },
     ],
-    [actionMutation, cancelMutation, canCallQueue, canManage, canManageVisits, navigate, now],
+    [actionMutation, cancelMutation, canCallQueue, canManage, canManageVisits, navigate, now, portal.canRead, portal.canInvite, portal.statuses, portal.loading, portal.openInvitation],
   );
 
   return (
     <div className="page">
+      {portal.drawer}
       <PageHeader
         title={`${isPersonalQueue ? 'Моя очередь' : 'Электронная очередь'}${queueQuery.data?.pages[0]?.total !== undefined ? ` ${queueQuery.data.pages[0].total}` : ''}`}
         extra={

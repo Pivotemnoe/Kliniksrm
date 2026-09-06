@@ -30,6 +30,7 @@ import {
 } from './queue.api';
 import { QueueFormDrawer } from './QueueFormDrawer';
 import { QueueCreateCardsDrawer } from './QueueCreateCardsDrawer';
+import { QueuePortalInvitationButton, useQueuePortalInvitations } from './QueuePortalInvitation';
 import { QueueMutationInput, getQueueDisplayStatus, queuePurposeLabels, queueUrgencyColors, queueUrgencyLabels } from './types';
 
 type QueueCardsInput = {
@@ -145,6 +146,7 @@ export function QueueCardPage() {
   }
 
   const queueEntry = queueQuery.data;
+  const portal = useQueuePortalInvitations(queueEntry ? [queueEntry] : []);
   const acceptWaitSeconds = queueEntry?.status === 'IN_PROGRESS' ? queueEntry.acceptWaitSeconds : 0;
   const statusView = queueEntry ? getQueueDisplayStatus(queueEntry) : null;
 
@@ -171,6 +173,11 @@ export function QueueCardPage() {
             </Button>
             {queueEntry ? (
               <>
+                {portal.canRead ? <QueuePortalInvitationButton
+                  ownerId={queueEntry.ownerId} status={queueEntry.ownerId ? portal.statuses?.[queueEntry.ownerId] : undefined}
+                  loading={portal.loading} canInvite={portal.canInvite}
+                  onClick={() => portal.openInvitation(queueEntry)}
+                /> : null}
                 {canCallQueue && queueEntry.status === 'WAITING' ? (
                   <Button
                     icon={<PhoneOutlined />}
@@ -278,6 +285,7 @@ export function QueueCardPage() {
         isSubmitting={updateMutation.isPending}
         submitError={updateMutation.error}
       />
+      {portal.drawer}
       <QueueCreateCardsDrawer
         open={createCardsOpen}
         queueEntry={queueEntry}

@@ -104,6 +104,8 @@ const GATEWAY_RETRY_DELAY_MS = 400;
 
 @Injectable()
 export class OwnerGatewayClient {
+  private portalStatisticsCache?: { expiresAt: number; value: OwnerGatewayPortalStatistics | null };
+  private portalStatisticsRequest?: Promise<OwnerGatewayPortalStatistics | null>;
   constructor(
     private readonly clientPortalService: ClientPortalService,
     private readonly objectStorageService: ObjectStorageService,
@@ -310,7 +312,20 @@ export class OwnerGatewayClient {
     }
   }
 
-  async getPortalStatistics(): Promise<OwnerGatewayPortalStatistics | null> {
+  getCachedPortalStatistics(): Promise<OwnerGatewayPortalStatistics | null> {
+    if (this.portalStatisticsCache && this.portalStatisticsCache.expiresAt > Date.now()) {
+      return Promise.resolve(this.portalStatisticsCache.value);
+    }
+    if (!this.portalStatisticsRequest) {
+      this.portalStatisticsRequest = this.getPortalStatistics(4_000).then((value) => {
+        this.portalStatisticsCache = { value, expiresAt: Date.now() + (value ? 15_000 : 5_000) };
+        return value;
+      }).finally(() => { this.portalStatisticsRequest = undefined; });
+    }
+    return this.portalStatisticsRequest;
+  }
+
+  async getPortalStatistics(timeoutMs?: number): Promise<OwnerGatewayPortalStatistics | null> {
     const baseUrl = normalizeBaseUrl(process.env.OWNER_GATEWAY_URL);
     const syncSecret = process.env.OWNER_GATEWAY_SYNC_SECRET?.trim();
 
@@ -319,10 +334,11 @@ export class OwnerGatewayClient {
     }
 
     try {
-      const result = await requestGatewayWithRetry<OwnerGatewayPortalStatistics>(
+      const result = await (timeoutMs ? requestGateway<OwnerGatewayPortalStatistics> : requestGatewayWithRetry<OwnerGatewayPortalStatistics>)(
         `${baseUrl}/internal/v1/owners/portal-statistics`,
         syncSecret,
         { method: 'GET' },
+        timeoutMs,
       );
       return {
         generatedAt: result.generatedAt,
@@ -545,6 +561,7 @@ async function requestGateway<T = unknown>(
   url: string,
   syncSecret: string,
   input: { method: 'POST' | 'PUT'; body: unknown } | { method: 'DELETE' | 'GET'; body?: never },
+  timeoutMs?: number,
 ): Promise<T> {
   const response = await fetch(url, {
     method: input.method,
@@ -553,7 +570,7 @@ async function requestGateway<T = unknown>(
       'X-Owner-Gateway-Secret': syncSecret,
     },
     body: input.body === undefined ? undefined : JSON.stringify(input.body),
-    signal: AbortSignal.timeout(getGatewayRequestTimeoutMs()),
+    signal: AbortSignal.timeout(timeoutMs ?? getGatewayRequestTimeoutMs()),
   });
 
   if (!response.ok) {

@@ -2,9 +2,10 @@ import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common
 import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { AuthEmployee } from '../auth/auth.types';
 import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
-import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { RequireAnyPermissions, RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { PortalStatusesDto } from './dto/portal-statuses.dto';
 import { CreateNotificationDto } from './dto/create-notification.dto';
-import { CreatePortalInviteDto } from './dto/create-portal-invite.dto';
+import { CreatePortalInviteDto, PortalInviteChannel } from './dto/create-portal-invite.dto';
 import { ListNotificationsQueryDto } from './dto/list-notifications-query.dto';
 import { ListTemplatesQueryDto } from './dto/list-templates-query.dto';
 import { UpdatePortalAccessDto } from './dto/update-portal-access.dto';
@@ -74,6 +75,12 @@ export class NotificationsController {
     return this.notificationsService.upsertTemplate(dto, actor.id);
   }
 
+  @Post('owners/portal-statuses')
+  @RequirePermissions('owners.read')
+  getPortalStatuses(@Body() dto: PortalStatusesDto) {
+    return this.notificationsService.getPortalStatuses(dto.ownerIds);
+  }
+
   @Get('owners/:ownerId/portal-access')
   @RequirePermissions('owners.read')
   @ApiOkResponse({ description: 'Owner client portal access state.' })
@@ -89,10 +96,13 @@ export class NotificationsController {
   }
 
   @Post('owners/:ownerId/portal-invites')
-  @RequirePermissions('notifications.manage')
+  @RequirePermissions('owners.read')
+  @RequireAnyPermissions('notifications.manage', 'owners.manage')
   @ApiCreatedResponse({ description: 'Channel-aware owner portal invitation created.' })
   createPortalInvite(@Param('ownerId') ownerId: string, @Body() dto: CreatePortalInviteDto, @CurrentEmployee() actor: AuthEmployee) {
-    return this.notificationsService.createPortalInvite(ownerId, dto, actor.id);
+    const invitation = actor.permissions.includes('*') || actor.permissions.includes('notifications.manage')
+      ? dto : { channel: PortalInviteChannel.WEB, onlyIfNotActivated: true };
+    return this.notificationsService.createPortalInvite(ownerId, invitation, actor.id);
   }
 
   @Post('owners/:ownerId/portal-sync')

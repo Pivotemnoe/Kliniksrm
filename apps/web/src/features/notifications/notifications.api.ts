@@ -14,6 +14,7 @@ import {
   UpsertNotificationTemplateInput,
   TelegramBroadcastDraft,
   TelegramBroadcastPreview,
+  PortalActivationStatus,
 } from './types';
 
 export type ListNotificationsQuery = {
@@ -76,6 +77,12 @@ export function upsertNotificationTemplate(input: UpsertNotificationTemplateInpu
 
 export function getPortalAccess(ownerId: string) {
   return apiRequest<ClientPortalAccess>(`/v1/notifications/owners/${ownerId}/portal-access`);
+}
+
+export function getPortalStatuses(ownerIds: string[]) {
+  return apiRequest<{ items: Array<{ ownerId: string; status: PortalActivationStatus }> }>(
+    '/v1/notifications/owners/portal-statuses', { method: 'POST', body: { ownerIds } },
+  );
 }
 
 export function updatePortalAccess(ownerId: string, input: UpdatePortalAccessInput) {

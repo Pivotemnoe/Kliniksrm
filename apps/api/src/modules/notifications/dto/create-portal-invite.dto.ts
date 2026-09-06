@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum } from 'class-validator';
+import { IsBoolean, IsEnum, IsOptional } from 'class-validator';
 
 export enum PortalInviteChannel {
   MAX = 'MAX',
@@ -11,4 +11,8 @@ export class CreatePortalInviteDto {
   @ApiProperty({ enum: PortalInviteChannel })
   @IsEnum(PortalInviteChannel)
   channel!: PortalInviteChannel;
+
+  @IsOptional()
+  @IsBoolean()
+  onlyIfNotActivated?: boolean;
 }

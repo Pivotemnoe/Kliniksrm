@@ -21,6 +21,7 @@ import { UpdatePortalAccessDto } from './dto/update-portal-access.dto';
 import { UpsertTemplateDto } from './dto/upsert-template.dto';
 import { PreviewTelegramBroadcastDto } from './dto/preview-telegram-broadcast.dto';
 import { CreateTelegramBroadcastDto } from './dto/create-telegram-broadcast.dto';
+import { resolvePortalActivation } from './portal-activation';
 
 @Injectable()
 export class NotificationsService {
@@ -382,6 +383,26 @@ export class NotificationsService {
     return template;
   }
 
+  async getPortalStatuses(ownerIds: string[]) {
+    const [owners, gateway] = await Promise.all([
+      this.prisma.owner.findMany({
+        where: { id: { in: ownerIds } },
+        select: {
+          id: true,
+          portalAccess: { select: { status: true, invitedAt: true, lastLoginAt: true } },
+        },
+      }),
+      this.ownerGatewayClient.getCachedPortalStatistics(),
+    ]);
+    const gatewayOwners = new Map((gateway?.owners ?? []).map((owner) => [owner.ownerId, owner]));
+    return {
+      items: owners.map((owner) => ({
+        ownerId: owner.id,
+        status: resolvePortalActivation(owner.portalAccess, Boolean(gateway), gatewayOwners.get(owner.id)?.activatedAt),
+      })),
+    };
+  }
+
   async getPortalAccess(ownerId: string) {
     const owner = await this.prisma.owner.findUnique({
       where: { id: ownerId },
@@ -458,6 +479,21 @@ export class NotificationsService {
 
     if (!owner) {
       throw new NotFoundException('Владелец не найден');
+    }
+
+    if (dto.onlyIfNotActivated) {
+      const [access, gateway] = await Promise.all([
+        this.prisma.clientPortalAccess.findUnique({ where: { ownerId } }),
+        this.ownerGatewayClient.getStatus(ownerId),
+      ]);
+      const status = resolvePortalActivation(access, Boolean(gateway), gateway?.activatedAt);
+      if (status === 'ACTIVATED') throw new BadRequestException('Владелец уже активировал личный кабинет');
+      if (status === 'BLOCKED' || status === 'SUSPENDED') {
+        throw new BadRequestException('Доступ к кабинету отключён. Проверьте настройки в карточке владельца.');
+      }
+      if (status === 'UNKNOWN') {
+        throw new ServiceUnavailableException('Не удалось проверить личный кабинет. Повторите попытку позже.');
+      }
     }
 
     const inviteToken = randomBytes(24).toString('hex');
