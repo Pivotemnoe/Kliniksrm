@@ -28,7 +28,8 @@ import {
   startQueueEntry,
   updateQueueEntry,
 } from './queue.api';
-import { QueueFormDrawer } from './QueueFormDrawer';
+import { QueueFormDrawer, type QueueFormSubmitInput } from './QueueFormDrawer';
+import { saveRegistrationAnimalEdit } from '../animals/registrationAnimal';
 import { QueueCreateCardsDrawer } from './QueueCreateCardsDrawer';
 import { QueuePortalInvitationButton, useQueuePortalInvitations } from './QueuePortalInvitation';
 import { QueueMutationInput, getQueueDisplayStatus, queuePurposeLabels, queueUrgencyColors, queueUrgencyLabels } from './types';
@@ -58,7 +59,10 @@ export function QueueCardPage() {
       query.state.data?.status === 'IN_PROGRESS' && query.state.data.acceptWaitSeconds > 0 ? 1000 : false,
   });
   const updateMutation = useMutation({
-    mutationFn: (values: QueueMutationInput) => updateQueueEntry(queueEntryId!, values),
+    mutationFn: async ({ animalEdit, ...values }: QueueFormSubmitInput) => {
+      await saveRegistrationAnimalEdit(animalEdit, values.animalId, values.ownerId);
+      return updateQueueEntry(queueEntryId!, values);
+    },
     onSuccess: async () => {
       await invalidate();
       setEditOpen(false);

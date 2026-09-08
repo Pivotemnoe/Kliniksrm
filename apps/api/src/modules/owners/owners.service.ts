@@ -129,6 +129,7 @@ export class OwnersService {
       include: {
         animals: { where: { archivedAt: null } },
         trustedPeople: true,
+        visits: { where: { status: { not: 'CANCELLED' } }, orderBy: { startedAt: 'desc' }, take: 1, select: { startedAt: true } },
         _count: {
           select: {
             animals: { where: { archivedAt: null } },
@@ -149,7 +150,8 @@ export class OwnersService {
       throw new NotFoundException('Owner not found');
     }
 
-    return owner;
+    const { visits, ...details } = owner;
+    return { ...details, lastVisitAt: visits[0]?.startedAt ?? null };
   }
 
   async updateOwner(ownerId: string, dto: UpdateOwnerDto, actorId: string) {
@@ -367,10 +369,12 @@ export class OwnersService {
   async listOwnerAnimals(ownerId: string, includeArchived = false) {
     await this.ensureOwnerExists(ownerId);
 
-    return this.prisma.animal.findMany({
+    const animals = await this.prisma.animal.findMany({
       where: { ownerId, ...(includeArchived ? {} : { archivedAt: null }) },
       orderBy: [{ archivedAt: 'asc' }, { createdAt: 'desc' }],
+      include: { visits: { where: { status: { not: 'CANCELLED' } }, orderBy: { startedAt: 'desc' }, take: 1, select: { startedAt: true } } },
     });
+    return animals.map(({ visits, ...animal }) => ({ ...animal, lastVisitAt: visits[0]?.startedAt ?? null }));
   }
 
   async createAnimal(dto: CreateAnimalDto & { ownerId: string }, actorId: string) {

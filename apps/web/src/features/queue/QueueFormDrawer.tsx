@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Button, Checkbox, Form, Input, Modal, Radio, Select, Space, Steps, Typography } from 'antd';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
@@ -13,9 +13,12 @@ import { AddressAutocomplete } from '../../shared/ui/AddressAutocomplete';
 import { RussianPhoneInput } from '../../shared/ui/RussianPhoneInput';
 import { isAnimalBirthDateInputValid, normalizeAnimalBirthDateInput } from '../../shared/utils/animalBirthDate';
 import { AnimalCatalogFields } from '../animals/AnimalCatalogFields';
+import { RegistrationAnimalFields } from '../animals/RegistrationAnimalFields';
+import type { RegistrationAnimalEdit } from '../animals/registrationAnimal';
 import { animalStatusOptions, normalizeAnimalStatusInput } from '../animals/animalStatus';
 import { AnimalMutationInput, AnimalSex } from '../animals/types';
 import { QuickCreateAnimalButton } from '../owners/QuickCreateAnimalButton';
+import { RegistrationLastVisit } from '../owners/RegistrationLastVisit';
 import { Owner, OwnerMutationInput } from '../owners/types';
 import { QueueEntry, QueueMutationInput, QueuePurpose, QueueUrgency, queuePurposeLabels, queueUrgencyLabels } from './types';
 
@@ -100,6 +103,7 @@ type OwnerSelectOption = {
 };
 
 export type QueueFormSubmitInput = QueueMutationInput & {
+  animalEdit?: RegistrationAnimalEdit;
   createCards?: {
     owner: OwnerMutationInput;
     animal: AnimalMutationInput;
@@ -131,9 +135,16 @@ export function QueueFormDrawer({
     defaultValues: getDefaultValues(initialQueue),
   });
   const [ownerSearch, setOwnerSearch] = useState('');
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (open && !wasOpen.current) handleOpenChange(true);
+    wasOpen.current = open;
+  }, [open, initialQueue, reset]);
+  const [animalEdit, setAnimalEdit] = useState<RegistrationAnimalEdit>();
   const [step, setStep] = useState<'intake' | 'cards'>('intake');
   const clientMode = useWatch({ control, name: 'clientMode' });
   const ownerId = useWatch({ control, name: 'ownerId' });
+  const animalId = useWatch({ control, name: 'animalId' });
   const officeId = useWatch({ control, name: 'officeId' });
   const primaryOwnerName = useWatch({ control, name: 'ownerName' });
   const primaryPhone = useWatch({ control, name: 'phone' });
@@ -204,7 +215,7 @@ export function QueueFormDrawer({
       return;
     }
 
-    onSubmit(toQueueInput(values, { createCards: isPrimaryCreate }));
+    onSubmit({ ...toQueueInput(values, { createCards: isPrimaryCreate }), animalEdit: values.clientMode === 'existing' && animalEdit?.animalId === values.animalId ? animalEdit : undefined });
   }
 
   function handleBackOrClose() {
@@ -224,10 +235,11 @@ export function QueueFormDrawer({
   return (
     <Modal
       title={title}
-      width={isCardsStep ? 760 : 620}
+      width={isCardsStep || clientMode === 'existing' ? 760 : 620}
+      style={{ top: 24 }}
+      styles={{ body: { maxHeight: 'calc(100dvh - 170px)', overflowY: 'auto', paddingRight: 8 } }}
       open={open}
       onCancel={onClose}
-      afterOpenChange={handleOpenChange}
       destroyOnHidden
       footer={
         <Space>
@@ -241,6 +253,8 @@ export function QueueFormDrawer({
       <Form layout="vertical">
         {submitError ? <Alert type="error" showIcon message={getErrorMessage(submitError)} className="form-alert" /> : null}
         {resourcesQuery.isError ? <Alert type="error" showIcon message={getErrorMessage(resourcesQuery.error)} className="form-alert" /> : null}
+        <RegistrationLastVisit ownerId={ownerId} isNew={clientMode === 'free'} open={open} />
+        {clientMode === 'free' ? <Typography.Paragraph><Typography.Text strong>Последний приём пациента: </Typography.Text>Приёмов ещё нет</Typography.Paragraph> : null}
         {isPrimaryCreate ? (
           <Steps
             size="small"
@@ -296,6 +310,10 @@ export function QueueFormDrawer({
                 <PrimaryIntakeFields control={control} setValue={setValue} />
               </>
             )}
+            {open && clientMode === 'existing' && animalsQuery.data?.filter((animal) => animal.id === animalId).map((animal) => (
+              <RegistrationAnimalFields key={animal.id} animal={animal} onChange={setAnimalEdit} />
+            ))}
+            {clientMode === 'existing' && animalsQuery.isError ? <Alert type="warning" className="form-alert" message="Не удалось загрузить данные пациента. Повторите выбор владельца." /> : null}
             <QueueDetailsFields
               control={control}
               resourcesLoading={resourcesQuery.isLoading}

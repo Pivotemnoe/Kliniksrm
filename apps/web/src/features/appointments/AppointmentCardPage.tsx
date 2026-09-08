@@ -27,6 +27,7 @@ import {
   updateAppointment,
 } from './appointments.api';
 import { AppointmentFormDrawer, AppointmentFormSubmit } from './AppointmentFormDrawer';
+import { saveRegistrationAnimalEdit } from '../animals/registrationAnimal';
 import {
   Appointment,
   appointmentStatusColors,
@@ -48,7 +49,10 @@ export function AppointmentCardPage() {
     enabled: Boolean(appointmentId),
   });
   const updateMutation = useMutation({
-    mutationFn: (values: AppointmentFormSubmit) => updateAppointment(appointmentId!, values.appointment),
+    mutationFn: async (values: AppointmentFormSubmit) => {
+      await saveRegistrationAnimalEdit(values.animalEdit, values.appointment.animalId, values.appointment.ownerId);
+      return updateAppointment(appointmentId!, values.appointment);
+    },
     onSuccess: async () => {
       await invalidate();
       setEditOpen(false);

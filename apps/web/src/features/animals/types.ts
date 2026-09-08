@@ -9,6 +9,7 @@ export type Animal = {
   breed: string | null;
   sex: AnimalSex;
   birthDate: string | null;
+  lastVisitAt?: string | null;
   color: string | null;
   microchip: string | null;
   mark: string | null;

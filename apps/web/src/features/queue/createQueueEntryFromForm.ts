@@ -1,9 +1,11 @@
 import { createOwner, createOwnerAnimal } from '../owners/owners.api';
 import { createQueueEntry } from './queue.api';
+import { saveRegistrationAnimalEdit } from '../animals/registrationAnimal';
 import type { QueueFormSubmitInput } from './QueueFormDrawer';
 
-export async function createQueueEntryFromForm(values: QueueFormSubmitInput) {
+export async function createQueueEntryFromForm({ animalEdit, ...values }: QueueFormSubmitInput) {
   if (!values.createCards) {
+    await saveRegistrationAnimalEdit(animalEdit, values.animalId, values.ownerId);
     return createQueueEntry(values);
   }
 

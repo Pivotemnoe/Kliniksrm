@@ -18,6 +18,7 @@ import { listEmployeeShifts } from '../scheduling/scheduling.api';
 import { EmployeeShift } from '../scheduling/types';
 import { createAppointment, listAppointments } from './appointments.api';
 import { AppointmentFormDrawer, AppointmentFormSubmit } from './AppointmentFormDrawer';
+import { saveRegistrationAnimalEdit } from '../animals/registrationAnimal';
 import { EmployeeShiftsPanel } from './EmployeeShiftsPanel';
 import {
   Appointment,
@@ -84,6 +85,8 @@ export function AppointmentsPage() {
       if (!ownerId || !animalId) {
         throw new Error('Выберите владельца и пациента');
       }
+
+      await saveRegistrationAnimalEdit(values.animalEdit, animalId, ownerId);
 
       return createAppointment({
         ...values.appointment,
