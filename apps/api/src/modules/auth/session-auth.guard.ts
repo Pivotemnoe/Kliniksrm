@@ -83,18 +83,20 @@ export class SessionAuthGuard implements CanActivate {
 
     if (
       session.accessType === 'REMOTE' &&
-      (!session.remoteDevice || session.remoteDevice.revokedAt || !session.remoteDevice.organization.remoteAccessPolicy?.enabled)
+      (!session.remoteDevice || session.remoteDevice.revokedAt || session.remoteDevice.employeeId !== session.user.employee.id || !session.remoteDevice.organization.remoteAccessPolicy?.enabled)
     ) {
       await this.prisma.session.deleteMany({ where: { id: session.id } });
       throw new UnauthorizedException('Удалённый доступ или доверие к устройству отозвано');
     }
 
+    const employee = this.authService.serializeEmployee(session.user.employee, session.user.mustChangePassword);
     try {
       await this.authService.assertEmployeeCanUseCrm(
         session.user.employee,
         'auth.session_outside_shift',
         getIpAddress(request),
         session.accessType,
+        session.accessType === 'REMOTE' && !employee.roles.includes('director'),
       );
     } catch (error) {
       await this.prisma.session.deleteMany({ where: { id: session.id } });
@@ -106,7 +108,7 @@ export class SessionAuthGuard implements CanActivate {
       userId: session.userId,
       accessType: session.accessType,
       remoteDeviceId: session.remoteDeviceId,
-      employee: this.authService.serializeEmployee(session.user.employee, session.user.mustChangePassword),
+      employee,
     };
 
     const allowRemoteMutation = this.reflector.getAllAndOverride<boolean>(ALLOW_REMOTE_MUTATION_KEY, [

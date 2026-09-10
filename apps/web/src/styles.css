@@ -5015,6 +5015,16 @@ body {
   }
 }
 
+.mobile-remote-access-notice { display: none; }
+
+@media (max-width: 767px) {
+  /* Operational notices remain available in the bell, without covering the page. */
+  .global-operational-alerts { display: none; }
+  .mobile-remote-access-notice { display: flex; margin-bottom: 8px; }
+  .mobile-remote-access-notice.ant-alert { padding: 8px; }
+  .staff-alerts-popover { max-height: min(65dvh, 520px); overflow-y: auto; }
+}
+
 .infinite-list-status {
   min-height: 52px;
   display: flex;

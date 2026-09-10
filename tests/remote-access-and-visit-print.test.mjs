@@ -344,6 +344,7 @@ function remoteSessionFixture() {
     expiresAt: new Date(Date.now() + 60_000),
     remoteDevice: {
       id: 'device-1',
+      employeeId: 'doctor-1',
       revokedAt: null,
       organization: { remoteAccessPolicy: { enabled: true, idleTimeoutMinutes: 30 } },
     },

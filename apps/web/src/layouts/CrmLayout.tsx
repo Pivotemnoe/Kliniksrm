@@ -178,7 +178,7 @@ export function CrmLayout() {
               </span>
             ) : null}
             <span className="header-action header-action-alerts">
-              <StaffAlertsPopover />
+              <StaffAlertsPopover unreadMessages={internalMessagesQuery.data?.totalUnread ?? 0} />
             </span>
             {canReadBusiness || canReadFinanceSettings ? (
               <span className="header-action header-action-finance">

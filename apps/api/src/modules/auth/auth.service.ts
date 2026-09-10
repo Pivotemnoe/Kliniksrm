@@ -88,8 +88,6 @@ export class AuthService {
       throw new UnauthorizedException('Сотрудник заблокирован или не связан с пользователем');
     }
 
-    await this.assertEmployeeCanUseCrm(user.employee, 'auth.login_outside_shift', ipAddress, access.accessType);
-
     let remoteDeviceId: string | null = null;
     let idleTimeoutMinutes = SESSION_IDLE_TIMEOUT_MINUTES;
     if (access.accessType === 'REMOTE') {
@@ -130,6 +128,11 @@ export class AuthService {
         data: { lastSeenAt: new Date(), lastIpAddress: ipAddress ?? null, userAgent: userAgent ?? device.userAgent },
       });
     }
+
+    // Only a validated remote device may bypass shifts, and only in read-only mode.
+    const trustedRemoteReadOnly = Boolean(remoteDeviceId)
+      && !this.serializeEmployee(user.employee, user.mustChangePassword).roles.includes('director');
+    await this.assertEmployeeCanUseCrm(user.employee, 'auth.login_outside_shift', ipAddress, access.accessType, trustedRemoteReadOnly);
 
     const token = randomBytes(48).toString('base64url');
     const sessionId = this.hashSessionToken(token);
@@ -189,8 +192,9 @@ export class AuthService {
     action: string,
     ipAddress?: string | null,
     accessType: 'LOCAL' | 'REMOTE' = 'LOCAL',
+    trustedRemoteReadOnly = false,
   ) {
-    if (!employee.restrictLoginToShifts || (accessType === 'REMOTE' && employee.allowRemoteOutsideShift)) {
+    if (!employee.restrictLoginToShifts || (accessType === 'REMOTE' && (employee.allowRemoteOutsideShift || trustedRemoteReadOnly))) {
       return;
     }
 

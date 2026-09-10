@@ -1,0 +1,15 @@
+{
+  "id": "/",
+  "name": "TemichevVet CRM",
+  "short_name": "TemichevVet CRM",
+  "lang": "ru",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#086bc1",
+  "icons": [
+    { "src": "/brand/temichevvet-favicon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/brand/temichevvet-logo.jpg", "sizes": "1280x1280", "type": "image/jpeg", "purpose": "any" }
+  ]
+}

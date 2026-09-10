@@ -7,12 +7,14 @@ import { getErrorMessage } from '../../api/errors';
 import { formatDateTime } from '../../shared/utils/date';
 import { listStaffAlerts, markAllStaffAlertsRead, markStaffAlertRead } from './staffAlerts.api';
 import { StaffAlertItem } from './types';
+import { useCurrentEmployee } from '../../auth/useAuth';
 
-export function StaffAlertsPopover() {
+export function StaffAlertsPopover({ unreadMessages = 0 }: { unreadMessages?: number }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { message } = App.useApp();
   const [open, setOpen] = useState(false);
+  const { data: auth } = useCurrentEmployee();
   const alertsQuery = useQuery({
     queryKey: ['staff-alerts'],
     queryFn: listStaffAlerts,
@@ -29,12 +31,13 @@ export function StaffAlertsPopover() {
     onError: (error) => message.error(getErrorMessage(error)),
   });
   const unreadItems = (alertsQuery.data?.items ?? []).filter((item) => item.unread);
+  const visibleItems = (alertsQuery.data?.items ?? []).filter((item) => item.unread || ['UNFINISHED_VISIT', 'TODAY_VACCINATION', 'OVERDUE_VACCINATION'].includes(item.kind));
 
   const content = (
     <div className="staff-alerts-popover">
       <div className="staff-alerts-header">
         <div>
-          <Typography.Text strong>Непросмотренные оповещения</Typography.Text>
+          <Typography.Text strong>Оповещения</Typography.Text>
           <Typography.Text type="secondary" className="staff-alerts-subtitle">
             Выберите нужное — откроется соответствующая запись или раздел.
           </Typography.Text>
@@ -51,6 +54,10 @@ export function StaffAlertsPopover() {
           </Button>
         ) : null}
       </div>
+      {auth?.accessType === 'REMOTE' ? <Alert type="info" showIcon className="mobile-remote-access-notice"
+        message={auth.employee.roles.includes('director') ? 'Удалённая работа директора' : 'Удалённый просмотр'}
+        description={auth.employee.roles.includes('director') ? 'Изменения по вашим правам, с аудитом.' : 'Изменение рабочих данных заблокировано.'} /> : null}
+      {unreadMessages > 0 ? <Button block className="mobile-remote-access-notice" onClick={() => { setOpen(false); navigate('/staff-messages'); }}>Сообщения сотрудникам: {unreadMessages}</Button> : null}
       {alertsQuery.isLoading ? (
         <div className="staff-alerts-loading"><Spin size="small" /></div>
       ) : alertsQuery.isError && !alertsQuery.data ? (
@@ -61,15 +68,15 @@ export function StaffAlertsPopover() {
           description="Проверьте соединение с сервером и повторите запрос."
           action={<Button size="small" onClick={() => void alertsQuery.refetch()}>Повторить</Button>}
         />
-      ) : unreadItems.length ? (
+      ) : visibleItems.length ? (
         <div className="staff-alerts-list">
-          {unreadItems.map((item) => (
+          {visibleItems.map((item) => (
             <button
               key={item.key}
               type="button"
               className="staff-alert-item"
               onClick={async () => {
-                await markReadMutation.mutateAsync(item.key);
+                if (item.unread) await markReadMutation.mutateAsync(item.key);
                 setOpen(false);
                 navigate(item.href);
               }}
@@ -104,7 +111,7 @@ export function StaffAlertsPopover() {
         if (nextOpen) void alertsQuery.refetch();
       }}
     >
-      <Badge count={alertsQuery.data?.unreadTotal || undefined} size="small" overflowCount={99}>
+      <Badge count={(alertsQuery.data?.unreadTotal ?? 0) + unreadMessages || undefined} size="small" overflowCount={99}>
         <Button type="text" shape="circle" icon={<BellOutlined />} aria-label="Непросмотренные оповещения" />
       </Badge>
     </Popover>

@@ -254,11 +254,12 @@ test('колокольчик, глобальная красная плашка, 
     read('apps/web/src/app/routes.tsx'),
   ]);
 
-  assert.match(layout, /<StaffAlertsPopover \/>/);
+  assert.match(layout, /<StaffAlertsPopover unreadMessages=\{internalMessagesQuery\.data\?\.totalUnread \?\? 0\} \/>/);
   assert.match(layout, /<GlobalOperationalAlerts[\s\S]*?internalMessages=\{internalMessagesQuery\.data\}/);
   assert.doesNotMatch(layout, /headerAlertTarget/);
   assert.match(popover, /Непросмотренные оповещения/);
-  assert.match(popover, /unreadItems\.map/);
+  assert.match(popover, /visibleItems\.map/);
+  assert.match(popover, /item\.unread \|\| \['UNFINISHED_VISIT', 'TODAY_VACCINATION', 'OVERDUE_VACCINATION'\]/);
   assert.match(popover, /navigate\(item\.href\)/);
   assert.match(operationalAlerts, /dashboard-overdue-banner/);
   assert.match(operationalAlerts, /Новое сообщение от/);
