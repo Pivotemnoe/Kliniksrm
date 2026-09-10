@@ -86,6 +86,8 @@ function Test-DiagnosticArchive($Directory, $Name) {
 if ($LibraryOnly) { return }
 $config=Read-DiagnosticJson $ConfigPath
 if ($env:COMPUTERNAME -ne $config.expectedHost -or $config.expectedRevision -notmatch '^[a-f0-9]{40}$') { throw 'Wrong host or invalid baseline' }
+if ($config.dockerHost -notmatch '^npipe://') { throw 'A local Docker named pipe is required' }
+$env:DOCKER_HOST=$config.dockerHost
 $directory=Join-Path $config.root 'diagnostics'
 [void][IO.Directory]::CreateDirectory($directory)
 $lock=$null

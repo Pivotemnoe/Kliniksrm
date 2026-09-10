@@ -9,6 +9,8 @@ $Root=(Resolve-Path -LiteralPath $Root).Path
 if (!(Test-Path (Join-Path $Root 'docker-compose.yml'))) { throw 'CRM directory required' }
 Set-Location $Root
 $docker=(Get-Command docker.exe -ErrorAction Stop).Source
+$dockerHost=(docker context inspect --format '{{.Endpoints.docker.Host}}').Trim()
+if ($LASTEXITCODE -ne 0 -or $dockerHost -notmatch '^npipe://') { throw 'A local Docker named pipe is required' }
 foreach ($name in @('api','web')) {
   $info=docker inspect "clinic-crm-$name" | ConvertFrom-Json
   if ($LASTEXITCODE -ne 0 -or !$info.State.Running -or $info.Config.Labels.'org.opencontainers.image.revision' -ne $ExpectedRevision) { throw "Unverified running revision: $name" }
@@ -37,7 +39,7 @@ foreach ($name in @('system-diagnostics.ps1','system-diagnostics-notify.cjs')) {
 }
 $configPath=Join-Path $bin 'system-diagnostics-config.json'
 if (Test-Path $configPath) { Copy-Item -LiteralPath $configPath -Destination (Join-Path $directory "baseline-before-$([DateTime]::Now.ToString('yyyyMMdd-HHmmss')).json") }
-$config=@{schemaVersion=1;root=$Root;expectedHost=$ExpectedHost;expectedRevision=$ExpectedRevision;backupDirectory=$backupDirectory;dockerPath=$docker;baseUrl='http://127.0.0.1:3000'}
+$config=@{schemaVersion=1;root=$Root;expectedHost=$ExpectedHost;expectedRevision=$ExpectedRevision;backupDirectory=$backupDirectory;dockerPath=$docker;dockerHost=$dockerHost;baseUrl='http://127.0.0.1:3000'}
 [IO.File]::WriteAllText($configPath,($config | ConvertTo-Json),(New-Object Text.UTF8Encoding($false)))
 if (![Diagnostics.EventLog]::SourceExists('TemichevVet Diagnostics')) { New-EventLog -LogName Application -Source 'TemichevVet Diagnostics' }
 $name='TemichevVet Daily Diagnostics'
