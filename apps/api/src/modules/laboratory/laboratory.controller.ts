@@ -12,11 +12,36 @@ import { UpdateLaboratoryOrderResultsDto } from './dto/update-laboratory-order-r
 import { UpdateLaboratoryProfileDto, UpsertLaboratoryProfileDto } from './dto/upsert-laboratory-profile.dto';
 import { UpdateLaboratoryTestDto, UpsertLaboratoryTestDto } from './dto/upsert-laboratory-test.dto';
 import { LaboratoryService } from './laboratory.service';
+import { CreateHospitalLaboratoryOrderDto } from './dto/create-hospital-laboratory-order.dto';
 
 @ApiTags('laboratory')
 @Controller('v1/laboratory')
 export class LaboratoryController {
   constructor(private readonly laboratoryService: LaboratoryService) {}
+
+  @Get('hospital/tests')
+  @RequirePermissions('hospital.read')
+  listHospitalTests(@Query() query: ListLaboratoryQueryDto) {
+    return this.laboratoryService.listTests(query);
+  }
+
+  @Get('hospital/:stayId/orders')
+  @RequirePermissions('hospital.read')
+  listHospitalOrders(@Param('stayId') stayId: string) {
+    return this.laboratoryService.listHospitalOrders(stayId);
+  }
+
+  @Post('hospital/:stayId/orders')
+  @RequirePermissions('hospital.manage')
+  createHospitalOrder(@Param('stayId') stayId: string, @Body() dto: CreateHospitalLaboratoryOrderDto, @CurrentEmployee() actor: AuthEmployee) {
+    return this.laboratoryService.createHospitalOrder(stayId, dto, actor.id);
+  }
+
+  @Patch('hospital/:stayId/orders/:orderId/results')
+  @RequirePermissions('hospital.manage')
+  updateHospitalResults(@Param('stayId') stayId: string, @Param('orderId') orderId: string, @Body() dto: UpdateLaboratoryOrderResultsDto, @CurrentEmployee() actor: AuthEmployee) {
+    return this.laboratoryService.updateHospitalResults(stayId, orderId, dto, actor.id);
+  }
 
   @Get('resources')
   @RequireAnyPermissions('laboratory.read', 'laboratory.manage', 'visits.manage')

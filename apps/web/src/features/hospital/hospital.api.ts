@@ -1,6 +1,7 @@
 import { apiRequest } from '../../api/client';
 import { PaginatedResponse } from '../../shared/types/api';
 import { buildQuery } from '../../shared/utils/query';
+import type { LaboratoryOrder, LaboratoryOrderResultRowInput, LaboratoryTest } from '../laboratory/types';
 import { AdmitHospitalInput, CancelHospitalRecordsInput, CreateHospitalAmendmentInput, CreateHospitalRecordInput, CreateHospitalTreatmentPlanInput, HospitalCatalog, HospitalPreliminaryBill, HospitalRecord, HospitalResources, HospitalStay, HospitalStayStatus, HospitalTreatmentPlan, UpdateHospitalRecordInput } from './types';
 
 type HospitalListQuery = {
@@ -10,6 +11,22 @@ type HospitalListQuery = {
   limit?: number;
   offset?: number;
 };
+
+export function listHospitalLaboratoryOrders(stayId: string) {
+  return apiRequest<LaboratoryOrder[]>(`/v1/laboratory/hospital/${stayId}/orders`);
+}
+
+export function searchHospitalLaboratoryTests(search: string) {
+  return apiRequest<PaginatedResponse<LaboratoryTest>>(`/v1/laboratory/hospital/tests${buildQuery({ search, isActive: true, limit: 100, offset: 0 })}`);
+}
+
+export function createHospitalLaboratoryOrder(stayId: string, input: { testId: string; comment?: string }) {
+  return apiRequest<LaboratoryOrder>(`/v1/laboratory/hospital/${stayId}/orders`, { method: 'POST', body: input });
+}
+
+export function updateHospitalLaboratoryResults(stayId: string, orderId: string, items: LaboratoryOrderResultRowInput[]) {
+  return apiRequest<LaboratoryOrder>(`/v1/laboratory/hospital/${stayId}/orders/${orderId}/results`, { method: 'PATCH', body: { items } });
+}
 
 export function listHospital(query: HospitalListQuery) {
   return apiRequest<PaginatedResponse<HospitalStay>>(`/v1/hospital${buildQuery(query)}`);

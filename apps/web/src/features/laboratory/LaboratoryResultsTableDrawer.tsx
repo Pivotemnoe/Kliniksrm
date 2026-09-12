@@ -43,11 +43,13 @@ export function LaboratoryResultsTableDrawer({
   patientName,
   canManage,
   onClose,
+  saveResults,
 }: {
   order: ResultOrder | null;
   patientName: string;
   canManage: boolean;
   onClose: () => void;
+  saveResults?: (orderId: string, items: LaboratoryOrderResultRowInput[]) => Promise<unknown>;
 }) {
   const queryClient = useQueryClient();
   const { message } = App.useApp();
@@ -55,7 +57,7 @@ export function LaboratoryResultsTableDrawer({
   const rowsRef = useRef<ResultTableRow[]>([]);
   const rowIndexesRef = useRef(new Map<string, number>());
   const mutation = useMutation({
-    mutationFn: (items: LaboratoryOrderResultRowInput[]) => updateLaboratoryOrderResults(order!.id, items),
+    mutationFn: (items: LaboratoryOrderResultRowInput[]) => (saveResults ?? updateLaboratoryOrderResults)(order!.id, items),
     onSuccess: () => {
       onClose();
       message.success('Таблица результатов сохранена');

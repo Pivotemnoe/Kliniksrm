@@ -13,7 +13,8 @@ import { UpdateLaboratoryOrderItemDto } from './dto/update-laboratory-order-item
 import { UpdateLaboratoryOrderResultsDto, UpdateLaboratoryOrderResultRowDto } from './dto/update-laboratory-order-results.dto';
 import { UpdateLaboratoryProfileDto, UpsertLaboratoryProfileDto } from './dto/upsert-laboratory-profile.dto';
 import { UpdateLaboratoryTestDto, UpsertLaboratoryTestDto } from './dto/upsert-laboratory-test.dto';
-import { extractLaboratoryDocumentIndicators } from './laboratory-document-form';
+import { extractLaboratoryDocumentIndicators, LaboratoryFormSnapshot } from './laboratory-document-form';
+import { CreateHospitalLaboratoryOrderDto } from './dto/create-hospital-laboratory-order.dto';
 
 @Injectable()
 export class LaboratoryService {
@@ -34,6 +35,75 @@ export class LaboratoryService {
     ]);
 
     return { services, species };
+  }
+
+  async listHospitalOrders(stayId: string) {
+    const stay = await this.prisma.hospitalStay.findUnique({ where: { id: stayId } });
+    if (!stay) throw new NotFoundException('Стационарная карта не найдена');
+    return this.prisma.laboratoryOrder.findMany({
+      where: { visitId: stay.sourceVisitId },
+      orderBy: { createdAt: 'desc' },
+      include: laboratoryOrderInclude,
+    });
+  }
+
+  async createHospitalOrder(stayId: string, dto: CreateHospitalLaboratoryOrderDto, actorId: string) {
+    // The source visit is already completed. This creates medical results only:
+    // hospital services continue to accrue through hospital records, without a second bill.
+    const order = await this.prisma.$transaction(async (tx) => {
+      const stay = await tx.hospitalStay.findUnique({ where: { id: stayId }, include: { sourceVisit: { select: { status: true } } } });
+      if (!stay) throw new NotFoundException('Стационарная карта не найдена');
+      if (stay.status !== 'ACTIVE') throw new BadRequestException('Добавление анализов доступно в открытом стационаре');
+      ensureLaboratoryVisitOperational(stay.sourceVisit);
+      const test = await tx.laboratoryTest.findUnique({
+        where: { id: dto.testId },
+        include: { documentTemplate: { select: { id: true, title: true, currentVersion: true, layout: true } } },
+      });
+      if (!test?.isActive) throw new NotFoundException('Анализ не найден или выключен');
+      const { layout, indicators } = extractLaboratoryDocumentIndicators(test.documentTemplate?.layout);
+      if (!test.documentTemplate || !layout || !indicators.length) {
+        throw new BadRequestException('Привяжите к анализу документ с таблицей показателей');
+      }
+      const created = await tx.laboratoryOrder.create({
+        data: { visitId: stay.sourceVisitId, createdById: actorId, comment: clean(dto.comment) },
+      });
+      const bindings: LaboratoryFormSnapshot['bindings'] = [];
+      for (const indicator of indicators) {
+        const item = await tx.laboratoryOrderItem.create({
+          data: {
+            orderId: created.id, testId: test.id, title: indicator.title,
+            code: indicator.code, groupName: test.title, material: test.material, method: test.method,
+            unit: indicator.unit, referenceRange: indicator.referenceRange,
+          },
+          select: { id: true },
+        });
+        bindings.push({ itemId: item.id, blockId: indicator.blockId, rowIndex: indicator.rowIndex, resultColumnIndex: indicator.resultColumnIndex });
+      }
+      const snapshot: LaboratoryFormSnapshot = {
+        schemaVersion: 1, testId: test.id, testTitle: test.title,
+        documentTemplateId: test.documentTemplate.id, documentTemplateTitle: test.documentTemplate.title,
+        documentTemplateVersion: test.documentTemplate.currentVersion, layout, bindings,
+      };
+      return tx.laboratoryOrder.update({
+        where: { id: created.id },
+        data: { formSnapshots: [snapshot] as unknown as Prisma.InputJsonValue },
+        include: laboratoryOrderInclude,
+      });
+    });
+    await this.auditService.log({
+      actorId, action: 'hospital.laboratory_order.create', entityType: 'LaboratoryOrder', entityId: order.id,
+      metadata: { stayId, visitId: order.visitId, testId: dto.testId, billingCreated: false },
+    });
+    return order;
+  }
+
+  async updateHospitalResults(stayId: string, orderId: string, dto: UpdateLaboratoryOrderResultsDto, actorId: string) {
+    const stay = await this.prisma.hospitalStay.findUnique({ where: { id: stayId } });
+    if (!stay) throw new NotFoundException('Стационарная карта не найдена');
+    if (stay.status !== 'ACTIVE') throw new BadRequestException('Редактирование анализов доступно в открытом стационаре');
+    const order = await this.prisma.laboratoryOrder.findFirst({ where: { id: orderId, visitId: stay.sourceVisitId }, select: { id: true } });
+    if (!order) throw new NotFoundException('Анализ не найден в этой стационарной карте');
+    return this.updateOrderResults(orderId, dto, actorId);
   }
 
   async listOrders(query: ListLaboratoryOrdersQueryDto) {

@@ -38,6 +38,7 @@ import {
   updateHospitalStay,
 } from './hospital.api';
 import { HospitalSheet } from './HospitalSheet';
+import { HospitalLaboratoryPanel } from './HospitalLaboratoryPanel';
 import { HospitalDischargeButton } from './HospitalDischargeButton';
 import { HospitalTreatmentPlanModal } from './HospitalTreatmentPlanModal';
 import { useDebouncedValue } from '../../shared/hooks/useDebouncedValue';
@@ -369,6 +370,7 @@ export function HospitalCardPage() {
               />
             </div>
           </div>
+          <HospitalLaboratoryPanel stay={stay} organization={organizationQuery.data} />
           {canReadDocuments ? (
             <div className="list-panel">
               <div className="list-panel-body">
