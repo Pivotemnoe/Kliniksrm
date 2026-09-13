@@ -137,9 +137,14 @@ function renderPortal(response) {
     ${section('documents', 'Документы', `<label class="search-label">Поиск в загруженных документах<input id="document-search" type="search" placeholder="Название или категория" value="${escapeHtml(documentQuery)}"></label>${historyNotice(snapshot.files, snapshot.historyLimits?.files, 'файлов')}<div id="document-results">${renderDocuments(searchDocuments(documents))}</div>`, activeTab !== 'documents')}
     ${section('bills', 'Счета и оплаты', `${!selectedAnimalId ? `<p class="muted">Баланс владельца по данным клиники: <strong>${formatMoney(owner.balance)}</strong></p>` : '<p class="muted">Показаны счета выбранного питомца. Счета без привязки к питомцу доступны при выборе «Все питомцы».</p>'}${historyNotice(snapshot.bills, snapshot.historyLimits?.bills, 'счетов')}${renderBills(bills)}`, activeTab !== 'bills')}
     ${section('notifications', 'Сообщения клиники', '<p class="muted">Общие сообщения владельцу — для всех питомцев.</p>' + historyNotice(notifications, snapshot.historyLimits?.notifications, 'сообщений') + renderNotifications(notifications), activeTab !== 'notifications')}
-    <details class="portal-settings"><summary>Устройства, уведомления и контакты владельца</summary><p>${joinText([owner.phone, owner.extraPhone, owner.email, owner.address]) || 'Контакты не указаны'}</p><p class="muted">Для исправления контактов обратитесь в клинику.</p><div class="settings-actions">
-      ${showBrowserTransfer ? '<button id="prepare-browser" class="button browser-only" type="button">Открыть в браузере</button><button id="copy-browser-link" class="button browser-only" type="button" hidden>Скопировать ссылку</button><span id="browser-hint" class="browser-hint browser-only" hidden>Нажмите значок браузера в MAX или скопируйте ссылку. Переход действует 10 минут.</span>' : ''}
-      <button id="enable-push" class="button" type="button" hidden>Включить уведомления</button><span id="push-status" class="push-status" role="status" hidden></span></div></details>`;
+    <details class="portal-settings"><summary>Настройки кабинета</summary>
+      <h3 class="subheading">Ваши контакты</h3>
+      ${[['Телефон', owner.phone], ['Дополнительный телефон', owner.extraPhone], ['Электронная почта', owner.email], ['Адрес', owner.address]].filter(([, value]) => value).map(([label, value]) => `<p><strong>${label}:</strong> ${escapeHtml(value)}</p>`).join('') || '<p>Контакты не указаны</p>'}
+      <p class="muted">Это ваши данные в карточке клиники. Если они изменились, сообщите администратору.</p>
+      <h3 class="subheading">Уведомления на этом устройстве</h3><div class="settings-actions">
+      <button id="enable-push" class="button" type="button" hidden>Включить уведомления</button><span id="push-status" class="push-status" role="status" hidden></span></div>
+      ${showBrowserTransfer ? '<h3 class="subheading">Вход в браузере</h3><div class="settings-actions"><button id="prepare-browser" class="button browser-only" type="button">Открыть кабинет в браузере</button><button id="copy-browser-link" class="button browser-only" type="button" hidden>Скопировать ссылку</button><span id="browser-hint" class="browser-hint browser-only" hidden>Нажмите значок браузера в MAX или скопируйте ссылку. Переход действует 10 минут.</span></div>' : ''}
+    </details>`;
   app.querySelectorAll('.tab').forEach((button) => button.addEventListener('click', () => {
     selectTab(button.dataset.tab);
     if (button.dataset.tab === 'notifications') markNotificationsRead(response.ownerId, notifications);
