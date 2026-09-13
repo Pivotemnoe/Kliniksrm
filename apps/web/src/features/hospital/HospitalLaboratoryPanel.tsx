@@ -1,6 +1,6 @@
 import { EditOutlined, PlusOutlined, PrinterOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Button, Card, Form, Input, Modal, Select, Space, Table, Tag, Typography } from 'antd';
+import { Alert, Button, Card, Drawer, Form, Input, Select, Space, Table, Tag, Typography } from 'antd';
 import { useState } from 'react';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
@@ -9,6 +9,8 @@ import { useDebouncedValue } from '../../shared/hooks/useDebouncedValue';
 import { formatDateTime } from '../../shared/utils/date';
 import { AttachmentsPanel } from '../files/AttachmentsPanel';
 import { listLaboratoryOrderFiles, uploadLaboratoryOrderFile } from '../files/files.api';
+import { getLaboratoryResources } from '../laboratory/laboratory.api';
+import { LaboratoryTestEditorDrawer } from '../laboratory/LaboratoryPage';
 import { LaboratoryResultsTableDrawer } from '../laboratory/LaboratoryResultsTableDrawer';
 import { printLaboratoryOrder } from '../laboratory/laboratoryPrint';
 import type { LaboratoryOrder } from '../laboratory/types';
@@ -17,7 +19,17 @@ import { laboratoryOrderStatusColors, laboratoryOrderStatusLabels } from '../vis
 import { createHospitalLaboratoryOrder, listHospitalLaboratoryOrders, searchHospitalLaboratoryTests, updateHospitalLaboratoryResults } from './hospital.api';
 import type { HospitalStay } from './types';
 
-export function HospitalLaboratoryPanel({ stay, organization }: { stay: HospitalStay; organization?: OrganizationPrintProfile | null }) {
+export function HospitalLaboratoryPanel({
+  stay,
+  organization,
+  createOpen,
+  onCreateOpenChange,
+}: {
+  stay: HospitalStay;
+  organization?: OrganizationPrintProfile | null;
+  createOpen: boolean;
+  onCreateOpenChange: (open: boolean) => void;
+}) {
   const { data: auth } = useCurrentEmployee();
   const remoteReadOnly = auth?.accessType === 'REMOTE' && !auth.employee.roles.includes('director');
   const canManage = hasPermission(auth?.employee, 'hospital.manage') && stay.status === 'ACTIVE' && !remoteReadOnly;
@@ -25,27 +37,43 @@ export function HospitalLaboratoryPanel({ stay, organization }: { stay: Hospital
   const canReadFiles = hasPermission(auth?.employee, 'laboratory.read');
   const canUploadFiles = canManage && hasPermission(auth?.employee, 'laboratory.manage');
   const client = useQueryClient();
-  const [open, setOpen] = useState(false);
+  const [configurationOpen, setConfigurationOpen] = useState(false);
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search, 250);
-  const [form] = Form.useForm<{ testId: string; comment?: string }>();
+  const [form] = Form.useForm<{ testIds: string[]; comment?: string }>();
   const [editing, setEditing] = useState<LaboratoryOrder | null>(null);
   const queryKey = ['laboratory', 'orders', 'hospital', stay.id];
   const orders = useQuery({ queryKey, queryFn: () => listHospitalLaboratoryOrders(stay.id) });
   const tests = useQuery({
     queryKey: ['laboratory', 'tests', 'hospital-select', debouncedSearch],
     queryFn: () => searchHospitalLaboratoryTests(debouncedSearch),
-    enabled: open,
+    enabled: createOpen,
+  });
+  const resources = useQuery({
+    queryKey: ['laboratory', 'resources'],
+    queryFn: getLaboratoryResources,
+    enabled: configurationOpen,
   });
   const create = useMutation({
-    mutationFn: (values: { testId: string; comment?: string }) => createHospitalLaboratoryOrder(stay.id, values),
+    mutationFn: (values: { testIds: string[]; comment?: string }) => createHospitalLaboratoryOrder(stay.id, values),
     onSuccess: async (order) => {
-      setOpen(false); form.resetFields(); setEditing(order);
+      onCreateOpenChange(false); setSearch(''); form.resetFields(); setEditing(order);
       await Promise.all([client.invalidateQueries({ queryKey: ['laboratory', 'orders'] }), client.invalidateQueries({ queryKey: ['visits'] })]);
     },
   });
+  const canConfigure = hasPermission(auth?.employee, 'laboratory.read')
+    || hasPermission(auth?.employee, 'laboratory.manage')
+    || hasPermission(auth?.employee, 'visits.manage');
+  const canEditDocuments = hasPermission(auth?.employee, 'documents.manage');
+  const availableTests = tests.data?.items ?? [];
+  function closeCreate() {
+    onCreateOpenChange(false);
+    setSearch('');
+    form.resetFields();
+    create.reset();
+  }
   return (
-    <Card title="Результаты анализов" size="small" extra={canManage ? <Button icon={<PlusOutlined />} onClick={() => { create.reset(); setOpen(true); }}>Добавить анализ</Button> : null}>
+    <Card title="Результаты анализов" size="small">
       <Typography.Paragraph type="secondary">Результаты сохраняются в истории пациента и лаборатории. Стоимость исследования добавляйте как услугу стационара — эта карточка повторно её не начисляет.</Typography.Paragraph>
       {orders.isError ? <Alert type="error" showIcon message={getErrorMessage(orders.error)} /> : null}
       <Space direction="vertical" className="full-width">
@@ -66,16 +94,57 @@ export function HospitalLaboratoryPanel({ stay, organization }: { stay: Hospital
           </Card>
         ))}
       </Space>
-      <Modal title="Добавить анализ" open={open} onCancel={() => setOpen(false)} onOk={() => form.submit()} okText="Добавить" cancelText="Отмена" confirmLoading={create.isPending}>
+      <Drawer title="Добавить анализы" open={createOpen} onClose={closeCreate} width={620} destroyOnHidden>
         <Form form={form} layout="vertical" onFinish={(values) => create.mutate(values)}>
           {create.isError ? <Alert type="error" message={getErrorMessage(create.error)} /> : null}
           {tests.isError ? <Alert type="error" message={getErrorMessage(tests.error)} /> : null}
-          <Form.Item name="testId" label="Исследование" rules={[{ required: true, message: 'Выберите исследование' }]}>
-            <Select showSearch filterOption={false} onSearch={setSearch} loading={tests.isFetching} options={tests.data?.items.map((test) => ({ value: test.id, label: test.title, disabled: !test.documentTemplateId }))} />
+          <Alert
+            type="info"
+            showIcon
+            className="form-alert"
+            message="Выберите связанные анализы"
+            description="Поиск работает по названию анализа, коду и связанной услуге. Показатели откроются из привязанного документа; повторного начисления здесь не будет."
+          />
+          {canConfigure ? (
+            <Button block icon={<PlusOutlined />} className="form-alert" onClick={() => setConfigurationOpen(true)}>
+              Связать услугу и документ
+            </Button>
+          ) : null}
+          {!tests.isLoading && !tests.isError && !availableTests.length ? (
+            <Alert
+              type="warning"
+              showIcon
+              className="form-alert"
+              message={debouncedSearch ? 'По запросу анализы не найдены' : 'Нет анализов, готовых к добавлению'}
+              description={debouncedSearch ? 'Измените запрос или создайте связь услуги и документа.' : 'Сначала свяжите услугу анализа с документом результатов.'}
+            />
+          ) : null}
+          <Form.Item name="testIds" label="Лабораторные анализы" rules={[{ required: true, message: 'Выберите хотя бы один анализ' }]}>
+            <Select
+              mode="multiple"
+              showSearch
+              filterOption={false}
+              onSearch={setSearch}
+              loading={tests.isFetching}
+              placeholder="Введите название анализа, код или услугу"
+              notFoundContent={tests.isFetching ? 'Идёт поиск…' : 'Анализы не найдены'}
+              options={availableTests.map((test) => ({
+                value: test.id,
+                label: `${test.title}${test.code ? ` · ${test.code}` : ''} · ${test.service?.title ?? 'услуга'} · ${test.documentTemplate?.title ?? 'документ'}`,
+              }))}
+            />
           </Form.Item>
           <Form.Item name="comment" label="Комментарий"><Input.TextArea maxLength={1000} rows={2} /></Form.Item>
+          <Button type="primary" htmlType="submit" loading={create.isPending} disabled={tests.isLoading || !availableTests.length}>Добавить</Button>
         </Form>
-      </Modal>
+      </Drawer>
+      <LaboratoryTestEditorDrawer
+        open={configurationOpen}
+        test={null}
+        resources={resources.data}
+        canEditDocuments={canEditDocuments}
+        onClose={() => setConfigurationOpen(false)}
+      />
       <LaboratoryResultsTableDrawer order={editing} patientName={stay.animal?.nickname ?? ''} canManage={canManage} onClose={() => setEditing(null)} saveResults={(orderId, items) => updateHospitalLaboratoryResults(stay.id, orderId, items)} />
     </Card>
   );

@@ -47,6 +47,27 @@ export class LaboratoryService {
     });
   }
 
+  async listHospitalTests(query: ListLaboratoryQueryDto) {
+    const { limit, offset } = parsePagination(query);
+    const where: Prisma.LaboratoryTestWhereInput = {
+      ...this.buildTestWhere(query),
+      isActive: true,
+      serviceId: { not: null },
+      documentTemplateId: { not: null },
+    };
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.laboratoryTest.findMany({
+        where,
+        orderBy: [{ title: 'asc' }],
+        include: laboratoryTestInclude,
+        skip: offset,
+        take: limit,
+      }),
+      this.prisma.laboratoryTest.count({ where }),
+    ]);
+    return { items, total, limit, offset };
+  }
+
   async createHospitalOrder(stayId: string, dto: CreateHospitalLaboratoryOrderDto, actorId: string) {
     // The source visit is already completed. This creates medical results only:
     // hospital services continue to accrue through hospital records, without a second bill.
@@ -55,44 +76,54 @@ export class LaboratoryService {
       if (!stay) throw new NotFoundException('Стационарная карта не найдена');
       if (stay.status !== 'ACTIVE') throw new BadRequestException('Добавление анализов доступно в открытом стационаре');
       ensureLaboratoryVisitOperational(stay.sourceVisit);
-      const test = await tx.laboratoryTest.findUnique({
-        where: { id: dto.testId },
+      const testIds = uniqueIds([...(dto.testIds ?? []), ...(dto.testId ? [dto.testId] : [])]);
+      if (!testIds.length) throw new BadRequestException('Выберите хотя бы один анализ');
+      const foundTests = await tx.laboratoryTest.findMany({
+        where: { id: { in: testIds }, isActive: true },
         include: { documentTemplate: { select: { id: true, title: true, currentVersion: true, layout: true } } },
       });
-      if (!test?.isActive) throw new NotFoundException('Анализ не найден или выключен');
-      const { layout, indicators } = extractLaboratoryDocumentIndicators(test.documentTemplate?.layout);
-      if (!test.documentTemplate || !layout || !indicators.length) {
-        throw new BadRequestException('Привяжите к анализу документ с таблицей показателей');
-      }
+      if (foundTests.length !== testIds.length) throw new NotFoundException('Один или несколько анализов не найдены или выключены');
+      const testsById = new Map(foundTests.map((test) => [test.id, test]));
+      const tests = testIds.map((testId) => testsById.get(testId)!);
+      const preparedTests = tests.map((test) => {
+        const { layout, indicators } = extractLaboratoryDocumentIndicators(test.documentTemplate?.layout);
+        if (!test.serviceId || !test.documentTemplate || !layout || !indicators.length) {
+          throw new BadRequestException(`Анализ «${test.title}» не настроен: привяжите услугу и документ с таблицей показателей`);
+        }
+        return { test, documentTemplate: test.documentTemplate, layout, indicators };
+      });
       const created = await tx.laboratoryOrder.create({
         data: { visitId: stay.sourceVisitId, createdById: actorId, comment: clean(dto.comment) },
       });
-      const bindings: LaboratoryFormSnapshot['bindings'] = [];
-      for (const indicator of indicators) {
-        const item = await tx.laboratoryOrderItem.create({
-          data: {
-            orderId: created.id, testId: test.id, title: indicator.title,
-            code: indicator.code, groupName: test.title, material: test.material, method: test.method,
-            unit: indicator.unit, referenceRange: indicator.referenceRange,
-          },
-          select: { id: true },
+      const snapshots: LaboratoryFormSnapshot[] = [];
+      for (const { test, documentTemplate, layout, indicators } of preparedTests) {
+        const bindings: LaboratoryFormSnapshot['bindings'] = [];
+        for (const indicator of indicators) {
+          const item = await tx.laboratoryOrderItem.create({
+            data: {
+              orderId: created.id, testId: test.id, title: indicator.title,
+              code: indicator.code, groupName: test.title, material: test.material, method: test.method,
+              unit: indicator.unit, referenceRange: indicator.referenceRange,
+            },
+            select: { id: true },
+          });
+          bindings.push({ itemId: item.id, blockId: indicator.blockId, rowIndex: indicator.rowIndex, resultColumnIndex: indicator.resultColumnIndex });
+        }
+        snapshots.push({
+          schemaVersion: 1, testId: test.id, testTitle: test.title,
+          documentTemplateId: documentTemplate.id, documentTemplateTitle: documentTemplate.title,
+          documentTemplateVersion: documentTemplate.currentVersion, layout, bindings,
         });
-        bindings.push({ itemId: item.id, blockId: indicator.blockId, rowIndex: indicator.rowIndex, resultColumnIndex: indicator.resultColumnIndex });
       }
-      const snapshot: LaboratoryFormSnapshot = {
-        schemaVersion: 1, testId: test.id, testTitle: test.title,
-        documentTemplateId: test.documentTemplate.id, documentTemplateTitle: test.documentTemplate.title,
-        documentTemplateVersion: test.documentTemplate.currentVersion, layout, bindings,
-      };
       return tx.laboratoryOrder.update({
         where: { id: created.id },
-        data: { formSnapshots: [snapshot] as unknown as Prisma.InputJsonValue },
+        data: { formSnapshots: snapshots as unknown as Prisma.InputJsonValue },
         include: laboratoryOrderInclude,
       });
     });
     await this.auditService.log({
       actorId, action: 'hospital.laboratory_order.create', entityType: 'LaboratoryOrder', entityId: order.id,
-      metadata: { stayId, visitId: order.visitId, testId: dto.testId, billingCreated: false },
+      metadata: { stayId, visitId: order.visitId, testIds: dto.testIds ?? (dto.testId ? [dto.testId] : []), billingCreated: false },
     });
     return order;
   }
@@ -768,6 +799,10 @@ const laboratoryOrderInclude = {
 function clean(value?: string | null) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
+}
+
+function uniqueIds(ids: string[]) {
+  return [...new Set(ids)];
 }
 
 function ensureLaboratoryVisitOperational(visit: { status: VisitStatus }) {

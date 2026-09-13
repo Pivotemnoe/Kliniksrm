@@ -7,14 +7,17 @@ const { LaboratoryService } = require('../apps/api/dist/modules/laboratory/labor
 
 function fixture() {
   const stay = { id: 'stay', sourceVisitId: 'visit', status: 'ACTIVE', sourceVisit: { status: 'COMPLETED' } };
-  const test = { id: 'test', title: 'Исследование крови', isActive: true, material: 'Кровь', method: null, documentTemplate: {
+  const laboratoryTest = { id: 'test', title: 'Исследование крови', serviceId: 'service', isActive: true, material: 'Кровь', method: null, documentTemplate: {
     id: 'template', title: 'Кровь', currentVersion: 3,
     layout: { schemaVersion: 1, blocks: [{ id: 'table', type: 'table', headerRows: 1, rows: [['Показатель', 'Результат', 'Ед.', 'Референс'], ['Гемоглобин', '', 'г/л', '120–180']] }] },
   } };
   const orders = []; const items = []; const audit = [];
   const prisma = {
     hospitalStay: { findUnique: async () => stay },
-    laboratoryTest: { findUnique: async () => test },
+    laboratoryTest: {
+      findMany: async ({ where }) => [laboratoryTest].filter(item => where.id.in.includes(item.id) && item.isActive),
+      count: async () => 1,
+    },
     laboratoryOrder: {
       create: async ({ data }) => { const order = { id: `order-${orders.length}`, status: 'ORDERED', ...data }; orders.push(order); return order; },
       update: async ({ where, data }) => { const order = orders.find(o => o.id === where.id); Object.assign(order, data); return { ...order, items }; },
@@ -29,16 +32,17 @@ function fixture() {
     },
     $transaction: async arg => typeof arg === 'function' ? arg(prisma) : Promise.all(arg),
   };
-  return { service: new LaboratoryService(prisma, { log: async event => audit.push(event) }), prisma, stay, test, orders, items, audit };
+  return { service: new LaboratoryService(prisma, { log: async event => audit.push(event) }), prisma, stay, test: laboratoryTest, orders, items, audit };
 }
 
 test('hospital result card uses completed source visit and document snapshot without billing or inventory writes', async () => {
-  const f = fixture(); const order = await f.service.createHospitalOrder('stay', { testId: 'test' }, 'doctor-2');
+  const f = fixture(); const order = await f.service.createHospitalOrder('stay', { testIds: ['test'] }, 'doctor-2');
   assert.equal(order.visitId, 'visit'); assert.equal(order.createdById, 'doctor-2');
   assert.equal(f.items[0].title, 'Гемоглобин'); assert.equal(f.items[0].billItemId, undefined);
   assert.equal(order.formSnapshots[0].documentTemplateVersion, 3);
   assert.equal(order.formSnapshots[0].bindings[0].itemId, f.items[0].id);
   assert.equal(f.audit[0].metadata.billingCreated, false);
+  assert.deepEqual(f.audit[0].metadata.testIds, ['test']);
   assert.equal(f.stay.sourceVisit.status, 'COMPLETED');
 });
 
@@ -71,7 +75,7 @@ test('missing stay, inactive test or missing form fail before writing a card', a
   await assert.rejects(f.service.listHospitalOrders('missing'), /не найдена/);
   await assert.rejects(f.service.createHospitalOrder('missing', { testId: 'test' }, 'doctor'), /не найдена/);
   for (const badTest of [null, { isActive: false }, { isActive: true, documentTemplate: null }]) {
-    const g = fixture(); g.prisma.laboratoryTest.findUnique = async () => badTest;
+    const g = fixture(); g.prisma.laboratoryTest.findMany = async () => badTest?.isActive ? [badTest] : [];
     await assert.rejects(g.service.createHospitalOrder('stay', { testId: 'test' }, 'doctor'));
     assert.equal(g.orders.length, 0);
   }
@@ -88,6 +92,10 @@ test('hospital UI reuses buffered result editor, scoped API, search and remote r
   const source = readFileSync(new URL('../apps/web/src/features/hospital/HospitalLaboratoryPanel.tsx', import.meta.url), 'utf8');
   assert.match(source, /LaboratoryResultsTableDrawer/); assert.match(source, /useDebouncedValue\(search, 250\)/);
   assert.match(source, /updateHospitalLaboratoryResults\(stay.id/); assert.match(source, /!remoteReadOnly/);
+  assert.match(source, /Связать услугу и документ/); assert.match(source, /mode="multiple"/);
+  assert.doesNotMatch(source, /extra=.*Добавить анализ/);
+  const page = readFileSync(new URL('../apps/web/src/features/hospital/HospitalCardPage.tsx', import.meta.url), 'utf8');
+  assert.match(page, /setLaboratoryOpen\(true\).*Добавить анализ/);
   const controller = readFileSync(new URL('../apps/api/src/modules/laboratory/laboratory.controller.ts', import.meta.url), 'utf8');
   assert.match(controller, /@Post\('hospital\/:stayId\/orders'\)\s+@RequirePermissions\('hospital.manage'\)/);
   assert.match(controller, /@Patch\('hospital\/:stayId\/orders\/:orderId\/results'\)\s+@RequirePermissions\('hospital.manage'\)/);

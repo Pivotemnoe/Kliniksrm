@@ -1,6 +1,7 @@
 import {
   ArrowLeftOutlined,
   CloseOutlined,
+  ExperimentOutlined,
   FileTextOutlined,
   PlusOutlined,
   PrinterOutlined,
@@ -73,6 +74,7 @@ export function HospitalCardPage() {
   const canPrint = hasPermission(auth?.employee, 'documents.print');
   const [recordOpen, setRecordOpen] = useState(false);
   const [treatmentPlanOpen, setTreatmentPlanOpen] = useState(false);
+  const [laboratoryOpen, setLaboratoryOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<HospitalRecord | null>(null);
   const [initialRecordStatus, setInitialRecordStatus] = useState<Extract<HospitalRecordStatus, 'PLANNED' | 'COMPLETED'>>('COMPLETED');
   const [initialRecordType, setInitialRecordType] = useState<HospitalRecordType>('OBSERVATION');
@@ -238,6 +240,7 @@ export function HospitalCardPage() {
             {stay && canPrint ? <Button icon={<PrinterOutlined />} onClick={() => {
               if (!printHospitalSheet(stay, organizationQuery.data)) message.warning('Браузер заблокировал окно печати');
             }}>Отчёт владельцу / PDF</Button> : null}
+            {canManage && active ? <Button icon={<ExperimentOutlined />} onClick={() => setLaboratoryOpen(true)}>Добавить анализ</Button> : null}
             {canManage && active ? <Button icon={<PlusOutlined />} onClick={() => setTreatmentPlanOpen(true)}>Назначить план лечения</Button> : null}
             {canManage && active ? <Button type="primary" icon={<PlusOutlined />} onClick={() => openNewRecord('COMPLETED')}>Записать выполненное действие</Button> : null}
           </Space>
@@ -370,7 +373,12 @@ export function HospitalCardPage() {
               />
             </div>
           </div>
-          <HospitalLaboratoryPanel stay={stay} organization={organizationQuery.data} />
+          <HospitalLaboratoryPanel
+            stay={stay}
+            organization={organizationQuery.data}
+            createOpen={laboratoryOpen}
+            onCreateOpenChange={setLaboratoryOpen}
+          />
           {canReadDocuments ? (
             <div className="list-panel">
               <div className="list-panel-body">

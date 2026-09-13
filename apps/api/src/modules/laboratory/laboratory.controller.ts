@@ -22,7 +22,7 @@ export class LaboratoryController {
   @Get('hospital/tests')
   @RequirePermissions('hospital.read')
   listHospitalTests(@Query() query: ListLaboratoryQueryDto) {
-    return this.laboratoryService.listTests(query);
+    return this.laboratoryService.listHospitalTests(query);
   }
 
   @Get('hospital/:stayId/orders')

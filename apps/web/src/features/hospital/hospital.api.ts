@@ -17,10 +17,10 @@ export function listHospitalLaboratoryOrders(stayId: string) {
 }
 
 export function searchHospitalLaboratoryTests(search: string) {
-  return apiRequest<PaginatedResponse<LaboratoryTest>>(`/v1/laboratory/hospital/tests${buildQuery({ search, isActive: true, limit: 100, offset: 0 })}`);
+  return apiRequest<PaginatedResponse<LaboratoryTest>>(`/v1/laboratory/hospital/tests${buildQuery({ search, isActive: true, limit: 300, offset: 0 })}`);
 }
 
-export function createHospitalLaboratoryOrder(stayId: string, input: { testId: string; comment?: string }) {
+export function createHospitalLaboratoryOrder(stayId: string, input: { testIds: string[]; comment?: string }) {
   return apiRequest<LaboratoryOrder>(`/v1/laboratory/hospital/${stayId}/orders`, { method: 'POST', body: input });
 }
 
