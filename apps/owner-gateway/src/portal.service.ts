@@ -106,11 +106,21 @@ export class PortalService {
 
   async getDocument(sessionToken: string, sourceFileId: string) {
     const session = await this.resolveSession(sessionToken);
+    const payload = session.owner.payload;
+    const files = payload && typeof payload === 'object' && !Array.isArray(payload) && Array.isArray(payload.files)
+      ? payload.files : [];
+    const allowedFile = files.find((file) => file && typeof file === 'object' && !Array.isArray(file) && file.id === sourceFileId);
+    if (!allowedFile || typeof allowedFile !== 'object' || Array.isArray(allowedFile)) {
+      throw new NotFoundException('Документ недоступен в личном кабинете');
+    }
     const document = await this.prisma.portalDocument.findUnique({
       where: { ownerId_sourceFileId: { ownerId: session.ownerId, sourceFileId } },
-      select: { fileName: true, mimeType: true, content: true },
+      select: { fileName: true, mimeType: true, content: true, checksumSha256: true },
     });
     if (!document || !document.content) throw new NotFoundException('Документ не найден или ещё не синхронизирован');
+    if (typeof allowedFile.checksumSha256 === 'string' && allowedFile.checksumSha256 !== document.checksumSha256) {
+      throw new NotFoundException('Обновлённый документ ещё не синхронизирован');
+    }
     return { ...document, content: Buffer.from(document.content) };
   }
 
@@ -166,7 +176,7 @@ export class PortalService {
 
   async listBookingRequests(sessionToken: string) {
     const session = await this.resolveSession(sessionToken);
-    return this.prisma.portalBookingRequest.findMany({
+    const requests = await this.prisma.portalBookingRequest.findMany({
       where: { ownerId: session.ownerId },
       orderBy: { createdAt: 'desc' },
       take: 20,
@@ -179,6 +189,16 @@ export class PortalService {
         status: true,
         createdAt: true,
       },
+    });
+    const snapshot = session.owner.payload as Record<string, unknown> | null;
+    const confirmations = Array.isArray(snapshot?.bookingRequests) ? snapshot.bookingRequests : [];
+    const appointments = Array.isArray(snapshot?.appointments) ? snapshot.appointments : [];
+    return requests.map((request) => {
+      const confirmation = confirmations.find((value) => value && typeof value === 'object' && value.externalRequestId === request.id);
+      const change = /^(Отмена|Перенос) записи от .+ \(№ ([^)]+)\)\./.exec(request.comment ?? '');
+      const original = change ? appointments.find((value) => value && typeof value === 'object' && value.id === change[2] && value.animal?.id === request.animalId) : null;
+      const appointment = original ? { id: original.id, startsAt: original.startsAt, endsAt: original.endsAt, status: original.status } : confirmation?.appointment ?? null;
+      return { ...request, clinicStatus: confirmation?.status ?? null, appointment, clinicUpdatedAt: confirmation?.updatedAt ?? null };
     });
   }
 
@@ -201,6 +221,18 @@ export class PortalService {
       throw new BadRequestException('Укажите пациента');
     }
 
+    let comment = clean(dto.comment);
+    if (dto.requestType === 'RESCHEDULE' || dto.requestType === 'CANCEL') {
+      const snapshot = session.owner.payload as Record<string, unknown> | null;
+      const appointments = Array.isArray(snapshot?.appointments) ? snapshot.appointments : [];
+      const appointment = appointments.find((value) => value && typeof value === 'object' && value.id === dto.appointmentId);
+      if (!appointment || appointment.animal?.id !== selectedAnimal?.id || !['PLANNED', 'CONFIRMED'].includes(appointment.status)) {
+        throw new BadRequestException('Запись недоступна для изменения. Обновите кабинет и обратитесь в клинику.');
+      }
+      // A request goes through the existing administrator inbox; the schedule is never changed here.
+      const label = dto.requestType === 'CANCEL' ? 'Отмена записи' : 'Перенос записи';
+      comment = `${label} от ${appointment.startsAt} (№ ${appointment.id}). ${comment ?? ''}`.trim();
+    }
     const preferredAt = dto.preferredAt ? new Date(dto.preferredAt) : null;
     if (preferredAt && (Number.isNaN(preferredAt.getTime()) || preferredAt <= new Date())) {
       throw new BadRequestException('Выберите будущую дату и время');
@@ -220,7 +252,7 @@ export class PortalService {
         animalNickname,
         animalSpecies: clean(selectedAnimal?.species ?? dto.animalSpecies),
         preferredAt,
-        comment: clean(dto.comment),
+        comment,
         contactConsent: true,
       },
       update: {},

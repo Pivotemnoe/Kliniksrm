@@ -145,3 +145,103 @@ button { font: inherit; }
   .tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tab { padding-inline: 8px; font-size: 14px; }
 }
+
+/* Owner cabinet: the summary and pet switcher precede service/settings controls. */
+[hidden] { display: none !important; }
+button, input, select, textarea, a { -webkit-tap-highlight-color: transparent; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 3px solid #55a9b4; outline-offset: 3px; }
+button:disabled { cursor: wait; opacity: .65; }
+.button { display: inline-flex; justify-content: center; align-items: center; min-height: 44px; text-decoration: none; }
+.secondary { color: #245662; background: #e8f2f3; }
+.hero { box-shadow: none; background: transparent; border: 0; padding: 0 2px 18px; align-items: center; }
+.hero h1 { font-size: clamp(26px, 4vw, 34px); margin: 3px 0 5px; letter-spacing: -.025em; }
+.eyebrow { margin: 0 0 7px; font-size: 12px; font-weight: 750; color: #376e79; letter-spacing: .04em; }
+.hero-meta { max-width: 460px; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; font-size: 12px; }
+#refresh-status { flex-basis: 100%; color: #8c4a16; line-height: 1.5; }
+.pet-toolbar { display: flex; align-items: center; gap: 12px; padding: 14px; border: 1px solid #dbe5e9; border-radius: 14px; background: white; }
+.pet-toolbar label { color: #526c78; font-weight: 700; }
+.pet-toolbar select { flex: 1; min-width: 0; max-width: 440px; min-height: 44px; border: 1px solid #c9dadd; border-radius: 9px; padding: 9px; color: #17324d; font: inherit; background: #f7fafb; }
+.pet-toolbar > button { margin-left: auto; }
+.portal-menu { padding: 0; margin: 16px 0; background: transparent; border: 0; box-shadow: none; }
+.tabs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 5px; padding: 3px 2px 8px; }
+.tab { min-height: 44px; flex: 1 0 auto; padding: 11px 18px; white-space: nowrap; background: transparent; }
+.tab[aria-selected="true"] { background: #173f4f; }
+.panel { padding: 22px; box-shadow: none; }
+.panel h2 { font-size: 22px; letter-spacing: -.02em; }
+.subheading { margin: 26px 0 12px; color: #23455f; font-size: 18px; }
+.overview-grid { display: grid; grid-template-columns: 1.25fr 1fr; gap: 16px; }
+.next-appointment { padding: 22px; background: #edf5f7; border: 1px solid #d8e7ec; border-radius: 14px; }
+.next-appointment h3 { font-size: 23px; color: #173f4f; margin: 8px 0; }
+.next-appointment p:not(.eyebrow) { color: #4d6876; line-height: 1.5; margin: 8px 0 17px; }
+.summary-links { display: grid; gap: 12px; }
+.summary-links button { display: grid; grid-template-columns: 1fr auto; padding: 18px; gap: 6px; border: 1px solid #e1e8ed; border-radius: 14px; background: #fff; color: #526976; text-align: left; cursor: pointer; }
+.summary-links strong { font-size: 24px; font-weight: 750; color: #23455f; grid-column: 1 / -1; }
+.summary-links span { font-size: 13px; line-height: 1.4; }
+.service-promo { margin: 20px 0 0; padding: 22px; border-color: #a9d2cd; border-left: 4px solid #2c877c; background: #edf8f4; box-shadow: none; }
+.service-promo h3 { margin: 0; font-size: 22px; letter-spacing: -.02em; }
+.service-promo .eyebrow { color: #267568; }
+.service-promo-description { font-size: 14px; }
+.service-promo-benefits { font-size: 12px; }
+.service-promo-note { font-size: 12px; line-height: 1.5; }
+.promo-text-link { color: #205e57; font-size: 13px; line-height: 1.5; text-underline-offset: 3px; margin-top: 4px; }
+.portal-settings { margin: 18px 0; padding: 18px; border: 1px solid #dfe7ed; border-radius: 14px; background: white; color: #536574; }
+.settings-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; }
+summary { cursor: pointer; font-weight: 700; color: #23455f; line-height: 1.5; }
+.card details > summary { min-height: 30px; }
+.card, .booking-request { overflow-wrap: anywhere; }
+.card h4 { color: #23455f; margin: 16px 0 6px; }
+.multiline { white-space: pre-wrap; }
+.subnav { display: flex; flex-wrap: wrap; gap: 10px; }
+.subnav a { color: #245e68; padding: 9px 12px; background: #edf4f5; border-radius: 8px; text-underline-offset: 3px; }
+[id] { scroll-margin-top: 86px; }
+.lab-results { margin-bottom: 12px; }
+.lab-results > div { padding: 13px 0; border-bottom: 1px solid #e1e8ed; }
+.lab-results dt { color: #23455f; font-weight: 700; }
+.lab-results dd { display: grid; gap: 6px; margin: 6px 0 0; }
+.lab-results .muted, .laboratory-card > .muted, .hospital-card .muted { font-size: 13px; line-height: 1.5; }
+.hospital-card { border-color: #b9d4df; background: #f1f7fa; }
+.prevention-row { padding: 12px 0; border-bottom: 1px solid #e1e8ed; }
+.attention, .card .attention { color: #935513; }
+.history-note { background: #fff6e8; color: #79531c; border-radius: 9px; padding: 12px; font-size: 13px; line-height: 1.5; }
+.search-label { display: grid; gap: 8px; color: #526976; margin-bottom: 16px; }
+.search-label input { font: inherit; padding: 12px; border: 1px solid #cbd7df; border-radius: 9px; min-width: 0; width: 100%; }
+.form-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+#new-animal-fields { display: grid; gap: 13px; }
+.booking-form { align-content: start; }
+.booking-form input, .booking-form textarea, .booking-form select { min-width: 0; font-size: 16px; }
+.booking-form small { font-size: 12px; font-weight: 400; }
+.booking-request .badge { justify-self: start; font-size: 12px; }
+.booking-request { font-size: 13px; gap: 7px; }
+@media (max-width: 700px) {
+  .topbar { min-height: 60px; padding-inline: 14px; }
+  .brand-logo { width: 38px; height: 38px; border-radius: 9px; }
+  .brand strong { font-size: 16px; }
+  .shell { width: calc(100% - 24px); margin-top: 18px; }
+  .hero { padding: 0 2px 14px; align-items: stretch; gap: 8px; }
+  .hero-meta { flex-direction: row; align-items: center; justify-content: space-between; }
+  #freshness { max-width: calc(100% - 100px); font-size: 11px; }
+  .hero-meta .button { padding: 6px 10px; min-height: 40px; font-size: 12px; }
+  .pet-toolbar { padding: 10px; gap: 8px; }
+  .pet-toolbar label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .pet-toolbar .button { font-size: 13px; padding: 10px; }
+  .portal-menu { margin: 9px 0; }
+  .tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .tab { padding: 10px 6px; font-size: 13px; }
+  .tab[data-tab="notifications"] { grid-column: auto; }
+  .panel { padding: 16px; }
+  .panel h2 { font-size: 20px; margin-bottom: 13px; }
+  .overview-grid { grid-template-columns: 1fr; gap: 12px; }
+  .next-appointment { padding: 16px; }
+  .next-appointment h3 { font-size: 21px; }
+  .summary-links { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .summary-links button { padding: 12px; }
+  .summary-links strong { font-size: 20px; }
+  .summary-links span { font-size: 12px; }
+  .summary-links span:last-child { display: none; }
+  .service-promo { padding: 16px; gap: 14px; }
+  .service-promo h3 { font-size: 20px; }
+  .booking-layout { grid-template-columns: 1fr; }
+}
+
+.hospital-summary-link { width: 100%; display: grid; gap: 5px; text-align: left; padding: 15px; margin-top: 14px; border: 1px solid #b9d4df; border-radius: 12px; background: #f1f7fa; color: #23455f; cursor: pointer; }
+.hospital-summary-link span { font-size: 13px; line-height: 1.4; }

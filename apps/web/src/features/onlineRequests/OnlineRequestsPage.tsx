@@ -190,7 +190,7 @@ export function OnlineRequestsPage() {
 
           return (
             <Space wrap size={[6, 6]}>
-              {canManage && !locked ? (
+              {canManage && !locked && !isOwnerAppointmentChange(request) ? (
                 quickAcceptInput ? (
                   <Popconfirm
                     title="Подтвердить запись?"
@@ -437,6 +437,12 @@ function RequestDrawer({
               ) : null}
             </Form>
           </div>
+          {isOwnerAppointmentChange(request) ? (
+            <Space direction="vertical">
+              <Alert type="info" showIcon message="Обращение об изменении существующей записи" description="Исходная запись указана в тексте обращения. Проверьте её в расписании, согласуйте перенос или отмену с владельцем и после обработки закройте заявку. Новая запись здесь не создаётся." />
+              {canManage && request.status !== 'ARCHIVED' ? <Button loading={actionLoading} onClick={() => onAction(request, 'archive')}>Закрыть обработанное обращение</Button> : null}
+            </Space>
+          ) : (
           <div className="list-panel online-request-confirm-section">
             <div className="list-panel-header">
               <Space direction="vertical" size={0}>
@@ -578,6 +584,7 @@ function RequestDrawer({
               </Form>
             </div>
           </div>
+          )}
         </div>
       ) : null}
     </Drawer>
@@ -712,6 +719,10 @@ async function copyPublicOnlineRequestUrl(url: string, message: ReturnType<typeo
   } catch {
     message.warning('Не удалось скопировать ссылку автоматически');
   }
+}
+
+function isOwnerAppointmentChange(request: OnlineAppointmentRequest) {
+  return request.source === 'OWNER_GATEWAY' && /^(Отмена|Перенос) записи от .+ \(№ [^)]+\)\./.test(request.comment ?? '');
 }
 
 function isRequestLocked(request: OnlineAppointmentRequest) {

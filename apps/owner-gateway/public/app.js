@@ -6,7 +6,18 @@ const serviceWorkerRegistrationPromise = 'serviceWorker' in navigator
   ? navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => null)
   : Promise.resolve(null);
 
+let portalResponse = null;
+let pendingPortalResponse = null;
+let selectedAnimalId = '';
+let activeTab = new URL(window.location.href).searchParams.get('section') === 'notifications' ? 'notifications' : 'home';
+let documentQuery = '';
+let refreshing = false;
+let bookingDirty = false;
+let bookingAttempt = null;
+let bookingDraft = {};
+
 void start();
+window.setInterval(() => { if (portalResponse && !document.hidden && !bookingDirty && !document.activeElement?.matches('input, textarea, select, [contenteditable="true"]')) void refreshPortal(); }, 60_000);
 
 async function start() {
   try {
@@ -75,106 +86,219 @@ async function request(path, options = {}) {
   try { payload = text ? JSON.parse(text) : null; } catch { payload = null; }
   if (!response.ok) {
     const message = typeof payload?.message === 'string' ? payload.message : 'Доступ не подтверждён';
-    throw new Error(message);
+    const error = new Error(message);
+    error.status = response.status;
+    throw error;
   }
   return payload;
 }
 
-function renderPortal(response) {
+function portalData(response) {
   const snapshot = response?.snapshot && typeof response.snapshot === 'object' ? response.snapshot : {};
-  const owner = snapshot.owner && typeof snapshot.owner === 'object' ? snapshot.owner : {};
   const animals = array(snapshot.animals);
-  const appointments = array(snapshot.appointments);
-  const visits = array(snapshot.visits);
-  const files = array(snapshot.files);
-  const bills = array(snapshot.bills);
-  const notifications = array(snapshot.notifications);
-  const unreadNotifications = getUnreadNotificationCount(response.ownerId, notifications);
+  if (selectedAnimalId && !animals.some((animal) => animal.id === selectedAnimalId)) selectedAnimalId = '';
+  const forPet = (items) => array(items).filter((item) => !selectedAnimalId || (item.animal?.id ?? item.animalId ?? item.visit?.animal?.id) === selectedAnimalId);
+  const visits = forPet(snapshot.visits);
   const documents = [
-    ...files.map((file) => ({ ...file, documentKind: 'file' })),
+    ...forPet(snapshot.files).map((file) => ({ ...file, documentKind: 'file' })),
     ...visits.flatMap((visit) => array(visit.documents).map((document) => ({ ...document, visit, documentKind: 'signed' }))),
   ];
-  const showBrowserTransfer = !isStandaloneMode();
+  return { snapshot, animals, pets: animals.filter((animal) => !selectedAnimalId || animal.id === selectedAnimalId), visits, documents,
+    appointments: forPet(snapshot.appointments), bills: forPet(snapshot.bills), hospital: forPet(snapshot.hospitalStays),
+    labs: forPet(snapshot.laboratoryOrders ?? array(snapshot.visits).flatMap((visit) => array(visit.laboratoryOrders).map((order) => ({ ...order, animal: visit.animal })))) };
+}
 
+function renderPortal(response) {
+  if (portalResponse && portalResponse.ownerId !== response.ownerId) { selectedAnimalId = ''; bookingDraft = {}; bookingAttempt = null; bookingDirty = false; }
+  portalResponse = response;
+  const data = portalData(response);
+  const { snapshot, animals, pets, appointments, visits, documents, bills, labs, hospital } = data;
+  const owner = snapshot.owner || {};
+  const notifications = array(snapshot.notifications);
+  const unread = getUnreadNotificationCount(response.ownerId, notifications);
+  const showBrowserTransfer = !isStandaloneMode();
   app.innerHTML = `
     <section class="hero">
-      <div><h1>${escapeHtml(owner.fullName || response.displayName || 'Личный кабинет')}</h1><p>Пациенты, история лечения и документы TemichevVet.</p><p>${joinText([owner.phone, owner.extraPhone, owner.email, owner.address])}</p></div>
-      <div class="hero-meta">
-        <span>Обновлено ${formatDateTime(response.syncedAt)}</span>
-        ${showBrowserTransfer ? '<button id="prepare-browser" class="button browser-button browser-only" type="button">Открыть в браузере</button>' : ''}
-        ${showBrowserTransfer ? '<button id="copy-browser-link" class="button browser-button browser-only" type="button" hidden>Скопировать ссылку</button>' : ''}
-        ${showBrowserTransfer ? '<span id="browser-hint" class="browser-hint browser-only" hidden>Нажмите значок браузера внизу MAX или скопируйте ссылку и вставьте её в любой браузер. Переход действует 10 минут, пароль не нужен.</span>' : ''}
-        <button id="enable-push" class="button push-button" type="button" hidden>Включить уведомления</button>
-        <span id="push-status" class="push-status" role="status" aria-live="polite" hidden></span>
-      </div>
+      <div><p class="eyebrow">Личный кабинет</p><h1>Мои питомцы</h1><p>${escapeHtml(owner.fullName || response.displayName || '')}</p></div>
+      <div class="hero-meta"><span id="freshness">${freshnessText(response.syncedAt)}</span><button id="refresh-portal" class="button secondary" type="button">Обновить</button><span id="refresh-status" role="status"></span></div>
     </section>
-    <section class="service-promo" aria-label="Сервис TemichevVet для владельцев животных">
-      <div class="service-promo-copy">
-        <strong class="service-promo-title">Сомневаетесь, можно ли подождать?</strong>
-        <p class="service-promo-description">Опишите, что происходит с питомцем. TemichevVet поможет заметить тревожные признаки и понять следующий шаг: наблюдать дома, обратиться за консультацией или не откладывать поездку в клинику.</p>
-        <p class="service-promo-benefits">Понять срочность <span aria-hidden="true">·</span> Разобрать симптомы <span aria-hidden="true">·</span> Проверить питание <span aria-hidden="true">·</span> Сохранить историю</p>
-      </div>
-      <div class="service-promo-action">
-        <a class="button service-promo-link" href="https://temichevvet.ru" target="_blank" rel="noopener noreferrer">Оценить состояние питомца</a>
-        <p class="service-promo-note">Первичный ориентир — без звонка и ожидания ответа. Сервис не ставит диагноз и не заменяет врача.</p>
-      </div>
-    </section>
-    <nav class="portal-menu" aria-labelledby="portal-menu-title">
-      <h2 id="portal-menu-title">Разделы кабинета</h2>
-      <div class="tabs">
-        ${tabButton('animals', `Пациенты · ${animals.length}`, true)}
-        ${tabButton('appointments', `Записи · ${appointments.length}`)}
-        ${tabButton('booking', 'Записаться')}
-        ${tabButton('visits', `Приёмы · ${visits.length}`)}
-        ${tabButton('documents', `Документы · ${documents.length}`)}
-        ${tabButton('bills', `Счета · ${bills.length}`)}
-        ${tabButton('notifications', `Сообщения · ${notifications.length}`, false, unreadNotifications)}
-      </div>
-    </nav>
-    ${section('animals', 'Мои животные', renderAnimals(animals), false)}
-    ${section('appointments', 'Записи в клинику', renderAppointments(appointments), true)}
-    ${section('booking', 'Запись на приём', renderBookingForm(animals), true)}
-    ${section('visits', 'Завершённые приёмы', renderVisits(visits), true)}
-    ${section('documents', 'Документы', renderDocuments(documents), true)}
-    ${section('bills', 'Счета', renderBills(bills), true)}
-    ${section('notifications', 'Сообщения клиники', renderNotifications(notifications), true)}
-  `;
-
+    <div class="pet-toolbar"><label for="pet-filter">Питомец</label><select id="pet-filter"><option value="">Все питомцы · ${animals.length}</option>${animals.map((animal) => `<option value="${escapeHtml(animal.id)}"${animal.id === selectedAnimalId ? ' selected' : ''}>${escapeHtml(animal.nickname)}</option>`).join('')}</select><button class="button" data-open="booking" type="button">Записаться</button></div>
+    <nav class="portal-menu" aria-label="Разделы кабинета"><div class="tabs" role="tablist">
+      ${[['home', 'Главная'], ['health', 'Здоровье'], ['appointments', 'Записи'], ['documents', 'Документы'], ['bills', 'Счета'], ['notifications', 'Сообщения']].map(([key, label]) => tabButton(key, label, key === activeTab, key === 'notifications' ? unread : 0)).join('')}
+    </div></nav>
+    ${section('home', selectedAnimalId ? `Сегодня · ${pets[0]?.nickname || 'Питомец'}` : 'На сегодня', renderHome(data) + renderServicePromo() + '<h3 class="subheading">Карточки питомцев</h3>' + renderAnimals(pets), activeTab !== 'home')}
+    ${section('health', 'Здоровье питомца', `<nav class="subnav" aria-label="Данные о здоровье"><a href="#treatment">Назначения</a><a href="#laboratory">Анализы</a><a href="#prevention">Профилактика</a><a href="#visit-history">Приёмы</a></nav>
+      ${hospital.length ? '<h3 class="subheading">Сейчас в стационаре</h3>' + renderHospital(hospital) : ''}
+      <h3 id="treatment" class="subheading">Назначения и уход</h3><p class="muted">Рекомендации из завершённых приёмов. Дата показывает, когда врач их выдал.</p>${renderTreatment(visits)}
+      <h3 id="laboratory" class="subheading">Анализы</h3>${historyNotice(snapshot.laboratoryOrders, snapshot.historyLimits?.laboratoryOrders, 'исследований')}${renderLaboratory(labs)}
+      <h3 id="prevention" class="subheading">Профилактика</h3>${renderPrevention(pets)}
+      <h3 id="visit-history" class="subheading">История приёмов</h3>${historyNotice(snapshot.visits, snapshot.historyLimits?.visits, 'приёмов')}${renderVisits(visits)}`, activeTab !== 'health')}
+    ${section('appointments', 'Записи в клинику', `${historyNotice(snapshot.appointments, snapshot.historyLimits?.appointments, 'записей')}${renderAppointments(appointments)}<h3 class="subheading">Заявка в клинику</h3>${renderBookingForm(animals)}`, activeTab !== 'appointments')}
+    ${section('documents', 'Документы', `<label class="search-label">Поиск в загруженных документах<input id="document-search" type="search" placeholder="Название или категория" value="${escapeHtml(documentQuery)}"></label>${historyNotice(snapshot.files, snapshot.historyLimits?.files, 'файлов')}<div id="document-results">${renderDocuments(searchDocuments(documents))}</div>`, activeTab !== 'documents')}
+    ${section('bills', 'Счета и оплаты', `${!selectedAnimalId ? `<p class="muted">Баланс владельца по данным клиники: <strong>${formatMoney(owner.balance)}</strong></p>` : '<p class="muted">Показаны счета выбранного питомца. Счета без привязки к питомцу доступны при выборе «Все питомцы».</p>'}${historyNotice(snapshot.bills, snapshot.historyLimits?.bills, 'счетов')}${renderBills(bills)}`, activeTab !== 'bills')}
+    ${section('notifications', 'Сообщения клиники', '<p class="muted">Общие сообщения владельцу — для всех питомцев.</p>' + historyNotice(notifications, snapshot.historyLimits?.notifications, 'сообщений') + renderNotifications(notifications), activeTab !== 'notifications')}
+    <details class="portal-settings"><summary>Устройства, уведомления и контакты владельца</summary><p>${joinText([owner.phone, owner.extraPhone, owner.email, owner.address]) || 'Контакты не указаны'}</p><p class="muted">Для исправления контактов обратитесь в клинику.</p><div class="settings-actions">
+      ${showBrowserTransfer ? '<button id="prepare-browser" class="button browser-only" type="button">Открыть в браузере</button><button id="copy-browser-link" class="button browser-only" type="button" hidden>Скопировать ссылку</button><span id="browser-hint" class="browser-hint browser-only" hidden>Нажмите значок браузера в MAX или скопируйте ссылку. Переход действует 10 минут.</span>' : ''}
+      <button id="enable-push" class="button" type="button" hidden>Включить уведомления</button><span id="push-status" class="push-status" role="status" hidden></span></div></details>`;
   app.querySelectorAll('.tab').forEach((button) => button.addEventListener('click', () => {
     selectTab(button.dataset.tab);
-    if (button.dataset.tab === 'notifications') {
-      markNotificationsRead(response.ownerId, notifications);
-    }
+    if (button.dataset.tab === 'notifications') markNotificationsRead(response.ownerId, notifications);
   }));
+  app.querySelector('[role="tablist"]').addEventListener('keydown', (event) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    const buttons = [...app.querySelectorAll('.tab')];
+    const current = buttons.indexOf(event.target);
+    if (current < 0) return;
+    event.preventDefault();
+    const index = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (current + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length;
+    buttons[index].click(); buttons[index].focus();
+  });
+  app.querySelectorAll('[data-open]').forEach((button) => button.addEventListener('click', () => selectTab(button.dataset.open)));
+  app.querySelectorAll('[data-change-appointment]').forEach((button) => button.addEventListener('click', () => prepareAppointmentChange(button.dataset.changeAppointment, button.dataset.requestType)));
+  document.querySelector('#pet-filter').addEventListener('change', (event) => { selectedAnimalId = event.target.value; renderPortal(portalResponse); });
+  document.querySelector('#document-search').addEventListener('input', (event) => { documentQuery = event.target.value; document.querySelector('#document-results').innerHTML = renderDocuments(searchDocuments(documents)); });
+  document.querySelector('#refresh-portal').addEventListener('click', () => void refreshPortal());
   document.querySelector('#prepare-browser')?.addEventListener('click', prepareBrowserTransfer);
   document.querySelector('#copy-browser-link')?.addEventListener('click', copyBrowserTransferLink);
   document.querySelector('#enable-push')?.addEventListener('click', enablePushNotifications);
-  document.querySelector('#booking-form')?.addEventListener('submit', submitBookingRequest);
+  const form = document.querySelector('#booking-form');
+  form?.addEventListener('submit', submitBookingRequest);
+  form?.elements.animalId.addEventListener('change', updateNewAnimalFields);
+  bindBookingDraft();
+  updateNewAnimalFields();
   void loadBookingRequests();
-  void updateAppBadge(unreadNotifications);
+  void updateAppBadge(unread);
   void updatePushButton();
+  if (window.sessionStorage.getItem(transferStorageKey)) showBrowserTransferReady();
+}
 
-  if (new URL(window.location.href).searchParams.get('section') === 'notifications') {
-    selectTab('notifications');
-    markNotificationsRead(response.ownerId, notifications);
+function freshnessText(value) {
+  if (!value || !Number.isFinite(Date.parse(value))) return 'Время обновления не указано';
+  const stale = Date.now() - Date.parse(value) > 30 * 60_000;
+  return `${stale ? 'Данные могут быть устаревшими. ' : ''}Данные клиники от ${formatDateTime(value)}`;
+}
+
+async function refreshPortal() {
+  if (refreshing) return;
+  refreshing = true;
+  const button = document.querySelector('#refresh-portal');
+  if (button) button.disabled = true;
+  try {
+    const response = await request('/v1/portal/me');
+    // Re-rendering must not discard an unsent application or interrupt keyboard input.
+    if (bookingDirty && portalResponse?.ownerId === response.ownerId) {
+      pendingPortalResponse = response;
+      const status = document.querySelector('#refresh-status');
+      if (status) status.textContent = 'Новые данные получены. Завершите или очистите заявку, чтобы показать их.';
+    } else {
+      pendingPortalResponse = null;
+      renderPortal(response);
+    }
+  } catch (error) {
+    if (error.status === 401 || error.status === 403) { portalResponse = null; renderError(error.message); }
+    else {
+      const status = document.querySelector('#refresh-status');
+      if (status) status.textContent = 'Не удалось обновить. На экране предыдущие данные. Повторите позже.';
+    }
+  } finally { refreshing = false; if (button) button.disabled = false; }
+}
+
+function renderHome({ pets, appointments, labs, hospital, bills }) {
+  const next = appointments.filter((item) => ['PLANNED', 'ARRIVED', 'IN_PROGRESS'].includes(item.status) && new Date(item.endsAt || item.startsAt) >= new Date()).sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt))[0];
+  const ready = labs.filter((order) => array(order.items).some((item) => item.status === 'COMPLETED'));
+  const debt = bills.filter((bill) => !['CANCELLED', 'REFUNDED'].includes(bill.status)).reduce((sum, bill) => sum + Math.max(0, Number(bill.totalAmount) - Number(bill.paidAmount)), 0);
+  return `<div class="overview-grid"><article class="next-appointment"><p class="eyebrow">Ближайшая запись</p><h3>${next ? formatDateTime(next.startsAt) : 'Ближайших записей нет'}</h3><p>${next ? joinText([next.animal?.nickname, next.employee?.fullName, next.room?.name]) : 'Выберите удобное время. Клиника подтвердит запись.'}</p><button type="button" class="button" data-open="${next ? 'appointments' : 'booking'}">${next ? 'Посмотреть запись' : 'Оставить заявку'}</button></article>
+    <div class="summary-links"><button type="button" data-open="health"><strong>${ready.length}</strong><span>Исследований с готовыми результатами</span><span aria-hidden="true">→</span></button><button type="button" data-open="bills"><strong>${formatMoney(debt)}</strong><span>Остаток по загруженным счетам</span><span aria-hidden="true">→</span></button></div></div>
+    ${hospital.length ? `<button type="button" class="hospital-summary-link" data-open="health"><strong>В стационаре: ${joinText(hospital.map((stay) => stay.animal?.nickname))}</strong><span>Посмотреть сводку ухода и последние измерения →</span></button>` : ''}
+    ${pets.length ? '' : '<p class="booking-note">Питомцев пока нет в кабинете. В заявке можно указать нового питомца; клиника добавит карточку.</p>'}`;
+}
+
+function renderServicePromo() {
+  return `<aside class="service-promo" aria-label="Сервис TemichevVet"><div class="service-promo-copy"><p class="eyebrow">TemichevVet · рядом каждый день</p><h3 class="service-promo-title">Паспорт питомца — всегда под рукой</h3><p class="service-promo-description">Вес, наблюдения, прививки и важные даты в личной карточке. Сохраняйте историю для следующего визита к врачу.</p><p class="service-promo-benefits">Карточка питомца · Напоминания · История наблюдений</p><a class="promo-text-link" href="https://temichevvet.ru" target="_blank" rel="noopener noreferrer">Есть вопросы о самочувствии? Открыть помощника →</a></div><div class="service-promo-action"><a class="button service-promo-link" href="https://temichevvet.ru/pet" target="_blank" rel="noopener noreferrer">Открыть паспорт питомца</a><p class="service-promo-note">Личный журнал в сервисе TemichevVet. Не заменяет официальный ветпаспорт. Данные клиники автоматически сюда не переносятся.</p></div></aside>`;
+}
+
+function renderTreatment(visits) {
+  return renderGrid(visits.filter((item) => item.recommendation?.treatmentPlan || item.recommendation?.careNotes), (item) => `<article class="card"><h3>${escapeHtml(item.animal?.nickname)} · ${formatDate(item.startedAt)}</h3><p>${escapeHtml(item.employee?.fullName || 'Врач не указан')}</p>${item.recommendation.treatmentPlan ? `<h4>Назначения врача</h4><p class="multiline">${escapeHtml(item.recommendation.treatmentPlan)}</p>` : ''}${item.recommendation.careNotes ? `<h4>Уход</h4><p class="multiline">${escapeHtml(item.recommendation.careNotes)}</p>` : ''}</article>`, 'Назначений в загруженных завершённых приёмах пока нет.');
+}
+
+function renderLaboratory(orders) {
+  return renderGrid(orders, (order) => `<article class="card laboratory-card"><h3>${escapeHtml(order.animal?.nickname || 'Питомец')} · ${formatDate(order.createdAt)}</h3><span class="badge">${escapeHtml(labStatusLabel(order.status))}</span><dl class="lab-results">${array(order.items).map((item) => `<div><dt>${escapeHtml(item.title)}</dt><dd><strong>${item.status === 'COMPLETED' ? joinText([item.resultValue ?? item.resultText ?? 'Готово', item.unit]) : escapeHtml(labStatusLabel(item.status))}</strong>${item.status === 'COMPLETED' && item.resultValue && item.resultText ? `<p class="multiline">${escapeHtml(item.resultText)}</p>` : ''}${item.referenceRange ? `<span class="muted">Референс: ${escapeHtml(item.referenceRange)}${item.unit ? ` ${escapeHtml(item.unit)}` : ''}</span>` : ''}${item.completedAt ? `<span class="muted">Результат от ${formatDateTime(item.completedAt)}</span>` : ''}</dd></div>`).join('')}</dl><p class="muted">Результаты оценивает лечащий врач с учётом состояния питомца.</p></article>`, 'Исследований пока нет в кабинете. Готовые результаты появятся автоматически.');
+}
+
+function renderPrevention(pets) {
+  return renderGrid(pets, (pet) => `<article class="card"><h3>${escapeHtml(pet.nickname)}</h3>${array(pet.vaccinations).length ? array(pet.vaccinations).map((item) => `<div class="prevention-row"><strong>${escapeHtml(item.title)}</strong><p>Вакцинация: ${formatDate(item.vaccinatedAt)}</p>${item.expiresAt ? `<p>Действует до ${formatDate(item.expiresAt)}</p>${Date.parse(item.expiresAt) < Date.now() ? '<p class="attention">Указанный срок истёк — уточните план вакцинации в клинике.</p>' : ''}` : '<p>Следующая дата не указана</p>'}<p>${joinText([item.vaccineSeries && `Серия ${item.vaccineSeries}`, item.vaccineBatch && `Партия ${item.vaccineBatch}`])}</p></div>`).join('') : '<p>В клинической карточке пока нет записей о прививках. Это не означает, что питомец не привит.</p>'}<p class="muted">В кабинете — до 20 записей о прививках.</p></article>`);
+}
+
+function renderHospital(stays) {
+  return renderGrid(stays, (stay) => `<article class="card hospital-card"><h3>${escapeHtml(stay.animal?.nickname || 'Питомец')} <span class="badge">В стационаре</span></h3><p>С ${formatDateTime(stay.startedAt)}</p><p>Ответственный врач: ${escapeHtml(stay.employee?.fullName || 'Не указан')}</p><p>Данные от ${formatDateTime(stay.updatedAt)}</p>${stay.latestTemperature ? `<p>Последняя температура: <strong>${escapeHtml(stay.latestTemperature.value)} °C</strong> · ${formatDateTime(stay.latestTemperature.measuredAt)}</p>` : '<p>Замеров температуры в сводке пока нет.</p>'}<p>${array(stay.completedCare).filter((item) => item.count > 0).map((item) => `${escapeHtml(({ MEDICATION: 'Выполнено введений препаратов', PROCEDURE: 'Процедур', FEEDING: 'Кормлений', CARE: 'Мероприятий ухода' })[item.type] || item.type)}: ${escapeHtml(item.count)}`).join('<br>') || 'Выполненные мероприятия пока не внесены.'}</p><p class="muted">${stay.recordsLimited ? 'Сводка по последним 100 выполненным записям.' : 'Сводка выполненных мероприятий за госпитализацию.'} Подробности состояния уточняйте у лечащего врача.</p></article>`);
+}
+
+function historyNotice(items, limit, label) {
+  return limit && array(items).length >= limit ? `<p class="history-note">Показаны последние ${limit} ${label}. Более ранние данные можно запросить в клинике.</p>` : '';
+}
+function searchDocuments(items) { const query = documentQuery.trim().toLocaleLowerCase('ru'); return items.filter((item) => [item.fileName, item.title, item.archiveCategory, item.animalName, item.visit?.animal?.nickname].filter(Boolean).join(' ').toLocaleLowerCase('ru').includes(query)); }
+function labStatusLabel(value) { return ({ ORDERED: 'Назначено', IN_PROGRESS: 'В работе', COMPLETED: 'Готово', CANCELLED: 'Отменено' })[value] || 'Ожидает результата'; }
+
+function renderBookingForm(animals) {
+  return `<div class="booking-layout"><form id="booking-form" class="booking-form">
+    <p class="booking-note" id="booking-purpose"><strong>Это заявка.</strong> Администратор свяжется с вами и подтвердит точное время приёма.</p>
+    <input type="hidden" name="requestType" value="NEW"><input type="hidden" name="appointmentId" value="">
+    <label>Питомец<select name="animalId">${animals.map((animal) => `<option value="${escapeHtml(animal.id)}"${animal.id === selectedAnimalId ? ' selected' : ''}>${escapeHtml(animal.nickname)}</option>`).join('')}<option value="">Новый питомец</option></select></label>
+    <div id="new-animal-fields"><label>Кличка<input name="animalNickname" maxlength="160" autocomplete="off"></label><label>Вид животного<input name="animalSpecies" maxlength="120" placeholder="Например, кошка"></label></div>
+    <label>Желаемая дата и время<input name="preferredAt" type="datetime-local"><small class="muted">Время вашего устройства. Точное время подтвердит клиника.</small></label>
+    <label>Причина обращения<textarea name="comment" maxlength="1000" rows="3" placeholder="Причина обращения и удобное время для звонка"></textarea></label>
+    <label class="booking-consent"><input name="contactConsent" type="checkbox" required> Разрешаю клинике связаться со мной по этой заявке</label>
+    <div class="form-actions"><button class="button" type="submit">Отправить заявку</button><button class="button secondary" id="clear-booking" type="button">Очистить</button></div><span id="booking-status" role="status" class="booking-status"></span>
+  </form><div><h3>Мои заявки</h3><p class="muted">Последние 20 заявок. Решение клиники обновляется автоматически.</p><div id="booking-requests" class="booking-requests">Загружаем…</div></div></div>`;
+}
+
+function bindBookingDraft() {
+  const form = document.querySelector('#booking-form');
+  if (!form) return;
+  for (const [name, value] of Object.entries(bookingDraft)) {
+    const input = form.elements.namedItem(name);
+    if (input) { if (input.type === 'checkbox') input.checked = value; else input.value = value; }
+  }
+  form.addEventListener('input', rememberBookingDraft);
+  form.addEventListener('change', rememberBookingDraft);
+  document.querySelector('#clear-booking').addEventListener('click', () => {
+    bookingDirty = false; bookingDraft = {}; bookingAttempt = null;
+    renderPortal(pendingPortalResponse || portalResponse); pendingPortalResponse = null;
+  });
+  if (form.elements.requestType.value !== 'NEW') {
+    document.querySelector('#booking-purpose').textContent = form.elements.requestType.value === 'CANCEL'
+      ? 'Заявка на отмену. До подтверждения клиникой запись остаётся в расписании.'
+      : 'Заявка на перенос. До подтверждения клиникой действует прежнее время.';
   }
 }
 
-function renderBookingForm(animals) {
-  const animalOptions = animals.map((animal) => `<option value="${escapeHtml(animal.id)}">${escapeHtml(animal.nickname || 'Пациент')}</option>`).join('');
-  return `
-    <div class="booking-layout">
-      <form id="booking-form" class="booking-form">
-        <p class="booking-note"><strong>Это заявка.</strong> Администратор свяжется с вами и подтвердит точное время приёма.</p>
-        <label>Пациент<select name="animalId" required>${animalOptions}</select></label>
-        <label>Желаемая дата и время<input name="preferredAt" type="datetime-local"></label>
-        <label>Причина обращения<textarea name="comment" maxlength="1000" rows="4" placeholder="Кратко опишите причину и удобное время для звонка"></textarea></label>
-        <label class="booking-consent"><input name="contactConsent" type="checkbox" required> Разрешаю клинике связаться со мной по этой заявке</label>
-        <button class="button" type="submit"${animals.length ? '' : ' disabled'}>Отправить заявку</button>
-        <span id="booking-status" class="booking-status" role="status" aria-live="polite"></span>
-      </form>
-      <div><h3>Мои заявки</h3><div id="booking-requests" class="booking-requests"><span class="muted">Загружаем…</span></div></div>
-    </div>`;
+function rememberBookingDraft() {
+  const form = document.querySelector('#booking-form');
+  bookingDraft = Object.fromEntries(new FormData(form));
+  bookingDraft.contactConsent = form.elements.contactConsent.checked;
+  bookingDirty = true;
+}
+
+function updateNewAnimalFields() {
+  const form = document.querySelector('#booking-form');
+  if (!form) return;
+  const isNew = !form.elements.animalId.value;
+  const fields = document.querySelector('#new-animal-fields');
+  fields.hidden = !isNew;
+  form.elements.animalNickname.required = isNew;
+}
+
+function prepareAppointmentChange(id, type) {
+  const appointment = array(portalResponse?.snapshot?.appointments).find((item) => item.id === id);
+  if (!appointment) return;
+  const form = document.querySelector('#booking-form');
+  form.elements.requestType.value = type;
+  form.elements.appointmentId.value = id;
+  form.elements.animalId.value = appointment.animal?.id || '';
+  document.querySelector('#booking-purpose').textContent = `${type === 'CANCEL' ? 'Отмена' : 'Перенос'} записи ${formatDateTime(appointment.startsAt)}. До подтверждения клиникой действует прежняя запись.`;
+  form.elements.preferredAt.value = '';
+  form.elements.contactConsent.checked = false;
+  rememberBookingDraft(); updateNewAnimalFields(); selectTab('booking');
 }
 
 async function submitBookingRequest(event) {
@@ -183,50 +307,45 @@ async function submitBookingRequest(event) {
   const button = form.querySelector('button[type="submit"]');
   const status = document.querySelector('#booking-status');
   const values = new FormData(form);
+  const payload = {
+    requestType: String(values.get('requestType') || 'NEW'), appointmentId: String(values.get('appointmentId') || '') || undefined,
+    animalId: String(values.get('animalId') || '') || undefined,
+    animalNickname: String(values.get('animalNickname') || '') || undefined,
+    animalSpecies: String(values.get('animalSpecies') || '') || undefined,
+    preferredAt: values.get('preferredAt') ? new Date(String(values.get('preferredAt'))).toISOString() : undefined,
+    comment: String(values.get('comment') || ''), contactConsent: values.get('contactConsent') === 'on',
+  };
+  const fingerprint = JSON.stringify(payload);
+  if (!bookingAttempt || bookingAttempt.fingerprint !== fingerprint) bookingAttempt = { fingerprint, id: createClientRequestId() };
   button.disabled = true;
   if (status) status.textContent = 'Отправляем…';
   try {
-    await request('/v1/portal/booking-requests', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        clientRequestId: createClientRequestId(),
-        animalId: String(values.get('animalId') || ''),
-        preferredAt: values.get('preferredAt') ? new Date(String(values.get('preferredAt'))).toISOString() : undefined,
-        comment: String(values.get('comment') || ''),
-        contactConsent: values.get('contactConsent') === 'on',
-      }),
-    });
-    form.reset();
-    if (status) status.textContent = 'Заявка отправлена. Клиника подтвердит время.';
+    await request('/v1/portal/booking-requests', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...payload, clientRequestId: bookingAttempt.id }) });
+    bookingDirty = false; bookingDraft = {}; bookingAttempt = null;
+    form.reset(); form.elements.requestType.value = 'NEW'; form.elements.appointmentId.value = ''; updateNewAnimalFields();
+    document.querySelector('#booking-purpose').textContent = 'Это заявка. Администратор свяжется с вами и подтвердит точное время приёма.';
+    if (status) status.textContent = 'Заявка отправлена. Дождитесь подтверждения клиники.';
     await loadBookingRequests();
+    if (pendingPortalResponse) {
+      const latest = pendingPortalResponse; pendingPortalResponse = null; renderPortal(latest);
+      document.querySelector('#booking-status').textContent = 'Заявка отправлена. Дождитесь подтверждения клиники.';
+    }
   } catch (error) {
-    if (status) status.textContent = error instanceof Error ? error.message : 'Не удалось отправить заявку';
-  } finally {
-    button.disabled = false;
-  }
+    if (status) status.textContent = `${error instanceof Error ? error.message : 'Не удалось отправить заявку'}. Повторите отправку: неизменённая заявка не продублируется.`;
+  } finally { button.disabled = false; }
 }
 
 async function loadBookingRequests() {
   const container = document.querySelector('#booking-requests');
   if (!container) return;
   try {
-    const items = await request('/v1/portal/booking-requests');
-    container.innerHTML = array(items).length
-      ? array(items).map((item) => `<article class="booking-request"><strong>${escapeHtml(item.animalNickname || 'Пациент')}</strong><span>${formatDateTime(item.createdAt)}</span><span>${escapeHtml(bookingStatusLabel(item.status))}</span></article>`).join('')
-      : '<span class="muted">Заявок пока нет.</span>';
-  } catch {
-    container.innerHTML = '<span class="muted">Не удалось загрузить заявки.</span>';
-  }
+    const items = array(await request('/v1/portal/booking-requests')).filter((item) => !selectedAnimalId || item.animalId === selectedAnimalId);
+    if (!container.isConnected) return;
+    container.innerHTML = items.length ? items.map((item) => `<article class="booking-request"><strong>${escapeHtml(item.animalNickname || 'Питомец')}</strong><span class="badge">${escapeHtml(bookingStatusLabel(item.clinicStatus || item.status))}</span><span>Отправлена ${formatDateTime(item.createdAt)}</span><span>Желаемое время: ${formatDateTime(item.preferredAt)}</span>${item.appointment ? `<strong>Запись в клинике: ${formatDateTime(item.appointment.startsAt)}</strong><span>${escapeHtml(statusLabel(item.appointment.status))}</span>` : ''}${item.comment ? `<p class="multiline">${escapeHtml(item.comment)}</p>` : ''}${item.clinicUpdatedAt ? `<span class="muted">Ответ клиники от ${formatDateTime(item.clinicUpdatedAt)}</span>` : '<span class="muted">Подтверждение времени ещё не поступило.</span>'}</article>`).join('') : '<p class="muted">Для выбранного питомца заявок пока нет.</p>';
+  } catch { if (container.isConnected) container.innerHTML = '<p class="muted">Не удалось загрузить заявки. Нажмите «Обновить», чтобы повторить.</p>'; }
 }
-
-function createClientRequestId() {
-  return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
-}
-
-function bookingStatusLabel(status) {
-  return status === 'IMPORTED' ? 'Передана в клинику' : status === 'CANCELLED' ? 'Отменена' : 'Ожидает обработки';
-}
+function createClientRequestId() { return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`; }
+function bookingStatusLabel(status) { return ({ NEW: 'Ожидает обработки', IMPORTED: 'Передана в клинику', IN_REVIEW: 'Клиника рассматривает', ACCEPTED: 'Принята клиникой', REJECTED: 'Не подтверждена', CANCELLED: 'Заявка отменена', ARCHIVED: 'Заявка закрыта' })[status] || 'Обрабатывается клиникой'; }
 
 async function prepareBrowserTransfer() {
   const button = document.querySelector('#prepare-browser');
@@ -270,8 +389,12 @@ function showBrowserTransferReady() {
 }
 
 function selectTab(name) {
-  app.querySelectorAll('.tab').forEach((button) => button.setAttribute('aria-selected', String(button.dataset.tab === name)));
+  const booking = name === 'booking';
+  name = booking ? 'appointments' : name;
+  activeTab = name;
+  app.querySelectorAll('.tab').forEach((button) => { button.setAttribute('aria-selected', String(button.dataset.tab === name)); button.tabIndex = button.dataset.tab === name ? 0 : -1; });
   app.querySelectorAll('.panel').forEach((panel) => { panel.hidden = panel.dataset.panel !== name; });
+  if (booking) document.querySelector('#booking-form')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
 }
 
 function renderAnimals(items) {
@@ -283,9 +406,9 @@ function renderAnimals(items) {
       <p><strong>Окрас:</strong> ${escapeHtml(animal.color || '—')}</p>
       <p><strong>Микрочип:</strong> ${escapeHtml(animal.microchip || '—')}</p>
       <p><strong>Клеймо:</strong> ${escapeHtml(animal.mark || '—')}</p>
-      <p><strong>Состояние:</strong> ${escapeHtml(animal.status || '—')}</p>
-      <p><strong>Последний вес:</strong> ${array(animal.weights).length ? `${escapeHtml(animal.weights[0].weightKg)} кг` : '—'}</p>
-      ${array(animal.weights).length ? `<details><summary>История веса</summary>${array(animal.weights).map((item) => `<p>${formatDate(item.measuredAt)} — ${escapeHtml(item.weightKg)} кг</p>`).join('')}</details>` : ''}
+      <p><strong>Статус карточки:</strong> ${escapeHtml(({ ACTIVE: 'Активна', DECEASED: 'Отмечен как умерший', LOST: 'Отмечен как пропавший' })[animal.status] || animal.status || 'Не указан')}</p>
+      <p><strong>Последний вес:</strong> ${array(animal.weights).length ? `${escapeHtml(animal.weights[0].weightKg)} кг · ${formatDate(animal.weights[0].measuredAt)}` : '—'}</p>
+      ${array(animal.weights).length ? `<details><summary>История веса · до 20 замеров</summary>${array(animal.weights).map((item) => `<p>${formatDate(item.measuredAt)} — ${escapeHtml(item.weightKg)} кг</p>`).join('')}</details>` : ''}
       ${array(animal.vaccinations).length ? `<details><summary>Прививки</summary>${array(animal.vaccinations).map((item) => `<p><strong>${escapeHtml(item.title)}</strong><br>${formatDate(item.vaccinatedAt)} · ${escapeHtml(item.status || 'Статус не указан')}${item.expiresAt ? `<br>Действует до ${formatDate(item.expiresAt)}` : ''}${item.vaccineSeries ? `<br>Серия: ${escapeHtml(item.vaccineSeries)}` : ''}${item.vaccineBatch ? `<br>Партия: ${escapeHtml(item.vaccineBatch)}` : ''}</p>`).join('')}</details>` : '<p><strong>Прививки:</strong> —</p>'}
     </article>`);
 }
@@ -296,30 +419,31 @@ function renderAppointments(items) {
       <p><strong>Пациент:</strong> ${escapeHtml(item.animal?.nickname || '—')}</p>
       <p><strong>Статус:</strong> ${escapeHtml(statusLabel(item.status))}</p>
       <p><strong>Врач:</strong> ${escapeHtml(item.employee?.fullName || '—')}</p>
-      <p><strong>Кабинет:</strong> ${escapeHtml(item.room?.name || '—')}</p>
+      <p><strong>Кабинет:</strong> ${escapeHtml(item.room?.name || '—')}</p>${item.status === 'PLANNED' && Date.parse(item.startsAt) > Date.now() ? `<div class="form-actions"><button type="button" class="button secondary" data-change-appointment="${escapeHtml(item.id)}" data-request-type="RESCHEDULE">Попросить перенос</button><button type="button" class="button secondary" data-change-appointment="${escapeHtml(item.id)}" data-request-type="CANCEL">Попросить отмену</button></div>` : ''}
     </article>`);
 }
 
 function renderVisits(items) {
   return renderGrid(items, (item) => `
-    <article class="card"><h3>${formatDateTime(item.startedAt)} · ${escapeHtml(item.animal?.nickname || 'Пациент')}</h3>
+    <article class="card"><details><summary>${formatDateTime(item.startedAt)} · ${escapeHtml(item.animal?.nickname || 'Питомец')}</summary>
       <p><strong>Врач:</strong> ${escapeHtml(item.employee?.fullName || '—')}</p>
       <p><strong>Цель приёма:</strong> ${escapeHtml(item.exam?.purpose || '—')}</p>
       <p><strong>Анамнез:</strong> ${escapeHtml(item.exam?.anamnesis || '—')}</p>
       <p><strong>Осмотр:</strong> ${escapeHtml(item.exam?.examination || '—')}</p>
       <p><strong>Симптомы:</strong> ${escapeHtml(item.exam?.symptoms || '—')}</p>
-      <p><strong>Вес:</strong> ${item.exam?.weightKg ?? '—'}${item.exam?.weightKg ? ' кг' : ''}</p>
-      <p><strong>Температура:</strong> ${item.exam?.temperatureC ?? '—'}${item.exam?.temperatureC ? ' °C' : ''}</p>
-      <p><strong>Диагноз:</strong> ${array(item.diagnoses).length ? array(item.diagnoses).map((value) => `${escapeHtml(value.title)}${value.description ? ` — ${escapeHtml(value.description)}` : ''}`).join('<br>') : '—'}</p>
+      <p><strong>Вес:</strong> ${escapeHtml(item.exam?.weightKg ?? '—')}${item.exam?.weightKg ? ' кг' : ''}</p>
+      <p><strong>Температура:</strong> ${escapeHtml(item.exam?.temperatureC ?? '—')}${item.exam?.temperatureC ? ' °C' : ''}</p>
+      <p><strong>Диагноз:</strong> ${array(item.diagnoses).length ? array(item.diagnoses).map((value) => `${escapeHtml(value.title)}${value.diagnosisType ? ` (${escapeHtml(value.diagnosisType)})` : ''}${value.description ? ` — ${escapeHtml(value.description)}` : ''}`).join('<br>') : '—'}</p>
       <p><strong>Манипуляции:</strong> ${escapeHtml(item.exam?.manipulations || '—')}</p>
       <p><strong>Стационар:</strong> ${array(item.hospitalRecords).length ? array(item.hospitalRecords).map((record) => `${formatDateTime(record.recordedAt)} — ${escapeHtml(record.title)}${record.temperatureC ? ` (${escapeHtml(record.temperatureC)} °C)` : record.value ? ` (${escapeHtml(record.value)})` : ''}`).join('<br>') : '—'}</p>
       <p><strong>Анализы:</strong> ${array(item.laboratoryOrders).flatMap((order) => array(order.items)).length ? array(item.laboratoryOrders).flatMap((order) => array(order.items)).map((result) => `${escapeHtml(result.title)}: ${escapeHtml(result.resultValue || result.resultText || 'результат не внесён')}${result.unit ? ` ${escapeHtml(result.unit)}` : ''}`).join('<br>') : '—'}</p>
       <p><strong>Лечение:</strong> ${escapeHtml(item.recommendation?.treatmentPlan || '—')}</p>
       <p><strong>Уход:</strong> ${escapeHtml(item.recommendation?.careNotes || '—')}</p>
-    </article>`);
+    </details></article>`);
 }
 
 function renderDocuments(items) {
+  if (!items.length && documentQuery.trim()) return '<div class="empty">По запросу ничего не найдено. Попробуйте другое название.</div>';
   return renderGrid(items, (item) => item.documentKind === 'file' ? `
     <article class="card"><h3>${escapeHtml(item.fileName || 'Документ')}</h3>
       <p>${formatDateTime(item.documentDate || item.sourceCreatedAt)} · ${escapeHtml(item.animalName || 'Пациент')}</p>
@@ -337,8 +461,8 @@ function renderBills(items) {
     <article class="card"><h3>${formatMoney(item.totalAmount)} · ${escapeHtml(item.animal?.nickname || 'Счёт')}</h3>
       <p><strong>Дата:</strong> ${formatDateTime(item.createdAt)}</p>
       <p><strong>Статус:</strong> ${escapeHtml(billStatusLabel(item.status))}</p>
-      <p><strong>Оплачено:</strong> ${formatMoney(item.paidAmount)}</p>
-      <p>${array(item.items).map((value) => `${escapeHtml(value.title)} — ${escapeHtml(value.quantity)} × ${formatMoney(value.totalAmount)}`).join('<br>') || 'Позиции не указаны'}</p>
+      <p><strong>Оплачено:</strong> ${formatMoney(item.paidAmount)}</p>${!['CANCELLED', 'REFUNDED'].includes(item.status) ? `<p><strong>Остаток:</strong> ${formatMoney(Math.max(0, Number(item.totalAmount) - Number(item.paidAmount)))}</p>${Number(item.paidAmount) > Number(item.totalAmount) ? `<p>Оплата сверх суммы счёта: ${formatMoney(Number(item.paidAmount) - Number(item.totalAmount))}. Уточните зачёт в клинике.</p>` : ''}` : ''}
+      <p>${array(item.items).map((value) => `${escapeHtml(value.title)} — ${escapeHtml(value.quantity)} шт., сумма ${formatMoney(value.totalAmount)}`).join('<br>') || 'Позиции не указаны'}</p>
     </article>`);
 }
 
@@ -346,26 +470,27 @@ function renderNotifications(items) {
   return renderGrid(items, (item) => `
     <article class="card"><h3>${escapeHtml(item.subject || 'Сообщение клиники')}</h3>
       <p>${formatDateTime(item.sentAt || item.createdAt)}</p>
-      <p>${escapeHtml(item.body || '')}</p>
+      <p>${escapeHtml(item.body || '').replaceAll('\n', '<br>')}</p>
     </article>`);
 }
 
-function renderGrid(items, renderer) {
-  return items.length ? `<div class="grid">${items.map(renderer).join('')}</div>` : '<div class="empty">В этом разделе пока нет данных.</div>';
+function renderGrid(items, renderer, empty = 'В этом разделе пока нет данных.') {
+  return items.length ? `<div class="grid">${items.map(renderer).join('')}</div>` : `<div class="empty">${escapeHtml(empty)}</div>`;
 }
 
 function tabButton(name, text, selected = false, unread = 0) {
   const unreadBadge = unread > 0 ? `<span class="tab-unread" aria-label="Непрочитанных сообщений: ${unread}">${unread}</span>` : '';
-  return `<button class="tab" type="button" data-tab="${name}" aria-selected="${selected}">${escapeHtml(text)}${unreadBadge}</button>`;
+  return `<button class="tab" role="tab" id="tab-${name}" aria-controls="panel-${name}" tabindex="${selected ? 0 : -1}" type="button" data-tab="${name}" aria-selected="${selected}">${escapeHtml(text)}${unreadBadge}</button>`;
 }
 
 function section(name, title, content, hidden) {
-  return `<section class="panel" data-panel="${name}"${hidden ? ' hidden' : ''}><h2>${escapeHtml(title)}</h2>${content}</section>`;
+  return `<section class="panel" role="tabpanel" id="panel-${name}" aria-labelledby="tab-${name}" data-panel="${name}"${hidden ? ' hidden' : ''}><h2>${escapeHtml(title)}</h2>${content}</section>`;
 }
 
 function renderError(message) {
   logoutButton.hidden = true;
-  app.innerHTML = `<section class="state-card"><h1>Кабинет пока не открыт</h1><p>${escapeHtml(message)}</p><p class="muted">Попросите клинику создать новую ссылку или QR-код.</p></section>`;
+  app.innerHTML = `<section class="state-card"><h1>Кабинет пока не открыт</h1><p>${escapeHtml(message)}</p><p class="muted">Откройте последнее приглашение клиники в MAX или Telegram. Если ссылка уже использована или истекла, попросите клинику прислать новую ссылку или QR-код.</p><button type="button" class="button" id="retry-portal">Повторить вход</button></section>`;
+  document.querySelector('#retry-portal').addEventListener('click', () => { void start(); });
 }
 
 function isStandaloneMode() {
@@ -581,9 +706,9 @@ function urlBase64ToUint8Array(value) {
 function array(value) { return Array.isArray(value) ? value : []; }
 function joinText(values) { return values.filter(Boolean).map(escapeHtml).join(' · '); }
 function escapeHtml(value) { return String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]); }
-function formatDate(value) { return value ? new Intl.DateTimeFormat('ru-RU').format(new Date(value)) : '—'; }
-function formatDateTime(value) { return value ? new Intl.DateTimeFormat('ru-RU', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—'; }
-function formatMoney(value) { const amount = Number(value); return Number.isFinite(amount) ? new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 2 }).format(amount) : '—'; }
+function formatDate(value) { return value && Number.isFinite(Date.parse(value)) ? new Intl.DateTimeFormat('ru-RU').format(new Date(value)) : '—'; }
+function formatDateTime(value) { return value && Number.isFinite(Date.parse(value)) ? new Intl.DateTimeFormat('ru-RU', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—'; }
+function formatMoney(value) { if (value === null || value === undefined || value === '') return '—'; const amount = Number(value); return Number.isFinite(amount) ? new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 2 }).format(amount) : '—'; }
 function formatFileSize(value) { const bytes = Number(value); return Number.isFinite(bytes) && bytes >= 0 ? `${Math.max(1, Math.round(bytes / 1024))} КБ` : ''; }
 function sexLabel(value) { return value === 'MALE' ? 'Самец' : value === 'FEMALE' ? 'Самка' : 'Не указан'; }
 function statusLabel(value) { return ({ PLANNED: 'Запланирована', ARRIVED: 'В клинике', IN_PROGRESS: 'Идёт приём', COMPLETED: 'Завершена', CANCELLED: 'Отменена', NO_SHOW: 'Не пришли' })[value] || value || '—'; }

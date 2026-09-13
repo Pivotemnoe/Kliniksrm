@@ -51,16 +51,14 @@ test('личный кабинет рекламирует отдельный се
   const publicPortal = await read('apps/owner-gateway/public/app.js');
   const localPortal = await read('apps/web/src/features/clientPortal/ClientPortalPage.tsx');
 
-  assert.match(publicPortal, /Сомневаетесь, можно ли подождать\?/);
-  assert.match(publicPortal, /Понять срочность/);
-  assert.match(publicPortal, /Оценить состояние питомца/);
-  assert.match(publicPortal, /Сервис не ставит диагноз и не заменяет врача/);
+  for (const portal of [publicPortal, localPortal]) {
+    assert.match(portal, /паспорт питомца/);
+    assert.match(portal, /Напоминания/);
+    assert.match(portal, /href="https:\/\/temichevvet\.ru\/pet"/);
+    assert.match(portal, /Не заменяет официальный ветпаспорт/);
+    assert.match(portal, /Данные клиники автоматически сюда не переносятся/);
+  }
   assert.match(publicPortal, /href="https:\/\/temichevvet\.ru"/);
-  assert.match(localPortal, /Сомневаетесь, можно ли подождать\?/);
-  assert.match(localPortal, /Понять срочность/);
-  assert.match(localPortal, /Оценить состояние питомца/);
-  assert.match(localPortal, /Сервис не ставит диагноз и не заменяет врача/);
-  assert.match(localPortal, /href="https:\/\/temichevvet\.ru"/);
 });
 
 test('разделы мобильного личного кабинета собраны в одну сетку без горизонтальной прокрутки', async () => {
@@ -68,12 +66,12 @@ test('разделы мобильного личного кабинета соб
   const portalStyles = await read('apps/owner-gateway/public/app.css');
   const serviceWorker = await read('apps/owner-gateway/public/sw.js');
 
-  assert.match(publicPortal, /<nav class="portal-menu" aria-labelledby="portal-menu-title">/);
-  assert.match(publicPortal, /<h2 id="portal-menu-title">Разделы кабинета<\/h2>/);
+  assert.match(publicPortal, /<nav class="portal-menu" aria-label="Разделы кабинета">/);
+  assert.match(publicPortal, /role="tablist"/);
   assert.match(portalStyles, /\.tabs \{ display: grid;/);
   assert.match(portalStyles, /grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
   assert.match(portalStyles, /@media \(max-width: 360px\)[\s\S]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
   assert.doesNotMatch(portalStyles, /\.tabs[^}]*overflow-x:\s*auto/s);
-  assert.match(serviceWorker, /temichevvet-owner-shell-v12/);
-  assert.match(serviceWorker, /20260812-clinical-history/);
+  assert.match(serviceWorker, /temichevvet-owner-shell-v13/);
+  assert.match(serviceWorker, /20260913-owner-cabinet/);
 });

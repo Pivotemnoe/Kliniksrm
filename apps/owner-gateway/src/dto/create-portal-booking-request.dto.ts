@@ -1,6 +1,15 @@
-import { IsBoolean, IsDateString, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsBoolean, IsDateString, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 export class CreatePortalBookingRequestDto {
+  @IsOptional()
+  @IsIn(['NEW', 'RESCHEDULE', 'CANCEL'])
+  requestType?: 'NEW' | 'RESCHEDULE' | 'CANCEL';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  appointmentId?: string;
+
   @IsString()
   @MinLength(16)
   @MaxLength(80)

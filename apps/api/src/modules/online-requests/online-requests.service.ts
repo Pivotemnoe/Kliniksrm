@@ -144,6 +144,10 @@ export class OnlineRequestsService {
   async acceptRequest(requestId: string, dto: AcceptOnlineRequestDto, actorId: string) {
     const request = await this.getRequest(requestId);
 
+    if (request.source === 'OWNER_GATEWAY' && /^(Отмена|Перенос) записи от .+ \(№ [^)]+\)\./.test(request.comment ?? '')) {
+      throw new BadRequestException('Это обращение об изменении существующей записи. Обработайте его в расписании и закройте заявку; создавать новую запись не нужно.');
+    }
+
     if (request.status === OnlineRequestStatus.ACCEPTED && request.appointmentId) {
       throw new BadRequestException('Заявка уже переведена в запись');
     }

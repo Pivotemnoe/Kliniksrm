@@ -80,6 +80,7 @@ export function ClientPortalPage() {
     queryKey: ['client-portal', token],
     queryFn: () => getClientPortalSummary(token),
     enabled: Boolean(token),
+    refetchInterval: 60_000,
   });
   const data = portalQuery.data;
 
@@ -118,6 +119,7 @@ export function ClientPortalPage() {
       { title: 'Статус', dataIndex: 'status', key: 'status', width: 130, render: (value: string) => statusTag(billStatusLabels[value] ?? value) },
       { title: 'Сумма', dataIndex: 'totalAmount', key: 'totalAmount', width: 130, render: formatMoney },
       { title: 'Оплачено', dataIndex: 'paidAmount', key: 'paidAmount', width: 130, render: formatMoney },
+      { title: 'Остаток', key: 'outstanding', render: (_, item) => ['CANCELLED', 'REFUNDED'].includes(item.status) ? '—' : formatMoney(Math.max(0, Number(item.totalAmount) - Number(item.paidAmount))) },
       { title: 'Позиции', key: 'items', render: (_, item) => item.items.map((billItem) => billItem.title).join(', ') || '—' },
     ],
     [],
@@ -215,21 +217,20 @@ export function ClientPortalPage() {
 
         <section className="portal-service-promo">
           <div className="portal-service-promo-copy">
-            <Typography.Title level={4}>Сомневаетесь, можно ли подождать?</Typography.Title>
+            <Typography.Title level={4}>TemichevVet: паспорт питомца всегда под рукой</Typography.Title>
             <Typography.Paragraph className="portal-service-promo-description">
-              Опишите, что происходит с питомцем. TemichevVet поможет заметить тревожные признаки и понять следующий шаг: наблюдать дома,
-              обратиться за консультацией или не откладывать поездку в клинику.
+              Вес, наблюдения, прививки и важные даты в личной карточке. Сохраняйте историю для следующего визита к врачу.
             </Typography.Paragraph>
             <Typography.Text className="portal-service-promo-benefits" strong>
-              Понять срочность · Разобрать симптомы · Проверить питание · Сохранить историю
+              Карточка питомца · Напоминания · История наблюдений
             </Typography.Text>
           </div>
           <div className="portal-service-promo-action">
-            <Button type="primary" icon={<ExportOutlined />} href="https://temichevvet.ru" target="_blank" rel="noopener noreferrer">
-              Оценить состояние питомца
+            <Button type="primary" icon={<ExportOutlined />} href="https://temichevvet.ru/pet" target="_blank" rel="noopener noreferrer">
+              Открыть паспорт питомца
             </Button>
             <Typography.Text className="portal-service-promo-note" type="secondary">
-              Первичный ориентир — без звонка и ожидания ответа. Сервис не ставит диагноз и не заменяет врача.
+              Личный журнал в сервисе TemichevVet. Не заменяет официальный ветпаспорт. Данные клиники автоматически сюда не переносятся.
             </Typography.Text>
           </div>
         </section>

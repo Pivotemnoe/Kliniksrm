@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { ClientPortalStatus, DocumentStatus, FilePurpose, Prisma } from '@prisma/client';
+import { ClientPortalStatus, DocumentStatus, Prisma } from '@prisma/client';
 import { createHash, randomBytes, randomInt } from 'node:crypto';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -8,6 +8,7 @@ import { RequestPortalCodeDto } from './dto/request-portal-code.dto';
 import { VerifyPortalCodeDto } from './dto/verify-portal-code.dto';
 import { shouldExposePortalDebugCode } from '../../config/runtime-config';
 import { ObjectStorageService } from '../files/object-storage.service';
+import { isOwnerDiagnosis, ownerGatewayFileWhere, ownerHospitalSelect, ownerLaboratorySelect, toOwnerHospitalStay, toOwnerLaboratoryOrder } from './owner-data-policy';
 
 const PORTAL_CODE_TTL_MINUTES = Number(process.env.CLIENT_PORTAL_CODE_TTL_MINUTES ?? 10);
 const PORTAL_CODE_MAX_ATTEMPTS = Number(process.env.CLIENT_PORTAL_CODE_MAX_ATTEMPTS ?? 5);
@@ -140,6 +141,9 @@ export class ClientPortalService {
       appointments: snapshot.appointments,
       visits: snapshot.visits,
       files: snapshot.files,
+      laboratoryOrders: snapshot.laboratoryOrders,
+      hospitalStays: snapshot.hospitalStays,
+      historyLimits: snapshot.historyLimits,
       bills: snapshot.bills,
       notifications: snapshot.notifications,
       onlineRequests,
@@ -161,7 +165,7 @@ export class ClientPortalService {
   }
 
   async buildOwnerGatewaySnapshot(ownerId: string) {
-    const [owner, appointments, visits, files, bills, notifications] = await this.prisma.$transaction([
+    const [owner, appointments, visits, files, bills, notifications, laboratoryOrders, hospitalStays, bookingRequests] = await this.prisma.$transaction([
       this.prisma.owner.findUnique({
         where: { id: ownerId },
         select: {
@@ -212,7 +216,7 @@ export class ClientPortalService {
         },
       }),
       this.prisma.appointment.findMany({
-        where: { ownerId },
+        where: { ownerId, animal: { ownerId } },
         orderBy: { startsAt: 'desc' },
         take: 30,
         select: {
@@ -226,7 +230,7 @@ export class ClientPortalService {
         },
       }),
       this.prisma.visit.findMany({
-        where: { ownerId, status: 'COMPLETED' },
+        where: { ownerId, animal: { ownerId }, status: 'COMPLETED' },
         orderBy: { startedAt: 'desc' },
         take: 30,
         select: {
@@ -253,7 +257,7 @@ export class ClientPortalService {
           },
           recommendation: { select: { treatmentPlan: true, careNotes: true } },
           hospitalRecords: {
-            where: { recordStatus: 'COMPLETED' },
+            where: { recordStatus: 'COMPLETED', cancelledAt: null, recordType: { in: ['TEMPERATURE', 'MEDICATION', 'PROCEDURE', 'FEEDING', 'CARE'] } },
             orderBy: { recordedAt: 'asc' },
             select: {
               id: true,
@@ -266,28 +270,7 @@ export class ClientPortalService {
               performedBy: { select: { id: true, fullName: true } },
             },
           },
-          laboratoryOrders: {
-            orderBy: { createdAt: 'asc' },
-            select: {
-              id: true,
-              status: true,
-              createdAt: true,
-              items: {
-                orderBy: { createdAt: 'asc' },
-                select: {
-                  id: true,
-                  title: true,
-                  code: true,
-                  status: true,
-                  resultValue: true,
-                  resultText: true,
-                  unit: true,
-                  referenceRange: true,
-                  completedAt: true,
-                },
-              },
-            },
-          },
+          laboratoryOrders: { orderBy: { createdAt: 'asc' }, select: ownerLaboratorySelect },
           documents: {
             where: { status: DocumentStatus.SIGNED },
             select: {
@@ -342,6 +325,26 @@ export class ClientPortalService {
           metadata: true,
         },
       }),
+      this.prisma.laboratoryOrder.findMany({
+        where: { visit: { ownerId, animal: { ownerId }, status: { not: 'CANCELLED' } } },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+        select: { ...ownerLaboratorySelect, visit: { select: { id: true, animal: { select: { id: true, nickname: true } } } } },
+      }),
+      this.prisma.hospitalStay.findMany({
+        where: { ownerId, animal: { ownerId }, status: 'ACTIVE' },
+        orderBy: { startedAt: 'desc' },
+        take: 20,
+        select: ownerHospitalSelect,
+      }),
+      this.prisma.onlineAppointmentRequest.findMany({
+        where: { ownerId }, orderBy: { createdAt: 'desc' }, take: 50,
+        select: {
+          id: true, externalRequestId: true, status: true, preferredAt: true, createdAt: true, updatedAt: true,
+          animalNickname: true, animalId: true,
+          appointment: { select: { id: true, startsAt: true, endsAt: true, status: true } },
+        },
+      }),
     ]);
 
     if (!owner) {
@@ -351,6 +354,8 @@ export class ClientPortalService {
     const { animals, ...ownerProfile } = owner;
     const portalVisits = visits.map((visit) => ({
       ...visit,
+      diagnoses: visit.diagnoses.filter(isOwnerDiagnosis),
+      laboratoryOrders: visit.laboratoryOrders.map(toOwnerLaboratoryOrder),
       documents: visit.documents.map(({ generatedDocument, ...document }) => {
         const snapshot = getGeneratedDocumentText(generatedDocument?.snapshot);
         return {
@@ -381,6 +386,10 @@ export class ClientPortalService {
       files: files.map(toPortalFileMetadata),
       bills,
       notifications: visibleNotifications,
+      laboratoryOrders: laboratoryOrders.map((order) => ({ ...toOwnerLaboratoryOrder(order), visitId: order.visit.id, animal: order.visit.animal })),
+      hospitalStays: hospitalStays.map(toOwnerHospitalStay),
+      bookingRequests,
+      historyLimits: { visits: 30, appointments: 30, bills: 30, files: 200, laboratoryOrders: 100, notifications: 20, bookingRequests: 50 },
       syncedAt: new Date().toISOString(),
     };
   }
@@ -537,24 +546,15 @@ const ownerGatewayFileSyncSelect = {
   createdAt: true,
   animal: { select: { id: true, nickname: true } },
   visit: { select: { animal: { select: { id: true, nickname: true } } } },
+  visitDocument: { select: { visit: { select: { animal: { select: { id: true, nickname: true } } } } } },
+  laboratoryOrder: { select: { visit: { select: { animal: { select: { id: true, nickname: true } } } } } },
+  laboratoryOrderItem: { select: { order: { select: { visit: { select: { animal: { select: { id: true, nickname: true } } } } } } } },
 } satisfies Prisma.FileObjectSelect;
 
 const ownerGatewayFileSelect = ownerGatewayFileSyncSelect;
 
-function ownerGatewayFileWhere(ownerId: string): Prisma.FileObjectWhereInput {
-  return {
-    purpose: FilePurpose.MEDICAL_DOCUMENT,
-    deletedAt: null,
-    OR: [
-      { ownerId },
-      { animal: { ownerId } },
-      { visit: { ownerId } },
-    ],
-  };
-}
-
 function toPortalFileMetadata(file: Prisma.FileObjectGetPayload<{ select: typeof ownerGatewayFileSyncSelect }>) {
-  const animal = file.animal ?? file.visit?.animal ?? null;
+  const animal = file.animal ?? file.visit?.animal ?? file.laboratoryOrder?.visit.animal ?? file.laboratoryOrderItem?.order.visit.animal ?? file.visitDocument?.visit.animal ?? null;
   return {
     id: file.id,
     animalId: animal?.id ?? null,

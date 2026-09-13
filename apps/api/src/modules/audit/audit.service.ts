@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Prisma, VisitStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditExportQueryDto } from './dto/audit-export-query.dto';
@@ -6,6 +6,7 @@ import { CreateActivityLogDto } from './dto/create-activity-log.dto';
 import { AuditVisitControlQueryDto } from './dto/audit-visit-control-query.dto';
 import { clinicDateKey, resolveReportRange } from '../reports/report-range';
 import { VISIT_OVERDUE_THRESHOLD_MINUTES } from '../visits/visit-overdue';
+import { queueOwnerRefreshForChange } from '../client-portal/owner-refresh';
 
 type AuditInput = {
   actorId?: string | null;
@@ -22,10 +23,11 @@ const maxExportLimit = 20000;
 
 @Injectable()
 export class AuditService {
+  private readonly logger = new Logger(AuditService.name);
   constructor(private readonly prisma: PrismaService) {}
 
   async log(input: AuditInput) {
-    return this.prisma.auditLog.create({
+    const entry = await this.prisma.auditLog.create({
       data: {
         actorId: input.actorId ?? null,
         action: input.action,
@@ -35,6 +37,12 @@ export class AuditService {
         ipAddress: input.ipAddress ?? null,
       },
     });
+    if (process.env.OWNER_GATEWAY_URL?.trim() && process.env.OWNER_GATEWAY_SYNC_SECRET?.trim()) {
+      await queueOwnerRefreshForChange(this.prisma, input).catch(() => {
+        this.logger.warn('Не удалось поставить обновление кабинета в очередь; данные будут сверены при периодическом обновлении.');
+      });
+    }
+    return entry;
   }
 
   async listRecent() {

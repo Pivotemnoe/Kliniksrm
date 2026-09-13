@@ -19,6 +19,7 @@ type SnapshotSyncJobInput = {
 type SnapshotSyncPayload = SnapshotSyncJobInput & {
   attempts: number;
   nextAttemptAt: string;
+  revokeAccess?: boolean;
 };
 
 @Injectable()
@@ -26,6 +27,7 @@ export class OwnerGatewaySnapshotSyncService implements OnApplicationBootstrap, 
   private readonly logger = new Logger(OwnerGatewaySnapshotSyncService.name);
   private timer: NodeJS.Timeout | null = null;
   private running = false;
+  private nextReconciliationAt = 0;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -37,6 +39,7 @@ export class OwnerGatewaySnapshotSyncService implements OnApplicationBootstrap, 
     await this.recoverStuckJobs();
     try {
       await this.enqueueActivePortalRefreshes();
+      this.nextReconciliationAt = Date.now() + 5 * 60_000;
     } catch (error) {
       this.logger.warn(`Не удалось поставить стартовое обновление личных кабинетов в очередь: ${errorMessage(error)}`);
     }
@@ -76,6 +79,15 @@ export class OwnerGatewaySnapshotSyncService implements OnApplicationBootstrap, 
     this.running = true;
     try {
       const now = Date.now();
+      if (hasConfiguredOwnerGateway() && now >= this.nextReconciliationAt) {
+        try {
+          await this.enqueueActivePortalRefreshes();
+          this.nextReconciliationAt = now + 5 * 60_000;
+        } catch (error) {
+          this.nextReconciliationAt = now + 60_000;
+          this.logger.warn(`Периодическое обновление кабинетов отложено: ${errorMessage(error)}`);
+        }
+      }
       const pendingJobs = await this.prisma.backgroundJob.findMany({
         where: { queueName: QUEUE_NAME, jobName: JOB_NAME, status: JobStatus.PENDING },
         orderBy: [{ createdAt: 'asc' }],
@@ -112,17 +124,21 @@ export class OwnerGatewaySnapshotSyncService implements OnApplicationBootstrap, 
     const attempt = payload.attempts + 1;
     let status: Awaited<ReturnType<OwnerGatewayClient['syncSnapshot']>>;
     try {
-      const owner = await this.prisma.owner.findUnique({
-        where: { id: payload.ownerId },
-        select: { id: true, fullName: true },
-      });
+      if (payload.revokeAccess) {
+        status = await this.ownerGatewayClient.revokeAccess(payload.ownerId);
+      } else {
+        const owner = await this.prisma.owner.findUnique({
+          where: { id: payload.ownerId },
+          select: { id: true, fullName: true },
+        });
 
-      if (!owner) {
-        await this.finishFailed(jobId, payload, attempt, 'Владелец для обновления личного кабинета не найден');
-        return;
+        if (!owner) {
+          await this.finishFailed(jobId, payload, attempt, 'Владелец для обновления личного кабинета не найден');
+          return;
+        }
+
+        status = await this.ownerGatewayClient.syncSnapshot({ ownerId: owner.id, displayName: owner.fullName });
       }
-
-      status = await this.ownerGatewayClient.syncSnapshot({ ownerId: owner.id, displayName: owner.fullName });
     } catch (error) {
       await this.scheduleRetry(jobId, payload, attempt, `Ошибка обновления личного кабинета: ${errorMessage(error)}`);
       return;
@@ -273,6 +289,7 @@ function readPayload(value: Prisma.JsonValue | null): SnapshotSyncPayload | null
     visitStatus: isVisitStatus(payload.visitStatus) ? payload.visitStatus : null,
     attempts: typeof payload.attempts === 'number' && Number.isFinite(payload.attempts) ? Math.max(0, Math.trunc(payload.attempts)) : 0,
     nextAttemptAt: typeof payload.nextAttemptAt === 'string' ? payload.nextAttemptAt : new Date(0).toISOString(),
+    revokeAccess: payload.revokeAccess === true,
   };
 }
 

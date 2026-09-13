@@ -474,7 +474,7 @@ export class OwnerGatewayClient {
         method: 'POST',
         body: {
           documents: files.map((file) => {
-            const animal = file.animal ?? file.visit?.animal ?? null;
+            const animal = file.animal ?? file.visit?.animal ?? file.laboratoryOrder?.visit.animal ?? file.laboratoryOrderItem?.order.visit.animal ?? file.visitDocument?.visit.animal ?? null;
             return {
               id: file.id,
               animalId: animal?.id,

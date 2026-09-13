@@ -11,6 +11,7 @@ import {
   normalizeRussianPhone,
 } from '../../common/phone';
 import { AuditService } from '../audit/audit.service';
+import { queueOwnerAccessRevocation } from '../client-portal/owner-refresh';
 import { AnimalCatalogService } from '../animals/animal-catalog.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateAnimalDto } from './dto/create-animal.dto';
@@ -264,6 +265,10 @@ export class OwnersService {
       });
 
       await tx.owner.delete({ where: { id: sourceOwnerId } });
+
+      if (process.env.OWNER_GATEWAY_URL?.trim() && process.env.OWNER_GATEWAY_SYNC_SECRET?.trim()) {
+        await queueOwnerAccessRevocation(tx, sourceOwnerId, actorId);
+      }
 
       return mergedOwner;
     });
