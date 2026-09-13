@@ -29,7 +29,6 @@ export class LaboratoryService {
         where: { isActive: true },
         orderBy: { title: 'asc' },
         select: { ...servicePricingSelect, category: { select: { id: true, title: true } } },
-        take: 300,
       }),
       this.prisma.animalSpecies.findMany({ orderBy: [{ sortOrder: 'asc' }, { title: 'asc' }], select: { id: true, title: true } }),
     ]);
@@ -72,7 +71,7 @@ export class LaboratoryService {
     // The source visit is already completed. This creates medical results only:
     // hospital services continue to accrue through hospital records, without a second bill.
     const order = await this.prisma.$transaction(async (tx) => {
-      const stay = await tx.hospitalStay.findUnique({ where: { id: stayId }, include: { sourceVisit: { select: { status: true } } } });
+      const stay = await tx.hospitalStay.findUnique({ where: { id: stayId }, include: { sourceVisit: { select: { status: true, animal: { select: { species: true } } } } } });
       if (!stay) throw new NotFoundException('Стационарная карта не найдена');
       if (stay.status !== 'ACTIVE') throw new BadRequestException('Добавление анализов доступно в открытом стационаре');
       ensureLaboratoryVisitOperational(stay.sourceVisit);
@@ -86,7 +85,7 @@ export class LaboratoryService {
       const testsById = new Map(foundTests.map((test) => [test.id, test]));
       const tests = testIds.map((testId) => testsById.get(testId)!);
       const preparedTests = tests.map((test) => {
-        const { layout, indicators } = extractLaboratoryDocumentIndicators(test.documentTemplate?.layout);
+        const { layout, indicators } = extractLaboratoryDocumentIndicators(test.documentTemplate?.layout, stay.sourceVisit.animal?.species ?? null);
         if (!test.serviceId || !test.documentTemplate || !layout || !indicators.length) {
           throw new BadRequestException(`Анализ «${test.title}» не настроен: привяжите услугу и документ с таблицей показателей`);
         }
@@ -107,7 +106,8 @@ export class LaboratoryService {
             },
             select: { id: true },
           });
-          bindings.push({ itemId: item.id, blockId: indicator.blockId, rowIndex: indicator.rowIndex, resultColumnIndex: indicator.resultColumnIndex });
+          bindings.push({ itemId: item.id, blockId: indicator.blockId, rowIndex: indicator.rowIndex, resultColumnIndex: indicator.resultColumnIndex,
+            unitColumnIndex: indicator.unitColumnIndex, referenceColumnIndex: indicator.referenceColumnIndex });
         }
         snapshots.push({
           schemaVersion: 1, testId: test.id, testTitle: test.title,
@@ -786,7 +786,7 @@ const laboratoryOrderInclude = {
       startedAt: true,
       completedAt: true,
       owner: { select: { id: true, fullName: true, phone: true } },
-      animal: { select: { id: true, nickname: true, species: true, breed: true } },
+      animal: { select: { id: true, nickname: true, species: true, breed: true, birthDate: true } },
       employee: { select: { id: true, fullName: true, position: true } },
     },
   },

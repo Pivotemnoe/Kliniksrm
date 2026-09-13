@@ -852,7 +852,7 @@ export class VisitsService {
 
       for (const test of tests) {
         const billItemId = await createBillItemFromService(tx, bill.id, test.service);
-        const { layout, indicators } = extractLaboratoryDocumentIndicators(test.documentTemplate?.layout);
+        const { layout, indicators } = extractLaboratoryDocumentIndicators(test.documentTemplate?.layout, visit.animal?.species ?? null);
 
         if (test.documentTemplate && layout && indicators.length) {
           const bindings: LaboratoryFormSnapshot['bindings'] = [];
@@ -873,6 +873,8 @@ export class VisitsService {
               blockId: indicator.blockId,
               rowIndex: indicator.rowIndex,
               resultColumnIndex: indicator.resultColumnIndex,
+              unitColumnIndex: indicator.unitColumnIndex,
+              referenceColumnIndex: indicator.referenceColumnIndex,
             });
           }
 
@@ -1246,7 +1248,7 @@ export class VisitsService {
   private async getVisitForBilling(tx: Prisma.TransactionClient, visitId: string) {
     const visit = await tx.visit.findUnique({
       where: { id: visitId },
-      select: { id: true, ownerId: true, animalId: true, status: true, completedAt: true },
+      select: { id: true, ownerId: true, animalId: true, animal: { select: { species: true } }, status: true, completedAt: true },
     });
 
     if (!visit) {

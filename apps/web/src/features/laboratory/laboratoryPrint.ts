@@ -1,6 +1,7 @@
 import type { DocumentLayout } from '../documents/documentLayout';
 import type { OrganizationPrintProfile } from '../organization/types';
 import { formatDateTime } from '../../shared/utils/date';
+import { formatAnimalAge } from '../../shared/utils/animalBirthDate';
 import { laboratoryOrderStatusLabels, type VisitLaboratoryOrderStatus } from '../visits/types';
 import type { LaboratoryFormSnapshot, LaboratoryOrderItem } from './types';
 
@@ -14,7 +15,7 @@ export type LaboratoryPrintOrder = {
   items: LaboratoryOrderItem[];
   visit: {
     owner: { fullName: string; phone: string | null };
-    animal: { nickname: string; species: string | null; breed: string | null };
+    animal: { nickname: string; species: string | null; breed: string | null; birthDate?: string | null };
     employee: { fullName: string } | null;
   };
 };
@@ -97,6 +98,7 @@ function renderSnapshotPage(
 ) {
   const items = new Map(order.items.map((item) => [item.id, item]));
   const bindings = new Map(snapshot.bindings.map((binding) => [`${binding.blockId}:${binding.rowIndex}:${binding.resultColumnIndex}`, binding.itemId]));
+  const rowBindings = new Map(snapshot.bindings.map((binding) => [`${binding.blockId}:${binding.rowIndex}`, binding]));
   const renderedLayout: DocumentLayout = {
     ...snapshot.layout,
     blocks: snapshot.layout.blocks.map((block) => {
@@ -104,6 +106,10 @@ function renderSnapshotPage(
       return {
         ...block,
         rows: block.rows.map((row, rowIndex) => row.map((cell, columnIndex) => {
+          const binding = rowBindings.get(`${block.id}:${rowIndex}`);
+          const rowItem = binding ? items.get(binding.itemId) : undefined;
+          if (rowItem && columnIndex === binding?.unitColumnIndex) return rowItem.unit || '';
+          if (rowItem && columnIndex === binding?.referenceColumnIndex) return rowItem.referenceRange || '';
           const itemId = bindings.get(`${block.id}:${rowIndex}:${columnIndex}`);
           if (!itemId) return renderTokens(cell, order);
           const item = items.get(itemId);
@@ -175,6 +181,7 @@ function renderMeta(order: LaboratoryPrintOrder) {
     <div><span>Владелец</span><strong>${escapeHtml(order.visit.owner.fullName)}</strong></div>
     <div><span>Пациент</span><strong>${escapeHtml(order.visit.animal.nickname)}</strong></div>
     <div><span>Вид / порода</span><strong>${escapeHtml(patientDescription)}</strong></div>
+    <div><span>Возраст на дату анализа</span><strong>${escapeHtml(formatAnimalAge(order.visit.animal.birthDate, new Date(order.createdAt)))}</strong></div>
     <div><span>Статус</span><strong>${escapeHtml(laboratoryOrderStatusLabels[order.status])}</strong></div>
   </section>`;
 }

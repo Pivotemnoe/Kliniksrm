@@ -102,7 +102,7 @@ export type LaboratoryOrder = {
     startedAt: string;
     completedAt: string | null;
     owner: { id: string; fullName: string; phone: string | null };
-    animal: { id: string; nickname: string; species: string | null; breed: string | null };
+    animal: { id: string; nickname: string; species: string | null; breed: string | null; birthDate?: string | null };
     employee: { id: string; fullName: string; position: string | null } | null;
   };
   items: LaboratoryOrderItem[];
@@ -121,6 +121,8 @@ export type LaboratoryFormSnapshot = {
     blockId: string;
     rowIndex: number;
     resultColumnIndex: number;
+    unitColumnIndex?: number;
+    referenceColumnIndex?: number;
   }>;
 };
 
