@@ -89,6 +89,23 @@ test('снимок выдаёт анализы и активный стацио�
   assert.equal(queries.hospital.where.status, 'ACTIVE');
   assert.equal(queries.bookings.select.internalComment, undefined);
   assert.equal(snapshot.historyLimits.visits, 30);
+
+  // Exercise the receiving service with the actual CRM builder output: adding a
+  // section must not silently break the authenticated production exchange.
+  const { InternalSyncService } = require('../apps/owner-gateway/dist/internal-sync.service.js');
+  let saved;
+  const receiver = new InternalSyncService({ ownerSnapshot: {
+    findUnique: async () => null,
+    upsert: async (query) => { saved = query; return { ownerId: 'owner-a' }; },
+  } }, {}, {}, {}, {});
+  const dto = { displayName: 'Пример', payload: snapshot, sourceVersion: 'test', sourceUpdatedAt: new Date().toISOString() };
+  await receiver.upsertSnapshot('owner-a', dto);
+  assert.deepEqual(saved.create.payload, snapshot);
+  saved = undefined;
+  await assert.rejects(() => receiver.upsertSnapshot('owner-a', {
+    ...dto, payload: { ...snapshot, internalNotes: 'INTERNAL_MARKER' },
+  }), /запрещённые разделы/);
+  assert.equal(saved, undefined);
 });
 
 const { PortalService } = require('../apps/owner-gateway/dist/portal.service.js');

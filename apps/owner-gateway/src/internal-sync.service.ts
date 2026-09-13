@@ -12,7 +12,10 @@ import { TelegramBotClient } from './telegram-bot.client';
 import { OwnerPushMessage, WebPushService } from './web-push.service';
 import { OwnerDocumentMetadataDto, UploadOwnerDocumentContentDto } from './dto/sync-owner-documents.dto';
 
-const allowedSnapshotKeys = new Set(['owner', 'animals', 'appointments', 'visits', 'files', 'bills', 'notifications', 'syncedAt']);
+const allowedSnapshotKeys = new Set([
+  'owner', 'animals', 'appointments', 'visits', 'files', 'bills', 'notifications',
+  'laboratoryOrders', 'hospitalStays', 'bookingRequests', 'historyLimits', 'syncedAt',
+]);
 const MAX_DOCUMENT_BYTES = 15 * 1024 * 1024;
 
 @Injectable()
