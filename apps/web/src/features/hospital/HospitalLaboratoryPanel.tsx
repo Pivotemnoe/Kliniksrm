@@ -102,12 +102,12 @@ export function HospitalLaboratoryPanel({
             type="info"
             showIcon
             className="form-alert"
-            message="Выберите связанные анализы"
-            description="Поиск работает по названию анализа, коду и связанной услуге. Показатели откроются из привязанного документа; повторного начисления здесь не будет."
+            message="Выберите анализ — бланк уже подключён"
+            description="После нажатия «Добавить» откроется таблица бланка для заполнения. Повторно связывать услугу не нужно; стоимость здесь не начисляется."
           />
           {canConfigure ? (
             <Button block icon={<PlusOutlined />} className="form-alert" onClick={() => setConfigurationOpen(true)}>
-              Связать услугу и документ
+              Настроить новый анализ
             </Button>
           ) : null}
           {!tests.isLoading && !tests.isError && !availableTests.length ? (

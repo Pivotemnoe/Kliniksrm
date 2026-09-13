@@ -233,7 +233,7 @@ function OrderDrawer({ open, visit, onClose }: { open: boolean; visit: Visit; on
           description="Выберите нужный анализ. CRM один раз начислит связанную услугу, а для результатов откроет таблицу именно из привязанного документа."
         />
         <Button block icon={<PlusOutlined />} className="form-alert" onClick={() => setConfigurationOpen(true)}>
-          Связать услугу и документ
+          Настроить новый анализ
         </Button>
         {testsQuery.isError ? (
           <Alert type="error" showIcon className="form-alert" message={getErrorMessage(testsQuery.error)} />

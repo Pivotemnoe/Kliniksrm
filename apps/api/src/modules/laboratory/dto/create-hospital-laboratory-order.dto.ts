@@ -4,7 +4,7 @@ import { ArrayMaxSize, ArrayMinSize, IsArray, IsOptional, IsString, IsUUID, MaxL
 export class CreateHospitalLaboratoryOrderDto {
   @ApiPropertyOptional({ description: 'Legacy single-test input.' })
   @IsOptional()
-  @IsUUID('4')
+  @IsUUID()
   testId?: string;
 
   @ApiPropertyOptional({ type: [String] })
@@ -12,7 +12,7 @@ export class CreateHospitalLaboratoryOrderDto {
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(100)
-  @IsUUID('4', { each: true })
+  @IsUUID('all', { each: true })
   testIds?: string[];
 
   @ApiPropertyOptional()

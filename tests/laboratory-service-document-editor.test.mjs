@@ -26,7 +26,7 @@ test('клинический сотрудник связывает услугу 
   assert.match(page, /name="documentTemplateId"/);
   assert.match(page, /Название связи, услугу и документ можно изменить в любой момент/);
   assert.match(visitTab, /<LaboratoryTestEditorDrawer/);
-  assert.match(visitTab, /Связать услугу и документ/);
+  assert.match(visitTab, /Настроить новый анализ/);
   assert.match(visitPage, /const canManageLaboratory =\s*canManage \|\| hasPermission\(auth\?\.employee, 'laboratory\.read'\) \|\| hasPermission\(auth\?\.employee, 'laboratory\.manage'\)/);
   assert.equal((visitsController.match(/@RequireAnyPermissions\('laboratory\.read', 'laboratory\.manage', 'visits\.manage'\)/g) ?? []).length, 3);
   assert.ok((laboratoryController.match(/@RequireAnyPermissions\('laboratory\.read', 'laboratory\.manage', 'visits\.manage'\)/g) ?? []).length >= 8);

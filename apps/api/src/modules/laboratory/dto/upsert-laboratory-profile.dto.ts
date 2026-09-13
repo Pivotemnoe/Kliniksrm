@@ -39,7 +39,7 @@ export class UpsertLaboratoryProfileDto {
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(20)
-  @IsUUID('4', { each: true })
+  @IsUUID('all', { each: true })
   testIds?: string[];
 }
 

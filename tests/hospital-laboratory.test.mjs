@@ -92,7 +92,8 @@ test('hospital UI reuses buffered result editor, scoped API, search and remote r
   const source = readFileSync(new URL('../apps/web/src/features/hospital/HospitalLaboratoryPanel.tsx', import.meta.url), 'utf8');
   assert.match(source, /LaboratoryResultsTableDrawer/); assert.match(source, /useDebouncedValue\(search, 250\)/);
   assert.match(source, /updateHospitalLaboratoryResults\(stay.id/); assert.match(source, /!remoteReadOnly/);
-  assert.match(source, /Связать услугу и документ/); assert.match(source, /mode="multiple"/);
+  assert.match(source, /Настроить новый анализ/); assert.match(source, /mode="multiple"/);
+  assert.match(source, /бланк уже подключён/);
   assert.doesNotMatch(source, /extra=.*Добавить анализ/);
   const page = readFileSync(new URL('../apps/web/src/features/hospital/HospitalCardPage.tsx', import.meta.url), 'utf8');
   assert.match(page, /setLaboratoryOpen\(true\).*Добавить анализ/);
