@@ -8,6 +8,12 @@ const { ClientPortalService } = require('../apps/api/dist/modules/client-portal/
 const item = (status, extra = {}) => ({ id: status, title: 'Глюкоза', code: 'GLU', status, unit: 'ммоль/л', referenceRange: '3–6', resultValue: '7', resultText: 'Результат', completedAt: new Date('2026-09-13'), ...extra });
 const order = (status, items) => ({ id: 'lab-1', status, createdAt: new Date('2026-09-12'), completedAt: null, comment: 'INTERNAL_MARKER', formSnapshots: [{ secret: 'INTERNAL_MARKER' }], items });
 
+test('удалённый показатель с прежним результатом не показывается владельцу', () => {
+  const result = toOwnerLaboratoryOrder(order('COMPLETED', [item('COMPLETED'), item('CANCELLED', { resultValue: 'DELETED_VALUE' })]));
+  assert.equal(result.items.length, 1);
+  assert.ok(!JSON.stringify(result).includes('DELETED_VALUE'));
+});
+
 test('готовый показатель выдаётся в ещё открытом исследовании, черновик скрыт вместе с результатом и датой', () => {
   const result = toOwnerLaboratoryOrder(order('IN_PROGRESS', [item('COMPLETED'), item('IN_PROGRESS'), item('ORDERED')]));
   assert.equal(result.items[0].resultValue, '7');

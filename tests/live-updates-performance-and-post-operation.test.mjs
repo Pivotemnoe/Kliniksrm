@@ -80,7 +80,9 @@ test('лабораторный экран получает сводку одни
   assert.match(drawer, /rowsRef = useRef/);
   assert.match(drawer, /onDraftChange=\{\(resultValue\) => updateDraftRow/);
   assert.match(drawer, /onBlur=\{onCommit\}/);
-  assert.match(drawer, /mutation\.mutate\(rowsRef\.current\.map/);
+  assert.match(drawer, /const active = rowsRef\.current\.filter/);
+  assert.match(drawer, /for \(const \{ title, code, disabled: _disabled, isNew, \.\.\.row \} of active\)/);
+  assert.match(drawer, /mutation\.mutate\(\{ items, changes:/);
   assert.doesNotMatch(drawer, /onChange=\{\(event\) => updateRow\(row\.itemId/);
   assert.match(gatewayNginx, /proxy_cache temichevvet_assets/);
   assert.match(gatewayNginx, /gzip on/);

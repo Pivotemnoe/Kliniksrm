@@ -18,7 +18,7 @@ type LaboratoryOrder = Prisma.LaboratoryOrderGetPayload<{ select: typeof ownerLa
 export function toOwnerLaboratoryOrder(order: LaboratoryOrder) {
   return {
     id: order.id, status: order.status, createdAt: order.createdAt, completedAt: order.completedAt,
-    items: order.items.map((item) => {
+    items: order.items.filter(item => item.status !== 'CANCELLED').map((item) => {
       const ready = order.status !== 'CANCELLED' && item.status === 'COMPLETED';
       return {
         id: item.id, title: item.title, code: item.code,

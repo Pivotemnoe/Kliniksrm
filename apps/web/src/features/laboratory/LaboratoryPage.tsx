@@ -616,7 +616,7 @@ function OrderDrawer({
           <Table<LaboratoryOrderItem>
             rowKey="id"
             columns={columns}
-            dataSource={order.items}
+            dataSource={order.items.filter(item => item.status !== 'CANCELLED')}
             pagination={false}
             className="dense-table"
             scroll={{ x: 980 }}

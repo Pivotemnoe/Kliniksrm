@@ -8,6 +8,7 @@ import {
   LaboratoryOrderItem,
   LaboratoryOrderItemInput,
   LaboratoryOrderResultRowInput,
+  LaboratoryTableChanges,
   LaboratoryOrdersQuery,
   LaboratoryProfile,
   LaboratoryProfileInput,
@@ -39,10 +40,10 @@ export function updateLaboratoryOrderItem(orderId: string, itemId: string, input
   return apiRequest<LaboratoryOrderItem>(`/v1/laboratory/orders/${orderId}/items/${itemId}`, { method: 'PATCH', body: input });
 }
 
-export function updateLaboratoryOrderResults(orderId: string, items: LaboratoryOrderResultRowInput[]) {
+export function updateLaboratoryOrderResults(orderId: string, items: LaboratoryOrderResultRowInput[], changes?: LaboratoryTableChanges) {
   return apiRequest<LaboratoryOrder>(`/v1/laboratory/orders/${orderId}/results`, {
     method: 'PATCH',
-    body: { items },
+    body: { items, ...changes },
   });
 }
 

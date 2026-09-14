@@ -192,7 +192,7 @@ export class LaboratoryService {
     }
     if (
       dto.status === LaboratoryOrderStatus.COMPLETED &&
-      existingOrder.items.some((item) => !clean(item.resultValue) && !clean(item.resultText) && item._count.files === 0)
+      existingOrder.items.some((item) => item.status !== LaboratoryOrderItemStatus.CANCELLED && !clean(item.resultValue) && !clean(item.resultText) && item._count.files === 0)
     ) {
       throw new BadRequestException('Сначала заполните результаты всех показателей или приложите бланк');
     }
@@ -245,6 +245,9 @@ export class LaboratoryService {
     if (existingItem.order.status === LaboratoryOrderStatus.CANCELLED) {
       throw new BadRequestException('Отменённый лабораторный заказ нельзя менять');
     }
+    if (existingItem.status === LaboratoryOrderItemStatus.CANCELLED) {
+      throw new BadRequestException('Удалённый показатель нельзя изменять');
+    }
     ensureLaboratoryVisitOperational(existingItem.order.visit);
     assertCompletedLaboratoryResult(dto, existingItem, existingItem.files.length > 0);
 
@@ -281,55 +284,83 @@ export class LaboratoryService {
   }
 
   async updateOrderResults(orderId: string, dto: UpdateLaboratoryOrderResultsDto, actorId: string) {
+    const added = dto.addedItems ?? [];
+    const removed = dto.removedItemIds ?? [];
     const uniqueItemIds = [...new Set(dto.items.map((item) => item.itemId))];
-    if (uniqueItemIds.length !== dto.items.length) {
+    const allIds = [...dto.items.map(row => row.itemId), ...added.map(row => row.itemId), ...removed];
+    if (new Set(allIds).size !== allIds.length) {
       throw new BadRequestException('Каждый показатель должен встречаться в таблице один раз');
     }
-
-    const order = await this.prisma.laboratoryOrder.findUnique({
-      where: { id: orderId },
-      include: {
-        visit: { select: { status: true } },
-        items: { include: { files: { select: { id: true } } } },
-      },
-    });
-    if (!order) throw new NotFoundException('Лабораторный заказ не найден');
-    if (order.status === LaboratoryOrderStatus.CANCELLED) {
-      throw new BadRequestException('Отменённый лабораторный заказ нельзя менять');
-    }
-    ensureLaboratoryVisitOperational(order.visit);
-
-    const existingById = new Map(order.items.map((item) => [item.id, item]));
-    for (const row of dto.items) {
-      const existing = existingById.get(row.itemId);
-      if (!existing) throw new BadRequestException('Один из показателей не принадлежит выбранному заказу');
-      assertCompletedLaboratoryResult(row, existing, existing.files.length > 0);
-    }
-
-    const resultingStatuses = order.items.map((item) => dto.items.find((row) => row.itemId === item.id)?.status ?? item.status);
-    const resultingOrderStatus = resolveLaboratoryOrderStatus(resultingStatuses);
-    await this.prisma.$transaction([
-      ...dto.items.map((row) => this.prisma.laboratoryOrderItem.update({
-        where: { id: row.itemId },
-        data: toLaboratoryResultUpdate(row),
-      })),
-      this.prisma.laboratoryOrder.update({
+    if (!allIds.length) throw new BadRequestException('Нет изменений для сохранения');
+    const change = await this.prisma.$transaction(async (tx) => {
+      // Serialize table edits; additions have stable client IDs so retrying cannot duplicate rows.
+      if (tx.$queryRaw) await tx.$queryRaw(Prisma.sql`SELECT id FROM "LaboratoryOrder" WHERE id = ${orderId} FOR UPDATE`);
+      const order = await tx.laboratoryOrder.findUnique({
         where: { id: orderId },
-        data: {
-          status: resultingOrderStatus,
-          completedAt: resultingOrderStatus === LaboratoryOrderStatus.COMPLETED ? new Date() : null,
-        },
-      }),
-    ]);
-
-    await this.auditService.log({
-      actorId,
-      action: 'laboratory.results_table.update',
-      entityType: 'LaboratoryOrder',
-      entityId: orderId,
-      metadata: { itemIds: uniqueItemIds, rows: uniqueItemIds.length },
+        include: { visit: { select: { status: true } }, items: { include: { files: { select: { id: true } } } } },
+      });
+      if (!order) throw new NotFoundException('Лабораторный заказ не найден');
+      if (order.status === LaboratoryOrderStatus.CANCELLED) throw new BadRequestException('Отменённый лабораторный заказ нельзя менять');
+      ensureLaboratoryVisitOperational(order.visit);
+      const existingById = new Map(order.items.map(item => [item.id, item]));
+      for (const row of dto.items) {
+        const existing = existingById.get(row.itemId);
+        if (!existing) throw new BadRequestException('Один из показателей не принадлежит выбранному заказу');
+        if (existing.status === LaboratoryOrderItemStatus.CANCELLED) {
+          if (row.status !== LaboratoryOrderItemStatus.CANCELLED) throw new BadRequestException('Удалённый показатель нельзя изменять');
+          continue;
+        }
+        assertCompletedLaboratoryResult(row, existing, existing.files.length > 0);
+      }
+      for (const id of removed) if (!existingById.has(id)) throw new BadRequestException('Удаляемый показатель не принадлежит выбранному заказу');
+      for (const row of added) {
+        if (!clean(row.title)) throw new BadRequestException('Укажите название нового показателя');
+        if (row.status === LaboratoryOrderItemStatus.CANCELLED) throw new BadRequestException('Новый показатель не может быть удалённым');
+        const existing = existingById.get(row.itemId);
+        if (existing && (existing.testId || existing.profileId || existing.billItemId || existing.title !== row.title.trim() || existing.status === LaboratoryOrderItemStatus.CANCELLED)) {
+          throw new BadRequestException('Конфликт нового показателя; откройте таблицу заново');
+        }
+        assertCompletedLaboratoryResult(row, existing ?? { resultValue: null, resultText: null }, Boolean(existing?.files.length));
+      }
+      const statuses = order.items.map(item => removed.includes(item.id)
+        ? LaboratoryOrderItemStatus.CANCELLED
+        : [...dto.items, ...added].find(row => row.itemId === item.id)?.status ?? item.status);
+      statuses.push(...added.filter(row => !existingById.has(row.itemId)).map(row => row.status ?? LaboratoryOrderItemStatus.ORDERED));
+      const activeCount = statuses.filter(status => status !== LaboratoryOrderItemStatus.CANCELLED).length;
+      if (!activeCount) throw new BadRequestException('Оставьте хотя бы один показатель или отмените анализ целиком');
+      if (activeCount > 100) throw new BadRequestException('В таблице может быть не более 100 действующих показателей');
+      for (const row of dto.items) if (existingById.get(row.itemId)?.status !== LaboratoryOrderItemStatus.CANCELLED) {
+        await tx.laboratoryOrderItem.update({ where: { id: row.itemId }, data: toLaboratoryResultUpdate(row) });
+      }
+      for (const row of added) {
+        if (existingById.has(row.itemId)) {
+          await tx.laboratoryOrderItem.update({ where: { id: row.itemId }, data: toLaboratoryResultUpdate(row) });
+        } else {
+          await tx.laboratoryOrderItem.create({ data: {
+            id: row.itemId, orderId, title: row.title.trim(), code: clean(row.code),
+            status: row.status ?? LaboratoryOrderItemStatus.ORDERED,
+            resultValue: clean(row.resultValue), resultText: clean(row.resultText),
+            unit: clean(row.unit), referenceRange: clean(row.referenceRange), comment: clean(row.comment),
+            completedAt: row.status === LaboratoryOrderItemStatus.COMPLETED ? new Date() : null,
+          } });
+        }
+      }
+      for (const id of removed) await tx.laboratoryOrderItem.update({
+        where: { id }, data: { status: LaboratoryOrderItemStatus.CANCELLED },
+      });
+      const status = resolveLaboratoryOrderStatus(statuses);
+      await tx.laboratoryOrder.update({ where: { id: orderId }, data: {
+        status, completedAt: status === LaboratoryOrderStatus.COMPLETED ? new Date() : null,
+      } });
+      return { removedItems: removed.map(id => {
+        const item = existingById.get(id)!;
+        return { id, title: item.title, status: item.status, resultValue: item.resultValue, resultText: item.resultText, unit: item.unit, referenceRange: item.referenceRange };
+      }) };
     });
-
+    await this.auditService.log({
+      actorId, action: 'laboratory.results_table.update', entityType: 'LaboratoryOrder', entityId: orderId,
+      metadata: { itemIds: uniqueItemIds, rows: uniqueItemIds.length, addedItemIds: added.map(row => row.itemId), removedItems: change.removedItems },
+    });
     return this.prisma.laboratoryOrder.findUniqueOrThrow({ where: { id: orderId }, include: laboratoryOrderInclude });
   }
 
@@ -963,7 +994,7 @@ function resolveLaboratoryOrderStatus(itemStatuses: LaboratoryOrderItemStatus[])
     return LaboratoryOrderStatus.CANCELLED;
   }
 
-  if (itemStatuses.every((status) => status === LaboratoryOrderItemStatus.COMPLETED)) {
+  if (itemStatuses.filter((status) => status !== LaboratoryOrderItemStatus.CANCELLED).every((status) => status === LaboratoryOrderItemStatus.COMPLETED)) {
     return LaboratoryOrderStatus.COMPLETED;
   }
 

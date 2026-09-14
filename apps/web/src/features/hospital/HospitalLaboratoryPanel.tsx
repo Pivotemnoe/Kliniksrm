@@ -85,7 +85,7 @@ export function HospitalLaboratoryPanel({
               {canPrint ? <Button icon={<PrinterOutlined />} onClick={() => printLaboratoryOrder(order, organization)}>Печать A5</Button> : null}
             </Space>
             {order.comment ? <Typography.Paragraph>{order.comment}</Typography.Paragraph> : null}
-            <Table rowKey="id" size="small" pagination={false} dataSource={order.items} scroll={{ x: 520 }} columns={[
+            <Table rowKey="id" size="small" pagination={false} dataSource={order.items.filter(item => item.status !== 'CANCELLED')} scroll={{ x: 520 }} columns={[
               { title: 'Показатель', key: 'title', render: (_, item) => <span>{item.groupName ? `${item.groupName} · ` : ''}{item.title}</span> },
               { title: 'Результат', key: 'result', render: (_, item) => item.resultValue || item.resultText || '—' },
               { title: 'Ед.', dataIndex: 'unit' }, { title: 'Референс', dataIndex: 'referenceRange' },
@@ -145,7 +145,7 @@ export function HospitalLaboratoryPanel({
         canEditDocuments={canEditDocuments}
         onClose={() => setConfigurationOpen(false)}
       />
-      <LaboratoryResultsTableDrawer order={editing} patientName={stay.animal?.nickname ?? ''} canManage={canManage} onClose={() => setEditing(null)} saveResults={(orderId, items) => updateHospitalLaboratoryResults(stay.id, orderId, items)} />
+      <LaboratoryResultsTableDrawer order={editing} patientName={stay.animal?.nickname ?? ''} canManage={canManage} onClose={() => setEditing(null)} saveResults={(orderId, items, changes) => updateHospitalLaboratoryResults(stay.id, orderId, items, changes)} />
     </Card>
   );
 }

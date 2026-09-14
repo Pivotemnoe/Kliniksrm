@@ -3,13 +3,13 @@ import { LaboratoryOrderItemStatus } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
-  ArrayMinSize,
   IsArray,
   IsEnum,
   IsOptional,
   IsString,
   IsUUID,
   MaxLength,
+  MinLength,
   ValidateNested,
 } from 'class-validator';
 
@@ -54,12 +54,40 @@ export class UpdateLaboratoryOrderResultRowDto {
   comment?: string | null;
 }
 
+export class AddLaboratoryOrderResultRowDto extends UpdateLaboratoryOrderResultRowDto {
+  @ApiProperty()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(240)
+  title!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  code?: string | null;
+}
+
 export class UpdateLaboratoryOrderResultsDto {
   @ApiProperty({ type: [UpdateLaboratoryOrderResultRowDto] })
   @IsArray()
-  @ArrayMinSize(1)
   @ArrayMaxSize(100)
   @ValidateNested({ each: true })
   @Type(() => UpdateLaboratoryOrderResultRowDto)
   items!: UpdateLaboratoryOrderResultRowDto[];
+
+  @ApiPropertyOptional({ type: [AddLaboratoryOrderResultRowDto] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => AddLaboratoryOrderResultRowDto)
+  addedItems?: AddLaboratoryOrderResultRowDto[];
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @IsUUID('all', { each: true })
+  removedItemIds?: string[];
 }

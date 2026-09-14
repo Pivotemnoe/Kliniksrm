@@ -43,8 +43,10 @@ export function buildLaboratoryOrderPrintHtml(
     ? new URL(organization.logoUrl, baseHref).href
     : new URL('/brand/temichevvet-logo.jpg', baseHref).href;
   const snapshots = Array.isArray(order.formSnapshots) ? order.formSnapshots.filter(isLaboratoryFormSnapshot) : [];
+  const boundIds = new Set(snapshots.flatMap(snapshot => snapshot.bindings.map(binding => binding.itemId)));
+  const additionalItems = order.items.filter(item => !boundIds.has(item.id) && item.status !== 'CANCELLED');
   const pages = snapshots.length
-    ? snapshots.map((snapshot) => renderSnapshotPage(snapshot, order, { clinicName, clinicAddress, clinicPhone, logoUrl })).join('')
+    ? snapshots.map((snapshot, index) => renderSnapshotPage(snapshot, order, { clinicName, clinicAddress, clinicPhone, logoUrl }, index === snapshots.length - 1 ? additionalItems : [])).join('')
     : renderGenericPage(order, { clinicName, clinicAddress, clinicPhone, logoUrl });
 
   return `<!doctype html>
@@ -95,6 +97,7 @@ function renderSnapshotPage(
   snapshot: LaboratoryFormSnapshot,
   order: LaboratoryPrintOrder,
   clinic: ClinicPrintData,
+  additionalItems: LaboratoryOrderItem[] = [],
 ) {
   const items = new Map(order.items.map((item) => [item.id, item]));
   const bindings = new Map(snapshot.bindings.map((binding) => [`${binding.blockId}:${binding.rowIndex}:${binding.resultColumnIndex}`, binding.itemId]));
@@ -105,16 +108,19 @@ function renderSnapshotPage(
       if (block.type !== 'table') return block;
       return {
         ...block,
-        rows: block.rows.map((row, rowIndex) => row.map((cell, columnIndex) => {
-          const binding = rowBindings.get(`${block.id}:${rowIndex}`);
-          const rowItem = binding ? items.get(binding.itemId) : undefined;
-          if (rowItem && columnIndex === binding?.unitColumnIndex) return rowItem.unit || '';
-          if (rowItem && columnIndex === binding?.referenceColumnIndex) return rowItem.referenceRange || '';
-          const itemId = bindings.get(`${block.id}:${rowIndex}:${columnIndex}`);
-          if (!itemId) return renderTokens(cell, order);
-          const item = items.get(itemId);
-          return item?.resultValue || item?.resultText || '';
-        })),
+        rows: block.rows.flatMap((row, rowIndex) => {
+          const rowBinding = rowBindings.get(`${block.id}:${rowIndex}`);
+          if (rowBinding && items.get(rowBinding.itemId)?.status === 'CANCELLED') return [];
+          return [row.map((cell, columnIndex) => {
+            const rowItem = rowBinding ? items.get(rowBinding.itemId) : undefined;
+            if (rowItem && columnIndex === rowBinding?.unitColumnIndex) return rowItem.unit || '';
+            if (rowItem && columnIndex === rowBinding?.referenceColumnIndex) return rowItem.referenceRange || '';
+            const itemId = bindings.get(`${block.id}:${rowIndex}:${columnIndex}`);
+            if (!itemId) return renderTokens(cell, order);
+            const item = items.get(itemId);
+            return item?.resultValue || item?.resultText || '';
+          })];
+        }),
       };
     }),
   };
@@ -125,22 +131,27 @@ function renderSnapshotPage(
     ${renderMeta(order)}
     ${order.comment ? `<div class="lab-comment"><strong>Комментарий</strong><br>${escapeHtml(order.comment)}</div>` : ''}
     ${renderLayout(renderedLayout, order)}
+    ${additionalItems.length ? `<h2>Дополнительные показатели</h2>${renderItemsTable(additionalItems)}` : ''}
     ${renderedLayout.page.showSignatures ? renderSignatures() : ''}
   </main>`;
 }
 
-function renderGenericPage(order: LaboratoryPrintOrder, clinic: ClinicPrintData) {
-  const rows = order.items.map((item) => `<tr>
+function renderItemsTable(items: LaboratoryOrderItem[]) {
+  const rows = items.filter(item => item.status !== 'CANCELLED').map((item) => `<tr>
     <td><strong>${escapeHtml(item.title)}</strong>${item.code ? `<br><small>${escapeHtml(item.code)}</small>` : ''}</td>
     <td>${escapeHtml(item.resultValue || item.resultText || '—')}</td>
     <td>${escapeHtml(item.unit || '—')}</td>
     <td>${escapeHtml(item.referenceRange || '—')}</td>
   </tr>`).join('');
+  return `<table class="lab-table"><thead><tr><th>Исследование</th><th>Результат</th><th>Ед.</th><th>Референс</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function renderGenericPage(order: LaboratoryPrintOrder, clinic: ClinicPrintData) {
   return `<main class="lab-page">
     ${renderHeader(clinic)}
     <h1>Результаты лабораторного исследования</h1>
     ${renderMeta(order)}
-    <table class="lab-table"><thead><tr><th>Исследование</th><th>Результат</th><th>Ед.</th><th>Референс</th></tr></thead><tbody>${rows}</tbody></table>
+    ${renderItemsTable(order.items)}
     ${renderSignatures()}
   </main>`;
 }

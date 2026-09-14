@@ -189,6 +189,11 @@ export type LaboratoryOrderResultRowInput = LaboratoryOrderItemInput & {
   itemId: string;
 };
 
+export type LaboratoryTableChanges = {
+  addedItems?: (LaboratoryOrderResultRowInput & { title: string; code?: string | null })[];
+  removedItemIds?: string[];
+};
+
 export type LaboratoryOrderInput = {
   status?: VisitLaboratoryOrderStatus;
   comment?: string | null;

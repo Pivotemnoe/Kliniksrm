@@ -172,7 +172,7 @@ export function VisitLaboratoryTab({
             <Table<VisitLaboratoryOrderItem>
               rowKey="id"
               columns={itemColumns}
-              dataSource={order.items}
+              dataSource={order.items.filter(item => item.status !== 'CANCELLED')}
               pagination={false}
               className="dense-table"
               scroll={{ x: 980 }}

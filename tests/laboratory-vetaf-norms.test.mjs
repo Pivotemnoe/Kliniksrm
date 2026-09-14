@@ -60,3 +60,29 @@ test('printed form matches saved result, corrected unit/reference and patient id
   delete snapshot.bindings[0].unitColumnIndex;delete snapshot.bindings[0].referenceColumnIndex;
   assert.ok(buildLaboratoryOrderPrintHtml(order).includes('120–180'));
 });
+
+test('A5 print omits removed rows and prints manual indicators once without changing template bindings', async () => {
+  const {buildSync}=require('esbuild');
+  const bundled=buildSync({entryPoints:['apps/web/src/features/laboratory/laboratoryPrint.ts'],bundle:true,write:false,platform:'node',format:'esm'}).outputFiles[0].text;
+  const {buildLaboratoryOrderPrintHtml:print}=await import(`data:text/javascript;base64,${Buffer.from(bundled).toString('base64')}`);
+  const source={schemaVersion:1,blocks:[{id:'t',type:'table',headerRows:1,rows:[
+    ['Показатель','Результат','Норма','Ед.'],['Удалённый маркер','','old-ref','u'],['Сохранённый маркер','','old-ref','u'],
+  ]}]};
+  const parsed=extract(source,'Собака');
+  const snapshot={schemaVersion:1,testId:'test',testTitle:'Test',documentTemplateId:'doc',documentTemplateTitle:'Бланк',documentTemplateVersion:1,layout:parsed.layout,bindings:parsed.indicators.map((v,i)=>({...v,itemId:`row${i}`}))};
+  const order={id:'order',status:'COMPLETED',comment:null,createdAt:'2026-09-14T10:00:00Z',completedAt:null,formSnapshots:[snapshot],
+    visit:{owner:{fullName:'Тестовый владелец',phone:null},animal:{nickname:'Тестовый пациент',species:'Собака',breed:null},employee:null},
+    items:[{id:'row0',status:'CANCELLED',title:'Удалённый маркер',resultValue:'deleted-value'},
+      {id:'row1',status:'COMPLETED',title:'Сохранённый маркер',resultValue:'2,5',unit:'saved-unit',referenceRange:'saved-ref'},
+      {id:'manual',status:'COMPLETED',title:'Новый <маркер>',code:'NEW',resultValue:'3,5',unit:'manual-unit',referenceRange:'manual-ref'},
+      {id:'removed-manual',status:'CANCELLED',title:'Удалённый дополнительный',resultValue:'deleted-manual'},
+    ]};
+  const before=structuredClone(order);
+  for(const snapshots of [[snapshot],[snapshot,snapshot],null]) {
+    const html=print({...order,formSnapshots:snapshots});
+    for(const text of ['2,5','saved-ref','saved-unit','3,5','manual-ref','manual-unit','Новый &lt;маркер&gt;','size: A5 portrait']) assert.ok(html.includes(text),text);
+    for(const text of ['Удалённый маркер','deleted-value','Удалённый дополнительный','deleted-manual','<маркер>']) assert.ok(!html.includes(text),text);
+    assert.equal(html.split('Новый &lt;маркер&gt;').length-1,1);
+  }
+  assert.deepEqual(order,before);
+});
