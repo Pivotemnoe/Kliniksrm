@@ -15,15 +15,15 @@ export class CreateVisitDiagnosisDto {
   @MaxLength(120)
   diagnosisType!: string;
 
-  @ApiPropertyOptional({ enum: VISIT_DIAGNOSIS_STATUSES })
+  @ApiPropertyOptional()
   @IsOptional()
-  @IsIn(VISIT_DIAGNOSIS_STATUSES)
   @IsString()
   @MaxLength(2000)
   description?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ enum: VISIT_DIAGNOSIS_STATUSES })
   @IsOptional()
+  @IsIn(VISIT_DIAGNOSIS_STATUSES)
   @IsString()
   @MaxLength(120)
   status?: string;

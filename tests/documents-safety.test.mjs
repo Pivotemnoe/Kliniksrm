@@ -50,7 +50,7 @@ test('визуальный редактор шаблона собирает бл
 
   assert.match(templates, /DocumentVisualEditor/);
   assert.match(templates, /exportDocumentDocx/);
-  assert.match(editor, /Предпросмотр A4/);
+  assert.match(editor, /Предпросмотр.*layout\.page\.size/);
   assert.match(editor, /createTableBlock/);
   assert.match(editor, /createPageBreakBlock/);
   assert.match(editor, /insertVariable/);
@@ -119,7 +119,7 @@ test('врач завершает обычный документ одной п�
   assert.match(ui, /Точная версия сохранена, PDF открыт для печати/);
   assert.match(ui, /documentRequiresSignature/);
   assert.match(ui, /Подтвердить подпись/);
-  assert.match(ui, /record\.generatedDocument && record\.status !== 'CANCELLED'/);
+  assert.match(ui, /canPrint && \(record\.generatedDocument \|\| record\.status === 'DRAFT'\) && record\.status !== 'CANCELLED'/);
   assert.doesNotMatch(ui, /title: 'Статус'/);
   assert.doesNotMatch(ui, /Сохранить черновик/);
   assert.doesNotMatch(ui, />\s*Сформировать\s*</);

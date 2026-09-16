@@ -85,11 +85,13 @@ export function HospitalLaboratoryPanel({
               {canPrint ? <Button icon={<PrinterOutlined />} onClick={() => printLaboratoryOrder(order, organization)}>Печать A5</Button> : null}
             </Space>
             {order.comment ? <Typography.Paragraph>{order.comment}</Typography.Paragraph> : null}
-            <Table rowKey="id" size="small" pagination={false} dataSource={order.items.filter(item => item.status !== 'CANCELLED')} scroll={{ x: 520 }} columns={[
+            <details className="laboratory-order-details"><summary>Просмотр результатов ({order.items.filter(item => item.status !== 'CANCELLED').length})</summary>
+            <Table rowKey="id" className="laboratory-compact-table" size="small" pagination={false} dataSource={order.items.filter(item => item.status !== 'CANCELLED')} scroll={{ x: 520 }} columns={[
               { title: 'Показатель', key: 'title', render: (_, item) => <span>{item.groupName ? `${item.groupName} · ` : ''}{item.title}</span> },
               { title: 'Результат', key: 'result', render: (_, item) => item.resultValue || item.resultText || '—' },
               { title: 'Ед.', dataIndex: 'unit' }, { title: 'Референс', dataIndex: 'referenceRange' },
             ]} />
+            </details>
             {canReadFiles ? <AttachmentsPanel queryKey={['laboratory', 'order-files', order.id]} listFiles={() => listLaboratoryOrderFiles(order.id)} uploadFile={(file) => uploadLaboratoryOrderFile(order.id, file)} canManage={canUploadFiles && order.status !== 'CANCELLED'} title="Бланки анализов" /> : null}
           </Card>
         ))}

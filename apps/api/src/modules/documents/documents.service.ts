@@ -7,6 +7,7 @@ import {
   Prisma,
 } from '@prisma/client';
 import { createHash } from 'node:crypto';
+import { Readable } from 'node:stream';
 import { AuditService } from '../audit/audit.service';
 import { ObjectStorageService } from '../files/object-storage.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -400,7 +401,19 @@ export class DocumentsService {
       throw new NotFoundException('Документ приёма не найден');
     }
     if (!document.generatedDocument?.file) {
-      throw new BadRequestException('У документа пока нет сохранённого PDF. Сформируйте его заново.');
+      if (document.status !== DocumentStatus.DRAFT) throw new BadRequestException('Сохранённый PDF недоступен. Требуется восстановление документа.');
+      const draft = await this.prisma.visitDocument.findFirstOrThrow({ where: { id: documentId, visitId },
+        include: { visit: { include: { owner: true, animal: true, employee: true } } } });
+      const organization = await this.prisma.organization.findFirst({ orderBy: { createdAt: 'asc' }, select: { displayName: true } });
+      const buffer = await this.pdfService.render({
+        title: `${draft.title} — черновик`, body: draft.body ?? '',
+        clinicName: organization?.displayName ?? 'TemichevVet', visitStartedAt: draft.visit.startedAt.toISOString(),
+        employeeName: draft.visit.employee?.fullName ?? '', ownerName: draft.visit.owner.fullName,
+        animalName: draft.visit.animal.nickname, animalDescription: [draft.visit.animal.species, draft.visit.animal.breed].filter(Boolean).join(', '),
+        layout: tryNormalizeDocumentLayout(draft.layout),
+      });
+      await this.auditService.log({ actorId, action: 'visit_document.draft_pdf_open', entityType: 'VisitDocument', entityId: document.id, metadata: { visitId } });
+      return { file: { originalName: `${draft.title}-draft.pdf`, sizeBytes: buffer.length }, stream: Readable.from(buffer) };
     }
 
     const actor = await this.getActor(actorId);

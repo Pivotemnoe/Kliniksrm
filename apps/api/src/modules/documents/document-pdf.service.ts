@@ -31,7 +31,8 @@ export class DocumentPdfService {
     return new Promise<Buffer>((resolve, reject) => {
       const chunks: Buffer[] = [];
       const document = new PDFDocument({
-        size: 'A4',
+        size: snapshot.layout?.page.size ?? 'A4',
+        layout: snapshot.layout?.page.orientation ?? 'portrait',
         margins: snapshot.layout
           ? {
               top: snapshot.layout.page.marginTop,
@@ -117,14 +118,29 @@ function drawStructuredDocument(
   const left = document.page.margins.left;
   const width = contentWidth(document);
 
-  if (layout.page.showClinicHeader) drawHeader(document, snapshot, clinicLogo);
-  document.font('Roboto-Bold').fontSize(18).fillColor('#17324d').text(snapshot.title, left, document.y, { width });
+  const compact = layout.page.size === 'A5';
+  if (layout.page.showClinicHeader) {
+    if (compact) {
+      document.font('Roboto-Bold').fontSize(12).fillColor('#17324d').text(snapshot.clinicName || 'TemichevVet', left, document.y, { width });
+      document.moveDown(0.4);
+    } else drawHeader(document, snapshot, clinicLogo);
+  }
+  document.font('Roboto-Bold').fontSize(compact ? 12 : 18).fillColor('#17324d').text(snapshot.title, left, document.y, { width });
   document.moveDown(0.8);
 
   if (layout.page.showVisitMeta) {
-    const metaTop = document.y;
-    drawVisitMeta(document, snapshot, metaTop);
-    document.y = metaTop + 126;
+    if (compact) {
+      document.font('Roboto').fontSize(9).fillColor('#25384a').text([
+        `Дата: ${formatDateTime(snapshot.visitStartedAt)} · Врач: ${snapshot.employeeName || '—'}`,
+        `Владелец: ${snapshot.ownerName || '—'}`,
+        `Пациент: ${snapshot.animalName || '—'} · ${snapshot.animalDescription || '—'}`,
+      ].join('\n'), left, document.y, { width, lineGap: 2 });
+      document.moveDown(0.6);
+    } else {
+      const metaTop = document.y;
+      drawVisitMeta(document, snapshot, metaTop);
+      document.y = metaTop + 126;
+    }
   }
 
   for (const block of layout.blocks) drawLayoutBlock(document, block, layout);

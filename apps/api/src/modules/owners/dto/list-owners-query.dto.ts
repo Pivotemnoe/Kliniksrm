@@ -1,7 +1,9 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBooleanString, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class ListOwnersQueryDto {
+  @IsOptional() @IsBooleanString() hasAnimals?: string;
+  @IsOptional() @IsBooleanString() hasVisits?: string;
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -18,4 +20,3 @@ export class ListOwnersQueryDto {
   @IsString()
   offset?: string;
 }
-

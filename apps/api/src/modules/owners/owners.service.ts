@@ -51,6 +51,9 @@ export class OwnersService {
         }
       : {};
 
+    if (query.hasAnimals) where.animals = query.hasAnimals === 'true' ? { some: { archivedAt: null } } : { none: { archivedAt: null } };
+    if (query.hasVisits) where.visits = query.hasVisits === 'true' ? { some: { status: { not: 'CANCELLED' } } } : { none: { status: { not: 'CANCELLED' } } };
+
     if (search) {
       const summaries = await this.prisma.owner.findMany({
         where,

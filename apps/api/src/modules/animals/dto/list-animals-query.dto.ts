@@ -1,7 +1,11 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBooleanString, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { IsBooleanString, IsIn, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 export class ListAnimalsQueryDto {
+  @IsOptional() @IsString() @MaxLength(120) species?: string;
+  @IsOptional() @IsIn(['MALE', 'FEMALE', 'UNKNOWN']) sex?: 'MALE' | 'FEMALE' | 'UNKNOWN';
+  @IsOptional() @IsString() @MaxLength(120) status?: string;
+  @IsOptional() @IsBooleanString() isFavorite?: string;
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

@@ -45,6 +45,10 @@ export class AnimalsService {
     const { limit, offset } = parsePagination(query);
     const search = query.search?.trim();
     const where: Prisma.AnimalWhereInput = {
+      ...(query.species ? { species: { equals: query.species, mode: 'insensitive' as const } } : {}),
+      ...(query.sex ? { sex: query.sex } : {}),
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.isFavorite ? { isFavorite: query.isFavorite === 'true' } : {}),
       ...(query.includeArchived === 'true' ? {} : { archivedAt: null }),
       ...(query.ownerId ? { ownerId: query.ownerId } : {}),
       ...(search

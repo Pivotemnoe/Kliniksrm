@@ -2318,6 +2318,22 @@ body {
   padding-right: 4px;
 }
 
+.laboratory-order-details > summary {
+  cursor: pointer;
+  padding: 6px 0;
+  color: #1677ff;
+}
+.laboratory-compact-table .ant-table-thead > tr > th,
+.laboratory-compact-table .ant-table-tbody > tr > td {
+  padding: 5px 8px !important;
+  font-size: 13px;
+  line-height: 1.3;
+}
+.laboratory-compact-table .ant-input,
+.laboratory-compact-table .ant-select-selector {
+  font-size: 13px;
+}
+
 .document-a4-page {
   position: relative;
   display: grid;

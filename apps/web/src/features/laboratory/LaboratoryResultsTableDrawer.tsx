@@ -174,10 +174,10 @@ export function LaboratoryResultsTableDrawer({
       destroyOnHidden
       extra={<Button type="primary" loading={mutation.isPending} disabled={!canManage} onClick={saveTable}>Сохранить всю таблицу</Button>}
     >
-      <Alert type="info" showIcon className="form-alert" message="Введите результаты прямо в бланк анализа" description="Показатели взяты из привязанного документа. Вся таблица сохраняется одной операцией, а печать использует тот же бланк A5." />
+      <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>Введите результаты в таблицу и сохраните её целиком.</Typography.Paragraph>
       {mutation.isError ? <Alert type="error" showIcon message={getErrorMessage(mutation.error)} className="form-alert" /> : null}
       {canManage ? <Space className="form-alert"><Button onClick={addRow} disabled={mutation.isPending || rows.length - removedIds.length >= 100}>Добавить показатель</Button>{removedIds.length ? <Button onClick={() => setRemovedIds([])} disabled={mutation.isPending}>Вернуть удалённые ({removedIds.length})</Button> : null}</Space> : null}
-      <Table<ResultTableRow> rowKey="itemId" columns={columns} dataSource={rows.filter(row => !removedIds.includes(row.itemId)).map(row => ({ ...row, disabled: row.disabled || !canManage || mutation.isPending }))} pagination={false} className="dense-table laboratory-result-grid" scroll={{ x: 1170, y: 'calc(100vh - 290px)' }} />
+      <Table<ResultTableRow> size="small" rowKey="itemId" columns={columns} dataSource={rows.filter(row => !removedIds.includes(row.itemId)).map(row => ({ ...row, disabled: row.disabled || !canManage || mutation.isPending }))} pagination={false} className="dense-table laboratory-result-grid laboratory-compact-table" scroll={{ x: 1170, y: 'calc(100vh - 230px)' }} />
     </Drawer>
   );
 }

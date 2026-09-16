@@ -3,17 +3,16 @@ import { IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validato
 import { VISIT_DIAGNOSIS_STATUSES, VISIT_DIAGNOSIS_TYPES } from '../visit-diagnosis-rules';
 
 export class UpdateVisitDiagnosisDto {
-  @ApiPropertyOptional({ enum: VISIT_DIAGNOSIS_TYPES })
+  @ApiPropertyOptional()
   @IsOptional()
-  @IsIn(VISIT_DIAGNOSIS_TYPES)
   @IsString()
   @MinLength(2)
   @MaxLength(500)
   title?: string;
 
-  @ApiPropertyOptional({ enum: VISIT_DIAGNOSIS_STATUSES })
+  @ApiPropertyOptional({ enum: VISIT_DIAGNOSIS_TYPES })
   @IsOptional()
-  @IsIn(VISIT_DIAGNOSIS_STATUSES)
+  @IsIn(VISIT_DIAGNOSIS_TYPES)
   @IsString()
   @MaxLength(120)
   diagnosisType?: string;
@@ -24,8 +23,9 @@ export class UpdateVisitDiagnosisDto {
   @MaxLength(2000)
   description?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ enum: VISIT_DIAGNOSIS_STATUSES })
   @IsOptional()
+  @IsIn(VISIT_DIAGNOSIS_STATUSES)
   @IsString()
   @MaxLength(120)
   status?: string;

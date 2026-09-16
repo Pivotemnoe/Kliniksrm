@@ -45,7 +45,7 @@ test('визуальный A4 сохраняется в версии, снимк
   assert.match(pdf, /drawStructuredDocument/);
   assert.match(pdf, /drawTable/);
   assert.match(pdf, /document\.addPage\(\)/);
-  assert.match(visual, /Предпросмотр A4/);
+  assert.match(visual, /Предпросмотр.*layout\.page\.size/);
   assert.match(visual, /Готовая клиническая форма/);
   assert.match(docx, /application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document/);
   assert.match(docx, /w:type="page"/);

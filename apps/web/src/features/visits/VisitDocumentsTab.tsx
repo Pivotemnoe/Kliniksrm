@@ -183,7 +183,7 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
         key: 'title',
         render: (value: string, record) => (
           <Space direction="vertical" size={0}>
-            <Typography.Text strong>{value}</Typography.Text>
+            <Typography.Link onClick={() => openEdit(record)}>{value}</Typography.Link>
             <Typography.Text type="secondary">
               {record.template?.category?.title ?? record.template?.title ?? 'Без шаблона'}
             </Typography.Text>
@@ -230,11 +230,9 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
 
           return (
             <Space wrap>
-              {canManage || record.generatedDocument ? (
                 <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(record)}>
-                  {record.status === 'DRAFT' ? 'Продолжить' : 'Открыть'}
+                  {canManage && record.status === 'DRAFT' ? 'Продолжить' : 'Открыть'}
                 </Button>
-              ) : null}
               {canManage && record.status === 'GENERATED' && documentRequiresSignature(record) ? (
                 <Button
                   type="primary"
@@ -246,7 +244,7 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
                   Подтвердить подпись
                 </Button>
               ) : null}
-              {canPrint && record.generatedDocument && record.status !== 'CANCELLED' ? (
+              {canPrint && (record.generatedDocument || record.status === 'DRAFT') && record.status !== 'CANCELLED' ? (
                 <Button
                   type={record.status === 'GENERATED' && !documentRequiresSignature(record) ? 'primary' : 'default'}
                   size="small"
@@ -254,7 +252,7 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
                   loading={printingDocumentId === record.id}
                   onClick={() => handlePrint(record)}
                 >
-                  Печать
+                  {record.generatedDocument ? 'Печать' : 'Печать черновика'}
                 </Button>
               ) : null}
               {canSend && canQueueDocument(record) ? (
@@ -363,7 +361,7 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
   }
 
   async function openDocumentPdf(document: VisitDocument, existingWindow?: Window) {
-    if (!document.generatedDocument) {
+    if (!document.generatedDocument && document.status !== 'DRAFT') {
       existingWindow?.close();
       message.warning('Сначала проверьте документ и нажмите «Готово и печать».');
       return false;
@@ -470,13 +468,13 @@ export function VisitDocumentsTab({ visit, locked }: { visit: Visit; locked: boo
         destroyOnHidden
         extra={
           <Space>
-            {editingDocument?.generatedDocument && editingDocument.status !== 'CANCELLED' && canPrint ? (
+            {editingDocument && (editingDocument.generatedDocument || editingDocument.status === 'DRAFT') && editingDocument.status !== 'CANCELLED' && canPrint ? (
               <Button
                 icon={<PrinterOutlined />}
                 loading={printingDocumentId === editingDocument.id}
                 onClick={() => handlePrint(editingDocument)}
               >
-                Печать
+                {editingDocument.generatedDocument ? 'Печать' : 'Печать черновика'}
               </Button>
             ) : null}
             {editingDocument && canSend && canQueueDocument(editingDocument) ? (

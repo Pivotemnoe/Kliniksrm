@@ -3,6 +3,8 @@ import { BadRequestException } from '@nestjs/common';
 export type DocumentTextAlign = 'left' | 'center' | 'right' | 'justify';
 
 export type DocumentLayoutPage = {
+  size?: 'A4' | 'A5';
+  orientation?: 'portrait' | 'landscape';
   marginTop: number;
   marginRight: number;
   marginBottom: number;
@@ -78,6 +80,8 @@ export function normalizeDocumentLayout(value: unknown): DocumentLayout | null {
   return {
     schemaVersion: 1,
     page: {
+      size: rawPage.size === 'A5' ? 'A5' : 'A4',
+      orientation: rawPage.orientation === 'landscape' ? 'landscape' : 'portrait',
       marginTop: numberInRange(rawPage.marginTop, defaultDocumentLayoutPage.marginTop, 24, 96),
       marginRight: numberInRange(rawPage.marginRight, defaultDocumentLayoutPage.marginRight, 24, 96),
       marginBottom: numberInRange(rawPage.marginBottom, defaultDocumentLayoutPage.marginBottom, 24, 96),

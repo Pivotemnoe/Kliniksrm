@@ -1,5 +1,5 @@
 import { SearchOutlined } from '@ant-design/icons';
-import { Button, Typography } from 'antd';
+import { Button, Select, Space, Typography } from 'antd';
 import { ColumnsType } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -9,7 +9,7 @@ import { InfiniteTable, useInfiniteListQuery } from '../../shared/ui/InfiniteTab
 import { LiveSearchInput } from '../../shared/ui/LiveSearchInput';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatAnimalAge } from '../../shared/utils/animalBirthDate';
-import { AnimalStatusTag } from './animalStatus';
+import { AnimalStatusTag, animalStatusOptions } from './animalStatus';
 import { listAnimals } from './animals.api';
 import { Animal } from './types';
 
@@ -19,9 +19,14 @@ export function AnimalsPage() {
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [searchInput, setSearchInput] = useState(searchParams.get('search') ?? '');
   const ownerId = searchParams.get('ownerId') ?? '';
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [species, setSpecies] = useState<string>();
+  const [sex, setSex] = useState<string>();
+  const [status, setStatus] = useState<string>();
+  const [isFavorite, setIsFavorite] = useState(false);
   const animalsQuery = useInfiniteListQuery({
-    queryKey: ['animals', { search, ownerId }],
-    queryFn: ({ limit, offset }) => listAnimals({ search, ownerId, limit, offset }),
+    queryKey: ['animals', { search, ownerId, species, sex, status, isFavorite }],
+    queryFn: ({ limit, offset }) => listAnimals({ search, ownerId, species, sex, status, isFavorite: isFavorite || undefined, limit, offset }),
   });
 
   useEffect(() => {
@@ -67,7 +72,7 @@ export function AnimalsPage() {
 
   return (
     <div className="page">
-      <PageHeader title="Пациенты" extra={<Button>Избранные</Button>} />
+      <PageHeader title="Пациенты" extra={<Button type={isFavorite ? 'primary' : 'default'} onClick={() => setIsFavorite(!isFavorite)}>Избранные</Button>} />
       <div className="list-panel">
         <div className="list-panel-header">
           <LiveSearchInput
@@ -82,8 +87,14 @@ export function AnimalsPage() {
               setSearchInput(value);
             }}
           />
-          <Button>Фильтры</Button>
+          <Button onClick={() => setFiltersOpen(!filtersOpen)} aria-expanded={filtersOpen}>Фильтры</Button>
         </div>
+        {filtersOpen ? <Space wrap style={{ padding: 12 }}>
+          <Select aria-label="Вид животного" placeholder="Вид" allowClear value={species} onChange={setSpecies} style={{ width: 160 }} options={['Кошка', 'Собака'].map(value => ({ value, label: value }))} />
+          <Select aria-label="Пол животного" placeholder="Пол" allowClear value={sex} onChange={setSex} style={{ width: 160 }} options={Object.entries(sexLabel).map(([value, label]) => ({ value, label }))} />
+          <Select aria-label="Состояние животного" placeholder="Состояние" allowClear value={status} onChange={setStatus} style={{ width: 180 }} options={animalStatusOptions} />
+          <Button onClick={() => { setSpecies(undefined); setSex(undefined); setStatus(undefined); setIsFavorite(false); }}>Сбросить</Button>
+        </Space> : null}
         <div className="list-panel-body">
           <InfiniteTable<Animal>
             query={animalsQuery}

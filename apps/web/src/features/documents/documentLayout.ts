@@ -1,6 +1,8 @@
 export type DocumentTextAlign = 'left' | 'center' | 'right' | 'justify';
 
 export type DocumentLayoutPage = {
+  size?: 'A4' | 'A5';
+  orientation?: 'portrait' | 'landscape';
   marginTop: number;
   marginRight: number;
   marginBottom: number;

@@ -56,12 +56,14 @@ function buildDocumentXml(title: string, layout: DocumentLayout, renderText: (te
     blocks.push(tableXml([['____________________\nПодпись владельца', '____________________\nПодпись врача']], 0, renderText));
   }
   const margins = layout.page;
+  const paper = margins.size === 'A5' ? [8391, 11906] : [11906, 16838];
+  const [paperWidth, paperHeight] = margins.orientation === 'landscape' ? [paper[1], paper[0]] : paper;
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
   <w:body>
     ${blocks.join('\n')}
     <w:sectPr>
-      <w:pgSz w:w="11906" w:h="16838"/>
+      <w:pgSz w:w="${paperWidth}" w:h="${paperHeight}"${margins.orientation === 'landscape' ? ' w:orient="landscape"' : ''}/>
       <w:pgMar w:top="${margins.marginTop * 20}" w:right="${margins.marginRight * 20}" w:bottom="${margins.marginBottom * 20}" w:left="${margins.marginLeft * 20}" w:header="360" w:footer="360" w:gutter="0"/>
     </w:sectPr>
   </w:body>

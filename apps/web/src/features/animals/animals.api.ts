@@ -13,6 +13,10 @@ import {
 } from './types';
 
 export type ListAnimalsQuery = ListQuery & {
+  species?: string;
+  sex?: string;
+  status?: string;
+  isFavorite?: boolean;
   ownerId?: string;
   includeArchived?: boolean;
 };

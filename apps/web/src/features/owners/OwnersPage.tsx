@@ -1,6 +1,6 @@
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Space } from 'antd';
+import { App, Button, Select, Space } from 'antd';
 import { ColumnsType } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -21,9 +21,12 @@ export function OwnersPage() {
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [searchInput, setSearchInput] = useState(searchParams.get('search') ?? '');
   const [createOpen, setCreateOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [hasAnimals, setHasAnimals] = useState<boolean>();
+  const [hasVisits, setHasVisits] = useState<boolean>();
   const ownersQuery = useInfiniteListQuery({
-    queryKey: ['owners', { search }],
-    queryFn: ({ limit, offset }) => listOwners({ search, limit, offset }),
+    queryKey: ['owners', { search, hasAnimals, hasVisits }],
+    queryFn: ({ limit, offset }) => listOwners({ search, hasAnimals, hasVisits, limit, offset }),
   });
   const createMutation = useMutation({
     mutationFn: (values: OwnerMutationInput) => createOwner(values),
@@ -106,8 +109,13 @@ export function OwnersPage() {
               setSearchInput(value);
             }}
           />
-          <Button>Фильтры</Button>
+          <Button onClick={() => setFiltersOpen(!filtersOpen)} aria-expanded={filtersOpen}>Фильтры</Button>
         </div>
+        {filtersOpen ? <Space wrap style={{ padding: 12 }}>
+          <Select aria-label="Наличие пациентов" placeholder="Пациенты" allowClear value={hasAnimals === undefined ? undefined : String(hasAnimals)} onChange={value => setHasAnimals(value === undefined ? undefined : value === 'true')} style={{ width: 200 }} options={[{ value: 'true', label: 'Есть пациенты' }, { value: 'false', label: 'Нет пациентов' }]} />
+          <Select aria-label="Наличие приёмов" placeholder="Приёмы" allowClear value={hasVisits === undefined ? undefined : String(hasVisits)} onChange={value => setHasVisits(value === undefined ? undefined : value === 'true')} style={{ width: 200 }} options={[{ value: 'true', label: 'Есть приёмы' }, { value: 'false', label: 'Нет приёмов' }]} />
+          <Button onClick={() => { setHasAnimals(undefined); setHasVisits(undefined); }}>Сбросить</Button>
+        </Space> : null}
         <div className="list-panel-body">
         <Space direction="vertical" size={16} className="full-width">
           <InfiniteTable<Owner>

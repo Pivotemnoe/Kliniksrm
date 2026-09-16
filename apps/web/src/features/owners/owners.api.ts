@@ -4,7 +4,7 @@ import { buildQuery } from '../../shared/utils/query';
 import { Animal, AnimalMutationInput } from '../animals/types';
 import { Owner, OwnerBalanceOperationInput, OwnerMutationInput } from './types';
 
-export function listOwners(query: ListQuery) {
+export function listOwners(query: ListQuery & { hasAnimals?: boolean; hasVisits?: boolean }) {
   return apiRequest<PaginatedResponse<Owner>>(`/v1/owners${buildQuery(query)}`);
 }
 

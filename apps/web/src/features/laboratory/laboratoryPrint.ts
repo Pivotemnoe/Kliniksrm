@@ -76,13 +76,27 @@ export function buildLaboratoryOrderPrintHtml(
     .lab-signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 8mm; margin-top: 5mm; }
     .lab-signature { padding-top: 4mm; border-top: .6px solid #64748b; color: #64748b; font-size: 7px; }
     @page { size: A5 portrait; margin: 0; }
-    @media print { .lab-page { padding: 6mm; } tr { break-inside: avoid; } }
+    .print-controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:12px; font:14px Arial,sans-serif; background:#eef3f7; }
+    @media print { .print-controls { display:none; } .lab-page { padding: 6mm; min-height:0; } tr { break-inside: avoid; } }
   </style>
+  <style id="paper-settings"></style>
 </head>
-<body>${pages}
+<body><div class="print-controls">
+  <label>Формат <select id="paper-size"><option>A5</option><option>A4</option></select></label>
+  <label>Ориентация <select id="paper-orientation"><option value="portrait">Книжная</option><option value="landscape">Альбомная</option></select></label>
+  <button type="button" id="print-button">Печать</button>
+</div>${pages}
   <script>
+    const updatePaper = () => {
+      const size = document.getElementById('paper-size').value === 'A4' ? 'A4' : 'A5';
+      const orientation = document.getElementById('paper-orientation').value === 'landscape' ? 'landscape' : 'portrait';
+      document.getElementById('paper-settings').textContent = '@page { size: ' + size + ' ' + orientation + '; margin: 0; }';
+    };
+    document.getElementById('paper-size').addEventListener('change', updatePaper);
+    document.getElementById('paper-orientation').addEventListener('change', updatePaper);
+    document.getElementById('print-button').addEventListener('click', () => { updatePaper(); window.print(); });
     const logos = Array.from(document.querySelectorAll('.lab-logo'));
-    const startPrint = () => window.setTimeout(() => window.print(), 100);
+    const startPrint = () => { document.getElementById('print-button').disabled = false; };
     if (!logos.length || logos.every((logo) => logo.complete)) startPrint();
     else Promise.all(logos.map((logo) => new Promise((resolve) => {
       logo.addEventListener('load', resolve, { once: true });

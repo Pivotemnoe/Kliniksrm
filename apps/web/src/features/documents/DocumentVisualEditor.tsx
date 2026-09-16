@@ -77,7 +77,11 @@ export function DocumentVisualEditor({
   }
 
   function insertVariable(variable: string) {
-    if (!selectedTextBlock) return;
+    if (disabled) return;
+    if (!selectedTextBlock) {
+      addBlock(createTextBlock(`{${variable}}`));
+      return;
+    }
     updateBlock(selectedTextBlock.id, {
       text: `${selectedTextBlock.text}${selectedTextBlock.text && !selectedTextBlock.text.endsWith(' ') ? ' ' : ''}{${variable}}`,
     });
@@ -93,7 +97,11 @@ export function DocumentVisualEditor({
 
   return (
     <div className="document-visual-editor">
-      <Card size="small" title="Страница A4" className="document-page-settings">
+      <Card size="small" title="Страница" className="document-page-settings">
+        <Space wrap style={{ marginBottom: 8 }}>
+          <Select aria-label="Формат страницы" value={value.page.size ?? 'A4'} disabled={disabled} onChange={(size) => updatePage({ size })} options={[{ value: 'A4', label: 'A4' }, { value: 'A5', label: 'A5' }]} />
+          <Select aria-label="Ориентация страницы" value={value.page.orientation ?? 'portrait'} disabled={disabled} onChange={(orientation) => updatePage({ orientation })} options={[{ value: 'portrait', label: 'Книжная' }, { value: 'landscape', label: 'Альбомная' }]} />
+        </Space>
         <Space wrap align="center">
           <Select<string>
             placeholder="Готовая клиническая форма"
@@ -144,7 +152,7 @@ export function DocumentVisualEditor({
             <Typography.Paragraph type="secondary">
               Выберите текстовый блок, затем вставьте нужное поле. Значение подставится при создании документа в приёме.
             </Typography.Paragraph>
-            <DocumentVariablePalette onInsert={insertVariable} />
+            <DocumentVariablePalette onInsert={disabled ? undefined : insertVariable} onInsertBlock={disabled ? undefined : (text) => addBlock(createTextBlock(text))} />
           </Card>
         </div>
         <DocumentA4Preview layout={value} title={title} renderText={renderText} />
@@ -300,9 +308,9 @@ function DocumentA4Preview({ layout, title, renderText }: { layout: DocumentLayo
   const pages = useMemo(() => splitIntoPreviewPages(layout.blocks), [layout.blocks]);
   return (
     <div className="document-a4-preview-column">
-      <Typography.Text strong>Предпросмотр A4</Typography.Text>
+      <Typography.Text strong>Предпросмотр {layout.page.size ?? 'A4'}</Typography.Text>
       {pages.map((blocks, pageIndex) => (
-        <div key={pageIndex} className="document-a4-page">
+        <div key={pageIndex} className="document-a4-page" style={{ minHeight: 0, aspectRatio: layout.page.orientation === 'landscape' ? '1.414' : '0.707', padding: `${layout.page.marginTop / 2}px ${layout.page.marginRight / 2}px ${layout.page.marginBottom / 2}px ${layout.page.marginLeft / 2}px` }}>
           {pageIndex === 0 && layout.page.showClinicHeader ? <div className="document-a4-clinic"><strong>Логотип и название клиники</strong><span>Документ ветеринарной клиники</span></div> : null}
           {pageIndex === 0 ? <h2>{title || 'Без названия'}</h2> : null}
           {pageIndex === 0 && layout.page.showVisitMeta ? <div className="document-a4-meta">Дата приёма · Врач · Владелец · Пациент</div> : null}

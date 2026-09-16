@@ -169,14 +169,18 @@ export function VisitLaboratoryTab({
             }
           >
             {order.comment ? <Typography.Paragraph>{order.comment}</Typography.Paragraph> : null}
+            <details className="laboratory-order-details">
+              <summary>Просмотр результатов ({order.items.filter(item => item.status !== 'CANCELLED').length})</summary>
             <Table<VisitLaboratoryOrderItem>
               rowKey="id"
               columns={itemColumns}
               dataSource={order.items.filter(item => item.status !== 'CANCELLED')}
               pagination={false}
-              className="dense-table"
+              className="dense-table laboratory-compact-table"
+              size="small"
               scroll={{ x: 980 }}
             />
+            </details>
           </Card>
         ))
       ) : (
