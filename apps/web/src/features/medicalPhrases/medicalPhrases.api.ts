@@ -1,5 +1,9 @@
 import { apiRequest } from '../../api/client';
 import { buildQuery } from '../../shared/utils/query';
+
+export function getPracticeHints(visitId: string) {
+  return apiRequest<Array<{ diagnosis: string; titles: string[] }>>(`/v1/medical-phrases/practice/${encodeURIComponent(visitId)}`);
+}
 import {
   ListMedicalPhrasesQuery,
   ManageMedicalPhrasesQuery,

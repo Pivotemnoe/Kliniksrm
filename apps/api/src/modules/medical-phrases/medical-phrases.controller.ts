@@ -12,11 +12,18 @@ import { SavePersonalMedicalPhraseDto } from './dto/save-personal-medical-phrase
 import { PersonalMedicalPhraseActionDto } from './dto/personal-medical-phrase-action.dto';
 import { UpdateMedicalPhraseAssistantSettingsDto } from './dto/update-medical-phrase-assistant-settings.dto';
 import { MedicalPhrasesService } from './medical-phrases.service';
+import { PracticeHintsService } from './practice-hints.service';
 
 @ApiTags('medical-phrases')
 @Controller('v1/medical-phrases')
 export class MedicalPhrasesController {
-  constructor(private readonly medicalPhrasesService: MedicalPhrasesService) {}
+  constructor(private readonly medicalPhrasesService: MedicalPhrasesService, private readonly practiceHints: PracticeHintsService) {}
+
+  @Get('practice/:visitId')
+  @RequirePermissions('visits.read')
+  practice(@Param('visitId') visitId: string, @CurrentEmployee() actor: AuthEmployee) {
+    return this.practiceHints.forVisit(visitId, actor.id);
+  }
 
   @Get()
   @RequirePermissions('visits.read')

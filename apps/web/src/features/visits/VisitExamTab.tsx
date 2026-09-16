@@ -1,6 +1,6 @@
 import { CheckCircleOutlined, CloseOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, App, Button, Form, Input, Select, Space, Typography } from 'antd';
 import { useEffect, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
@@ -10,6 +10,7 @@ import { nullToEmpty, optionalString } from '../../shared/utils/forms';
 import { animalStatusOptions } from '../animals/animalStatus';
 import { updateAnimal } from '../animals/animals.api';
 import { MedicalTextArea } from './MedicalTextArea';
+import { getPracticeHints } from '../medicalPhrases/medicalPhrases.api';
 import { VisitDiagnosesTab } from './VisitDiagnosesTab';
 import { updateVisit, upsertVisitExam } from './visits.api';
 import { Visit, VisitRecommendationInput, VisitType, visitTypeLabels } from './types';
@@ -151,12 +152,22 @@ export function VisitExamTab({ visit, canManage, locked, recommendationDraft, on
   }, [disabled, draftKey, watch]);
 
   const watchedExamValues = watch();
+  const practiceQuery = useQuery({
+    queryKey: ['practice-hints', visit.id, visit.diagnoses.map((d) => d.title).join('|')],
+    queryFn: () => getPracticeHints(visit.id),
+    enabled: !disabled && !assistantSuppressed && visit.diagnoses.length > 0,
+    staleTime: 60_000,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+  const practiceHints = practiceQuery.data ?? [];
   const assistantReview = buildVisitExamAssistantReview(watchedExamValues, visit, recommendationDraft);
   const currentRecommendation = recommendationDraft ?? visit.recommendation;
   const assistantReviewSignature = JSON.stringify({
     values: watchedExamValues,
     recommendationTreatmentPlan: currentRecommendation?.treatmentPlan ?? '',
     recommendationCareNotes: currentRecommendation?.careNotes ?? '',
+    practiceHints,
   });
 
   useEffect(() => {
@@ -164,7 +175,7 @@ export function VisitExamTab({ visit, canManage, locked, recommendationDraft, on
     setAssistantVisible(false);
     setAssistantManuallyHidden(false);
 
-    if (disabled || assistantSuppressed || assistantReview.issues.length === 0) return;
+    if (disabled || assistantSuppressed || (assistantReview.issues.length === 0 && practiceHints.length === 0)) return;
 
     assistantTimerRef.current = setTimeout(() => {
       setAssistantVisible(true);
@@ -255,7 +266,7 @@ export function VisitExamTab({ visit, canManage, locked, recommendationDraft, on
             validateStatus={fieldState.error ? 'error' : undefined}
             help={fieldState.error?.message}
           >
-            <Input.TextArea rows={2} placeholder="Например: отказ от корма, хромота, вакцинация" {...field} />
+            <Input.TextArea id="visit-exam-purpose" rows={2} placeholder="Например: отказ от корма, хромота, вакцинация" {...field} />
           </Form.Item>
         )}
       />
@@ -269,6 +280,7 @@ export function VisitExamTab({ visit, canManage, locked, recommendationDraft, on
               disabled={disabled}
               snippets={examSnippets.anamnesis}
               fieldKey="visit.exam.anamnesis"
+              id="visit-exam-anamnesis"
               species={species}
               diagnoses={diagnoses}
               {...field}
@@ -286,6 +298,7 @@ export function VisitExamTab({ visit, canManage, locked, recommendationDraft, on
               disabled={disabled}
               snippets={examSnippets.examination}
               fieldKey="visit.exam.examination"
+              id="visit-exam-examination"
               species={species}
               diagnoses={diagnoses}
               {...field}
@@ -304,6 +317,7 @@ export function VisitExamTab({ visit, canManage, locked, recommendationDraft, on
               disabled={disabled}
               snippets={examSnippets.symptoms}
               fieldKey="visit.exam.symptoms"
+              id="visit-exam-symptoms"
               species={species}
               diagnoses={diagnoses}
               {...field}
@@ -321,6 +335,7 @@ export function VisitExamTab({ visit, canManage, locked, recommendationDraft, on
               disabled={disabled}
               snippets={examSnippets.manipulations}
               fieldKey="visit.exam.manipulations"
+              id="visit-exam-manipulations"
               species={species}
               diagnoses={diagnoses}
               {...field}
@@ -350,12 +365,12 @@ export function VisitExamTab({ visit, canManage, locked, recommendationDraft, on
           </Form.Item>
         )}
       />
-      {assistantVisible && !assistantSuppressed && assistantReview.issues.length ? (
+      {assistantVisible && !assistantSuppressed && (assistantReview.issues.length > 0 || practiceHints.length > 0) ? (
         <section className="visit-exam-assistant" aria-live="polite" aria-label="Проверка заполнения помощником">
           <div className="visit-exam-assistant-header">
             <div>
               <Typography.Text strong>Помощник проверил заполнение</Typography.Text>
-              <div className="visit-exam-assistant-count">{formatAttentionCount(assistantReview.issues.length)}</div>
+              {assistantReview.issues.length > 0 ? <div className="visit-exam-assistant-count">{formatAttentionCount(assistantReview.issues.length)}</div> : null}
             </div>
             <div className="visit-exam-assistant-controls">
               <Typography.Text type="secondary">Можно пропустить — сохранение осмотра доступно</Typography.Text>
@@ -384,6 +399,14 @@ export function VisitExamTab({ visit, canManage, locked, recommendationDraft, on
             </div>
           </div>
           <div className="visit-exam-assistant-list">
+            {practiceHints.map((hint) => (
+              <div className="visit-exam-assistant-row" key={hint.diagnosis}>
+                <span>При диагнозе «{hint.diagnosis}» в клинике чаще назначали: {hint.titles.join(', ')}.</span>
+              </div>
+            ))}
+            {practiceHints.length > 0 ? <Typography.Text type="secondary">
+              Это история назначений, а не оценка эффективности. Решение принимает врач.
+            </Typography.Text> : null}
             {assistantReview.issues.map((issue) => (
               <div className="visit-exam-assistant-row" key={issue.key}>
                 <ExclamationCircleOutlined className="visit-exam-assistant-warning" />
@@ -393,8 +416,10 @@ export function VisitExamTab({ visit, canManage, locked, recommendationDraft, on
                   onClick={() => {
                     if (issue.key === 'temperature') {
                       focusVisitExamField('visit-exam-temperature');
-                    } else {
+                    } else if (issue.key === 'recommendation') {
                       onOpenRecommendations?.();
+                    } else {
+                      focusVisitExamField(`visit-exam-${issue.key}`);
                     }
                   }}
                 >
@@ -422,9 +447,9 @@ export function VisitExamTab({ visit, canManage, locked, recommendationDraft, on
           Сбросить
         </Button>
         <Typography.Text type="secondary">{autoSaveLabel(autoSaveState)}</Typography.Text>
-        {!assistantVisible && !assistantSuppressed && assistantManuallyHidden && assistantReview.issues.length ? (
+        {!assistantVisible && !assistantSuppressed && assistantManuallyHidden && (assistantReview.issues.length > 0 || practiceHints.length > 0) ? (
           <Button type="link" size="small" onClick={() => setAssistantVisible(true)}>
-            Показать подсказки ({assistantReview.issues.length})
+            {assistantReview.issues.length > 0 ? <>Показать подсказки ({assistantReview.issues.length})</> : 'Показать подсказки'}
           </Button>
         ) : null}
       </Space>
@@ -549,7 +574,7 @@ function clearDraftIfCurrent(key: string, snapshot: string) {
 }
 
 type VisitExamAssistantIssue = {
-  key: 'temperature' | 'recommendation';
+  key: 'temperature' | 'recommendation' | 'purpose' | 'anamnesis' | 'examination' | 'symptoms' | 'manipulations';
   label: string;
   actionLabel: string;
 };
@@ -563,6 +588,16 @@ function buildVisitExamAssistantReview(
   coreCompleted: boolean;
 } {
   const issues: VisitExamAssistantIssue[] = [];
+  const fields = [
+    ['purpose', 'Не заполнена причина обращения'],
+    ['anamnesis', 'Не заполнен анамнез'],
+    ['examination', 'Не заполнен осмотр'],
+    ['symptoms', 'Не заполнены симптомы'],
+    ['manipulations', 'Не заполнены манипуляции'],
+  ] as const;
+  for (const [key, label] of fields) {
+    if (!hasText(values[key])) issues.push({ key, label, actionLabel: 'Заполнить' });
+  }
   if (!hasText(values.temperatureC)) {
     issues.push({ key: 'temperature', label: 'Не указана температура', actionLabel: 'Заполнить' });
   }

@@ -32,6 +32,7 @@ type MedicalSnippet = {
 };
 
 type MedicalTextAreaProps = {
+  id?: string;
   value?: string;
   rows?: number;
   disabled?: boolean;
@@ -51,6 +52,7 @@ type SnippetOption = {
 };
 
 export function MedicalTextArea({
+  id,
   value = '',
   rows = 4,
   disabled,
@@ -240,6 +242,7 @@ export function MedicalTextArea({
         ) : null}
       </div>
       <Input.TextArea
+        id={id}
         rows={rows}
         value={value}
         disabled={disabled}

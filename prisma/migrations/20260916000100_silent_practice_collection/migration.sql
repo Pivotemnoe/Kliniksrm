@@ -1,0 +1,11 @@
+CREATE TABLE "PracticeObservation" (
+  "visitId" TEXT NOT NULL PRIMARY KEY,
+  "payload" JSONB NOT NULL,
+  "collectedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "PracticeObservation_visitId_fkey" FOREIGN KEY ("visitId") REFERENCES "Visit"("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+CREATE TABLE "PracticeCollectionCursor" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "lastVisitId" TEXT NOT NULL DEFAULT '',
+  "startedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

@@ -1152,6 +1152,7 @@ model Visit {
   hospitalStay     HospitalStay?
   overdueAlert     VisitOverdueAlert?
   vaccinations     Vaccination[]
+  practiceObservation PracticeObservation?
   createdAt        DateTime                @default(now())
   updatedAt        DateTime                @updatedAt
 
@@ -1159,6 +1160,20 @@ model Visit {
   @@index([animalId])
   @@index([employeeId])
   @@index([startedAt])
+}
+
+// Internal collection only; no recommendation endpoint or automatic activation.
+model PracticeObservation {
+  visitId String @id
+  visit Visit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  payload Json
+  collectedAt DateTime @default(now())
+}
+
+model PracticeCollectionCursor {
+  id String @id
+  lastVisitId String @default("")
+  startedAt DateTime @default(now())
 }
 
 model HospitalStay {
