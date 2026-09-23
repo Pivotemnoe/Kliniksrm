@@ -164,6 +164,8 @@ function Set-TemichevVetHostFingerprint {
 }
 
 function Import-RuntimeEnvOverrides {
+  . (Join-Path $PSScriptRoot 'assert-release-overrides.ps1')
+  Assert-ReleaseOverridesConsistent $EnvFile $RuntimeEnvFile
   if (!(Test-Path $RuntimeEnvFile -PathType Leaf)) {
     return
   }
@@ -359,7 +361,7 @@ function Invoke-DockerPullWithRetry {
 }
 
 function Try-UseRemoteImages {
-  if ($Build -or $NoImageUpdate) {
+  if ($Build -or $NoImageUpdate -or !$UpdateImages) {
     return $false
   }
 
@@ -614,11 +616,17 @@ if (!$Build -and $hasConfiguredApi -and $hasConfiguredWeb) {
   Write-Host "  web: $webImage"
   Start-ComposeServices -NoBuild $true
 } elseif (!$Build -and $hasLocalApi -and $hasLocalWeb) {
+  if ((Get-EnvValue 'CRM_SOURCE_VERSION' '') -match '^[a-f0-9]{40}$') {
+    throw 'Pinned release images are unavailable. Refusing to replace the installed release with old local images.'
+  }
   Set-EnvValue "TEMICHEVVET_API_IMAGE" "temichevvet-api:local"
   Set-EnvValue "TEMICHEVVET_WEB_IMAGE" "temichevvet-web:local"
   Write-Host "Registry images are unavailable. Starting from local offline images..."
   Start-ComposeServices -NoBuild $true
 } else {
+  if (!$Build -and (Get-EnvValue 'CRM_SOURCE_VERSION' '') -match '^[a-f0-9]{40}$') {
+    throw 'Pinned release images are unavailable. Refusing an automatic rebuild from potentially outdated sources.'
+  }
   Start-ComposeServices -NoBuild $false
 }
 

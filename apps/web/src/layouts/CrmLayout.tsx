@@ -212,6 +212,7 @@ export function CrmLayout() {
         </Header>
         <Content className="crm-content">
           <GlobalOperationalAlerts
+            clinicalOnly={Boolean(employee?.roles.includes('doctor') && !employee?.roles.includes('director'))}
             internalMessages={internalMessagesQuery.data}
             remoteAccessMode={data?.accessType === 'REMOTE'
               ? employee?.roles.includes('director') ? 'director' : 'read-only'

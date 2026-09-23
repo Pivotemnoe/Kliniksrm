@@ -763,7 +763,14 @@ export class HospitalService {
 
   async createAmendment(stayId: string, recordId: string, dto: CreateHospitalAmendmentDto, actorId: string) {
     const stay = await this.getExistingHospitalStay(stayId);
+    const catalogRequested = Boolean(dto.productId || dto.serviceId);
+    const warehouseScope = catalogRequested ? await this.getWarehouseScope(actorId) : null;
     const result = await this.prisma.$transaction(async (tx) => {
+      if (catalogRequested) {
+        await tx.$queryRaw`SELECT "id" FROM "HospitalStay" WHERE "id" = ${stay.id} FOR UPDATE`;
+        const currentStay = await tx.hospitalStay.findUniqueOrThrow({ where: { id: stay.id }, select: { status: true } });
+        if (currentStay.status !== HospitalStayStatus.ACTIVE) throw new BadRequestException('Списание можно добавить только в активном стационаре');
+      }
       await tx.$queryRaw`SELECT "id" FROM "HospitalRecord" WHERE "id" = ${recordId} FOR UPDATE`;
       const existing = await tx.hospitalRecord.findFirst({
         where: { id: recordId, visitId: stay.sourceVisitId },
@@ -778,6 +785,7 @@ export class HospitalService {
           plannedQuantity: true,
           plannedStockQuantity: true,
           plannedUnitPrice: true,
+          billItemId: true,
           amendments: {
             where: plannedCatalogAmendmentWhere,
             orderBy: { recordedAt: 'desc' },
@@ -795,28 +803,34 @@ export class HospitalService {
       }
 
       this.ensureTemperatureRecord(dto.recordType, dto.temperatureC);
-      const planCorrectionRequested = dto.quantity !== undefined
+      const planCorrectionRequested = catalogRequested || dto.quantity !== undefined
         || dto.stockQuantity !== undefined
         || dto.unitPrice !== undefined;
       const currentPlan = getEffectivePlannedCatalog(existing);
       let correctedPlan: HospitalCatalogLine | null = null;
 
       if (planCorrectionRequested) {
-        if (existing.recordStatus !== HospitalRecordStatus.PLANNED) {
+        const missedAccounting = catalogRequested && existing.recordStatus === HospitalRecordStatus.COMPLETED
+          && !existing.billItemId && !currentPlan.productId && !currentPlan.serviceId;
+        if (existing.recordStatus !== HospitalRecordStatus.PLANNED && !missedAccounting) {
           throw new BadRequestException('Проведённое списание нельзя переписать исправлением. Создайте отдельное складское корректирующее движение');
         }
-        if (!currentPlan.productId && !currentPlan.serviceId) {
+        if (!catalogRequested && !currentPlan.productId && !currentPlan.serviceId) {
           throw new BadRequestException('У исходного назначения нет связанного товара или услуги');
         }
-        if (dto.stockQuantity !== undefined && !currentPlan.productId) {
+        if (catalogRequested && (currentPlan.productId || currentPlan.serviceId)
+          && (dto.productId !== (currentPlan.productId ?? undefined) || dto.serviceId !== (currentPlan.serviceId ?? undefined))) {
+          throw new BadRequestException('Связанный товар или услугу нельзя заменить исправлением');
+        }
+        if (dto.stockQuantity !== undefined && !(dto.productId || currentPlan.productId)) {
           throw new BadRequestException('Количество списания применяется только к товару');
         }
 
         correctedPlan = await this.resolveCatalogLine(tx, {
           recordType: existing.recordType as CreateHospitalRecordDto['recordType'],
           title: existing.title,
-          productId: currentPlan.productId ?? undefined,
-          serviceId: currentPlan.serviceId ?? undefined,
+          productId: dto.productId ?? currentPlan.productId ?? undefined,
+          serviceId: dto.serviceId ?? currentPlan.serviceId ?? undefined,
           quantity: dto.quantity ?? decimalToOptionalNumber(currentPlan.quantity),
           stockQuantity: dto.stockQuantity ?? decimalToOptionalNumber(currentPlan.stockQuantity),
           unitPrice: dto.unitPrice ?? decimalToOptionalNumber(currentPlan.unitPrice),
@@ -848,6 +862,11 @@ export class HospitalService {
         },
         include: hospitalRecordBaseInclude,
       });
+
+      if (correctedPlan && existing.recordStatus === HospitalRecordStatus.COMPLETED) {
+        if (correctedPlan.productId) await this.writeOffHospitalProduct(tx, stay.sourceVisitId, null, existing.id, correctedPlan, warehouseScope);
+        await this.writeOffLinkedHospitalProducts(tx, stay.sourceVisitId, existing.id, correctedPlan, warehouseScope);
+      }
 
       return {
         amendment,
@@ -1145,7 +1164,8 @@ export class HospitalService {
           visitId: existing.sourceVisitId,
           recordStatus: HospitalRecordStatus.COMPLETED,
           billItemId: null,
-          OR: [{ plannedProductId: { not: null } }, { plannedServiceId: { not: null } }],
+          OR: [{ plannedProductId: { not: null } }, { plannedServiceId: { not: null } },
+            { amendments: { some: { OR: [{ plannedProductId: { not: null } }, { plannedServiceId: { not: null } }] } } }],
         },
         orderBy: { recordedAt: 'asc' },
         include: {

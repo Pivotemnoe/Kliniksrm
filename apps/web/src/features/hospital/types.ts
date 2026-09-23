@@ -258,6 +258,8 @@ export type CancelHospitalRecordsInput = {
 };
 
 export type CreateHospitalAmendmentInput = {
+  productId?: string;
+  serviceId?: string;
   reason: string;
   recordType: HospitalRecordType;
   title: string;

@@ -12,9 +12,11 @@ import type { InternalMessageConversationsResponse } from '../features/internalM
 export function GlobalOperationalAlerts({
   internalMessages,
   remoteAccessMode = null,
+  clinicalOnly = false,
 }: {
   internalMessages?: InternalMessageConversationsResponse;
   remoteAccessMode?: 'read-only' | 'director' | null;
+  clinicalOnly?: boolean;
 }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -37,7 +39,7 @@ export function GlobalOperationalAlerts({
   const todayVaccinations = activeAlerts.filter((item) => item.kind === 'TODAY_VACCINATION');
   const overdueVaccinations = activeAlerts.filter((item) => item.kind === 'OVERDUE_VACCINATION');
   const vaccinationAlerts = [...todayVaccinations, ...overdueVaccinations];
-  const otherUnreadAlerts = activeAlerts.filter((item) => item.unread && ![
+  const otherUnreadAlerts = activeAlerts.filter((item) => !clinicalOnly && item.unread && ![
     'UNFINISHED_VISIT',
     'TODAY_VACCINATION',
     'OVERDUE_VACCINATION',
@@ -45,7 +47,7 @@ export function GlobalOperationalAlerts({
   const unreadConversations = (internalMessages?.items ?? [])
     .filter((conversation) => conversation.unreadCount > 0)
     .sort((left, right) => new Date(right.lastMessage.createdAt).getTime() - new Date(left.lastMessage.createdAt).getTime());
-  const latestUnreadConversation = unreadConversations[0];
+  const latestUnreadConversation = clinicalOnly ? undefined : unreadConversations[0];
 
   async function openAlert(item: StaffAlertItem) {
     if (item.unread) await markReadMutation.mutateAsync(item.key);
@@ -75,7 +77,7 @@ export function GlobalOperationalAlerts({
           </button>
         </div>
       ) : null}
-      {remoteAccessMode ? (
+      {remoteAccessMode && !clinicalOnly ? (
         <div className="dashboard-overdue-banner remote-read-only-banner" role="status">
           <span className="dashboard-overdue-banner-copy">
             <EyeOutlined />

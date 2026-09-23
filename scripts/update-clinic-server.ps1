@@ -24,6 +24,8 @@ function Test-Command($Name) {
 }
 
 function Import-RuntimeEnvOverrides {
+  . (Join-Path $PSScriptRoot 'assert-release-overrides.ps1')
+  Assert-ReleaseOverridesConsistent $EnvFile $RuntimeEnvFile
   if (!(Test-Path $RuntimeEnvFile -PathType Leaf)) { return }
   foreach ($rawLine in Get-Content $RuntimeEnvFile) {
     $line = $rawLine.Trim()

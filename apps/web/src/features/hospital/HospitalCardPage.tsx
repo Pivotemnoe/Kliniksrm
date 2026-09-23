@@ -811,7 +811,7 @@ function HospitalRecordModal({
   );
 }
 
-function HospitalAmendmentModal({
+export function HospitalAmendmentModal({
   open,
   record,
   loading,
@@ -824,30 +824,46 @@ function HospitalAmendmentModal({
   onClose: () => void;
   onSubmit: (input: CreateHospitalAmendmentInput) => void;
 }) {
-  const [form] = Form.useForm<CreateHospitalAmendmentInput>();
+  const [form] = Form.useForm<CreateHospitalAmendmentInput & { catalogKind?: 'NONE' | 'PRODUCT' | 'SERVICE' }>();
   const recordType = Form.useWatch('recordType', form);
   const plannedCatalog = getEffectivePlannedCatalog(record);
-  const plannedProduct = plannedCatalog.product;
-  const plannedService = plannedCatalog.service;
+  const catalogKind = Form.useWatch('catalogKind', form) ?? 'NONE';
+  const selectedProductId = Form.useWatch('productId', form);
+  const selectedServiceId = Form.useWatch('serviceId', form);
+  const [catalogSearch, setCatalogSearch] = useState('');
+  const debouncedCatalogSearch = useDebouncedValue(catalogSearch.trim());
+  const catalogQuery = useQuery({
+    queryKey: ['hospital', 'catalog', debouncedCatalogSearch],
+    queryFn: ({ signal }) => getHospitalCatalog(debouncedCatalogSearch || undefined, signal),
+    enabled: open && catalogKind !== 'NONE',
+  });
+  const canAttachCatalog = Boolean(record && ['PLANNED', 'COMPLETED'].includes(record.recordStatus)
+    && !record.billItem && !plannedCatalog.productId && !plannedCatalog.serviceId);
+  const plannedProduct = record?.recordStatus === 'PLANNED' && plannedCatalog.product
+    ? plannedCatalog.product : catalogQuery.data?.products.find(item => item.id === selectedProductId);
+  const plannedService = record?.recordStatus === 'PLANNED' && plannedCatalog.service
+    ? plannedCatalog.service : catalogQuery.data?.services.find(item => item.id === selectedServiceId);
 
   useEffect(() => {
     if (!open || !record) return;
     const currentPlannedCatalog = getEffectivePlannedCatalog(record);
     form.resetFields();
+    setCatalogSearch('');
     form.setFieldsValue({
+      catalogKind: 'NONE',
       reason: '',
       recordType: record.recordType,
       title: record.title,
       temperatureC: record.temperatureC === null ? undefined : Number(record.temperatureC),
       value: record.value ?? '',
       notes: record.notes ?? '',
-      quantity: currentPlannedCatalog.productId || currentPlannedCatalog.serviceId
+      quantity: record.recordStatus === 'PLANNED' && (currentPlannedCatalog.productId || currentPlannedCatalog.serviceId)
         ? Number(currentPlannedCatalog.quantity ?? 1)
         : undefined,
-      stockQuantity: currentPlannedCatalog.productId
+      stockQuantity: record.recordStatus === 'PLANNED' && currentPlannedCatalog.productId
         ? Number(currentPlannedCatalog.stockQuantity ?? currentPlannedCatalog.quantity ?? 1)
         : undefined,
-      unitPrice: currentPlannedCatalog.productId || currentPlannedCatalog.serviceId
+      unitPrice: record.recordStatus === 'PLANNED' && (currentPlannedCatalog.productId || currentPlannedCatalog.serviceId)
         ? Number(currentPlannedCatalog.unitPrice ?? 0)
         : undefined,
     });
@@ -875,7 +891,7 @@ function HospitalAmendmentModal({
       <Form
         form={form}
         layout="vertical"
-        onFinish={(values) => onSubmit({
+        onFinish={({ catalogKind: _catalogKind, ...values }) => onSubmit({
           ...values,
           temperatureC: values.temperatureC === undefined
             ? undefined
@@ -897,20 +913,42 @@ function HospitalAmendmentModal({
           <Form.Item name="value" label="Исправленное значение / результат"><Input /></Form.Item>
         )}
         <Form.Item name="notes" label="Исправленный комментарий"><Input.TextArea rows={4} /></Form.Item>
-        {record?.recordStatus === 'PLANNED' && plannedProduct ? (
+        {canAttachCatalog ? <>
+          <Typography.Title level={5}>Учёт в счёте и на складе</Typography.Title>
+          <Form.Item name="catalogKind" label="Что учесть">
+            <Select options={[
+              { value: 'NONE', label: 'Только запись в журнал, без начисления' },
+              { value: 'PRODUCT', label: 'Товар — начислить и списать со склада' },
+              { value: 'SERVICE', label: 'Услуга — начислить по прайсу' },
+            ]} onChange={() => form.setFieldsValue({ productId: undefined, serviceId: undefined, quantity: undefined, stockQuantity: undefined, unitPrice: undefined })} />
+          </Form.Item>
+          {catalogKind === 'PRODUCT' ? <Form.Item name="productId" label="Товар из каталога" rules={[{ required: true }]}>
+            <Select showSearch filterOption={false} onSearch={setCatalogSearch} loading={catalogQuery.isFetching}
+              options={catalogQuery.data?.products.map(item => ({ value: item.id, label: `${item.title} · остаток ${item.stockRest} ${item.stockUnit}` }))}
+              onChange={id => { const item = catalogQuery.data?.products.find(p => p.id === id); form.setFieldsValue({ quantity: 1, stockQuantity: 1, unitPrice: Number(item?.retailPrice ?? 0) }); }} />
+          </Form.Item> : null}
+          {catalogKind === 'SERVICE' ? <Form.Item name="serviceId" label="Услуга из каталога" rules={[{ required: true }]}>
+            <Select showSearch filterOption={false} onSearch={setCatalogSearch} loading={catalogQuery.isFetching}
+              options={catalogQuery.data?.services.map(item => ({ value: item.id, label: item.title }))}
+              onChange={id => { const item = catalogQuery.data?.services.find(p => p.id === id); form.setFieldsValue({ quantity: 1, unitPrice: item ? getServiceDefaultPrice(item) : 0 }); }} />
+          </Form.Item> : null}
+        </> : null}
+        {plannedProduct ? (
           <>
-            <Typography.Title level={5}>Исправить плановое списание и начисление</Typography.Title>
+            <Typography.Title level={5}>{record?.recordStatus === 'PLANNED' ? 'Исправить плановое списание и начисление' : 'Добавить пропущенное списание и начисление'}</Typography.Title>
             <Alert
               type="info"
               showIcon
               className="form-alert"
               message={`Товар: ${plannedProduct.title}`}
-              description="Новое количество сохранится в истории исправления. Списание со склада и начисление произойдут только после отметки назначения «Выполнено»."
+              description={record?.recordStatus === 'PLANNED'
+                ? 'Новое количество сохранится в истории исправления. Списание со склада и начисление произойдут только после отметки назначения «Выполнено».'
+                : 'Пропущенный товар спишется сейчас. Сумма накопится в стационаре и попадёт в счёт при выписке. Исходная запись сохранится.'}
             />
             <div className="form-grid two-columns">
               <Form.Item
                 name="stockQuantity"
-                label={`Списать при выполнении, ${plannedProduct.writeOffUnit || plannedProduct.stockUnit || 'ед.'}`}
+                label={`${record?.recordStatus === 'PLANNED' ? 'Списать при выполнении' : 'Списать со склада'}, ${plannedProduct.writeOffUnit || plannedProduct.stockUnit || 'ед.'}`}
                 rules={[{ required: true, message: 'Укажите количество для списания' }]}
               >
                 <InputNumber min={0.001} precision={3} className="full-width" />
@@ -932,15 +970,15 @@ function HospitalAmendmentModal({
             </div>
           </>
         ) : null}
-        {record?.recordStatus === 'PLANNED' && plannedService ? (
+        {plannedService ? (
           <>
-            <Typography.Title level={5}>Исправить плановое начисление</Typography.Title>
+            <Typography.Title level={5}>{record?.recordStatus === 'PLANNED' ? 'Исправить плановое начисление' : 'Добавить пропущенное начисление'}</Typography.Title>
             <Alert
               type="info"
               showIcon
               className="form-alert"
               message={`Услуга: ${plannedService.title}`}
-              description={`Исправление сохранится отдельно. Начисление произойдёт только после отметки назначения «Выполнено». ${getServicePriceHelp(plannedService) ?? ''}`}
+              description={record?.recordStatus === 'PLANNED' ? `Исправление сохранится отдельно. Начисление произойдёт только после отметки назначения «Выполнено». ${getServicePriceHelp(plannedService) ?? ''}` : 'Пропущенная услуга учтётся в стационаре. Счёт будет сформирован при выписке.'}
             />
             <div className="form-grid two-columns">
               <Form.Item name="quantity" label="Количество услуг" rules={[{ required: true, message: 'Укажите количество' }]}>
