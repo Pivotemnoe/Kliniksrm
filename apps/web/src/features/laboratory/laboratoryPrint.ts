@@ -75,9 +75,9 @@ export function buildLaboratoryOrderPrintHtml(
     .lab-spacer { min-height: 1mm; }
     .lab-signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 8mm; margin-top: 5mm; }
     .lab-signature { padding-top: 4mm; border-top: .6px solid #64748b; color: #64748b; font-size: 9px; }
-    @page { size: A5 portrait; margin: 0; }
+    @page { size: A5 portrait; margin: 6mm; }
     .print-controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:12px; font:14px Arial,sans-serif; background:#eef3f7; }
-    @media print { .print-controls { display:none; } .lab-page { padding: 6mm; min-height:0; } tr { break-inside: avoid; } }
+    @media print { .print-controls { display:none; } .lab-page { width: auto; padding: 0; min-height:0; } tr { break-inside: avoid; } }
   </style>
   <style id="paper-settings"></style>
 </head>
@@ -92,7 +92,7 @@ export function buildLaboratoryOrderPrintHtml(
       const orientation = document.getElementById('paper-orientation').value === 'landscape' ? 'landscape' : 'portrait';
       const widths = size === 'A4' ? [210, 297] : [148, 210];
       const paperWidth = widths[orientation === 'landscape' ? 1 : 0];
-      document.getElementById('paper-settings').textContent = '@page { size: ' + size + ' ' + orientation + '; margin: 0; } .lab-page { width: ' + paperWidth + 'mm; min-height: 0; }';
+      document.getElementById('paper-settings').textContent = '@page { size: ' + size + ' ' + orientation + '; margin: 6mm; } @media screen { .lab-page { width: ' + paperWidth + 'mm; min-height: 0; } }';
     };
     document.getElementById('paper-size').addEventListener('change', updatePaper);
     document.getElementById('paper-orientation').addEventListener('change', updatePaper);
