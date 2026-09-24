@@ -249,8 +249,9 @@ export function HospitalCardPage() {
         }
       />
       <Modal title="Лист для бокса" open={boxPrintOpen} onCancel={() => setBoxPrintOpen(false)} okText="Печать" cancelText="Назад" onOk={() => {
-        if (stay && printHospitalBoxSheet(stay, organizationQuery.data, boxPrintAssignments)) setBoxPrintOpen(false);
-        else message.warning('Браузер заблокировал окно печати');
+        // The native print dialog can suspend the opener before Ant's closing
+        // animation finishes. Keep the options open so no invisible mask remains.
+        if (!stay || !printHospitalBoxSheet(stay, organizationQuery.data, boxPrintAssignments)) message.warning('Браузер заблокировал окно печати');
       }}>
         <Typography.Paragraph>Номер бокса, ФИО владельца, кличка и диагноз животного печатаются всегда.</Typography.Paragraph>
         <Checkbox checked={boxPrintAssignments} onChange={event => setBoxPrintAssignments(event.target.checked)}>Печатать назначения и препараты</Checkbox>
