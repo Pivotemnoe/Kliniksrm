@@ -58,7 +58,7 @@ export function buildLaboratoryOrderPrintHtml(
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; color: #142033; background: #fff; font: 11px/1.3 Arial, sans-serif; }
     .lab-page { width: 148mm; min-height: 210mm; margin: 0 auto; padding: 6mm; break-after: page; page-break-after: always; }
-    .lab-page:last-child { break-after: auto; page-break-after: auto; }
+    .lab-page:last-of-type { break-after: auto; page-break-after: auto; }
     .lab-header { display: grid; grid-template-columns: 14mm 1fr; gap: 3mm; align-items: center; padding-bottom: 2.5mm; border-bottom: 1.2px solid #21848d; }
     .lab-logo { width: 13mm; height: 13mm; object-fit: contain; }
     .lab-brand { color: #153958; font-size: 13px; font-weight: 700; }
