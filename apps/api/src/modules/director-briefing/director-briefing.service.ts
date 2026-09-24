@@ -17,7 +17,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { clinicDateKey, resolveReportRange } from '../reports/report-range';
 import { buildOverdueVisitWhere } from '../visits/visit-overdue';
-import { resolveVaccinationDues } from '../animals/vaccination-due';
+import { groupVaccinationDues, resolveVaccinationDues } from '../animals/vaccination-due';
 
 type BriefingTrigger = 'SCHEDULED' | 'MANUAL';
 
@@ -154,6 +154,7 @@ export class DirectorBriefingService implements OnApplicationBootstrap, OnModule
     const paid = sum(payments.filter((item) => Number(item.amount) > 0), (item) => item.amount);
     const refunds = -sum(payments.filter((item) => Number(item.amount) < 0), (item) => item.amount);
     const vaccinationDues = resolveVaccinationDues(vaccinations, now);
+    const vaccinationTasks = groupVaccinationDues(vaccinationDues);
     const unfinishedVisits = await this.prisma.visit.count({ where: { ...buildOverdueVisitWhere(now), animal: { archivedAt: null } } });
     const lowStockCount = lowStock.filter((product) => product.batches.reduce((total, batch) => total + Number(batch.rest), 0) <= Number(product.minStock)).length;
     const debtorsAmount = debtBills.reduce((total, bill) => total + Math.max(Number(bill.totalAmount) - Number(bill.paidAmount), 0), 0);
@@ -170,7 +171,7 @@ export class DirectorBriefingService implements OnApplicationBootstrap, OnModule
       },
       finance: { billed, paid, refunds, manualRevenue, otherIncome, expenses, debtorsAmount, supplierPayable },
       control: { unresolvedEntries, submittedCloses },
-      vaccinations: { today: vaccinationDues.today.length, overdue: vaccinationDues.overdue.length, upcoming30Days: countUpcomingVaccinations(vaccinations, now, expiresSoon) },
+      vaccinations: { today: vaccinationTasks.filter(v => !v.overdue).length, overdue: vaccinationTasks.filter(v => v.overdue).length, upcoming30Days: countUpcomingVaccinations(vaccinations, now, expiresSoon) },
       stock: { lowStock: lowStockCount },
       laboratory: {
         ordered: laboratoryOrders.length,
@@ -269,7 +270,7 @@ function countUpcomingVaccinations<T extends { title: string; expiresAt: Date | 
     const key = `${item.animal.id}:${item.title.trim().toLocaleLowerCase('ru-RU')}`;
     if (!latest.has(key)) latest.set(key, item);
   }
-  return [...latest.values()].filter((item) => item.expiresAt && item.expiresAt > from && item.expiresAt <= to).length;
+  return new Set([...latest.values()].filter((item) => item.expiresAt && item.expiresAt > from && item.expiresAt <= to).map(item => item.animal.id)).size;
 }
 function errorMessage(error: unknown) { return error instanceof Error ? error.message : String(error); }
 function getBriefingIntervalMs() {

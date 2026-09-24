@@ -21,6 +21,7 @@ export type StaffAlertItem = {
   version: string;
   unread: boolean;
   readAt: string | null;
+  vaccination?: { animalId: string; animalName: string; ownerId: string; ownerName: string; vaccines: { id: string; title: string; dueAt: string }[] };
 };
 
 export type StaffAlertsResponse = {

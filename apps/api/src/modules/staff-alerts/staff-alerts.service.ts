@@ -15,7 +15,7 @@ import {
   getVisitOverdueAt,
   VISIT_OVERDUE_THRESHOLD_MINUTES,
 } from '../visits/visit-overdue';
-import { resolveVaccinationDues } from '../animals/vaccination-due';
+import { groupVaccinationDues, resolveVaccinationDues } from '../animals/vaccination-due';
 
 type StaffAlertSeverity = 'info' | 'warning' | 'error';
 
@@ -29,6 +29,7 @@ type StaffAlertCandidate = {
   severity: StaffAlertSeverity;
   occurredAt: Date;
   version: string;
+  vaccination?: { animalId: string; animalName: string; ownerId: string; ownerName: string; vaccines: { id: string; title: string; dueAt: Date }[] };
 };
 
 @Injectable()
@@ -120,8 +121,9 @@ export class StaffAlertsService {
     const can = (permission: string) => actor.permissions.includes('*') || actor.permissions.includes(permission);
     const showFailedDeliveries = can('notifications.manage');
     const showOnlineRequests = can('appointments.manage');
-    const showBills = can('billing.manage') || can('payments.manage');
-    const showStock = can('stock.manage');
+    const clinicalOnly = actor.roles.includes('doctor') && !actor.roles.includes('director');
+    const showBills = !clinicalOnly && (can('billing.manage') || can('payments.manage'));
+    const showStock = !clinicalOnly && can('stock.manage');
     const showNews = can('news.read');
     const showDirectorBriefing = actor.roles.includes('director');
 
@@ -175,7 +177,6 @@ export class StaffAlertsService {
         ? this.loadOptionalCandidates('low stock', () => this.prisma.product.findMany({
             where: { isActive: true, minStock: { not: null } },
             orderBy: { title: 'asc' },
-            take: 500,
             select: {
               id: true,
               title: true,
@@ -206,7 +207,6 @@ export class StaffAlertsService {
       this.prisma.vaccination.findMany({
         where: { expiresAt: { not: null }, cancelledAt: null, animal: { archivedAt: null } },
         orderBy: [{ expiresAt: 'desc' }, { createdAt: 'desc' }],
-        take: 2000,
         select: {
           id: true,
           title: true,
@@ -215,7 +215,7 @@ export class StaffAlertsService {
             select: {
               id: true,
               nickname: true,
-              owner: { select: { fullName: true, phone: true } },
+              owner: { select: { id: true, fullName: true, phone: true } },
             },
           },
         },
@@ -245,30 +245,22 @@ export class StaffAlertsService {
     });
 
     const vaccinationDues = resolveVaccinationDues(vaccinationCandidates, now);
-    for (const vaccination of vaccinationDues.today) {
+    for (const group of groupVaccinationDues(vaccinationDues)) {
+      const { animal, vaccines, overdue } = group;
       items.push({
-        key: `vaccination:today:${vaccination.id}`,
-        kind: 'TODAY_VACCINATION',
-        title: `Сегодня вакцинация: ${vaccination.animal.nickname}`,
-        description: `${vaccination.title} · ${vaccination.animal.owner.fullName}${vaccination.animal.owner.phone ? ` · ${vaccination.animal.owner.phone}` : ''}`,
-        href: `/patients/${vaccination.animal.id}`,
+        key: `vaccination:animal:${animal.id}`,
+        kind: overdue ? 'OVERDUE_VACCINATION' : 'TODAY_VACCINATION',
+        title: `${overdue ? 'Просрочена вакцинация' : 'Сегодня вакцинация'}: ${animal.nickname}`,
+        description: `${animal.owner.fullName} · ${vaccines.map(v => v.title).join(', ')}`,
+        href: `/patients/${animal.id}`,
         count: 1,
-        severity: 'warning',
-        occurredAt: vaccinationDues.todayAvailableAt,
-        version: hashVersion([vaccination.id, vaccination.expiresAt?.toISOString(), 'today-08-msk']),
-      });
-    }
-    for (const vaccination of vaccinationDues.overdue) {
-      items.push({
-        key: `vaccination:overdue:${vaccination.id}`,
-        kind: 'OVERDUE_VACCINATION',
-        title: `Просрочена вакцинация: ${vaccination.animal.nickname}`,
-        description: `${vaccination.title} · ${vaccination.animal.owner.fullName}${vaccination.animal.owner.phone ? ` · ${vaccination.animal.owner.phone}` : ''}`,
-        href: `/patients/${vaccination.animal.id}`,
-        count: 1,
-        severity: 'error',
-        occurredAt: vaccination.expiresAt!,
-        version: hashVersion([vaccination.id, vaccination.expiresAt?.toISOString(), 'overdue']),
+        severity: overdue ? 'error' : 'warning',
+        occurredAt: overdue ? vaccines[0].expiresAt! : vaccinationDues.todayAvailableAt,
+        version: hashVersion([overdue, ...vaccines.map(v => `${v.id}:${v.expiresAt?.toISOString()}`)]),
+        vaccination: {
+          animalId: animal.id, animalName: animal.nickname, ownerId: animal.owner.id, ownerName: animal.owner.fullName,
+          vaccines: vaccines.map(v => ({ id: v.id, title: v.title, dueAt: v.expiresAt! })),
+        },
       });
     }
 

@@ -76,49 +76,35 @@ export function HospitalPage() {
 
   const columns = useMemo<ColumnsType<HospitalStay>>(
     () => [
-      { title: 'Бокс', key: 'box', render: (_, record) => record.hospitalBox?.name ?? '—' },
+      { title: 'Бокс', width: 80, key: 'box', render: (_, record) => record.hospitalBox?.name ?? '—' },
       {
         title: 'Пациент',
-        key: 'animal',
+        key: 'animal', width: 180, fixed: 'left',
         render: (_, record) => (
           <Button type="link" className="table-link" onClick={() => navigate(`/patients/${record.animalId}`)}>
             {record.animal?.nickname ?? 'Пациент'}
+            <span className="table-patient-details"><AnimalSpeciesLabel species={record.animal?.species} /> · {formatAnimalAge(record.animal?.birthDate)}</span>
           </Button>
         ),
       },
-      { title: 'Вид', key: 'species', render: (_, record) => <AnimalSpeciesLabel species={record.animal?.species} /> },
-      { title: 'Возраст', key: 'animalAge', render: (_, record) => formatAnimalAge(record.animal?.birthDate) },
-      { title: 'Владелец', key: 'owner', render: (_, record) => record.owner?.fullName ?? '—' },
-      { title: 'Сотрудник', key: 'employee', render: (_, record) => record.employee?.fullName ?? '—' },
-      { title: 'Поступил', dataIndex: 'startedAt', key: 'startedAt', render: formatDateTime },
-      { title: 'В стационаре', key: 'duration', render: (_, record) => getStayDuration(record.startedAt, record.completedAt) },
-      { title: 'Причина / назначения', key: 'purpose', ellipsis: true, render: (_, record) => record.exam?.purpose || record.recommendation?.careNotes || '—' },
+      { title: 'Владелец', key: 'owner', width: 190, render: (_, record) => <>{record.owner?.fullName ?? '—'}<span className="table-patient-details">Сотрудник: {record.employee?.fullName ?? '—'}</span></> },
+      { title: 'Поступил', key: 'startedAt', width: 140, render: (_, record) => <>{formatDateTime(record.startedAt)}<span className="table-patient-details">В стационаре: {getStayDuration(record.startedAt, record.completedAt)}</span></> },
       {
         title: 'Лечение сейчас',
-        key: 'treatment',
+        key: 'treatment', width: 230,
         render: (_, record) => {
           if (record.status !== 'ACTIVE') return '—';
           const treatment = getStayTreatmentStatus(record, nowMs);
-          if (treatment.dueCount > 0) return <Tag color="red">Выполнить: {treatment.dueCount}</Tag>;
-          if (treatment.nextAt) return <Tag color="blue">Следующее {formatTreatmentTime(treatment.nextAt, record.timezone)}</Tag>;
-          return <Typography.Text type="secondary">Нет назначений</Typography.Text>;
+          return <>{treatment.dueCount > 0 ? <Tag color="red">Выполнить: {treatment.dueCount}</Tag> : treatment.nextAt ? <Tag color="blue">Следующее {formatTreatmentTime(treatment.nextAt, record.timezone)}</Tag> : <Typography.Text type="secondary">Нет назначений</Typography.Text>}<span className="table-patient-details">{record.exam?.purpose || record.recommendation?.careNotes || '—'}</span></>;
         },
       },
       {
-        title: 'Счёт',
-        key: 'bill',
-        render: (_, record) =>
-          record.bill ? `${formatMoney(record.bill.paidAmount)} / ${formatMoney(record.bill.totalAmount)}` : '—',
-      },
-      {
-        title: 'Статус',
-        dataIndex: 'status',
-        key: 'status',
-        render: (value: HospitalStay['status']) => <Tag color={hospitalStatusColors[value]}>{hospitalStatusLabels[value]}</Tag>,
+        title: 'Статус', key: 'status', width: 140,
+        render: (_, record) => <><Tag color={hospitalStatusColors[record.status]}>{hospitalStatusLabels[record.status]}</Tag><span className="table-patient-details">Счёт: {record.bill ? `${formatMoney(record.bill.paidAmount)} / ${formatMoney(record.bill.totalAmount)}` : '—'}</span></>,
       },
       {
         title: 'Действия',
-        key: 'actions',
+        key: 'actions', width: 200, fixed: 'right',
         render: (_, record) => (
           <Space wrap>
             <Button size="small" type="primary" onClick={() => navigate(`/hospital/${record.id}`)}>
@@ -209,6 +195,7 @@ export function HospitalPage() {
             rowKey="id"
             className="dense-table"
             columns={columns}
+            scroll={{ x: 1160 }}
             onRow={(record) => ({ onDoubleClick: () => navigate(`/hospital/${record.id}`) })}
           />
         </div>

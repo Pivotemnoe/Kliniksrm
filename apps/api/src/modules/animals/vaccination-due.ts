@@ -52,3 +52,19 @@ function moscowMinuteOfDay(value: Date) {
   const minute = Number(parts.find((part) => part.type === 'minute')?.value ?? 0);
   return hour * 60 + minute;
 }
+
+// One actionable reminder per animal; an overdue vaccine makes the whole task overdue.
+export function groupVaccinationDues<T extends VaccinationDueItem>(dues: { today: T[]; overdue: T[] }) {
+  const groups = new Map<string, { animal: T['animal']; vaccines: T[]; overdue: boolean }>();
+  for (const [rows, overdue] of [[dues.today, false], [dues.overdue, true]] as const) {
+    for (const vaccine of rows) {
+      const group = groups.get(vaccine.animal.id) ?? { animal: vaccine.animal, vaccines: [] as T[], overdue: false };
+      group.vaccines.push(vaccine);
+      group.overdue ||= overdue;
+      groups.set(vaccine.animal.id, group);
+    }
+  }
+  return [...groups.values()].map(group => ({ ...group,
+    vaccines: group.vaccines.sort((a, b) => Number(a.expiresAt) - Number(b.expiresAt) || a.id.localeCompare(b.id)),
+  }));
+}

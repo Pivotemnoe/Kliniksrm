@@ -2,12 +2,12 @@ import { appConfig } from '../../app/config';
 import type { OrganizationSettings } from '../organization/types';
 import type { HospitalRecord, HospitalStay } from './types';
 
-export function printHospitalSheet(stay: HospitalStay, organization?: OrganizationSettings | null) {
+export function printHospitalSheet(stay: HospitalStay, organization?: OrganizationSettings | null, includeNotes = false) {
   const printWindow = window.open('', '_blank', 'width=1100,height=820');
   if (!printWindow) return false;
 
   const timeZone = stay.timezone || 'Europe/Moscow';
-  const groups = groupOwnerReportRecords(stay.hospitalRecords ?? [], timeZone);
+  const groups = groupOwnerReportRecords(stay.hospitalRecords ?? [], timeZone, includeNotes);
   const clinicName = organization?.displayName?.trim() || appConfig.brandName;
   const clinicDescription = organization?.orgType?.trim() || 'Ветеринарная клиника';
   const logoUrl = organization?.logoUrl ? new URL(organization.logoUrl, window.location.href).href : null;
@@ -16,7 +16,7 @@ export function printHospitalSheet(stay: HospitalStay, organization?: Organizati
     organization?.inn ? `ИНН ${organization.inn}` : null,
     organization?.postalAddress || organization?.legalAddress,
   ].filter(Boolean).join(' · ');
-  const patient = [stay.animal?.nickname, stay.animal?.species, stay.animal?.breed, stay.animal?.sex].filter(Boolean).join(' · ');
+  const patient = [stay.animal?.nickname, stay.animal?.species, stay.animal?.breed, ({ MALE: 'Самец', FEMALE: 'Самка', UNKNOWN: 'Пол не указан' } as Record<string, string>)[stay.animal?.sex ?? ''] ?? stay.animal?.sex].filter(Boolean).join(' · ');
   const recordsMarkup = groups.length
     ? `<table class="treatment-summary">
         <thead><tr><th class="date-column">Дата</th><th>Выполнено</th></tr></thead>
@@ -35,7 +35,7 @@ export function printHospitalSheet(stay: HospitalStay, organization?: Organizati
   <style>
     * { box-sizing: border-box; }
     @page { size: A4 portrait; margin: 10mm 10mm 12mm; }
-    body { margin: 0; color: #162f47; background: #fff; font: 9.5px/1.28 Arial, sans-serif; }
+    body { margin: 0; color: #162f47; background: #fff; font: 11px/1.35 Arial, sans-serif; }
     .page { width: 100%; }
     .clinic { display: grid; grid-template-columns: ${logoUrl ? '14mm 1fr' : '1fr'}; gap: 3mm; align-items: center; padding-bottom: 2mm; border-bottom: 1.5px solid #173a5e; }
     .logo { width: 13mm; height: 13mm; object-fit: contain; }
@@ -43,12 +43,12 @@ export function printHospitalSheet(stay: HospitalStay, organization?: Organizati
     .muted { color: #65798b; }
     h1 { margin: 3mm 0 2mm; font-size: 16px; color: #173a5e; }
     .meta { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.2mm 4mm; padding: 2mm; background: #eef4f7; border: 1px solid #cbd8e2; }
-    .meta div span { display: block; color: #65798b; font-size: 7px; text-transform: uppercase; }
-    .meta div strong { display: block; margin-top: 0.4mm; font-size: 9.5px; }
+    .meta div span { display: block; color: #65798b; font-size: 9px; text-transform: uppercase; }
+    .meta div strong { display: block; margin-top: 0.4mm; font-size: 11px; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     .treatment-summary { margin-top: 3mm; }
     th, td { padding: 1mm 1.5mm; border: 1px solid #cbd8e2; vertical-align: top; }
-    th { background: #e8eef5; color: #173a5e; text-align: left; font-size: 8px; }
+    th { background: #e8eef5; color: #173a5e; text-align: left; font-size: 10px; }
     .date-column { width: 27mm; }
     .treatment-list { margin: 0; padding: 0 0 0 4mm; }
     .treatment-list li { margin: 0.4mm 0; }
@@ -88,7 +88,7 @@ export function printHospitalSheet(stay: HospitalStay, organization?: Organizati
   return true;
 }
 
-export function printHospitalBoxSheet(stay: HospitalStay, organization?: OrganizationSettings | null) {
+export function printHospitalBoxSheet(stay: HospitalStay, organization?: OrganizationSettings | null, includeAssignments = false) {
   const printWindow = window.open('', '_blank', 'width=760,height=900');
   if (!printWindow) return false;
 
@@ -155,11 +155,11 @@ export function printHospitalBoxSheet(stay: HospitalStay, organization?: Organiz
       <div class="identity-row patient-row"><span class="identity-label">Кличка животного</span><strong class="identity-value">${escapeHtml(patientName)}</strong></div>
       <div class="identity-row"><span class="identity-label">Диагноз животного</span><strong class="identity-value">${escapeHtml(diagnosis)}</strong></div>
     </section>
-    <div class="section-title">
+    ${includeAssignments ? `<div class="section-title">
       <h1>Назначения на ${escapeHtml(sheetDate)}</h1>
       <div class="section-summary">${occurrences.length} поз.</div>
     </div>
-    ${assignmentMarkup}
+    ${assignmentMarkup}` : ''}
   </main>
   <script>window.setTimeout(() => window.print(), 100);</script>
 </body>
@@ -219,7 +219,7 @@ type OwnerReportGroup = {
   items: string[];
 };
 
-export function groupOwnerReportRecords(records: HospitalRecord[], timeZone: string): OwnerReportGroup[] {
+export function groupOwnerReportRecords(records: HospitalRecord[], timeZone: string, includeNotes = false): OwnerReportGroup[] {
   const completed = records
     .filter((record) => record.recordStatus === 'COMPLETED' && record.recordType !== 'TEMPERATURE')
     .sort((left, right) => new Date(left.completedAt ?? left.recordedAt).getTime() - new Date(right.completedAt ?? right.recordedAt).getTime());
@@ -249,7 +249,7 @@ export function groupOwnerReportRecords(records: HospitalRecord[], timeZone: str
         quantity: (current?.quantity ?? 0) + productAmount.quantity,
       });
     } else {
-      const details = [effective.value, effective.notes].filter(Boolean).join(', ');
+      const details = includeNotes ? [effective.value, effective.notes].filter(Boolean).join(', ') : '';
       day.otherItems.add(details ? `${effective.title} - ${details}` : effective.title);
     }
     days.set(dayKey, day);

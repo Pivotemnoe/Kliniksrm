@@ -146,7 +146,7 @@ export function MedicalTextArea({
           <Typography.Text strong>Личный помощник врача</Typography.Text>
           <div>
             <Typography.Text type="secondary">
-              Предлагает текст только после двух повторов. Решение всегда принимает врач.
+              Предлагает текст после использования в двух разных приёмах. Решение всегда принимает врач.
             </Typography.Text>
           </div>
         </div>
@@ -220,7 +220,7 @@ export function MedicalTextArea({
             <Button size="small" icon={<CheckCircleOutlined />} disabled={disabled} onClick={() => insert('Без особенностей.')} />
           </Tooltip>
           {assistantContent ? (
-            <Popover trigger="click" placement="bottomLeft" content={assistantContent} overlayClassName="medical-assistant-overlay">
+            <Popover trigger="click" placement="bottomLeft" autoAdjustOverflow content={assistantContent} overlayClassName="medical-assistant-overlay">
               <Button size="small" icon={<BulbOutlined />} disabled={disabled} loading={phrasesQuery.isLoading}>
                 Помощник
                 {phrases.some((phrase) => phrase.isSuggested) ? <span className="medical-assistant-dot" /> : null}

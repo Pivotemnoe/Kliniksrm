@@ -389,6 +389,7 @@ function toPrintOrder(visit: Visit, order: VisitLaboratoryOrder) {
         nickname: visit.animal.nickname,
         species: visit.animal.species,
         breed: visit.animal.breed,
+        birthDate: visit.animal.birthDate,
       },
       employee: visit.employee ? { fullName: visit.employee.fullName } : null,
     },

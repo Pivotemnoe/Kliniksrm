@@ -341,56 +341,35 @@ export class MedicalPhrasesService {
     return serializeMedicalPhrase(updated);
   }
 
-  async learnFromText(fields: LearnableTextMap, actor: AuthEmployee) {
-    const operations: Array<Promise<unknown>> = [];
+  async learnFromText(fields: LearnableTextMap, actor: AuthEmployee, visitId: string) {
     const scopeKey = getEmployeeScopeKey(actor.id);
     const now = new Date();
-
-    for (const [field, text] of Object.entries(fields)) {
-      if (!LEARNABLE_FIELDS.has(field)) {
-        continue;
-      }
-
-      for (const candidate of extractCandidates(text)) {
-        const textHash = hashPhrase(candidate);
-
-        operations.push(
-          this.prisma.medicalPhrase.upsert({
-            where: {
-              field_scopeKey_textHash: {
-                field,
-                scopeKey,
-                textHash,
-              },
-            },
-            update: {
-              title: buildTitle(candidate),
-              text: candidate,
-              usageCount: { increment: 1 },
-              lastUsedAt: now,
-            },
+    await this.prisma.$transaction(async (tx) => {
+      for (const [field, text] of Object.entries(fields)) {
+        if (!LEARNABLE_FIELDS.has(field)) continue;
+        for (const candidate of extractCandidates(text)) {
+          const textHash = hashPhrase(candidate);
+          const phrase = await tx.medicalPhrase.upsert({
+            where: { field_scopeKey_textHash: { field, scopeKey, textHash } },
+            update: { lastUsedAt: now },
             create: {
-              field,
-              category: 'Часто использует врач',
-              title: buildTitle(candidate),
-              text: candidate,
-              textHash,
-              source: MedicalPhraseSource.EMPLOYEE,
-              scopeKey,
-              employeeId: actor.id,
-              isActive: true,
-              isAccepted: false,
-              isPinned: false,
-              usageCount: 1,
-              lastUsedAt: now,
+              field, category: 'Часто использует врач', title: buildTitle(candidate), text: candidate,
+              textHash, source: MedicalPhraseSource.EMPLOYEE, scopeKey, employeeId: actor.id,
+              isActive: true, isAccepted: false, isPinned: false, usageCount: 0, learnedVisitCount: 0, lastUsedAt: now,
             },
-          }),
-        );
+          });
+          const evidence = await tx.medicalPhraseLearning.createMany({
+            data: [{ phraseId: phrase.id, visitId }], skipDuplicates: true,
+          });
+          if (evidence.count) await tx.medicalPhrase.update({
+            where: { id: phrase.id },
+            data: { usageCount: { increment: 1 }, learnedVisitCount: { increment: 1 } },
+          });
+        }
       }
-    }
-
-    await Promise.all(operations);
+    });
   }
+
 }
 
 function buildListWhere(
@@ -411,7 +390,7 @@ function buildListWhere(
             {
               employeeId: actor.id,
               dismissedAt: null,
-              OR: [{ isAccepted: true }, { usageCount: { gte: 2 } }],
+              OR: [{ isAccepted: true }, { learnedVisitCount: { gte: 2 } }],
             },
           ]
         : [{ source: { in: [MedicalPhraseSource.SYSTEM, MedicalPhraseSource.DIAGNOSIS_TEMPLATE] } }],
@@ -548,7 +527,7 @@ function serializeMedicalPhrase(phrase: MedicalPhraseWithEmployee) {
     isActive: phrase.isActive,
     isAccepted: phrase.isAccepted,
     isPinned: phrase.isPinned,
-    isSuggested: phrase.source === MedicalPhraseSource.EMPLOYEE && !phrase.isAccepted && phrase.usageCount >= 2,
+    isSuggested: phrase.source === MedicalPhraseSource.EMPLOYEE && !phrase.isAccepted && phrase.learnedVisitCount >= 2,
     dismissedAt: phrase.dismissedAt,
     employee: phrase.employee
       ? {

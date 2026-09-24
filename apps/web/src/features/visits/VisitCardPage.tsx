@@ -18,7 +18,7 @@ import { AnimalVaccinationsTab } from '../animals/AnimalVaccinationsTab';
 import { admitExistingHospitalStay, getHospitalResources } from '../hospital/hospital.api';
 import { getOrganizationSettings } from '../organization/organization.api';
 import { VisitDocumentsTab } from './VisitDocumentsTab';
-import { VisitExamTab } from './VisitExamTab';
+import { VisitExamTab, flushPendingVisitExam } from './VisitExamTab';
 import { VisitHistoryTab } from './VisitHistoryTab';
 import { VisitLaboratoryTab } from './VisitLaboratoryTab';
 import { VisitRecommendationTab } from './VisitRecommendationTab';
@@ -74,12 +74,13 @@ export function VisitCardPage() {
     onError: (error) => message.error(getErrorMessage(error)),
   });
   const actionMutation = useMutation({
-    mutationFn: (action: 'start' | 'complete' | 'cancel') => {
+    mutationFn: async (action: 'start' | 'complete' | 'cancel') => {
       if (action === 'start') {
         return startVisit(visitId!);
       }
 
       if (action === 'complete') {
+        if (visitQuery.data) await flushPendingVisitExam(visitQuery.data);
         return completeVisit(visitId!);
       }
 
@@ -195,8 +196,8 @@ export function VisitCardPage() {
                 Завершить
               </Button>
             ) : null}
-            {visit.status === 'DRAFT' || visit.status === 'IN_PROGRESS' ? (
-              <Button danger icon={<CloseOutlined />} loading={actionMutation.isPending} onClick={() => actionMutation.mutate('cancel')}>
+            {visit.status === 'DRAFT' || visit.status === 'IN_PROGRESS' || (visit.status === 'COMPLETED' && !isVisitLockedForEditing(visit, auth?.employee)) ? (
+              <Button danger icon={<CloseOutlined />} loading={actionMutation.isPending} onClick={() => modal.confirm({ title: 'Отменить приём?', content: 'Приём останется в истории с отметкой об отмене. Неоплаченный счёт будет отменён.', okText: 'Отменить приём', cancelText: 'Оставить', okButtonProps: { danger: true }, onOk: () => actionMutation.mutateAsync('cancel') })}>
                 Отменить
               </Button>
             ) : null}
@@ -387,8 +388,8 @@ export function VisitCardPage() {
                     Завершить
                   </Button>
                 ) : null}
-                {visit.status === 'DRAFT' || visit.status === 'IN_PROGRESS' ? (
-                  <Button danger icon={<CloseOutlined />} loading={actionMutation.isPending} onClick={() => actionMutation.mutate('cancel')}>
+                {visit.status === 'DRAFT' || visit.status === 'IN_PROGRESS' || (visit.status === 'COMPLETED' && !isVisitLockedForEditing(visit, auth?.employee)) ? (
+                  <Button danger icon={<CloseOutlined />} loading={actionMutation.isPending} onClick={() => modal.confirm({ title: 'Отменить приём?', content: 'Приём останется в истории с отметкой об отмене. Неоплаченный счёт будет отменён.', okText: 'Отменить приём', cancelText: 'Оставить', okButtonProps: { danger: true }, onOk: () => actionMutation.mutateAsync('cancel') })}>
                     Отменить
                   </Button>
                 ) : null}

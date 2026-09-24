@@ -1,6 +1,6 @@
 import { ExclamationCircleOutlined, EyeOutlined, MedicineBoxOutlined, MessageOutlined, NotificationOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Drawer, List, Space, Tag, Typography } from 'antd';
+import { App, Button, Drawer, List, Space, Tag, Typography } from 'antd';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getErrorMessage } from '../api/errors';
@@ -60,7 +60,7 @@ export function GlobalOperationalAlerts({
   if (!alertsUnavailable && !remoteAccessMode && !latestUnreadConversation && !overdueVisits.length && !vaccinationAlerts.length && !otherUnreadAlerts.length) return null;
 
   return (
-    <div className="global-operational-alerts" aria-label="Рабочие предупреждения клиники">
+    <div className="global-operational-alerts compact-operational-alerts" aria-label="Рабочие предупреждения клиники">
       {alertsUnavailable ? (
         <div className="dashboard-overdue-banner dashboard-vaccination-banner-danger" role="alert">
           <span className="dashboard-overdue-banner-copy">
@@ -78,7 +78,7 @@ export function GlobalOperationalAlerts({
         </div>
       ) : null}
       {remoteAccessMode && !clinicalOnly ? (
-        <div className="dashboard-overdue-banner remote-read-only-banner" role="status">
+        <div className="dashboard-overdue-banner remote-read-only-banner" role="status" title={remoteAccessMode === 'director' ? 'Изменения разрешены по вашим правам и сохраняются в аудите' : 'Удалённый просмотр: изменение рабочих данных заблокировано'}>
           <span className="dashboard-overdue-banner-copy">
             <EyeOutlined />
             <strong>{remoteAccessMode === 'director' ? 'Удалённая работа директора' : 'Удалённый просмотр'}</strong>
@@ -105,13 +105,14 @@ export function GlobalOperationalAlerts({
       {otherUnreadAlerts.map((item) => (
         <button
           key={item.key}
+          title={`${item.title}: ${item.description}`}
           type="button"
           className={`dashboard-overdue-banner staff-notice-banner${item.severity === 'error' ? ' dashboard-vaccination-banner-danger' : item.severity === 'warning' ? ' dashboard-vaccination-banner' : ''}`}
           onClick={() => void openAlert(item)}
         >
           <span className="dashboard-overdue-banner-copy">
             <NotificationOutlined />
-            <strong>{item.title}</strong>
+            <strong>{item.title}{item.count > 1 ? ` · ${item.count}` : ''}</strong>
             <span>{item.description}</span>
           </span>
           <span className="dashboard-overdue-banner-action">Открыть</span>
@@ -179,18 +180,22 @@ function VaccinationAlertsList({
         <Typography.Title level={5}>{title}</Typography.Title>
         <Tag color={danger ? 'red' : 'gold'}>{items.length}</Tag>
       </Space>
-      <List
-        bordered
-        dataSource={items}
-        renderItem={(item) => (
-          <List.Item className="global-vaccination-item" onClick={() => void onOpen(item)}>
-            <List.Item.Meta
-              title={item.title}
-              description={`${item.description} · ${formatDate(item.occurredAt)}`}
-            />
-          </List.Item>
-        )}
-      />
+      {Array.from(new Set(items.map(item => item.vaccination?.ownerId ?? item.key))).map(ownerKey => {
+        const ownerItems = items.filter(item => (item.vaccination?.ownerId ?? item.key) === ownerKey);
+        return <section className="vaccination-owner-group" key={ownerKey}>
+          {ownerItems[0].vaccination ? <Typography.Text strong>{ownerItems[0].vaccination.ownerName}</Typography.Text> : null}
+          <List dataSource={ownerItems} renderItem={item => (
+            <List.Item>
+              <List.Item.Meta
+                title={<Button type="link" onClick={() => void onOpen(item)}>{item.vaccination?.animalName ?? item.title}</Button>}
+                description={item.vaccination
+                  ? <ul>{item.vaccination.vaccines.map(vaccine => <li key={vaccine.id}>{vaccine.title} · {formatDate(vaccine.dueAt)}</li>)}</ul>
+                  : `${item.description} · ${formatDate(item.occurredAt)}`}
+              />
+            </List.Item>
+          )} />
+        </section>;
+      })}
     </section>
   );
 }

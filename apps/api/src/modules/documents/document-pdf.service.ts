@@ -143,7 +143,8 @@ function drawStructuredDocument(
     }
   }
 
-  for (const block of layout.blocks) drawLayoutBlock(document, block, layout);
+  layout.blocks.forEach((block, index) => drawLayoutBlock(document, block, layout,
+    layout.page.showSignatures && index === layout.blocks.length - 1 ? 82 : 0));
 
   if (!layout.blocks.length) {
     document.font('Roboto').fontSize(layout.page.fontSize).fillColor('#17202a').text(snapshot.body || '—', left, document.y, {
@@ -175,7 +176,7 @@ function drawVisitMeta(document: PDFKit.PDFDocument, snapshot: DocumentPdfSnapsh
   drawMeta(document, left, top + 76, 'Вид / порода / пол', snapshot.animalDescription || '—', width);
 }
 
-function drawLayoutBlock(document: PDFKit.PDFDocument, block: DocumentLayoutBlock, layout: DocumentLayout) {
+function drawLayoutBlock(document: PDFKit.PDFDocument, block: DocumentLayoutBlock, layout: DocumentLayout, reserveAfter = 0) {
   if (block.type === 'pageBreak') {
     document.addPage();
     return;
@@ -186,7 +187,7 @@ function drawLayoutBlock(document: PDFKit.PDFDocument, block: DocumentLayoutBloc
     return;
   }
   if (block.type === 'table') {
-    drawTable(document, block.rows, block.headerRows, layout.page.fontSize);
+    drawTable(document, block.rows, block.headerRows, layout.page.fontSize, reserveAfter + 12);
     document.moveDown(0.6);
     return;
   }
@@ -210,44 +211,42 @@ function drawLayoutBlock(document: PDFKit.PDFDocument, block: DocumentLayoutBloc
   document.moveDown(0.45);
 }
 
-function drawTable(document: PDFKit.PDFDocument, rows: string[][], headerRows: number, fontSize: number) {
+function drawTable(document: PDFKit.PDFDocument, rows: string[][], headerRows: number, fontSize: number, reserveAfter = 0) {
   if (!rows.length) return;
   const left = document.page.margins.left;
-  const width = contentWidth(document);
-  const columns = Math.max(1, rows[0]?.length ?? 1);
-  const cellWidth = width / columns;
+  const columns = Math.max(1, ...rows.map(row => row.length));
+  const cellWidth = contentWidth(document) / columns;
   const padding = 5;
-
-  rows.forEach((row, rowIndex) => {
-    document
-      .font(rowIndex < headerRows ? 'Roboto-Bold' : 'Roboto')
-      .fontSize(Math.max(8, Math.min(fontSize, 12)));
-    const rowHeight = Math.max(
-      24,
-      ...row.map((cell) =>
-        document.heightOfString(cell || ' ', {
-          width: cellWidth - padding * 2,
-          lineGap: 1,
-        }),
-      ),
-    ) + padding * 2;
-    ensureVerticalSpace(document, rowHeight);
+  const size = Math.max(8, Math.min(fontSize, 12));
+  const headers = rows.slice(0, headerRows);
+  function rowHeight(row: string[], header: boolean) {
+    document.font(header ? 'Roboto-Bold' : 'Roboto').fontSize(size);
+    return Math.max(24, ...row.map(cell => document.heightOfString(cell || ' ', { width: cellWidth - padding * 2, lineGap: 1 }))) + padding * 2;
+  }
+  function drawRow(row: string[], header: boolean) {
+    const height = rowHeight(row, header);
     const top = document.y;
-    row.forEach((cell, columnIndex) => {
+    Array.from({ length: columns }, (_, i) => row[i] ?? '').forEach((cell, columnIndex) => {
       const x = left + columnIndex * cellWidth;
-      if (rowIndex < headerRows) document.save().fillColor('#eef5f6').rect(x, top, cellWidth, rowHeight).fill().restore();
-      document.strokeColor('#9aabb8').lineWidth(0.45).rect(x, top, cellWidth, rowHeight).stroke();
-      document
-        .font(rowIndex < headerRows ? 'Roboto-Bold' : 'Roboto')
-        .fontSize(Math.max(8, Math.min(fontSize, 12)))
-        .fillColor('#17202a')
-        .text(cell || ' ', x + padding, top + padding, {
-          width: cellWidth - padding * 2,
-          height: rowHeight - padding * 2,
-          lineGap: 1,
-        });
+      if (header) document.save().fillColor('#eef5f6').rect(x, top, cellWidth, height).fill().restore();
+      document.strokeColor('#9aabb8').lineWidth(0.45).rect(x, top, cellWidth, height).stroke();
+      document.font(header ? 'Roboto-Bold' : 'Roboto').fontSize(size).fillColor('#17202a')
+        .text(cell || ' ', x + padding, top + padding, { width: cellWidth - padding * 2, height: height - padding * 2, lineGap: 1 });
     });
-    document.y = top + rowHeight;
+    document.y = top + height;
+  }
+  rows.forEach((row, index) => {
+    const header = index < headerRows;
+    const height = rowHeight(row, header);
+    const reserve = index === rows.length - 1 ? reserveAfter : 0;
+    const bottom = document.page.height - document.page.margins.bottom - 18;
+    // Keep the initial header with its first data row and repeat it on continuation pages.
+    const firstDataHeight = index === 0 ? rows.slice(1, headerRows + 1).reduce((sum, item, i) => sum + rowHeight(item, i + 1 < headerRows), 0) : 0;
+    if (document.y + height + reserve + firstDataHeight > bottom) {
+      document.addPage();
+      if (!header) headers.forEach(item => drawRow(item, true));
+    }
+    drawRow(row, header);
   });
 }
 

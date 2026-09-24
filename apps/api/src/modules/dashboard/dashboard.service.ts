@@ -171,7 +171,6 @@ export class DashboardService {
       this.prisma.product.findMany({
         where: { isActive: true, minStock: { not: null } },
         orderBy: { title: 'asc' },
-        take: 200,
         select: {
           id: true,
           title: true,
@@ -186,7 +185,6 @@ export class DashboardService {
       this.prisma.stockBatch.findMany({
         where: { rest: { gt: 0 }, expiresAt: { gte: start, lte: expiringUntil } },
         orderBy: { expiresAt: 'asc' },
-        take: 6,
         select: {
           id: true,
           rest: true,
@@ -241,8 +239,7 @@ export class DashboardService {
         };
       })
       .filter((product) => product.minStock !== null && product.rest <= product.minStock)
-      .sort((a, b) => a.rest - b.rest)
-      .slice(0, 6);
+      .sort((a, b) => a.rest - b.rest);
 
     const canRead = (permission: string) => actor.permissions.includes('*') || actor.permissions.includes(permission);
 
@@ -295,8 +292,8 @@ export class DashboardService {
       stock: canRead('stock.read') ? {
         lowStockProducts: lowStockProducts.length,
         expiringBatches: expiringBatches.length,
-        lowStockItems: lowStockProducts,
-        expiringItems: expiringBatches,
+        lowStockItems: lowStockProducts.slice(0, 6),
+        expiringItems: expiringBatches.slice(0, 6),
       } : { lowStockProducts: 0, expiringBatches: 0, lowStockItems: [], expiringItems: [] },
       onlineRequests: canRead('appointments.read') ? {
         newRequests: onlineNew,

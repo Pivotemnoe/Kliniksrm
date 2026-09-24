@@ -86,7 +86,7 @@ test('личный помощник предлагает после двух п�
   assert.match(schema, /medicalPhraseAssistantEnabled\s+Boolean\s+@default\(true\)/);
   assert.match(controller, /@Patch\('personal\/settings'\)/);
   assert.match(controller, /@Patch\('personal\/:phraseId'\)/);
-  assert.match(service, /usageCount: \{ gte: 2 \}/);
+  assert.match(service, /learnedVisitCount: \{ gte: 2 \}/);
   assert.match(service, /action === 'ACCEPT'/);
   assert.match(service, /action === 'REJECT'/);
   assert.match(service, /action === 'PIN'/);

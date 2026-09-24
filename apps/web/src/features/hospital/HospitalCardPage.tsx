@@ -8,7 +8,7 @@ import {
   SwapOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Descriptions, Form, Input, Modal, Radio, Select, Space, Table, Tag, Typography } from 'antd';
+import { Alert, App, Button, Checkbox, Descriptions, Dropdown, Form, Input, Modal, Radio, Select, Space, Table, Tag, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';
@@ -73,6 +73,8 @@ export function HospitalCardPage() {
   const canManageDocuments = hasPermission(auth?.employee, 'documents.manage');
   const canPrint = hasPermission(auth?.employee, 'documents.print');
   const [recordOpen, setRecordOpen] = useState(false);
+  const [boxPrintOpen, setBoxPrintOpen] = useState(false);
+  const [boxPrintAssignments, setBoxPrintAssignments] = useState(false);
   const [treatmentPlanOpen, setTreatmentPlanOpen] = useState(false);
   const [laboratoryOpen, setLaboratoryOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<HospitalRecord | null>(null);
@@ -234,18 +236,25 @@ export function HospitalCardPage() {
           <Space wrap>
             <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/hospital')}>К стационару</Button>
             {stay ? <Button icon={<FileTextOutlined />} onClick={() => navigate(`/visits/${stay.sourceVisitId}`)}>Открыть исходный приём</Button> : null}
-            {stay && canPrint ? <Button icon={<PrinterOutlined />} onClick={() => {
-              if (!printHospitalBoxSheet(stay, organizationQuery.data)) message.warning('Браузер заблокировал окно печати');
-            }}>Лист для бокса</Button> : null}
-            {stay && canPrint ? <Button icon={<PrinterOutlined />} onClick={() => {
+            {stay && canPrint ? <Button icon={<PrinterOutlined />} onClick={() => setBoxPrintOpen(true)}>Лист для бокса</Button> : null}
+            {stay && canPrint ? <Dropdown.Button icon={<PrinterOutlined />} menu={{ items: [{ key: 'notes', label: 'С заметками', onClick: () => {
+              if (!printHospitalSheet(stay, organizationQuery.data, true)) message.warning('Браузер заблокировал окно печати');
+            } }] }} onClick={() => {
               if (!printHospitalSheet(stay, organizationQuery.data)) message.warning('Браузер заблокировал окно печати');
-            }}>Отчёт владельцу / PDF</Button> : null}
+            }}>Отчёт владельцу / PDF</Dropdown.Button> : null}
             {canManage && active ? <Button icon={<ExperimentOutlined />} onClick={() => setLaboratoryOpen(true)}>Добавить анализ</Button> : null}
             {canManage && active ? <Button icon={<PlusOutlined />} onClick={() => setTreatmentPlanOpen(true)}>Назначить план лечения</Button> : null}
             {canManage && active ? <Button type="primary" icon={<PlusOutlined />} onClick={() => openNewRecord('COMPLETED')}>Записать выполненное действие</Button> : null}
           </Space>
         }
       />
+      <Modal title="Лист для бокса" open={boxPrintOpen} onCancel={() => setBoxPrintOpen(false)} okText="Печать" cancelText="Назад" onOk={() => {
+        if (stay && printHospitalBoxSheet(stay, organizationQuery.data, boxPrintAssignments)) setBoxPrintOpen(false);
+        else message.warning('Браузер заблокировал окно печати');
+      }}>
+        <Typography.Paragraph>Номер бокса, ФИО владельца, кличка и диагноз животного печатаются всегда.</Typography.Paragraph>
+        <Checkbox checked={boxPrintAssignments} onChange={event => setBoxPrintAssignments(event.target.checked)}>Печатать назначения и препараты</Checkbox>
+      </Modal>
       {stay ? (
         <>
           <div className="list-panel hospital-summary-panel">

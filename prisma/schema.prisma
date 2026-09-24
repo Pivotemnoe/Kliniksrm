@@ -1153,6 +1153,7 @@ model Visit {
   overdueAlert     VisitOverdueAlert?
   vaccinations     Vaccination[]
   practiceObservation PracticeObservation?
+  phraseLearning MedicalPhraseLearning[]
   createdAt        DateTime                @default(now())
   updatedAt        DateTime                @updatedAt
 
@@ -1343,6 +1344,8 @@ model MedicalPhrase {
   isPinned    Boolean             @default(false)
   dismissedAt DateTime?
   usageCount  Int                 @default(0)
+  learnedVisitCount Int           @default(0)
+  learnedVisits MedicalPhraseLearning[]
   lastUsedAt  DateTime?
   createdAt   DateTime            @default(now())
   updatedAt   DateTime            @updatedAt
@@ -1353,6 +1356,17 @@ model MedicalPhrase {
   @@index([employeeId, field])
   @@index([diagnosis])
   @@index([species])
+}
+
+model MedicalPhraseLearning {
+  phraseId String
+  visitId String
+  phrase MedicalPhrase @relation(fields: [phraseId], references: [id], onDelete: Cascade)
+  visit Visit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([phraseId, visitId])
+  @@index([visitId])
 }
 
 model VisitDocument {

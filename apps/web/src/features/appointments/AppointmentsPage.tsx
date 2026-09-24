@@ -138,23 +138,14 @@ export function AppointmentsPage() {
         key: 'status',
         render: (value: AppointmentStatus) => <Tag color={appointmentStatusColors[value]}>{appointmentStatusLabels[value]}</Tag>,
       },
-      { title: 'Комментарий', dataIndex: 'comment', key: 'comment', ellipsis: true, render: (value: string | null) => value || '—' },
+      { title: 'Комментарий', dataIndex: 'comment', key: 'comment', render: (value: string | null) => value || '—' },
     ],
     [navigate],
   );
 
   return (
     <div className="page">
-      <PageHeader
-        title={isPersonalSchedule ? 'Моё расписание' : 'Расписание'}
-        extra={
-          canManage ? (
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-              Записать на приём
-            </Button>
-          ) : null
-        }
-      />
+      <PageHeader title={isPersonalSchedule ? 'Моё расписание' : 'Расписание'} />
       <AppointmentsWeekBoard
         days={weekDays}
         selectedDate={date}

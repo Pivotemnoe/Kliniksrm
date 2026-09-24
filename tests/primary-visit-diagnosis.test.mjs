@@ -23,7 +23,7 @@ test('первичный приём не завершается без диаг�
   assert.doesNotThrow(() => assertPrimaryVisitDiagnosesReady({ visitType: 'POST_OPERATION' }, []));
 });
 
-test('запрет нельзя обойти сохранением осмотра, прямым PATCH или переводом в стационар', async () => {
+test('запрет завершения нельзя обойти прямым PATCH или переводом в стационар', async () => {
   const [visits, hospital] = await Promise.all([
     read('apps/api/src/modules/visits/visits.service.ts'),
     read('apps/api/src/modules/hospital/hospital.service.ts'),
@@ -31,7 +31,7 @@ test('запрет нельзя обойти сохранением осмотр
 
   assert.match(visits, /dto\.status === VisitStatus\.COMPLETED[\s\S]*ensurePrimaryVisitDiagnosesReady/);
   assert.match(visits, /status === VisitStatus\.COMPLETED[\s\S]*ensurePrimaryVisitDiagnosesReady/);
-  assert.match(visits, /async upsertExam[\s\S]*ensurePrimaryVisitDiagnosesReady\(visit\)/);
+  assert.doesNotMatch(visits.slice(visits.indexOf('async upsertExam'), visits.indexOf('async upsertRecommendation')), /ensurePrimaryVisitDiagnosesReady/);
   assert.match(hospital, /assertPrimaryVisitDiagnosesReady\([\s\S]*visit\.diagnoses/);
 });
 

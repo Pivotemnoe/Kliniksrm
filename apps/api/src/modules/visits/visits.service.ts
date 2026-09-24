@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
   AppointmentStatus,
   BillSource,
@@ -46,6 +46,7 @@ const COMPLETED_VISIT_EDIT_GRACE_MS = 60 * 60 * 1000;
 
 @Injectable()
 export class VisitsService {
+  private readonly logger = new Logger(VisitsService.name);
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
@@ -393,9 +394,15 @@ export class VisitsService {
   async upsertExam(visitId: string, dto: UpsertVisitExamDto, actor: AuthEmployee) {
     const visit = await this.getExistingVisit(visitId);
     ensureVisitEditable(visit, actor);
-    await this.ensurePrimaryVisitDiagnosesReady(visit);
-
+    // Draft persistence must work before a diagnosis is ready; completion remains guarded.
+    let weightRecorded = false;
     const exam = await this.prisma.$transaction(async (tx) => {
+      // Serialize retries from different tabs before comparing the visit's last weight.
+      if (dto.weightKg !== undefined) {
+        await tx.$queryRaw`SELECT "id" FROM "Visit" WHERE "id" = ${visitId} FOR UPDATE`;
+        const previous = await tx.visitExam.findUnique({ where: { visitId }, select: { weightKg: true } });
+        weightRecorded = previous?.weightKg == null || !new Prisma.Decimal(previous.weightKg).equals(dto.weightKg);
+      }
       const savedExam = await tx.visitExam.upsert({
         where: { visitId },
         create: {
@@ -421,11 +428,11 @@ export class VisitsService {
         },
       });
 
-      if (dto.weightKg !== undefined) {
+      if (weightRecorded) {
         await tx.animalWeightRecord.create({
           data: {
             animalId: visit.animalId,
-            weightKg: dto.weightKg,
+            weightKg: dto.weightKg!,
             measuredAt: new Date(),
           },
         });
@@ -439,10 +446,10 @@ export class VisitsService {
       action: 'visit_exam.upsert',
       entityType: 'Visit',
       entityId: visitId,
-      metadata: { changedFields: Object.keys(dto), weightRecorded: dto.weightKg !== undefined },
+      metadata: { changedFields: Object.keys(dto), weightRecorded },
     });
 
-    await this.medicalPhrasesService.learnFromText(
+    await this.learnPhrasesSafely(visitId,
       {
         'visit.exam.purpose': dto.purpose,
         'visit.exam.anamnesis': dto.anamnesis,
@@ -484,7 +491,7 @@ export class VisitsService {
       metadata: { changedFields: Object.keys(dto) },
     });
 
-    await this.medicalPhrasesService.learnFromText(
+    await this.learnPhrasesSafely(visitId,
       {
         'visit.recommendation.treatmentPlan': dto.treatmentPlan,
         'visit.recommendation.careNotes': dto.careNotes,
@@ -495,6 +502,14 @@ export class VisitsService {
     await this.syncCompletedVisitSnapshot(visit, actor.id);
 
     return recommendation;
+  }
+
+  private async learnPhrasesSafely(visitId: string, fields: Parameters<MedicalPhrasesService['learnFromText']>[0], actor: AuthEmployee) {
+    try {
+      await this.medicalPhrasesService.learnFromText(fields, actor, visitId);
+    } catch {
+      this.logger.warn('Optional phrase learning failed; clinical data has been saved');
+    }
   }
 
   async createDiagnosis(visitId: string, dto: CreateVisitDiagnosisDto, actor: AuthEmployee) {
@@ -1106,6 +1121,10 @@ export class VisitsService {
     });
 
     assertPrimaryVisitDiagnosesReady(visit, diagnoses);
+    if (visit.visitType === 'PRIMARY') {
+      const exam = await this.prisma.visitExam.findUnique({ where: { visitId: visit.id }, select: { examination: true } });
+      if (!exam?.examination?.trim()) throw new BadRequestException('Заполните текст осмотра перед завершением первичного приёма');
+    }
   }
 
   private async resolveVisitCreationData(dto: CreateVisitDto, actor: AuthEmployee): Promise<VisitCreationData> {

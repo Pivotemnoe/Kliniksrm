@@ -56,25 +56,25 @@ export function buildLaboratoryOrderPrintHtml(
   <title>${escapeHtml(`Лабораторный бланк — ${order.visit.animal.nickname}`)}</title>
   <style>
     * { box-sizing: border-box; }
-    html, body { margin: 0; padding: 0; color: #142033; background: #fff; font: 8px/1.22 Arial, sans-serif; }
+    html, body { margin: 0; padding: 0; color: #142033; background: #fff; font: 11px/1.3 Arial, sans-serif; }
     .lab-page { width: 148mm; min-height: 210mm; margin: 0 auto; padding: 6mm; break-after: page; page-break-after: always; }
     .lab-page:last-child { break-after: auto; page-break-after: auto; }
     .lab-header { display: grid; grid-template-columns: 14mm 1fr; gap: 3mm; align-items: center; padding-bottom: 2.5mm; border-bottom: 1.2px solid #21848d; }
     .lab-logo { width: 13mm; height: 13mm; object-fit: contain; }
     .lab-brand { color: #153958; font-size: 13px; font-weight: 700; }
-    .lab-contact { color: #637184; font-size: 7px; }
+    .lab-contact { color: #637184; font-size: 9px; }
     h1 { margin: 3mm 0 2mm; color: #153958; font-size: 13px; line-height: 1.12; }
     .lab-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 1mm 3mm; margin-bottom: 2.5mm; padding: 2mm; border: .6px solid #ccd7df; border-radius: 1.5mm; }
     .lab-meta div { display: grid; grid-template-columns: 17mm 1fr; gap: 1mm; }
     .lab-meta span { color: #6b7888; }
     .lab-comment { margin: 0 0 2mm; padding: 1.5mm; border-left: 1.5px solid #21848d; background: #f4f8fa; white-space: pre-wrap; }
     .lab-text { margin: 0 0 1.5mm; white-space: pre-wrap; overflow-wrap: anywhere; }
-    .lab-table { width: 100%; margin: 0 0 2mm; border-collapse: collapse; table-layout: fixed; font-size: 6.6px; line-height: 1.14; }
+    .lab-table { width: 100%; margin: 0 0 2mm; border-collapse: collapse; table-layout: fixed; font-size: 10.5px; line-height: 1.25; }
     .lab-table th, .lab-table td { padding: .75mm .65mm; border: .45px solid #8998a6; text-align: left; vertical-align: top; overflow-wrap: anywhere; white-space: pre-wrap; }
     .lab-table th { background: #eaf3f5; color: #153958; font-weight: 700; }
     .lab-spacer { min-height: 1mm; }
     .lab-signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 8mm; margin-top: 5mm; }
-    .lab-signature { padding-top: 4mm; border-top: .6px solid #64748b; color: #64748b; font-size: 7px; }
+    .lab-signature { padding-top: 4mm; border-top: .6px solid #64748b; color: #64748b; font-size: 9px; }
     @page { size: A5 portrait; margin: 0; }
     .print-controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:12px; font:14px Arial,sans-serif; background:#eef3f7; }
     @media print { .print-controls { display:none; } .lab-page { padding: 6mm; min-height:0; } tr { break-inside: avoid; } }
@@ -90,7 +90,9 @@ export function buildLaboratoryOrderPrintHtml(
     const updatePaper = () => {
       const size = document.getElementById('paper-size').value === 'A4' ? 'A4' : 'A5';
       const orientation = document.getElementById('paper-orientation').value === 'landscape' ? 'landscape' : 'portrait';
-      document.getElementById('paper-settings').textContent = '@page { size: ' + size + ' ' + orientation + '; margin: 0; }';
+      const widths = size === 'A4' ? [210, 297] : [148, 210];
+      const paperWidth = widths[orientation === 'landscape' ? 1 : 0];
+      document.getElementById('paper-settings').textContent = '@page { size: ' + size + ' ' + orientation + '; margin: 0; } .lab-page { width: ' + paperWidth + 'mm; min-height: 0; }';
     };
     document.getElementById('paper-size').addEventListener('change', updatePaper);
     document.getElementById('paper-orientation').addEventListener('change', updatePaper);
@@ -175,16 +177,21 @@ function renderLayout(layout: DocumentLayout, order: LaboratoryPrintOrder) {
     if (block.type === 'pageBreak') return '<div style="break-before:page;page-break-before:always"></div>';
     if (block.type === 'spacer') return `<div class="lab-spacer" style="height:${Math.max(4, block.height) / 4}px"></div>`;
     if (block.type === 'text') {
-      return `<div class="lab-text" style="font-size:${Math.max(6.5, block.fontSize * .68)}px;font-weight:${block.bold ? 700 : 400};font-style:${block.italic ? 'italic' : 'normal'};text-align:${block.align}">${escapeHtml(renderTokens(block.text, order) || ' ')}</div>`;
+      return `<div class="lab-text" style="font-size:${Math.max(10, block.fontSize * .85)}px;font-weight:${block.bold ? 700 : 400};font-style:${block.italic ? 'italic' : 'normal'};text-align:${block.align}">${escapeHtml(renderTokens(block.text, order) || ' ')}</div>`;
     }
-    const rows = block.rows
-      .filter((row) => row.some((cell) => cell.trim()))
-      .map((row, rowIndex) => `<tr>${row.map((cell) => {
-        const tag = rowIndex < block.headerRows ? 'th' : 'td';
-        return `<${tag}>${escapeHtml(renderTokens(cell, order) || ' ')}</${tag}>`;
-      }).join('')}</tr>`)
-      .join('');
-    return rows ? `<table class="lab-table"><tbody>${rows}</tbody></table>` : '';
+    const resolvedRows = block.rows.map(row => row.map(cell => renderTokens(cell, order)));
+    const nonemptyColumns = Array.from({ length: Math.max(0, ...resolvedRows.map(row => row.length)) }, (_, i) => i)
+      .filter(i => resolvedRows.some(row => row[i]?.trim()));
+    const renderRows = (rows: string[][], header: boolean) => rows
+      .map(row => nonemptyColumns.map(i => row[i] ?? ''))
+      .filter(row => row.some(cell => cell.trim()))
+      .map(row => `<tr>${row.map(cell => {
+        const tag = header ? 'th' : 'td';
+        return `<${tag}>${escapeHtml(cell || ' ')}</${tag}>`;
+      }).join('')}</tr>`).join('');
+    const header = renderRows(resolvedRows.slice(0, block.headerRows), true);
+    const body = renderRows(resolvedRows.slice(block.headerRows), false);
+    return header || body ? `<table class="lab-table"><thead>${header}</thead><tbody>${body}</tbody></table>` : '';
   }).join('');
 }
 

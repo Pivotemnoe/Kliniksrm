@@ -27,6 +27,8 @@ const examSchema = z.object({
   comment: optionalString(2000),
 });
 
+const examSaveQueues = new Map<string, Promise<unknown>>();
+
 type ExamValues = z.infer<typeof examSchema>;
 type ExamInput = z.input<typeof examSchema>;
 
@@ -46,9 +48,9 @@ export function VisitExamTab({ visit, canManage, locked, recommendationDraft, on
     defaultValues: getDefaultValues(visit),
   });
   const disabled = locked || !canManage;
+  const savingRef = useRef(false);
   const draftKey = `temichevvet:visit-exam-draft:${visit.id}`;
   const assistantSuppressionKey = `temichevvet:visit-exam-assistant-suppressed:${visit.id}`;
-  const saveChainRef = useRef<Promise<unknown>>(Promise.resolve());
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const assistantTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [autoSaveState, setAutoSaveState] = useState<'idle' | 'local' | 'saving' | 'saved'>('idle');
@@ -57,7 +59,7 @@ export function VisitExamTab({ visit, canManage, locked, recommendationDraft, on
   const [assistantSuppressed, setAssistantSuppressed] = useState(() => readAssistantSuppression(assistantSuppressionKey));
   const mutation = useMutation({
     mutationFn: (request: { values: ExamValues; silent: boolean; snapshot: string }) => {
-      const run = saveChainRef.current.then(async () => {
+      const run = (examSaveQueues.get(visit.id) ?? Promise.resolve()).catch(() => undefined).then(async () => {
         const { visitType, ...examValues } = request.values;
 
         if (visitType && visitType !== visit.visitType) {
@@ -67,10 +69,12 @@ export function VisitExamTab({ visit, canManage, locked, recommendationDraft, on
         const exam = await upsertVisitExam(visit.id, examValues);
         return { exam, visitType };
       });
-      saveChainRef.current = run.then(() => undefined, () => undefined);
+      examSaveQueues.set(visit.id, run);
+      void run.finally(() => { if (examSaveQueues.get(visit.id) === run) examSaveQueues.delete(visit.id); }).catch(() => undefined);
       return run;
     },
     onMutate: (request) => {
+      savingRef.current = true;
       if (request.silent) setAutoSaveState('saving');
     },
     onSuccess: async (result, request) => {
@@ -82,7 +86,7 @@ export function VisitExamTab({ visit, canManage, locked, recommendationDraft, on
       clearDraftIfCurrent(draftKey, request.snapshot);
 
       if (request.silent) {
-        setAutoSaveState('saved');
+        setAutoSaveState(readExamDraft(draftKey) ? 'local' : 'saved');
         return;
       }
 
@@ -92,10 +96,11 @@ export function VisitExamTab({ visit, canManage, locked, recommendationDraft, on
         queryClient.invalidateQueries({ queryKey: ['animals', visit.animalId] }),
         queryClient.invalidateQueries({ queryKey: ['medical-phrases'] }),
       ]);
-      setAutoSaveState('saved');
+      setAutoSaveState(readExamDraft(draftKey) ? 'local' : 'saved');
       message.success('Лист осмотра сохранён');
     },
     onError: () => setAutoSaveState('local'),
+    onSettled: () => { savingRef.current = false; },
   });
   const statusMutation = useMutation({
     mutationFn: (status: string) => updateAnimal(visit.animalId, { status }),
@@ -120,6 +125,8 @@ export function VisitExamTab({ visit, canManage, locked, recommendationDraft, on
       setAutoSaveState('local');
     } else {
       reset(serverValues);
+      // A draft superseded by the server must not be replayed by the retry effect.
+      if (draft) clearDraftIfCurrent(draftKey, JSON.stringify(draft.values));
     }
   // The form must only be rehydrated when another visit is opened.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -150,6 +157,27 @@ export function VisitExamTab({ visit, canManage, locked, recommendationDraft, on
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     };
   }, [disabled, draftKey, watch]);
+
+  useEffect(() => {
+    if (disabled) return;
+    const retryDraft = () => {
+      if (savingRef.current) return;
+      const draft = readExamDraft(draftKey);
+      if (!draft) return;
+      const parsed = examSchema.safeParse(draft.values);
+      if (parsed.success) mutation.mutate({ values: parsed.data, silent: true, snapshot: JSON.stringify(draft.values) });
+    };
+    // Recovered drafts and interrupted requests are retried without another keystroke.
+    retryDraft();
+    const retryTimer = window.setInterval(retryDraft, 15_000);
+    window.addEventListener('online', retryDraft);
+    window.addEventListener('focus', retryDraft);
+    return () => {
+      window.clearInterval(retryTimer);
+      window.removeEventListener('online', retryDraft);
+      window.removeEventListener('focus', retryDraft);
+    };
+  }, [disabled, draftKey]);
 
   const watchedExamValues = watch();
   const practiceQuery = useQuery({
@@ -193,8 +221,14 @@ export function VisitExamTab({ visit, canManage, locked, recommendationDraft, on
     if (diagnosisIssue) {
       modal.warning({
         title: diagnosisIssue,
-        content: 'Добавьте диагноз и выберите его тип. После этого сохраните лист осмотра.',
-        okText: 'Понятно',
+        content: 'Добавьте диагноз и выберите его тип. Автосохранение листа осмотра продолжает работать.',
+        okText: 'К диагнозам',
+        focusTriggerAfterClose: false,
+        afterClose: () => {
+          const section = document.getElementById('visit-diagnoses');
+          section?.scrollIntoView({ behavior: 'instant', block: 'center' });
+          section?.querySelector<HTMLInputElement>('input')?.focus({ preventScroll: true });
+        },
       });
       return;
     }
@@ -306,7 +340,7 @@ export function VisitExamTab({ visit, canManage, locked, recommendationDraft, on
           </Form.Item>
         )}
       />
-      <VisitDiagnosesTab visit={visit} canManage={canManage} locked={locked} compact showLockedAlert={false} />
+      <section id="visit-diagnoses"><VisitDiagnosesTab visit={visit} canManage={canManage} locked={locked} compact showLockedAlert={false} /></section>
       <Controller
         control={control}
         name="symptoms"
@@ -646,4 +680,18 @@ function writeAssistantSuppression(key: string) {
   } catch {
     // Suppression still applies until the current page is closed.
   }
+}
+
+export async function flushPendingVisitExam(visit: Visit) {
+  await examSaveQueues.get(visit.id);
+  const key = `temichevvet:visit-exam-draft:${visit.id}`;
+  const draft = readExamDraft(key);
+  if (!draft) return;
+  const parsed = examSchema.safeParse(draft.values);
+  if (!parsed.success) throw new Error('Проверьте значения в листе осмотра перед завершением приёма');
+  const { visitType, ...values } = parsed.data;
+  if (visitType && visitType !== visit.visitType) await updateVisit(visit.id, { visitType });
+  await upsertVisitExam(visit.id, values);
+  clearDraftIfCurrent(key, JSON.stringify(draft.values));
+  if (readExamDraft(key)) throw new Error('Лист осмотра изменился во время сохранения. Повторите завершение приёма');
 }

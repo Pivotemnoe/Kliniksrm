@@ -21,22 +21,20 @@ const BufferedLaboratoryInput = memo(function BufferedLaboratoryInput({
   ariaLabel,
   onDraftChange,
   onCommit,
+  multiline = false,
 }: {
   value: string;
   disabled: boolean;
   ariaLabel?: string;
   onDraftChange: (value: string) => void;
   onCommit: () => void;
+  multiline?: boolean;
 }) {
-  return (
-    <Input
-      defaultValue={value}
-      disabled={disabled}
-      aria-label={ariaLabel}
-      onChange={(event) => onDraftChange(event.target.value)}
-      onBlur={onCommit}
-    />
-  );
+  const inputProps = {
+    disabled, 'aria-label': ariaLabel,
+    onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => onDraftChange(event.target.value),
+  };
+  return multiline ? <Input.TextArea {...inputProps} defaultValue={value} onBlur={onCommit} autoSize={{ minRows: 1, maxRows: 5 }} /> : <Input {...inputProps} defaultValue={value} onBlur={onCommit} />;
 });
 
 export function LaboratoryResultsTableDrawer({
@@ -150,12 +148,12 @@ export function LaboratoryResultsTableDrawer({
       </Space> : <Space direction="vertical" size={0}><Typography.Text strong>{row.title}</Typography.Text>{row.code ? <Typography.Text type="secondary">{row.code}</Typography.Text> : null}</Space>,
     },
     {
-      title: 'Значение', dataIndex: 'resultValue', key: 'resultValue', width: 145,
+      title: 'Значение', dataIndex: 'resultValue', key: 'resultValue', width: 250,
       shouldCellUpdate: (row, previous) => row.resultValue !== previous.resultValue || row.status !== previous.status || row.disabled !== previous.disabled,
-      render: (value, row) => <BufferedLaboratoryInput value={value ?? ''} disabled={row.disabled} ariaLabel={`Значение ${row.title}`} onDraftChange={(resultValue) => updateDraftRow(row.itemId, { resultValue })} onCommit={() => commitDraftRow(row.itemId, true)} />,
+      render: (value, row) => <BufferedLaboratoryInput value={value ?? ''} disabled={row.disabled} multiline ariaLabel={`Значение ${row.title}`} onDraftChange={(resultValue) => updateDraftRow(row.itemId, { resultValue })} onCommit={() => commitDraftRow(row.itemId, true)} />,
     },
-    { title: 'Ед.', dataIndex: 'unit', key: 'unit', width: 110, shouldCellUpdate: (row, previous) => row.unit !== previous.unit || row.disabled !== previous.disabled, render: (value, row) => <BufferedLaboratoryInput value={value ?? ''} disabled={row.disabled} onDraftChange={(unit) => updateDraftRow(row.itemId, { unit })} onCommit={() => commitDraftRow(row.itemId)} /> },
-    { title: 'Референс', dataIndex: 'referenceRange', key: 'referenceRange', width: 230, shouldCellUpdate: (row, previous) => row.referenceRange !== previous.referenceRange || row.disabled !== previous.disabled, render: (value, row) => <BufferedLaboratoryInput value={value ?? ''} disabled={row.disabled} onDraftChange={(referenceRange) => updateDraftRow(row.itemId, { referenceRange })} onCommit={() => commitDraftRow(row.itemId)} /> },
+    { title: 'Ед.', dataIndex: 'unit', key: 'unit', width: 80, shouldCellUpdate: (row, previous) => row.unit !== previous.unit || row.disabled !== previous.disabled, render: (value, row) => <BufferedLaboratoryInput value={value ?? ''} disabled={row.disabled} onDraftChange={(unit) => updateDraftRow(row.itemId, { unit })} onCommit={() => commitDraftRow(row.itemId)} /> },
+    { title: 'Референс', dataIndex: 'referenceRange', key: 'referenceRange', width: 160, shouldCellUpdate: (row, previous) => row.referenceRange !== previous.referenceRange || row.disabled !== previous.disabled, render: (value, row) => <BufferedLaboratoryInput value={value ?? ''} disabled={row.disabled} onDraftChange={(referenceRange) => updateDraftRow(row.itemId, { referenceRange })} onCommit={() => commitDraftRow(row.itemId)} /> },
     { title: 'Комментарий', dataIndex: 'comment', key: 'comment', width: 210, shouldCellUpdate: (row, previous) => row.comment !== previous.comment || row.disabled !== previous.disabled, render: (value, row) => <BufferedLaboratoryInput value={value ?? ''} disabled={row.disabled} onDraftChange={(comment) => updateDraftRow(row.itemId, { comment })} onCommit={() => commitDraftRow(row.itemId)} /> },
     {
       title: 'Статус', dataIndex: 'status', key: 'status', width: 155,
@@ -177,7 +175,7 @@ export function LaboratoryResultsTableDrawer({
       <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>Введите результаты в таблицу и сохраните её целиком.</Typography.Paragraph>
       {mutation.isError ? <Alert type="error" showIcon message={getErrorMessage(mutation.error)} className="form-alert" /> : null}
       {canManage ? <Space className="form-alert"><Button onClick={addRow} disabled={mutation.isPending || rows.length - removedIds.length >= 100}>Добавить показатель</Button>{removedIds.length ? <Button onClick={() => setRemovedIds([])} disabled={mutation.isPending}>Вернуть удалённые ({removedIds.length})</Button> : null}</Space> : null}
-      <Table<ResultTableRow> size="small" rowKey="itemId" columns={columns} dataSource={rows.filter(row => !removedIds.includes(row.itemId)).map(row => ({ ...row, disabled: row.disabled || !canManage || mutation.isPending }))} pagination={false} className="dense-table laboratory-result-grid laboratory-compact-table" scroll={{ x: 1170, y: 'calc(100vh - 230px)' }} />
+      <Table<ResultTableRow> size="small" rowKey="itemId" columns={columns} dataSource={rows.filter(row => !removedIds.includes(row.itemId)).map(row => ({ ...row, disabled: row.disabled || !canManage || mutation.isPending }))} pagination={false} className="dense-table laboratory-result-grid laboratory-compact-table" scroll={{ x: 1175, y: 'calc(100vh - 230px)' }} />
     </Drawer>
   );
 }

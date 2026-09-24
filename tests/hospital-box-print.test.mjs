@@ -13,7 +13,7 @@ test('карта стационара печатает отдельный вну
 
   assert.match(card, /printHospitalBoxSheet/);
   assert.match(card, />Лист для бокса<\/Button>/);
-  assert.match(card, />Отчёт владельцу \/ PDF<\/Button>/);
+  assert.match(card, />Отчёт владельцу \/ PDF<\/Dropdown.Button>/);
   assert.match(print, /export function printHospitalBoxSheet/);
   assert.match(print, /@page \{ size: A5 portrait; margin: 7mm; \}/);
   assert.match(print, /Номер бокса/);

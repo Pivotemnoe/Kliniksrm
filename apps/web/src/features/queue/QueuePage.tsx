@@ -168,35 +168,6 @@ export function QueuePage() {
         render: (_, record) => formatAnimalAge(record.animal?.birthDate),
       },
       {
-        title: 'Действие',
-        key: 'action',
-        width: 280,
-        render: (_, record) => (
-          <Space direction="vertical" size={6}>
-            {canCallQueue || canManageVisits ? (
-            <QueueActionButton
-              record={record}
-              loading={actionMutation.isPending}
-              canCallQueue={canCallQueue}
-              canManage={canManage}
-              canManageVisits={canManageVisits}
-              onCall={() => actionMutation.mutate({ record, action: 'call' })}
-              onRepeat={() => actionMutation.mutate({ record, action: 'repeat' })}
-              onAccept={() => actionMutation.mutate({ record, action: 'accept' })}
-              onOpenVisit={() => navigate(`/visits/${record.visit?.id}`)}
-              onCreateVisit={() => actionMutation.mutate({ record, action: 'createVisit' })}
-              onCancel={() => cancelMutation.mutate(record.id)}
-            />
-            ) : null}
-            {portal.canRead ? <QueuePortalInvitationButton
-              ownerId={record.ownerId} status={record.ownerId ? portal.statuses?.[record.ownerId] : undefined}
-              loading={portal.loading} canInvite={portal.canInvite} compact
-              onClick={() => portal.openInvitation(record)}
-            /> : null}
-          </Space>
-        ),
-      },
-      {
         title: 'Срочность',
         dataIndex: 'urgency',
         key: 'urgency',
@@ -245,12 +216,40 @@ export function QueuePage() {
         dataIndex: 'comment',
         key: 'comment',
         width: 220,
-        ellipsis: true,
         render: (value: string | null) => value || '—',
       },
       { title: 'Создана', dataIndex: 'createdAt', key: 'createdAt', width: 145, render: formatDateTime },
       { title: 'Сотрудник', key: 'employee', width: 150, render: (_, record) => record.employee?.fullName ?? '—', responsive: ['xl'] },
       { title: 'Кабинет', key: 'room', width: 120, render: (_, record) => record.room?.name ?? '—', responsive: ['xl'] },
+      {
+        title: 'Действие',
+        key: 'action', fixed: 'right',
+        width: 240,
+        render: (_, record) => (
+          <Space direction="vertical" size={6}>
+            {canCallQueue || canManageVisits ? (
+            <QueueActionButton
+              record={record}
+              loading={actionMutation.isPending}
+              canCallQueue={canCallQueue}
+              canManage={canManage}
+              canManageVisits={canManageVisits}
+              onCall={() => actionMutation.mutate({ record, action: 'call' })}
+              onRepeat={() => actionMutation.mutate({ record, action: 'repeat' })}
+              onAccept={() => actionMutation.mutate({ record, action: 'accept' })}
+              onOpenVisit={() => navigate(`/visits/${record.visit?.id}`)}
+              onCreateVisit={() => actionMutation.mutate({ record, action: 'createVisit' })}
+              onCancel={() => cancelMutation.mutate(record.id)}
+            />
+            ) : null}
+            {portal.canRead ? <QueuePortalInvitationButton
+              ownerId={record.ownerId} status={record.ownerId ? portal.statuses?.[record.ownerId] : undefined}
+              loading={portal.loading} canInvite={portal.canInvite} compact
+              onClick={() => portal.openInvitation(record)}
+            /> : null}
+          </Space>
+        ),
+      },
     ],
     [actionMutation, cancelMutation, canCallQueue, canManage, canManageVisits, navigate, now, portal.canRead, portal.canInvite, portal.statuses, portal.loading, portal.openInvitation],
   );

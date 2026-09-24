@@ -118,11 +118,12 @@ function openPrintWindow({
     .meta-row strong, .compact-meta strong { display: block; margin-top: 2px; font-size: 14px; }
     .compact-meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
     .compact-meta div { padding: 8px 10px; border: 1px solid #e5e7eb; border-radius: 7px; }
-    .section { margin-top: 11px; page-break-inside: avoid; }
+    .section { margin-top: 8px; }
+    .section h2 { break-after: avoid; }
     .section h2 { margin: 0 0 5px; font-size: 15px; }
-    .text { min-height: 38px; padding: 9px 10px; border: 1px solid #e5e7eb; border-radius: 7px; white-space: pre-wrap; }
-    .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 31px; page-break-inside: avoid; }
-    .signature { padding-top: 22px; border-top: 1px solid #111827; color: #374151; font-size: 12px; }
+    .text { padding: 3px 0 7px; border-bottom: 1px solid #e5e7eb; orphans: 3; widows: 3; white-space: pre-wrap; }
+    .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 20px; page-break-inside: avoid; }
+    .signature { padding-top: 10px; border-top: 1px solid #111827; color: #374151; font-size: 12px; }
     @media print { html, body { width: 210mm; } .page { padding: 10mm 12mm 13mm; } }
   </style>
 </head>

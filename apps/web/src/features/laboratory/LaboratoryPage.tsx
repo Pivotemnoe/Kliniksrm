@@ -435,7 +435,7 @@ function OrdersTable({
       },
       {
         title: '',
-        key: 'actions',
+        key: 'actions', fixed: 'right',
         width: 240,
         render: (_, order) => (
           <Space wrap>
@@ -551,7 +551,7 @@ function OrderDrawer({
       },
       {
         title: '',
-        key: 'actions',
+        key: 'actions', fixed: 'right',
         width: 110,
         render: (_, item) =>
           canManage && order ? (
@@ -742,7 +742,7 @@ function TestsTable({
       { title: 'Статус', dataIndex: 'isActive', key: 'isActive', width: 110, render: activeTag },
       {
         title: '',
-        key: 'actions',
+        key: 'actions', fixed: 'right',
         width: 110,
         render: (_, item) =>
           canManage ? (
