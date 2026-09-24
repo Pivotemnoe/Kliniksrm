@@ -88,3 +88,9 @@ export function deleteVaccination(animalId: string, vaccinationId: string, reaso
     body: { reason },
   });
 }
+
+export function dismissVaccinationReminders(animalId: string, vaccinationIds: string[], reason: string) {
+  return apiRequest<{ dismissed: number }>(`/v1/animals/${animalId}/vaccination-reminders/dismiss`, {
+    method: 'POST', body: { vaccinationIds, reason },
+  });
+}

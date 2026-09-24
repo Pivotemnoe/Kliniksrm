@@ -15,8 +15,8 @@ test('подсказки исчезают по мере заполнения т�
   const compiled = ts.transpileModule(fragment, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
   const review = vm.runInNewContext(`${compiled}; buildVisitExamAssistantReview`);
   const empty = review({}, {});
-  assert.equal(empty.issues.length, 7);
-  const values = { purpose: 'Причина', anamnesis: 'Анамнез', examination: 'Осмотр', symptoms: 'Нет', manipulations: 'Не проводились', temperatureC: '38,5' };
+  assert.equal(empty.issues.length, 6);
+  const values = { anamnesis: 'Анамнез', examination: 'Осмотр', symptoms: 'Нет', manipulations: 'Не проводились', temperatureC: '38,5' };
   assert.equal(review(values, {}, { careNotes: 'Рекомендации' }).issues.length, 0);
   assert.equal(review({ ...values, temperatureC: '' }, {}, { careNotes: 'Рекомендации' }).issues[0].key, 'temperature');
   assert.equal(review(values, { recommendation: { careNotes: 'Сохранённое' } }, { careNotes: '' }).issues[0].key, 'recommendation');

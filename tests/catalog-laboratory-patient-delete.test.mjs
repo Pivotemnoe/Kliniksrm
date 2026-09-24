@@ -68,7 +68,7 @@ test('лабораторный бланк редактируется в доку
   assert.match(laboratoryPage, /listDocumentTemplates/);
   assert.match(laboratoryPage, /name="documentTemplateId"/);
   assert.match(laboratoryResultsDrawer, /Сохранить всю таблицу/);
-  assert.match(laboratoryPrint, /@page \{ size: A5 portrait; margin: 0; \}/);
+  assert.match(laboratoryPrint, /@page \{ size: A5 portrait; margin: 6mm; \}/);
   assert.match(laboratoryPrint, /snapshot\.documentTemplateTitle/);
   assert.match(laboratoryPrint, /order\.visit\.owner\.fullName/);
   assert.match(laboratoryPrint, /order\.visit\.animal\.nickname/);

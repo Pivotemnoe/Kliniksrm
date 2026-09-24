@@ -1,3 +1,4 @@
+import { ExamDocumentPicker } from './ExamDocumentPicker';
 import { CheckCircleOutlined, CloseOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -19,7 +20,6 @@ const examSchema = z.object({
   weightKg: optionalNumber(0, 300),
   temperatureC: optionalNumber(30, 45),
   visitType: z.enum(['PRIMARY', 'FOLLOW_UP', 'OPERATION', 'POST_OPERATION', 'VACCINATION']).optional(),
-  purpose: optionalString(1000),
   anamnesis: optionalString(4000),
   examination: optionalString(4000),
   symptoms: optionalString(4000),
@@ -292,20 +292,6 @@ export function VisitExamTab({ visit, canManage, locked, recommendationDraft, on
       </div>
       <Controller
         control={control}
-        name="purpose"
-        render={({ field, fieldState }) => (
-          <Form.Item
-            label="Причина обращения"
-            extra="Кратко: с чем владелец обратился в клинику. Это поле отображается в истории болезни."
-            validateStatus={fieldState.error ? 'error' : undefined}
-            help={fieldState.error?.message}
-          >
-            <Input.TextArea id="visit-exam-purpose" rows={2} placeholder="Например: отказ от корма, хромота, вакцинация" {...field} />
-          </Form.Item>
-        )}
-      />
-      <Controller
-        control={control}
         name="anamnesis"
         render={({ field, fieldState }) => (
           <Form.Item label="Анамнез" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
@@ -368,6 +354,7 @@ export function VisitExamTab({ visit, canManage, locked, recommendationDraft, on
               rows={10}
               disabled={disabled}
               snippets={examSnippets.manipulations}
+              extraTools={<ExamDocumentPicker value={field.value ?? ''} disabled={disabled} onInsert={field.onChange} />}
               fieldKey="visit.exam.manipulations"
               id="visit-exam-manipulations"
               species={species}
@@ -540,7 +527,6 @@ function getDefaultValues(visit: Visit): ExamInput {
     weightKg: nullToEmpty(visit.exam?.weightKg ? String(visit.exam.weightKg) : undefined),
     temperatureC: nullToEmpty(visit.exam?.temperatureC ? String(visit.exam.temperatureC) : undefined),
     visitType: visit.hospitalStay ? undefined : visit.visitType ?? 'PRIMARY',
-    purpose: nullToEmpty(visit.exam?.purpose),
     anamnesis: nullToEmpty(visit.exam?.anamnesis),
     examination: nullToEmpty(visit.exam?.examination),
     symptoms: nullToEmpty(visit.exam?.symptoms),
@@ -590,7 +576,10 @@ function readExamDraft(key: string): { updatedAt: number; values: ExamInput } | 
     if (!raw) return null;
     const parsed = JSON.parse(raw) as { updatedAt?: unknown; values?: unknown };
     if (typeof parsed.updatedAt !== 'number' || !parsed.values || typeof parsed.values !== 'object') return null;
-    return { updatedAt: parsed.updatedAt, values: parsed.values as ExamInput };
+    const values = { ...parsed.values } as ExamInput & { purpose?: string };
+    if (values.purpose?.trim()) values.anamnesis = [values.purpose.trim(), values.anamnesis?.trim()].filter(Boolean).join('\n\n');
+    delete values.purpose;
+    return { updatedAt: parsed.updatedAt, values };
   } catch {
     return null;
   }
@@ -608,7 +597,7 @@ function clearDraftIfCurrent(key: string, snapshot: string) {
 }
 
 type VisitExamAssistantIssue = {
-  key: 'temperature' | 'recommendation' | 'purpose' | 'anamnesis' | 'examination' | 'symptoms' | 'manipulations';
+  key: 'temperature' | 'recommendation' | 'anamnesis' | 'examination' | 'symptoms' | 'manipulations';
   label: string;
   actionLabel: string;
 };
@@ -623,7 +612,6 @@ function buildVisitExamAssistantReview(
 } {
   const issues: VisitExamAssistantIssue[] = [];
   const fields = [
-    ['purpose', 'Не заполнена причина обращения'],
     ['anamnesis', 'Не заполнен анамнез'],
     ['examination', 'Не заполнен осмотр'],
     ['symptoms', 'Не заполнены симптомы'],
@@ -645,7 +633,7 @@ function buildVisitExamAssistantReview(
     });
   }
 
-  const coreCompleted = [values.purpose, values.anamnesis, values.examination, values.symptoms, values.manipulations]
+  const coreCompleted = [values.anamnesis, values.examination, values.symptoms, values.manipulations]
     .every(hasText);
   return { issues, coreCompleted };
 }

@@ -205,12 +205,15 @@ export class StaffAlertsService {
           }))
         : Promise.resolve([]),
       this.prisma.vaccination.findMany({
-        where: { expiresAt: { not: null }, cancelledAt: null, animal: { archivedAt: null } },
+        where: { cancelledAt: null, animal: { archivedAt: null } },
         orderBy: [{ expiresAt: 'desc' }, { createdAt: 'desc' }],
         select: {
           id: true,
           title: true,
           expiresAt: true,
+          vaccinatedAt: true,
+          createdAt: true,
+          revaccinationTask: { select: { status: true } },
           animal: {
             select: {
               id: true,

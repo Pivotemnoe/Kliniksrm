@@ -1,22 +1,18 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+const read = (path) => readFile(new URL('../' + path, import.meta.url), 'utf8');
 
-const root = new URL('../', import.meta.url);
-const read = (path) => readFile(new URL(path, root), 'utf8');
-
-test('причина обращения хранится отдельно от анамнеза и отображается в истории болезни', async () => {
-  const [exam, history, apiService] = await Promise.all([
+test('лист осмотра использует анамнез; прежняя причина обращения сохраняется в истории и печати', async () => {
+  const [exam, history, print] = await Promise.all([
     read('apps/web/src/features/visits/VisitExamTab.tsx'),
     read('apps/web/src/features/visits/VisitHistoryTab.tsx'),
-    read('apps/api/src/modules/visits/visits.service.ts'),
+    read('apps/web/src/features/visits/visitPrint.ts'),
   ]);
-
-  assert.match(exam, /label="Причина обращения"/);
-  assert.match(exam, /purpose: nullToEmpty\(visit\.exam\?\.purpose\)/);
+  assert.doesNotMatch(exam, /label="Причина обращения"/);
+  assert.doesNotMatch(exam, /name="purpose"/);
   assert.match(exam, /anamnesis: nullToEmpty\(visit\.exam\?\.anamnesis\)/);
-  assert.doesNotMatch(exam, /purpose: ''/);
-  assert.doesNotMatch(exam, /mergeText\(visit\.exam\?\.purpose/);
-  assert.match(history, /label="Причина обращения"/);
-  assert.match(apiService, /'visit\.exam\.purpose': dto\.purpose/);
+  assert.doesNotMatch(history, /label="Причина обращения"/);
+  assert.match(history, /visit\.exam\?\.purpose, visit\.exam\?\.anamnesis/);
+  assert.match(print, /visit\.exam\?\.purpose, visit\.exam\?\.anamnesis/);
 });

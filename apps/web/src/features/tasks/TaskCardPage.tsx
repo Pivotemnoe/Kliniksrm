@@ -219,5 +219,6 @@ async function invalidateTask(queryClient: ReturnType<typeof useQueryClient>, ta
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: ['tasks', taskId] }),
     queryClient.invalidateQueries({ queryKey: ['tasks'] }),
+        queryClient.invalidateQueries({ queryKey: ['staff-alerts'] }),
   ]);
 }

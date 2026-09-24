@@ -67,6 +67,7 @@ export function AnimalVaccinationsTab({ animalId, visitId, readOnly = false, aut
         queryClient.invalidateQueries({ queryKey: ['animals', animalId, 'vaccinations'] }),
         ...(visitId ? [queryClient.invalidateQueries({ queryKey: ['visits', visitId] })] : []),
         queryClient.invalidateQueries({ queryKey: ['tasks'] }),
+        queryClient.invalidateQueries({ queryKey: ['staff-alerts'] }),
       ]);
     }
 

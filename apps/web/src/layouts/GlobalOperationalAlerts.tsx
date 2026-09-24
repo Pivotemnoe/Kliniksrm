@@ -1,6 +1,9 @@
+import { hasPermission } from '../auth/permissions';
+import { useCurrentEmployee } from '../auth/useAuth';
+import { dismissVaccinationReminders } from '../features/animals/animals.api';
 import { ExclamationCircleOutlined, EyeOutlined, MedicineBoxOutlined, MessageOutlined, NotificationOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Drawer, List, Space, Tag, Typography } from 'antd';
+import { App, Button, Drawer, Input, List, Modal, Space, Tag, Typography } from 'antd';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getErrorMessage } from '../api/errors';
@@ -21,6 +24,20 @@ export function GlobalOperationalAlerts({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { message } = App.useApp();
+  const { data: auth } = useCurrentEmployee();
+  const canDismiss = remoteAccessMode !== 'read-only' && (hasPermission(auth?.employee, 'animals.manage') || hasPermission(auth?.employee, 'visits.manage'));
+  const [dismissing, setDismissing] = useState<StaffAlertItem | null>(null);
+  const [dismissReason, setDismissReason] = useState('');
+  const dismissMutation = useMutation({
+    mutationFn: () => dismissVaccinationReminders(dismissing!.vaccination!.animalId, dismissing!.vaccination!.vaccines.map(v => v.id), dismissReason.trim()),
+    onSuccess: async () => {
+      setDismissing(null); setDismissReason('');
+      await Promise.all(['staff-alerts', 'tasks', 'animals'].map(key => queryClient.invalidateQueries({ queryKey: [key] })));
+      message.success('Напоминание убрано');
+    },
+    onError: error => message.error(getErrorMessage(error)),
+  });
+  const onDismiss = canDismiss ? (item: StaffAlertItem) => { setDismissReason(''); setDismissing(item); } : undefined;
   const [vaccinationsOpen, setVaccinationsOpen] = useState(false);
   const alertsQuery = useQuery({
     queryKey: ['staff-alerts'],
@@ -155,9 +172,17 @@ export function GlobalOperationalAlerts({
         width={620}
         destroyOnHidden
       >
-        <VaccinationAlertsList title="Сегодня" items={todayVaccinations} onOpen={openAlert} />
-        <VaccinationAlertsList title="Просроченные" items={overdueVaccinations} onOpen={openAlert} danger />
+        <VaccinationAlertsList title="Сегодня" items={todayVaccinations} onOpen={openAlert} onDismiss={onDismiss} />
+        <VaccinationAlertsList title="Просроченные" items={overdueVaccinations} onOpen={openAlert} onDismiss={onDismiss} danger />
       </Drawer>
+      <Modal title="Убрать напоминание" open={Boolean(dismissing)} okText="Убрать напоминание" cancelText="Отмена"
+        confirmLoading={dismissMutation.isPending} okButtonProps={{ disabled: dismissReason.trim().length < 2 }}
+        onCancel={() => { if (!dismissMutation.isPending) setDismissing(null); }} onOk={() => dismissMutation.mutate()}>
+        <Typography.Paragraph>{dismissing?.vaccination?.animalName}: {dismissing?.vaccination?.vaccines.map(v => v.title).join(', ')}</Typography.Paragraph>
+        <Typography.Paragraph>Напоминание и задача ревакцинации будут закрыты. Запланированные сообщения владельцу по этим напоминаниям отменятся. Сделанные прививки останутся в истории, начисления не изменятся.</Typography.Paragraph>
+        <Space wrap style={{ marginBottom: 12 }}><Button onClick={() => setDismissReason('Отказались')}>Отказались</Button><Button onClick={() => setDismissReason('Не придут')}>Не придут</Button></Space>
+        <Input.TextArea aria-label="Причина снятия напоминания" placeholder="Причина" value={dismissReason} onChange={event => setDismissReason(event.target.value)} maxLength={500} rows={3} />
+      </Modal>
     </div>
   );
 }
@@ -167,11 +192,13 @@ function VaccinationAlertsList({
   items,
   danger = false,
   onOpen,
+  onDismiss,
 }: {
   title: string;
   items: StaffAlertItem[];
   danger?: boolean;
   onOpen: (item: StaffAlertItem) => Promise<void>;
+  onDismiss?: (item: StaffAlertItem) => void;
 }) {
   if (!items.length) return null;
   return (
@@ -185,7 +212,7 @@ function VaccinationAlertsList({
         return <section className="vaccination-owner-group" key={ownerKey}>
           {ownerItems[0].vaccination ? <Typography.Text strong>{ownerItems[0].vaccination.ownerName}</Typography.Text> : null}
           <List dataSource={ownerItems} renderItem={item => (
-            <List.Item>
+            <List.Item actions={item.vaccination && onDismiss ? [<Button key="dismiss" onClick={() => onDismiss(item)}>Убрать напоминание</Button>] : undefined}>
               <List.Item.Meta
                 title={<Button type="link" onClick={() => void onOpen(item)}>{item.vaccination?.animalName ?? item.title}</Button>}
                 description={item.vaccination

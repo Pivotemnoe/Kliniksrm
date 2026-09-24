@@ -405,5 +405,5 @@ function toDateInput(value: Date) {
 }
 
 async function invalidateTasks(queryClient: ReturnType<typeof useQueryClient>) {
-  await queryClient.invalidateQueries({ queryKey: ['tasks'] });
+  await Promise.all([queryClient.invalidateQueries({ queryKey: ['tasks'] }), queryClient.invalidateQueries({ queryKey: ['staff-alerts'] })]);
 }

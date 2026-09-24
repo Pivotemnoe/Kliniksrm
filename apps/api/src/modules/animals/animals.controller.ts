@@ -1,3 +1,4 @@
+import { DismissVaccinationRemindersDto } from './dto/dismiss-vaccination-reminders.dto';
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { AuthEmployee } from '../auth/auth.types';
@@ -110,6 +111,16 @@ export class AnimalsController {
     @CurrentEmployee() actor: AuthEmployee,
   ) {
     return this.animalsService.updateVaccination(animalId, vaccinationId, dto, actor.id);
+  }
+
+  @Post(':animalId/vaccination-reminders/dismiss')
+  @RequireAnyPermissions('animals.manage', 'visits.manage')
+  dismissVaccinationReminders(
+    @Param('animalId') animalId: string,
+    @Body() dto: DismissVaccinationRemindersDto,
+    @CurrentEmployee() actor: AuthEmployee,
+  ) {
+    return this.animalsService.dismissVaccinationReminders(animalId, dto, actor.id);
   }
 
   @Delete(':animalId/vaccinations/:vaccinationId')

@@ -11,7 +11,7 @@ export function printVisitSheet(visit: Visit, organization?: OrganizationSetting
     visit,
     organization,
     sections: [
-      { title: 'Анамнез', body: visit.exam?.anamnesis },
+      { title: 'Анамнез', body: [visit.exam?.purpose, visit.exam?.anamnesis].filter(Boolean).join('\n\n') },
       { title: 'Осмотр', body: visit.exam?.examination },
       { title: 'Симптомы', body: visit.exam?.symptoms },
       { title: 'Манипуляции', body: visit.exam?.manipulations },

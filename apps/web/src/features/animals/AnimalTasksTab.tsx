@@ -32,6 +32,7 @@ export function AnimalTasksTab({ ownerId, animalId, readOnly = false }: AnimalTa
     mutationFn: (values: CreateTaskInput) => createTask(values),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      await queryClient.invalidateQueries({ queryKey: ['staff-alerts'] });
       setCreateOpen(false);
       message.success('Задача создана');
     },
@@ -41,6 +42,7 @@ export function AnimalTasksTab({ ownerId, animalId, readOnly = false }: AnimalTa
     mutationFn: ({ task, values }: { task: Task; values: TaskMutationInput }) => updateTask(task.id, values),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      await queryClient.invalidateQueries({ queryKey: ['staff-alerts'] });
       setEditingTask(null);
       message.success('Задача сохранена');
     },
@@ -50,6 +52,7 @@ export function AnimalTasksTab({ ownerId, animalId, readOnly = false }: AnimalTa
     mutationFn: (task: Task) => completeTask(task.id),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      await queryClient.invalidateQueries({ queryKey: ['staff-alerts'] });
       message.success('Задача выполнена');
     },
     onError: (error) => message.error(getErrorMessage(error)),
@@ -64,6 +67,7 @@ export function AnimalTasksTab({ ownerId, animalId, readOnly = false }: AnimalTa
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      await queryClient.invalidateQueries({ queryKey: ['staff-alerts'] });
       message.success('Статус задачи обновлён');
     },
     onError: (error) => message.error(getErrorMessage(error)),

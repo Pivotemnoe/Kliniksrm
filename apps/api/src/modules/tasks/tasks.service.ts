@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, TaskStatus } from '@prisma/client';
+import { NotificationStatus, Prisma, TaskStatus } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
 import { withRussianSearchVariants } from '../../common/search-ranking';
 import { AuditService } from '../audit/audit.service';
@@ -114,11 +114,7 @@ export class TasksService {
   async updateTask(taskId: string, dto: UpdateTaskDto, actorId: string) {
     await this.ensureTaskExists(taskId);
     const data = (await this.resolveTaskData(dto, true)) as Prisma.TaskUncheckedUpdateInput;
-    const task = await this.prisma.task.update({
-      where: { id: taskId },
-      data,
-      include: taskInclude,
-    });
+    const task = await this.saveTaskAndReminder(taskId, data);
 
     await this.auditService.log({
       actorId,
@@ -149,11 +145,7 @@ export class TasksService {
 
   private async setStatus(taskId: string, status: TaskStatus, actorId: string, action: string) {
     await this.ensureTaskExists(taskId);
-    const task = await this.prisma.task.update({
-      where: { id: taskId },
-      data: { status },
-      include: taskInclude,
-    });
+    const task = await this.saveTaskAndReminder(taskId, { status });
 
     await this.auditService.log({
       actorId,
@@ -164,6 +156,19 @@ export class TasksService {
     });
 
     return (await this.withRoleTitles([task]))[0];
+  }
+
+  private async saveTaskAndReminder(taskId: string, data: Prisma.TaskUncheckedUpdateInput) {
+    return this.prisma.$transaction(async tx => {
+      const task = await tx.task.update({ where: { id: taskId }, data, include: taskInclude });
+      if (task.sourceVaccinationId && task.status !== TaskStatus.OPEN) {
+        await tx.notificationOutbox.updateMany({
+          where: { dedupeKey: { startsWith: `vaccination:${task.sourceVaccinationId}:` }, status: { in: [NotificationStatus.QUEUED, NotificationStatus.FAILED] } },
+          data: { status: NotificationStatus.CANCELLED },
+        });
+      }
+      return task;
+    });
   }
 
   private async resolveTaskData(dto: CreateTaskDto | UpdateTaskDto, isUpdate = false): Promise<Prisma.TaskUncheckedCreateInput | Prisma.TaskUncheckedUpdateInput> {

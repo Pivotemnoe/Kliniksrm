@@ -2,6 +2,7 @@ import { Tag } from 'antd';
 
 export const animalStatusOptions = [
   { value: 'Здоров', label: 'Здоров', color: 'green' },
+  { value: 'Без изменений', label: 'Без изменений', color: 'default' },
   { value: 'Улучшение', label: 'Улучшение', color: 'blue' },
   { value: 'Ухудшение', label: 'Ухудшение', color: 'red' },
   { value: 'Обследование', label: 'Обследование', color: 'gold' },

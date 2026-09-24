@@ -13,7 +13,7 @@ import {
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Button, Divider, Empty, Input, List, Popconfirm, Popover, Select, Space, Switch, Tag, Tooltip, Typography } from 'antd';
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { getErrorMessage } from '../../api/errors';
 import { formatDateTime } from '../../shared/utils/date';
 import {
@@ -33,6 +33,7 @@ type MedicalSnippet = {
 
 type MedicalTextAreaProps = {
   id?: string;
+  extraTools?: ReactNode;
   value?: string;
   rows?: number;
   disabled?: boolean;
@@ -53,6 +54,7 @@ type SnippetOption = {
 
 export function MedicalTextArea({
   id,
+  extraTools,
   value = '',
   rows = 4,
   disabled,
@@ -227,6 +229,7 @@ export function MedicalTextArea({
               </Button>
             </Popover>
           ) : null}
+          {extraTools}
         </Space>
         {snippetOptions.length ? (
           <Select<string>

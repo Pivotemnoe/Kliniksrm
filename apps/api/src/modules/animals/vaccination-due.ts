@@ -3,19 +3,16 @@ export type VaccinationDueItem = {
   title: string;
   expiresAt: Date | null;
   animal: { id: string };
+  vaccinatedAt?: Date | null;
+  createdAt?: Date;
+  revaccinationTask?: { status: string } | null;
 };
 
 export function resolveVaccinationDues<T extends VaccinationDueItem>(items: T[], now = new Date(), dashboardDate?: string) {
-  const currentByAnimalAndVaccine = new Map<string, T>();
-  for (const item of items) {
-    const key = `${item.animal.id}:${item.title.trim().toLocaleLowerCase('ru-RU')}`;
-    if (!currentByAnimalAndVaccine.has(key)) currentByAnimalAndVaccine.set(key, item);
-  }
-
   const selectedDate = dashboardDate ?? moscowDateKey(now);
   const isCurrentMoscowDay = selectedDate === moscowDateKey(now);
   const showToday = !isCurrentMoscowDay || moscowMinuteOfDay(now) >= 8 * 60;
-  const current = [...currentByAnimalAndVaccine.values()];
+  const current = selectCurrentVaccinations(items).filter(item => !item.revaccinationTask || item.revaccinationTask.status === 'OPEN');
 
   return {
     today: showToday
@@ -67,4 +64,27 @@ export function groupVaccinationDues<T extends VaccinationDueItem>(dues: { today
   return [...groups.values()].map(group => ({ ...group,
     vaccines: group.vaccines.sort((a, b) => Number(a.expiresAt) - Number(b.expiresAt) || a.id.localeCompare(b.id)),
   }));
+}
+
+// Packaging text is not a different vaccine. Keep product/valency numbers otherwise:
+// arbitrary fuzzy matching could hide a genuinely different vaccination.
+export function vaccinationIdentity(title: string) {
+  const key = title.toLocaleLowerCase('ru-RU').replace(/ё/g, 'е')
+    .replace(/\(?\s*\d+(?:[.,]\d+)?\s*доз(?:а|ы|у)?\s*\)?/gu, '')
+    .replace(/[\s()]+/gu, '').trim();
+  return key === 'мультифел' ? 'мультифел4' : key;
+}
+
+export function selectCurrentVaccinations<T extends VaccinationDueItem>(items: T[]): T[] {
+  const byVaccine = new Map<string, T>();
+  const date = (item: T) => Number(item.vaccinatedAt ?? item.createdAt ?? item.expiresAt ?? 0);
+  for (const item of items) {
+    const key = `${item.animal.id}:${vaccinationIdentity(item.title)}`;
+    const previous = byVaccine.get(key);
+    if (!previous || date(item) > date(previous)
+      || (date(item) === date(previous) && Number(item.createdAt ?? 0) > Number(previous.createdAt ?? 0))) {
+      byVaccine.set(key, item);
+    }
+  }
+  return [...byVaccine.values()];
 }

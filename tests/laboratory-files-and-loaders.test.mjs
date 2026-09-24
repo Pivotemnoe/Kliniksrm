@@ -82,7 +82,7 @@ test('лабораторный журнал использует докумен�
   assert.match(documentsPage, /openEdit\(template\)/);
   assert.match(visitTab, /Заполнить показатели/);
   assert.match(visitTab, /Печать A5/);
-  assert.match(printer, /@page \{ size: A5 portrait; margin: 0; \}/);
+  assert.match(printer, /@page \{ size: A5 portrait; margin: 6mm; \}/);
   assert.match(printer, /snapshot\.documentTemplateTitle/);
   assert.match(formParser, /extractLaboratoryDocumentIndicators/);
   assert.match(migration, /ADD COLUMN "documentTemplateId"/);

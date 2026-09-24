@@ -1,3 +1,5 @@
+import { selectCurrentVaccinations } from './vaccination-due';
+import { DismissVaccinationRemindersDto } from './dto/dismiss-vaccination-reminders.dto';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import {
   AppointmentStatus,
@@ -439,6 +441,7 @@ export class AnimalsService {
 
       taskAudit = await this.syncRevaccinationTask(tx, animal, createdVaccination, dto, actorId);
       await this.syncOwnerVaccinationReminders(tx, animal, createdVaccination, actorId);
+      await this.closeSupersededVaccinationReminders(tx, animal.id);
 
       return tx.vaccination.findUniqueOrThrow({
         where: { id: createdVaccination.id },
@@ -576,6 +579,7 @@ export class AnimalsService {
 
       taskAudit = await this.syncRevaccinationTask(tx, animal, createdVaccination, dto, actorId);
       await this.syncOwnerVaccinationReminders(tx, animal, createdVaccination, actorId);
+      await this.closeSupersededVaccinationReminders(tx, animal.id);
 
       const billItems = await tx.billItem.findMany({ where: { billId: bill.id }, select: { totalAmount: true } });
       const totalAmount = billItems.reduce((sum, item) => sum.plus(item.totalAmount), decimal(0));
@@ -637,6 +641,7 @@ export class AnimalsService {
 
       taskAudit = await this.syncRevaccinationTask(tx, animal, savedVaccination, dto, actorId);
       await this.syncOwnerVaccinationReminders(tx, animal, savedVaccination, actorId);
+      await this.closeSupersededVaccinationReminders(tx, animal.id);
 
       return tx.vaccination.findUniqueOrThrow({
         where: { id: vaccinationId },
@@ -738,6 +743,39 @@ export class AnimalsService {
     await this.logTaskAudit(taskAudit, actorId);
 
     return { deleted: true };
+  }
+
+  async dismissVaccinationReminders(animalId: string, dto: DismissVaccinationRemindersDto, actorId: string) {
+    const reason = dto.reason.trim();
+    if (reason.length < 2) throw new BadRequestException('Укажите причину');
+    const animal = await this.getAnimalForVaccination(animalId);
+    await this.prisma.$transaction(async tx => {
+      const vaccinations = await tx.vaccination.findMany({
+        where: { id: { in: dto.vaccinationIds }, animalId, cancelledAt: null },
+        include: { revaccinationTask: true },
+      });
+      if (vaccinations.length !== dto.vaccinationIds.length) throw new NotFoundException('Напоминание не найдено у этого пациента');
+      for (const vaccination of vaccinations) {
+        await tx.task.upsert({
+          where: { sourceVaccinationId: vaccination.id },
+          create: { sourceVaccinationId: vaccination.id, ownerId: animal.ownerId, animalId,
+            creatorId: actorId, taskType: 'revaccination', title: `Ревакцинация: ${vaccination.title}`,
+            dueAt: vaccination.expiresAt, status: TaskStatus.CANCELLED, comment: reason },
+          update: {}, // A concurrent completion must not be rewritten as a refusal.
+        });
+        await tx.task.updateMany({
+          where: { sourceVaccinationId: vaccination.id, status: TaskStatus.OPEN },
+          data: { status: TaskStatus.CANCELLED, comment: [vaccination.revaccinationTask?.comment, reason].filter(Boolean).join('\n') },
+        });
+        await tx.notificationOutbox.updateMany({
+          where: { dedupeKey: { startsWith: `vaccination:${vaccination.id}:` }, status: { in: [NotificationStatus.QUEUED, NotificationStatus.FAILED] } },
+          data: { status: NotificationStatus.CANCELLED },
+        });
+      }
+    });
+    await this.auditService.log({ actorId, action: 'vaccination.reminder.dismiss', entityType: 'Animal', entityId: animalId,
+      metadata: { vaccinationIds: dto.vaccinationIds, reason } });
+    return { dismissed: dto.vaccinationIds.length };
   }
 
   private async getAnimalForVaccination(animalId: string) {
@@ -849,6 +887,19 @@ export class AnimalsService {
     };
   }
 
+  private async closeSupersededVaccinationReminders(tx: Prisma.TransactionClient, animalId: string) {
+    const rows = await tx.vaccination.findMany({ where: { animalId, cancelledAt: null },
+      select: { id: true, title: true, vaccinatedAt: true, createdAt: true, expiresAt: true } });
+    const current = new Set(selectCurrentVaccinations(rows.map(row => ({ ...row, animal: { id: animalId } }))).map(row => row.id));
+    const superseded = rows.filter(row => !current.has(row.id)).map(row => row.id);
+    if (!superseded.length) return;
+    await tx.task.updateMany({ where: { sourceVaccinationId: { in: superseded }, status: TaskStatus.OPEN }, data: { status: TaskStatus.DONE } });
+    await tx.notificationOutbox.updateMany({ where: {
+      OR: superseded.map(id => ({ dedupeKey: { startsWith: `vaccination:${id}:` } })),
+      status: { in: [NotificationStatus.QUEUED, NotificationStatus.FAILED] },
+    }, data: { status: NotificationStatus.CANCELLED } });
+  }
+
   private async syncOwnerVaccinationReminders(
     tx: Prisma.TransactionClient,
     animal: AnimalForVaccination,
@@ -865,7 +916,8 @@ export class AnimalsService {
       data: { status: NotificationStatus.CANCELLED },
     });
 
-    if (!vaccination.ownerReminderEnabled || !vaccination.expiresAt || !animal.ownerId) {
+    const reminderTask = await tx.task.findUnique({ where: { sourceVaccinationId: vaccination.id }, select: { status: true } });
+    if ((reminderTask && reminderTask.status !== TaskStatus.OPEN) || !vaccination.ownerReminderEnabled || !vaccination.expiresAt || !animal.ownerId) {
       return;
     }
 
