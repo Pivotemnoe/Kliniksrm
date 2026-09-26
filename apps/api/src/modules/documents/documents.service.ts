@@ -11,7 +11,7 @@ import { Readable } from 'node:stream';
 import { AuditService } from '../audit/audit.service';
 import { ObjectStorageService } from '../files/object-storage.service';
 import { PrismaService } from '../../prisma/prisma.service';
-import { DocumentPdfLogo, DocumentPdfService, DocumentPdfSnapshot } from './document-pdf.service';
+import { defaultDocumentLogo, DocumentPdfLogo, DocumentPdfService, DocumentPdfSnapshot } from './document-pdf.service';
 import {
   documentLayoutToPlainText,
   normalizeDocumentLayout,
@@ -813,7 +813,7 @@ export class DocumentsService {
 
   private async loadPdfLogo(storageKey: string | null | undefined, mimeType: string | null | undefined) {
     if (!storageKey || (mimeType !== 'image/jpeg' && mimeType !== 'image/png')) {
-      return undefined;
+      return defaultDocumentLogo();
     }
 
     const stream = await this.storage.getObject(storageKey);

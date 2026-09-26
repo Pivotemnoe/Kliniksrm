@@ -1,8 +1,9 @@
+import { printLogoUrl, printImagesScript } from '../../shared/print/branding';
 import { appConfig } from '../../app/config';
-import type { OrganizationSettings } from '../organization/types';
+import type { OrganizationPrintProfile } from '../organization/types';
 import type { HospitalRecord, HospitalStay } from './types';
 
-export function printHospitalSheet(stay: HospitalStay, organization?: OrganizationSettings | null, includeNotes = false) {
+export function printHospitalSheet(stay: HospitalStay, organization?: OrganizationPrintProfile | null, includeNotes = false) {
   const printWindow = window.open('', '_blank', 'width=1100,height=820');
   if (!printWindow) return false;
 
@@ -10,7 +11,7 @@ export function printHospitalSheet(stay: HospitalStay, organization?: Organizati
   const groups = groupOwnerReportRecords(stay.hospitalRecords ?? [], timeZone, includeNotes);
   const clinicName = organization?.displayName?.trim() || appConfig.brandName;
   const clinicDescription = organization?.orgType?.trim() || 'Ветеринарная клиника';
-  const logoUrl = organization?.logoUrl ? new URL(organization.logoUrl, window.location.href).href : null;
+  const logoUrl = printLogoUrl(organization?.logoUrl);
   const organizationDetails = [
     organization?.legalName,
     organization?.inn ? `ИНН ${organization.inn}` : null,
@@ -61,7 +62,7 @@ export function printHospitalSheet(stay: HospitalStay, organization?: Organizati
 <body>
   <main class="page">
     <header class="clinic">
-      ${logoUrl ? `<img class="logo" src="${escapeHtml(logoUrl)}" alt="Логотип" />` : ''}
+      ${logoUrl ? `<img data-clinic-logo class="logo" src="${escapeHtml(logoUrl)}" alt="Логотип" />` : ''}
       <div><div class="brand">${escapeHtml(clinicName)}</div><div class="muted">${escapeHtml(clinicDescription)} · отчёт о лечении в стационаре</div>${organizationDetails ? `<div class="muted">${escapeHtml(organizationDetails)}</div>` : ''}</div>
     </header>
     <h1>Отчёт о лечении в стационаре</h1>
@@ -74,21 +75,14 @@ export function printHospitalSheet(stay: HospitalStay, organization?: Organizati
     ${recordsMarkup}
     <section class="signatures"><div class="signature">Представитель клиники / подпись</div><div class="signature">Дата</div></section>
   </main>
-  <script>
-    (() => {
-      const logo = document.querySelector('.logo');
-      const print = () => window.setTimeout(() => window.print(), 100);
-      if (!logo || logo.complete) print();
-      else { logo.addEventListener('load', print, { once: true }); logo.addEventListener('error', print, { once: true }); }
-    })();
-  </script>
+  ${printImagesScript()}
 </body>
 </html>`);
   printWindow.document.close();
   return true;
 }
 
-export function printHospitalBoxSheet(stay: HospitalStay, organization?: OrganizationSettings | null, includeAssignments = false) {
+export function printHospitalBoxSheet(stay: HospitalStay, organization?: OrganizationPrintProfile | null, includeAssignments = false) {
   const printWindow = window.open('', '_blank', 'width=760,height=900');
   if (!printWindow) return false;
 
@@ -148,7 +142,7 @@ export function printHospitalBoxSheet(stay: HospitalStay, organization?: Organiz
 </head>
 <body>
   <main class="page">
-    <header class="document-header"><div class="clinic">${escapeHtml(clinicName)}</div><div class="document-name">Лист стационара</div></header>
+    <header class="document-header"><img data-clinic-logo src="${escapeHtml(printLogoUrl(organization?.logoUrl))}" alt="Логотип клиники" style="width:14mm;height:14mm;object-fit:contain" /><div class="clinic">${escapeHtml(clinicName)}</div><div class="document-name">Лист стационара</div></header>
     <section class="identity">
       <div class="identity-row box-row"><span class="identity-label">Номер бокса</span><strong class="identity-value">${escapeHtml(boxName)}</strong></div>
       <div class="identity-row"><span class="identity-label">ФИО владельца</span><strong class="identity-value">${escapeHtml(ownerName)}</strong></div>
@@ -161,7 +155,7 @@ export function printHospitalBoxSheet(stay: HospitalStay, organization?: Organiz
     </div>
     ${assignmentMarkup}` : ''}
   </main>
-  <script>window.setTimeout(() => window.print(), 100);</script>
+  ${printImagesScript()}
 </body>
 </html>`);
   printWindow.document.close();

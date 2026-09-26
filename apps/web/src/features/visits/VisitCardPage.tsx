@@ -16,7 +16,7 @@ import { formatMoney } from '../../shared/utils/money';
 import { AnimalStatusTag } from '../animals/animalStatus';
 import { AnimalVaccinationsTab } from '../animals/AnimalVaccinationsTab';
 import { admitExistingHospitalStay, getHospitalResources } from '../hospital/hospital.api';
-import { getOrganizationSettings } from '../organization/organization.api';
+import { getOrganizationPrintProfile } from '../organization/organization.api';
 import { VisitDocumentsTab } from './VisitDocumentsTab';
 import { VisitExamTab, flushPendingVisitExam } from './VisitExamTab';
 import { VisitHistoryTab } from './VisitHistoryTab';
@@ -57,7 +57,7 @@ export function VisitCardPage() {
     queryFn: getHospitalResources,
     enabled: canManageHospital,
   });
-  const organizationQuery = useQuery({ queryKey: ['organization'], queryFn: getOrganizationSettings });
+  const organizationQuery = useQuery({ queryKey: ['organization-print-profile'], queryFn: getOrganizationPrintProfile });
   const hospitalAdmissionMutation = useMutation({
     mutationFn: (boxId: string) => admitExistingHospitalStay(visitId!, { hospitalBoxId: boxId }),
     onSuccess: async (stay) => {
@@ -452,6 +452,7 @@ export function VisitCardPage() {
                   label: 'Рекомендации',
                   children: (
                     <VisitRecommendationTab
+                      key={visit.id}
                       visit={visit}
                       canManage={canManage}
                       locked={Boolean(locked)}

@@ -33,7 +33,7 @@ export type OrganizationSettings = {
 export type OrganizationPrintProfile = Pick<
   OrganizationSettings,
   'id' | 'displayName' | 'legalName' | 'legalAddress' | 'logoUrl' | 'offices'
->;
+> & Partial<Pick<OrganizationSettings, 'orgType' | 'inn' | 'postalAddress'>>;
 
 export type UpdateOrganizationPayload = {
   displayName?: string;

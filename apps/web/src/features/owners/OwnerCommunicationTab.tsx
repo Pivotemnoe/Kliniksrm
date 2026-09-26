@@ -1,3 +1,4 @@
+import { printBrandHeader, printImagesScript } from '../../shared/print/branding';
 import { CopyOutlined, LinkOutlined, LockOutlined, MailOutlined, PrinterOutlined, ReloadOutlined, StopOutlined, UserAddOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Alert, Button, Checkbox, Descriptions, Drawer, Input, Popconfirm, QRCode, Radio, Space, Table, Tag, Typography } from 'antd';
@@ -753,7 +754,7 @@ export function printPortalInvite(input: PortalInvitePrintInput) {
     .footer { margin-top: 6px; color: #60717d; font-size: 8.5px; }
   </style>
 </head>
-<body>
+<body>${printBrandHeader()}
   <div class="brand">Личный кабинет владельца животного</div>
   <h1>Приглашение в личный кабинет</h1>
   <p class="intro">Уважаемый(ая) <strong>${escapePrintHtml(input.ownerName)}</strong>!</p>
@@ -776,11 +777,12 @@ export function printPortalInvite(input: PortalInvitePrintInput) {
     <p>Полезный онлайн-сервис для владельцев собак и кошек: <a href="${ownerServiceUrl}">${ownerServiceUrl}</a></p>
   </section>
   <p class="footer">Если интернет временно недоступен, сохраните приглашение и отсканируйте любой регистрационный QR-код позже, но до окончания указанного срока.</p>
+${printImagesScript()}
 </body>
 </html>`);
   printWindow.document.close();
   printWindow.focus();
-  printWindow.setTimeout(() => printWindow.print(), 250);
+
   return true;
 }
 

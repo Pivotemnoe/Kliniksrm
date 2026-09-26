@@ -44,6 +44,7 @@ COPY prisma prisma
 RUN npm --workspace @clinic-crm/api run db:generate
 
 COPY --from=build /app/apps/api/dist apps/api/dist
+COPY apps/api/assets apps/api/assets
 COPY apps/api/docker-entrypoint.sh apps/api/docker-entrypoint.sh
 COPY certs/russian_trusted_root_ca.pem certs/russian_trusted_root_ca.pem
 

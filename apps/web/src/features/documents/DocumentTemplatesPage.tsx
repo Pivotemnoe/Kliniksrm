@@ -1,3 +1,4 @@
+import { printLogoUrl, printImagesScript } from '../../shared/print/branding';
 import {
   BellOutlined,
   DeleteOutlined,
@@ -1339,9 +1340,7 @@ function printTemplate(
   }
 
   const clinicName = organization?.displayName?.trim() || 'TemichevVet';
-  const logoUrl = organization?.logoUrl
-    ? new URL(organization.logoUrl, window.location.href).href
-    : new URL('/brand/temichevvet-logo.jpg', window.location.href).href;
+  const logoUrl = printLogoUrl(organization?.logoUrl);
   const renderedBlocks = renderPrintableLayout(layout, renderDocumentPreview);
   const isLaboratoryTemplate = category?.toLocaleLowerCase('ru-RU').includes('лаборатор') ?? false;
   const showClinicHeader = layout.page.showClinicHeader || isLaboratoryTemplate;
@@ -1385,13 +1384,14 @@ function printTemplate(
 </head>
 <body>
   <main class="page">
-    ${showClinicHeader ? `<section class="header">
-      <img class="logo" src="${escapeHtml(logoUrl)}" alt="${escapeHtml(clinicName)}" />
-      <div>
+    <section class="header">
+      <img data-clinic-logo class="logo" src="${escapeHtml(logoUrl)}" alt="${escapeHtml(clinicName)}" />
+      ${showClinicHeader ? `<div>
         <div class="brand">${escapeHtml(clinicName)}</div>
         <div class="muted">Ветеринарная клиника</div>
       </div>
-    </section>` : ''}
+      ` : ''}
+    </section>
     <h1>${escapeHtml(title)}</h1>
     ${category ? `<div class="category">${escapeHtml(category)}</div>` : ''}
     ${patientMeta}
@@ -1401,12 +1401,7 @@ function printTemplate(
       <div class="signature">Подпись врача</div>
     </section>` : ''}
   </main>
-  <script>
-    const logo = document.querySelector('.logo');
-    const startPrint = () => window.setTimeout(() => window.print(), 80);
-    if (!logo || logo.complete) startPrint();
-    else { logo.addEventListener('load', startPrint, { once: true }); logo.addEventListener('error', startPrint, { once: true }); }
-  </script>
+  ${printImagesScript()}
 </body>
 </html>`);
   printWindow.document.close();

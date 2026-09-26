@@ -116,7 +116,7 @@ export function DocumentVisualEditor({
           <NumberSetting label="Размер текста" value={value.page.fontSize} min={8} max={18} disabled={disabled} onChange={(fontSize) => updatePage({ fontSize })} />
         </Space>
         <Space wrap className="document-page-toggles">
-          <Checkbox checked={value.page.showClinicHeader} disabled={disabled} onChange={(event) => updatePage({ showClinicHeader: event.target.checked })}>Шапка клиники</Checkbox>
+          <Checkbox checked={value.page.showClinicHeader} disabled={disabled} onChange={(event) => updatePage({ showClinicHeader: event.target.checked })}>Название клиники (логотип печатается всегда)</Checkbox>
           <Checkbox checked={value.page.showVisitMeta} disabled={disabled} onChange={(event) => updatePage({ showVisitMeta: event.target.checked })}>Данные приёма</Checkbox>
           <Checkbox checked={value.page.showSignatures} disabled={disabled} onChange={(event) => updatePage({ showSignatures: event.target.checked })}>Подписи</Checkbox>
         </Space>
@@ -311,7 +311,7 @@ function DocumentA4Preview({ layout, title, renderText }: { layout: DocumentLayo
       <Typography.Text strong>Предпросмотр {layout.page.size ?? 'A4'}</Typography.Text>
       {pages.map((blocks, pageIndex) => (
         <div key={pageIndex} className="document-a4-page" style={{ minHeight: 0, aspectRatio: layout.page.orientation === 'landscape' ? '1.414' : '0.707', padding: `${layout.page.marginTop / 2}px ${layout.page.marginRight / 2}px ${layout.page.marginBottom / 2}px ${layout.page.marginLeft / 2}px` }}>
-          {pageIndex === 0 && layout.page.showClinicHeader ? <div className="document-a4-clinic"><strong>Логотип и название клиники</strong><span>Документ ветеринарной клиники</span></div> : null}
+          {pageIndex === 0 ? <div className="document-a4-clinic"><strong>{layout.page.showClinicHeader ? 'Логотип и название клиники' : 'Логотип клиники'}</strong>{layout.page.showClinicHeader ? <span>Документ ветеринарной клиники</span> : null}</div> : null}
           {pageIndex === 0 ? <h2>{title || 'Без названия'}</h2> : null}
           {pageIndex === 0 && layout.page.showVisitMeta ? <div className="document-a4-meta">Дата приёма · Врач · Владелец · Пациент</div> : null}
           {blocks.map((block) => <PreviewBlock key={block.id} block={block} renderText={renderText} />)}

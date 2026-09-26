@@ -1,3 +1,4 @@
+import { printBrandHeader, printImagesScript } from '../../shared/print/branding';
 import { formatMoney } from '../../shared/utils/money';
 import { ClinicReport } from './types';
 
@@ -64,7 +65,7 @@ export function printReportAsPdf(report: ClinicReport) {
   popup.opener = null;
   popup.document.write(`<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Отчёт TemichevVet</title><style>
     body{font-family:Arial,sans-serif;color:#183750;margin:28px}h1{margin:0 0 6px}h2{margin-top:28px;font-size:18px}p{color:#657b8d}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.card{border:1px solid #dbe4ea;border-radius:8px;padding:12px}.card b{display:block;font-size:18px;margin-top:6px}table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:7px;border:1px solid #dbe4ea;text-align:left}th{background:#eef4f7}.num{text-align:right}@media print{body{margin:10mm}.no-print{display:none}}
-  </style></head><body><h1>TemichevVet · Управленческий отчёт</h1><p>Период: ${escapeHtml(report.range.from)} — ${escapeHtml(report.range.to)}. Сформирован: ${escapeHtml(new Date(report.generatedAt).toLocaleString('ru-RU'))}</p>
+  </style></head><body>${printBrandHeader()}<h1>TemichevVet · Управленческий отчёт</h1><p>Период: ${escapeHtml(report.range.from)} — ${escapeHtml(report.range.to)}. Сформирован: ${escapeHtml(new Date(report.generatedAt).toLocaleString('ru-RU'))}</p>
   <div class="cards">${printCard('Начислено', formatMoney(report.finance.billedAmount))}${printCard('Оплачено', formatMoney(report.finance.paidAmount))}${printCard('Долг', formatMoney(report.finance.debtAmount))}${printCard('Валовая прибыль', formatMoney(report.profit.grossProfit))}</div>
   ${printTable('Контроль приёмов по дням', ['Дата', 'Начато', 'Завершено', 'Более часа', 'Оповещений'], report.traffic.daily.map((item) => [date(item.date), item.visits, item.completedVisits, item.overdueVisits, item.overdueNotifications]))}
   ${printTable('Финансы по дням', ['Дата', 'Начислено', 'Оплачено'], report.traffic.daily.map((item) => [date(item.date), formatMoney(item.billedAmount), formatMoney(item.paidAmount)]))}
@@ -74,7 +75,7 @@ export function printReportAsPdf(report: ClinicReport) {
   ${printTable('Задолженность', ['Владелец', 'Телефон', 'Долг'], report.finance.debtors.map((item) => [item.ownerName, item.phone, formatMoney(item.debt)]))}
   ${printTable('Проведённые вакцинации', ['Дата', 'Вакцина', 'Пациент', 'Владелец', 'Микрочип'], report.vaccinations.administeredItems.map((item) => [date(item.vaccinatedAt), item.title, item.animal.nickname, item.animal.owner.fullName, item.animal.microchip]))}
   ${printTable('Идентифицированные животные', ['Микрочип', 'Пациент', 'Вид', 'Порода', 'Владелец'], report.vaccinations.identifiedAnimals.map((item) => [item.microchip, item.nickname, item.species, item.breed, item.owner.fullName]))}
-  <p>${escapeHtml(report.profit.note)}</p><script>window.onload=()=>window.print();<\/script></body></html>`);
+  <p>${escapeHtml(report.profit.note)}</p>${printImagesScript()}</body></html>`);
   popup.document.close();
   return true;
 }

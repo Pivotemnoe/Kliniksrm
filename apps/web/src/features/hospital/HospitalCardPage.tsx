@@ -23,7 +23,7 @@ import { formatMoney } from '../../shared/utils/money';
 import { formatServicePrice, getServiceDefaultPrice, getServicePriceHelp, getServicePriceRange } from '../stock/service-pricing';
 import { AttachmentsPanel } from '../files/AttachmentsPanel';
 import { listVisitFiles, uploadVisitFile } from '../files/files.api';
-import { getOrganizationSettings } from '../organization/organization.api';
+import { getOrganizationPrintProfile } from '../organization/organization.api';
 import {
   cancelHospitalStay,
   cancelHospitalRecords,
@@ -90,7 +90,7 @@ export function HospitalCardPage() {
     enabled: Boolean(stayId),
   });
   const resourcesQuery = useQuery({ queryKey: ['hospital', 'resources'], queryFn: getHospitalResources });
-  const organizationQuery = useQuery({ queryKey: ['organization'], queryFn: getOrganizationSettings });
+  const organizationQuery = useQuery({ queryKey: ['organization-print-profile'], queryFn: getOrganizationPrintProfile });
   const stay = stayQuery.data;
   const active = stay?.status === 'ACTIVE';
 

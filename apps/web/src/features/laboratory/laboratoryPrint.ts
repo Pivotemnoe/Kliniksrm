@@ -1,3 +1,4 @@
+import { printLogoUrl, printImagesScript } from '../../shared/print/branding';
 import type { DocumentLayout } from '../documents/documentLayout';
 import type { OrganizationPrintProfile } from '../organization/types';
 import { formatDateTime } from '../../shared/utils/date';
@@ -39,9 +40,7 @@ export function buildLaboratoryOrderPrintHtml(
   const clinicName = organization?.displayName?.trim() || 'TemichevVet';
   const clinicAddress = organization?.offices?.[0]?.address || organization?.legalAddress || '';
   const clinicPhone = organization?.offices?.[0]?.phone || '';
-  const logoUrl = organization?.logoUrl
-    ? new URL(organization.logoUrl, baseHref).href
-    : new URL('/brand/temichevvet-logo.jpg', baseHref).href;
+  const logoUrl = printLogoUrl(organization?.logoUrl, baseHref);
   const snapshots = Array.isArray(order.formSnapshots) ? order.formSnapshots.filter(isLaboratoryFormSnapshot) : [];
   const boundIds = new Set(snapshots.flatMap(snapshot => snapshot.bindings.map(binding => binding.itemId)));
   const additionalItems = order.items.filter(item => !boundIds.has(item.id) && item.status !== 'CANCELLED');
@@ -86,6 +85,7 @@ export function buildLaboratoryOrderPrintHtml(
   <label>Ориентация <select id="paper-orientation"><option value="portrait">Книжная</option><option value="landscape">Альбомная</option></select></label>
   <button type="button" id="print-button">Печать</button>
 </div>${pages}
+  ${printImagesScript(false, baseHref)}
   <script>
     const updatePaper = () => {
       const size = document.getElementById('paper-size').value === 'A4' ? 'A4' : 'A5';
@@ -96,7 +96,7 @@ export function buildLaboratoryOrderPrintHtml(
     };
     document.getElementById('paper-size').addEventListener('change', updatePaper);
     document.getElementById('paper-orientation').addEventListener('change', updatePaper);
-    document.getElementById('print-button').addEventListener('click', () => { updatePaper(); window.print(); });
+    document.getElementById('print-button').addEventListener('click', () => { updatePaper(); window.printWithImages(); });
     const logos = Array.from(document.querySelectorAll('.lab-logo'));
     const startPrint = () => { document.getElementById('print-button').disabled = false; };
     if (!logos.length || logos.every((logo) => logo.complete)) startPrint();
@@ -197,7 +197,7 @@ function renderLayout(layout: DocumentLayout, order: LaboratoryPrintOrder) {
 
 function renderHeader(clinic: ClinicPrintData) {
   return `<header class="lab-header">
-    <img class="lab-logo" src="${escapeHtml(clinic.logoUrl)}" alt="${escapeHtml(clinic.clinicName)}" />
+    <img data-clinic-logo class="lab-logo" src="${escapeHtml(clinic.logoUrl)}" alt="${escapeHtml(clinic.clinicName)}" />
     <div><div class="lab-brand">${escapeHtml(clinic.clinicName)}</div><div>Ветеринарная клиника</div>
       ${clinic.clinicAddress ? `<div class="lab-contact">${escapeHtml(clinic.clinicAddress)}</div>` : ''}
       ${clinic.clinicPhone ? `<div class="lab-contact">${escapeHtml(clinic.clinicPhone)}</div>` : ''}

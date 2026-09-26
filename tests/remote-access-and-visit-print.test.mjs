@@ -20,10 +20,8 @@ test('печатный лист приёма использует реквизи
   assert.match(source, /organization\.inn/);
   assert.match(source, /organization\.postalAddress \|\| organization\.legalAddress/);
   assert.match(source, /@page \{ size: A4; margin: 0; \}/);
-  assert.match(source, /organization\?\.logoUrl \? new URL\(organization\.logoUrl, window\.location\.href\)\.href : null/);
-  assert.match(source, /logo\.addEventListener\('load', printWhenReady/);
-  assert.match(source, /logo\.parentElement\.remove\(\)/);
-  assert.doesNotMatch(source, /src="\$\{escapeHtml\(appConfig\.logoUrl\)\}"/);
+  assert.match(source, /printLogoUrl\(organization\?\.logoUrl\)/);
+  assert.match(source, /printImagesScript\(\)/);
   assert.doesNotMatch(source, /<span>Напечатано<\/span>|<span>Напечатал<\/span>/);
   assert.doesNotMatch(source, /owner\.phone|owner\.extraPhone|<span>Телефон владельца<\/span>/);
   assert.doesNotMatch(source, /employee\?\.phone|doctorPhone|<span>Телефон врача<\/span>/);
@@ -42,7 +40,7 @@ test('кличка пациента редактируется отдельно�
   assert.match(service, /nickname: \{ from: currentAnimal\.nickname, to: dto\.nickname \}/);
 });
 
-test('организация загружает собственный логотип, а пустой логотип не печатается', async () => {
+test('организация загружает собственный логотип, а без него используется фирменный', async () => {
   const [service, controller, page, migration, print] = await Promise.all([
     read('apps/api/src/modules/organization/organization.service.ts'),
     read('apps/api/src/modules/organization/organization.controller.ts'),
@@ -57,7 +55,7 @@ test('организация загружает собственный лого�
   assert.match(service, /hasExpectedImageSignature/);
   assert.match(service, /5 \* 1024 \* 1024/);
   assert.match(page, /Загрузить логотип/);
-  assert.match(page, /Если логотип не загружен, место под него на документе не показывается/);
+  assert.match(page, /Если свой логотип не загружен, используется логотип TemichevVet/);
   assert.match(print, /organization\?\.logoUrl/);
   assert.doesNotMatch(print, /<img class="logo" src="\$\{escapeHtml\(appConfig\.logoUrl\)\}/);
   assert.doesNotMatch(migration, /DROP TABLE|TRUNCATE|DELETE FROM/i);

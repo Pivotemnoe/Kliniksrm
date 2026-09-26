@@ -406,7 +406,7 @@ function OrganizationLogoEditor({
       <Space direction="vertical" size={6} style={{ flex: 1 }}>
         <Typography.Text strong>Логотип клиники</Typography.Text>
         <Typography.Text type="secondary">
-          Печатается на бланках приёма и назначений. Если логотип не загружен, место под него на документе не показывается.
+          Печатается на документах клиники. Если свой логотип не загружен, используется логотип TemichevVet.
         </Typography.Text>
         {organization?.logoOriginalName ? <Typography.Text>{organization.logoOriginalName}</Typography.Text> : null}
         {canManage ? (

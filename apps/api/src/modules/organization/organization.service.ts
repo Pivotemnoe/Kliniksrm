@@ -34,6 +34,9 @@ export class OrganizationService {
       displayName: organization.displayName,
       legalName: organization.legalName,
       legalAddress: organization.legalAddress,
+      postalAddress: organization.postalAddress,
+      orgType: organization.orgType,
+      inn: organization.inn,
       offices: organization.offices,
       logoUrl: organization.logoStorageKey
         ? `/api/v1/organization/print-logo?v=${encodeURIComponent(organization.logoUpdatedAt?.toISOString() || '1')}`

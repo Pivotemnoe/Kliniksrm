@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { Injectable } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
 import { DocumentLayout, DocumentLayoutBlock } from './document-layout';
@@ -28,6 +30,7 @@ export type DocumentPdfLogo = {
 @Injectable()
 export class DocumentPdfService {
   render(snapshot: DocumentPdfSnapshot, clinicLogo?: DocumentPdfLogo) {
+    clinicLogo ??= defaultDocumentLogo();
     return new Promise<Buffer>((resolve, reject) => {
       const chunks: Buffer[] = [];
       const document = new PDFDocument({
@@ -119,11 +122,10 @@ function drawStructuredDocument(
   const width = contentWidth(document);
 
   const compact = layout.page.size === 'A5';
-  if (layout.page.showClinicHeader) {
-    if (compact) {
-      document.font('Roboto-Bold').fontSize(12).fillColor('#17324d').text(snapshot.clinicName || 'TemichevVet', left, document.y, { width });
-      document.moveDown(0.4);
-    } else drawHeader(document, snapshot, clinicLogo);
+  if (layout.page.showClinicHeader) drawHeader(document, snapshot, clinicLogo);
+  else {
+    document.image((clinicLogo ?? defaultDocumentLogo()).data, left, document.y, { fit: [54, 54] });
+    document.y += 66;
   }
   document.font('Roboto-Bold').fontSize(compact ? 12 : 18).fillColor('#17324d').text(snapshot.title, left, document.y, { width });
   document.moveDown(0.8);
@@ -262,10 +264,11 @@ function contentWidth(document: PDFKit.PDFDocument) {
 function drawHeader(document: PDFKit.PDFDocument, snapshot: DocumentPdfSnapshot, clinicLogo?: DocumentPdfLogo) {
   const left = document.page.margins.left;
   const width = contentWidth(document);
+  const top = document.y;
   let logoRendered = false;
   if (clinicLogo && hasExpectedLogoSignature(clinicLogo)) {
     try {
-      document.image(clinicLogo.data, left, 38, { fit: [54, 54], align: 'center', valign: 'center' });
+      document.image(clinicLogo.data, left, top, { fit: [54, 54], align: 'center', valign: 'center' });
       logoRendered = true;
     } catch {
       // Keep a clean text header if a previously uploaded image can no longer be decoded.
@@ -277,14 +280,14 @@ function drawHeader(document: PDFKit.PDFDocument, snapshot: DocumentPdfSnapshot,
     .font('Roboto-Bold')
     .fontSize(18)
     .fillColor('#17324d')
-    .text(snapshot.clinicName || 'TemichevVet', textX, 47, { width: left + width - textX, lineBreak: false, ellipsis: true });
+    .text(snapshot.clinicName || 'TemichevVet', textX, top + 9, { width: left + width - textX, lineBreak: false, ellipsis: true });
   document
     .font('Roboto')
     .fontSize(9)
     .fillColor('#66788a')
-    .text('Документ ветеринарной клиники', textX, 72, { width: left + width - textX, lineBreak: false });
-  document.strokeColor('#1f7880').lineWidth(1.2).moveTo(left, 104).lineTo(left + width, 104).stroke();
-  document.y = 119;
+    .text('Документ ветеринарной клиники', textX, top + 34, { width: left + width - textX, lineBreak: false });
+  document.strokeColor('#1f7880').lineWidth(1.2).moveTo(left, top + 66).lineTo(left + width, top + 66).stroke();
+  document.y = top + 81;
 }
 
 function hasExpectedLogoSignature(logo: DocumentPdfLogo) {
@@ -311,4 +314,8 @@ function formatDateTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '—';
   return date.toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' });
+}
+
+export function defaultDocumentLogo(): DocumentPdfLogo {
+  return { data: readFileSync(resolve(__dirname, '../../../assets/temichevvet-logo.jpg')), mimeType: 'image/jpeg' };
 }

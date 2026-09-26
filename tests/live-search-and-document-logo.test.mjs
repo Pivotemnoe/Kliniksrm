@@ -61,5 +61,5 @@ test('новый PDF получает загруженный логотип ор
   assert.match(documentsService, /clinicLogoSha256/);
   assert.match(documentsService, /this\.pdfService\.render\(pdfSnapshot, clinicLogo\)/);
   assert.match(pdfService, /document\.image\(clinicLogo\.data/);
-  assert.doesNotMatch(pdfService, /temichevvet-logo\.jpg/);
+  assert.match(pdfService, /temichevvet-logo\.jpg/);
 });

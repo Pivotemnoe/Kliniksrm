@@ -1,3 +1,4 @@
+import { printBrandHeader, printImagesScript } from '../../shared/print/branding';
 import {
   CheckCircleOutlined,
   CloseOutlined,
@@ -1290,7 +1291,7 @@ function printBillDocument(bill: Bill, settings: BillPrintSettings) {
     ${isReceipt ? 'h1 { font-size: 17px; } h2 { font-size: 13px; margin-top: 14px; } .grid { grid-template-columns: 1fr; } .totals { width: 100%; }' : ''}
   </style>
 </head>
-<body>
+<body>${printBrandHeader()}
   <h1>Счёт / накладная</h1>
   <div class="meta">${escapeHtml(formatDateTime(bill.createdAt))} · ${escapeHtml(billSourceLabels[bill.source])} · ${escapeHtml(paymentStatusLabels[bill.status])}</div>
 
@@ -1351,7 +1352,7 @@ function printBillDocument(bill: Bill, settings: BillPrintSettings) {
     </thead>
     <tbody>${paymentRows}</tbody>
   </table>` : ''}
-  <script>window.onload = () => window.print();</script>
+  ${printImagesScript()}
 </body>
 </html>`);
   printWindow.document.close();

@@ -1,10 +1,11 @@
+import { printLogoUrl, printImagesScript } from '../../shared/print/branding';
 import { appConfig } from '../../app/config';
 import { formatDateTime } from '../../shared/utils/date';
 import { formatMoney } from '../../shared/utils/money';
-import type { OrganizationSettings } from '../organization/types';
+import type { OrganizationPrintProfile } from '../organization/types';
 import { Visit, VisitRecommendationInput, visitTypeLabels } from './types';
 
-export function printVisitSheet(visit: Visit, organization?: OrganizationSettings | null) {
+export function printVisitSheet(visit: Visit, organization?: OrganizationPrintProfile | null) {
   openPrintWindow({
     title: `Лист приёма ${visit.animal.nickname}`,
     heading: 'Лист приёма',
@@ -32,7 +33,7 @@ export function printVisitSheet(visit: Visit, organization?: OrganizationSetting
 export function printVisitRecommendation(
   visit: Visit,
   recommendation?: VisitRecommendationInput,
-  organization?: OrganizationSettings | null,
+  organization?: OrganizationPrintProfile | null,
 ) {
   openPrintWindow({
     title: `Назначения ${visit.animal.nickname}`,
@@ -64,7 +65,7 @@ function openPrintWindow({
   title: string;
   heading: string;
   visit: Visit;
-  organization?: OrganizationSettings | null;
+  organization?: OrganizationPrintProfile | null;
   sections: PrintSection[];
   compactMeta?: Array<[string, string]>;
 }) {
@@ -75,7 +76,7 @@ function openPrintWindow({
 
   const animalLine = [formatSpecies(visit.animal.species), visit.animal.nickname, visit.animal.breed].filter(Boolean).join(' · ');
   const doctor = visit.employee?.fullName ?? '—';
-  const logoUrl = organization?.logoUrl ? new URL(organization.logoUrl, window.location.href).href : null;
+  const logoUrl = printLogoUrl(organization?.logoUrl);
   const clinicName = organization?.displayName?.trim() || appConfig.brandName;
   const clinicDescription = organization?.orgType?.trim() || 'Ветеринарная клиника';
   const clinicDetails = formatOrganizationDetails(organization);
@@ -130,7 +131,7 @@ function openPrintWindow({
 <body>
   <main class="page">
     <section class="header${logoUrl ? ' with-logo' : ''}">
-      ${logoUrl ? `<div class="logo-box"><img class="logo" src="${escapeHtml(logoUrl)}" alt="Логотип клиники" /></div>` : ''}
+      ${logoUrl ? `<div class="logo-box"><img data-clinic-logo class="logo" src="${escapeHtml(logoUrl)}" alt="Логотип клиники" /></div>` : ''}
       <div>
         <div class="brand">${escapeHtml(clinicName)}</div>
         <div class="muted">${escapeHtml(clinicDescription)} · документ приёма</div>
@@ -151,41 +152,13 @@ function openPrintWindow({
       <div class="signature">Подпись врача</div>
     </section>
   </main>
-  <script>
-    (() => {
-      const logo = document.querySelector('.logo');
-      let printStarted = false;
-
-      const printWhenReady = () => {
-        if (printStarted) return;
-        printStarted = true;
-        window.setTimeout(() => window.print(), 80);
-      };
-      const hideBrokenLogo = () => {
-        if (logo?.parentElement) logo.parentElement.remove();
-        document.querySelector('.header')?.classList.remove('with-logo');
-        printWhenReady();
-      };
-
-      if (!logo) {
-        printWhenReady();
-      } else if (logo.complete) {
-        logo.naturalWidth > 0 ? printWhenReady() : hideBrokenLogo();
-      } else {
-        logo.addEventListener('load', printWhenReady, { once: true });
-        logo.addEventListener('error', hideBrokenLogo, { once: true });
-        window.setTimeout(() => {
-          if (!logo.complete || logo.naturalWidth === 0) hideBrokenLogo();
-        }, 2000);
-      }
-    })();
-  </script>
+  ${printImagesScript()}
 </body>
 </html>`);
   printWindow.document.close();
 }
 
-function formatOrganizationDetails(organization?: OrganizationSettings | null) {
+function formatOrganizationDetails(organization?: OrganizationPrintProfile | null) {
   if (!organization) {
     return '';
   }
