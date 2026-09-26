@@ -404,14 +404,15 @@ export class DocumentsService {
       if (document.status !== DocumentStatus.DRAFT) throw new BadRequestException('Сохранённый PDF недоступен. Требуется восстановление документа.');
       const draft = await this.prisma.visitDocument.findFirstOrThrow({ where: { id: documentId, visitId },
         include: { visit: { include: { owner: true, animal: true, employee: true } } } });
-      const organization = await this.prisma.organization.findFirst({ orderBy: { createdAt: 'asc' }, select: { displayName: true } });
+      const organization = await this.prisma.organization.findFirst({ orderBy: { createdAt: 'asc' }, select: { displayName: true, logoStorageKey: true, logoMimeType: true } });
+      const clinicLogo = await this.loadPdfLogo(organization?.logoStorageKey, organization?.logoMimeType);
       const buffer = await this.pdfService.render({
         title: `${draft.title} — черновик`, body: draft.body ?? '',
         clinicName: organization?.displayName ?? 'TemichevVet', visitStartedAt: draft.visit.startedAt.toISOString(),
         employeeName: draft.visit.employee?.fullName ?? '', ownerName: draft.visit.owner.fullName,
         animalName: draft.visit.animal.nickname, animalDescription: [draft.visit.animal.species, draft.visit.animal.breed].filter(Boolean).join(', '),
         layout: tryNormalizeDocumentLayout(draft.layout),
-      });
+      }, clinicLogo);
       await this.auditService.log({ actorId, action: 'visit_document.draft_pdf_open', entityType: 'VisitDocument', entityId: document.id, metadata: { visitId } });
       return { file: { originalName: `${draft.title}-draft.pdf`, sizeBytes: buffer.length }, stream: Readable.from(buffer) };
     }

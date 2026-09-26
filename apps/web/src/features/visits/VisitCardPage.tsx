@@ -322,10 +322,10 @@ export function VisitCardPage() {
             </div>
             <div className="context-section-body">
               <Space wrap>
-                <Button icon={<PrinterOutlined />} onClick={() => printVisitSheet(visit, organizationQuery.data)}>
+                <Button icon={<PrinterOutlined />} onClick={() => printVisitSheet(visit, organizationQuery.data, recommendationDraft?.visitId === visit.id ? recommendationDraft.values : undefined)}>
                   Лист приёма
                 </Button>
-                <Button icon={<PrinterOutlined />} onClick={() => printVisitRecommendation(visit, undefined, organizationQuery.data)}>
+                <Button icon={<PrinterOutlined />} onClick={() => printVisitRecommendation(visit, recommendationDraft?.visitId === visit.id ? recommendationDraft.values : undefined, organizationQuery.data)}>
                   Лист назначений
                 </Button>
               </Space>

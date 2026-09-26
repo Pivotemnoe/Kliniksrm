@@ -5,7 +5,7 @@ import { formatMoney } from '../../shared/utils/money';
 import type { OrganizationPrintProfile } from '../organization/types';
 import { Visit, VisitRecommendationInput, visitTypeLabels } from './types';
 
-export function printVisitSheet(visit: Visit, organization?: OrganizationPrintProfile | null) {
+export function printVisitSheet(visit: Visit, organization?: OrganizationPrintProfile | null, recommendation?: VisitRecommendationInput) {
   openPrintWindow({
     title: `Лист приёма ${visit.animal.nickname}`,
     heading: 'Лист приёма',
@@ -17,8 +17,8 @@ export function printVisitSheet(visit: Visit, organization?: OrganizationPrintPr
       { title: 'Симптомы', body: visit.exam?.symptoms },
       { title: 'Манипуляции', body: visit.exam?.manipulations },
       { title: 'Диагнозы', body: formatDiagnoses(visit) },
-      { title: 'План лечения', body: visit.recommendation?.treatmentPlan },
-      { title: 'Рекомендации владельцу', body: visit.recommendation?.careNotes },
+      { title: 'План лечения', body: recommendation?.treatmentPlan ?? visit.recommendation?.treatmentPlan },
+      { title: 'Рекомендации владельцу', body: recommendation?.careNotes ?? visit.recommendation?.careNotes },
       { title: 'Товары и услуги', body: formatServices(visit) },
     ],
     compactMeta: [

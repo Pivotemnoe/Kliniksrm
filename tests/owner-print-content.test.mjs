@@ -63,3 +63,13 @@ test('box sheet defaults to identity only; explicit option includes assignments 
  module.printHospitalBoxSheet(stay, undefined, true);
  assert.match(html, /MEDICATION_SENTINEL/); assert.match(html, /<h1>Назначения/); assert.match(html, /class="paper-check" type="checkbox"/);
 });
+
+test('visit print uses current recommendation draft and preserves explicitly cleared fields', () => {
+ let html;
+ const module = loadPrintModule('visits/visitPrint.ts', value => { html = value; });
+ const visit = { startedAt: base.recordedAt, owner: { fullName: 'Тест' }, animal: { nickname: 'Тест', species: 'Кошка' }, diagnoses: [], recommendation: { treatmentPlan: 'OLD_PLAN', careNotes: 'OLD_CARE' } };
+ module.printVisitSheet(visit, undefined, { treatmentPlan: 'NEW_PLAN', careNotes: '' });
+ assert.match(html, /NEW_PLAN/); assert.doesNotMatch(html, /OLD_PLAN|OLD_CARE/);
+ module.printVisitRecommendation(visit, { treatmentPlan: '', careNotes: 'NEW_CARE' });
+ assert.match(html, /NEW_CARE/); assert.doesNotMatch(html, /OLD_PLAN|OLD_CARE/);
+});

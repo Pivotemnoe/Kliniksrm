@@ -181,7 +181,7 @@ export function VisitRecommendationTab({ visit, canManage, locked, organization,
         <Button onClick={resetToSaved} disabled={disabled || mutation.isPending}>
           Сбросить
         </Button>
-        <Button icon={<PrinterOutlined />} onClick={() => printVisitRecommendation(visit, recommendationSchema.parse(getValues()), organization)}>
+        <Button icon={<PrinterOutlined />} onClick={() => printVisitRecommendation(visit, getValues(), organization)}>
           Печать назначений
         </Button>
       </Space>
