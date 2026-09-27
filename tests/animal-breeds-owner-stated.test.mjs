@@ -5,10 +5,10 @@ import test from 'node:test';
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
 test('каталог содержит расширенные породы собак и кошек', async () => {
-  const seed = await read('prisma/seed.cjs');
+  const seed = await read('prisma/data/animal-catalog-base.json');
 
   for (const breed of ['Фокстерьер гладкошёрстный', 'Вельш-корги пемброк', 'Канадский сфинкс', 'Норвежская лесная']) {
-    assert.match(seed, new RegExp(`'${breed}'`));
+    assert.match(seed, new RegExp(breed));
   }
 });
 
