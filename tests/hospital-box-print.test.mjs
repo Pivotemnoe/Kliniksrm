@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import postcss from 'postcss';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
@@ -37,10 +38,16 @@ test('карта стационара печатает отдельный вну
   assert.match(hospitalService, /diagnoses: stay\.sourceVisit\.diagnoses/);
 });
 
-test('заголовок карты стационара не сжимается по буквам на рабочем ноутбуке', async () => {
+test('шапка стационара защищена от сжатия вне зависимости от ширины экрана', async () => {
   const styles = await read('apps/web/src/styles.css');
 
-  assert.match(styles, /\.hospital-card-page \.page-header \{[\s\S]*?flex-direction: column;/);
+  const css = postcss.parse(styles);
+  const desktopRule = css.nodes.find((node) => node.type === 'rule' && node.selector === '.hospital-card-page .page-header');
+  assert.ok(desktopRule, 'Hospital header protection must be unconditional, outside viewport media queries');
+  assert.ok(desktopRule.nodes.some((node) => node.prop === 'flex-direction' && node.value === 'column'));
+  const commonRule = css.nodes.find((node) => node.type === 'rule' && node.selector === '.page-header');
+  assert.ok(commonRule.nodes.some((node) => node.prop === 'flex-wrap' && node.value === 'wrap'));
+
   assert.match(styles, /\.hospital-card-page \.page-header h2 \{[\s\S]*?overflow-wrap: normal;[\s\S]*?word-break: normal;/);
   assert.match(styles, /\.hospital-card-page \.page-header-extra > \.ant-space \{[\s\S]*?flex-wrap: wrap;/);
 });
