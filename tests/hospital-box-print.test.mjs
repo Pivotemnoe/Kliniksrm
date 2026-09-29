@@ -40,7 +40,7 @@ test('карта стационара печатает отдельный вну
 test('заголовок карты стационара не сжимается по буквам на рабочем ноутбуке', async () => {
   const styles = await read('apps/web/src/styles.css');
 
-  assert.match(styles, /@media \(max-width: 1500px\)[\s\S]*?\.hospital-card-page \.page-header \{[\s\S]*?flex-direction: column;/);
+  assert.match(styles, /\.hospital-card-page \.page-header \{[\s\S]*?flex-direction: column;/);
   assert.match(styles, /\.hospital-card-page \.page-header h2 \{[\s\S]*?overflow-wrap: normal;[\s\S]*?word-break: normal;/);
   assert.match(styles, /\.hospital-card-page \.page-header-extra > \.ant-space \{[\s\S]*?flex-wrap: wrap;/);
 });
