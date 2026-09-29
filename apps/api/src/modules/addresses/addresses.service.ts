@@ -6,7 +6,7 @@ type AddressRow = { id: bigint; label: string; level: number; sourceVersion: num
 
 @Injectable()
 export class AddressesService {
-  private localities: string[] = [];
+  private localities: { name: string; city: boolean }[] = [];
   private refreshedAt = 0;
   constructor(private readonly prisma: PrismaService) {}
 
@@ -14,15 +14,24 @@ export class AddressesService {
     const query = addressSearchQuery(input);
     if (!query.valid) return { suggestions: [] };
     if (Date.now() - this.refreshedAt > 5 * 60 * 1000) {
-      const names = await this.prisma.$queryRaw<{ name: string }[]>`SELECT DISTINCT "name" FROM "AddressCatalogEntry" WHERE "level" IN (5,6)`;
-      this.localities = names.map(({ name }) => name.toLocaleLowerCase('ru').replace(/ё/g, 'е').replace(/[^а-яa-z0-9]+/gu, ' ').trim()).sort((a, b) => b.length - a.length);
+      const names = await this.prisma.$queryRaw<{ name: string; level: number }[]>`SELECT DISTINCT "name", "level" FROM "AddressCatalogEntry" WHERE "level" IN (5,6)`;
+      this.localities = names.map(({ name, level }) => ({ name: name.toLocaleLowerCase('ru').replace(/ё/g, 'е').replace(/[^а-яa-z0-9]+/gu, ' ').trim(), city: level === 5 })).sort((a, b) => b.name.length - a.name.length);
       this.refreshedAt = Date.now();
     }
-    const placeInput = normalizeAddressInput(input)
-      .replace(/^(?:россия[,\s]*)?(?:(?:краснодарский|ставропольский)\s+край[,\s]*)?/u, '')
-      .replace(/^(?:город|г\.?|село|с\.?|поселок|пос\.?|п\.?|станица|ст\.?|ст-ца)\s+/u, '')
+    const regionlessInput = normalizeAddressInput(input)
+      .replace(/^(?:россия[,\s]*)?(?:(?:краснодарский|ставропольский)\s+край[,\s]*)?/u, '');
+    const explicitPlaceType = /^(?:город|г\.?|село|с\.?|поселок|пос\.?|п\.?|станица|ст\.?|ст-ца|хутор|х\.?)\s+/u.test(regionlessInput);
+    const placeInput = regionlessInput
+      .replace(/^(?:город|г\.?|село|с\.?|поселок|пос\.?|п\.?|станица|ст\.?|ст-ца|хутор|х\.?)\s+/u, '')
       .replace(/[^а-яa-z0-9]+/gu, ' ').trim();
-    const locality = this.localities.find((name) => placeInput === name || placeInput.startsWith(`${name} `));
+    // A village may share a street name (e.g. Ленина). Bare street + house
+    // must retain Armavir priority; explicit place type or a following street
+    // identifies a settlement. City names are unambiguous locality hints.
+    const locality = this.localities.find(({ name, city }) => {
+      if (placeInput !== name && !placeInput.startsWith(`${name} `)) return false;
+      const rest = addressSearchQuery(placeInput.slice(name.length).trim());
+      return city || explicitPlaceType || /[а-яa-z]{2}/u.test(rest.tsquery);
+    })?.name;
     const rows = await this.prisma.$queryRaw<AddressRow[]>`
       SELECT "id", "label", "level", "sourceVersion"
       FROM "AddressCatalogEntry"

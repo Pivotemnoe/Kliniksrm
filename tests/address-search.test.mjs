@@ -20,7 +20,7 @@ test('explicit locality restricts results; unknown place does not silently selec
   const { AddressesService } = createRequire(import.meta.url)('../apps/api/dist/modules/addresses/addresses.service.js');
   const calls = [];
   const prisma = { $queryRaw: async (strings, ...values) => {
-    if (strings.join('').includes('DISTINCT')) return [{name:'Армавир'}, {name:'Ставрополь'}, {name:'Заветный'}];
+    if (strings.join('').includes('DISTINCT')) return [{name:'Армавир', level:5}, {name:'Ставрополь', level:5}, {name:'Заветный', level:6}, {name:'Ленина', level:6}];
     calls.push(values);
     return [{id: 123n, label:'test', level:8, sourceVersion:20260929}];
   } };
@@ -31,6 +31,16 @@ test('explicit locality restricts results; unknown place does not silently selec
   await service.suggest('Неизвестныйпоселок Мира');
   assert.ok(!calls[1].includes('|армавир|'));
   assert.equal(calls[1][1], '');
+  await service.suggest('Ленина');
+  assert.equal(calls[2][1], '');
+  await service.suggest('Ленина, д. 15');
+  assert.equal(calls[3][1], '');
+  await service.suggest('х. Ленина, д. 15');
+  assert.ok(calls[4].includes('|ленина|'));
+  await service.suggest('Заветный Мира');
+  assert.ok(calls[5].includes('|заветный|'));
+  await service.suggest('Ставрополь');
+  assert.ok(calls[6].includes('|ставрополь|'));
 });
 
 test('colloquial Starostanichnaya locality resolves to the GAR name without renaming streets', () => {
