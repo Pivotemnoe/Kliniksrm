@@ -32,3 +32,9 @@ test('explicit locality restricts results; unknown place does not silently selec
   assert.ok(!calls[1].includes('|армавир|'));
   assert.equal(calls[1][1], '');
 });
+
+test('colloquial Starostanichnaya locality resolves to the GAR name without renaming streets', () => {
+  const { normalizeAddressInput } = createRequire(import.meta.url)('../apps/api/dist/modules/addresses/address-search.js');
+  assert.equal(normalizeAddressInput('Старостаничная, Мира'), 'старая станица, мира');
+  assert.equal(normalizeAddressInput('Армавир, ул. Старостаничная'), 'армавир, ул. старостаничная');
+});

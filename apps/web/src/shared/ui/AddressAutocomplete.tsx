@@ -23,7 +23,8 @@ export function AddressAutocomplete({ value, onChange, placeholder = 'Город
   // Never invent a street, default an unknown town to Armavir, or show stale
   // suggestions belonging to an earlier query.
   const current = query === (value?.trim() ?? '');
-  const options = current ? (addresses.data?.suggestions ?? []).map((item) => ({ value: item.label, key: item.id })) : [];
+  const apartment = value?.match(/(?:^|[,\s])((?:кв\.?|квартира|офис)\s*[^,]+)$/iu)?.[1];
+  const options = current ? (addresses.data?.suggestions ?? []).map((item) => ({ value: apartment ? `${item.label}, ${apartment}` : item.label, key: item.id })) : [];
   return (
     <AutoComplete
       value={value}

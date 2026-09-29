@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { addressSearchQuery } from './address-search';
+import { addressSearchQuery, normalizeAddressInput } from './address-search';
 
 type AddressRow = { id: bigint; label: string; level: number; sourceVersion: number };
 
@@ -18,7 +18,7 @@ export class AddressesService {
       this.localities = names.map(({ name }) => name.toLocaleLowerCase('ru').replace(/ё/g, 'е').replace(/[^а-яa-z0-9]+/gu, ' ').trim()).sort((a, b) => b.length - a.length);
       this.refreshedAt = Date.now();
     }
-    const placeInput = input.toLocaleLowerCase('ru').replace(/ё/g, 'е')
+    const placeInput = normalizeAddressInput(input)
       .replace(/^(?:россия[,\s]*)?(?:(?:краснодарский|ставропольский)\s+край[,\s]*)?/u, '')
       .replace(/^(?:город|г\.?|село|с\.?|поселок|пос\.?|п\.?|станица|ст\.?|ст-ца)\s+/u, '')
       .replace(/[^а-яa-z0-9]+/gu, ' ').trim();
