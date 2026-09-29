@@ -18,6 +18,11 @@ export type HospitalBox = {
 };
 
 export type HospitalPreliminaryBillLine = {
+  productId?: string | null;
+  serviceId?: string | null;
+  stockQuantity?: DecimalValue | null;
+  stockUnit?: string | null;
+  billingUnit?: string | null;
   id: string;
   kind: 'PRODUCT' | 'SERVICE' | 'STAY';
   title: string;

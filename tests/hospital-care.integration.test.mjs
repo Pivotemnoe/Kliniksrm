@@ -61,6 +61,17 @@ test('hospital care and independent bills against isolated PostgreSQL', { skip: 
     await service.updateStay(historical.stay.id, { dailyServicePrice: 300 }, employee.id);
     assert.equal(Number((await service.getPreliminaryBill(historical.stay.id)).totalAmount), 500);
   });
+  await t.test('first assigned price covers admission through discharge for all stays', async () => {
+    const f = await fixture({daysAgo:11,dailyPrice:0});
+    await service.updateStay(f.stay.id,{dailyServiceId:dailyService.id,dailyServicePrice:1000},employee.id);
+    const preview = await service.getPreliminaryBill(f.stay.id);
+    assert.equal(preview.completedDays,12);
+    assert.equal(Number(preview.totalAmount),12000);
+    assert.equal(preview.lines.length,1);
+    assert.equal(preview.lines[0].billingUnit,'дн.');
+    const closed=await service.discharge(f.stay.id,employee.id);
+    assert.equal(Number(closed.bill.totalAmount),12000);
+  });
   await t.test('4 days out of 5: performed billed, pending cancelled, initial bill unchanged, repeat discharge safe', async () => {
     const f = await fixture({ paid: true });
     const primaryBefore = await db.bill.findUnique({ where: { id: f.visit.bill.id }, include: { items: true } });

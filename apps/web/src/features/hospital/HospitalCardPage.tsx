@@ -1,3 +1,4 @@
+import { groupBillLines, billQuantityText, billPriceText } from '../billing/groupBillLines';
 import { HospitalTariffSelect } from './HospitalTariffSelect';
 import { HospitalSummaryEditor } from './HospitalSummaryEditor';
 import { AnimalStatusTag } from '../animals/animalStatus';
@@ -432,12 +433,12 @@ export function HospitalCardPage() {
               pagination={false}
               size="small"
               scroll={{ x: 760 }}
-              dataSource={preliminaryBill.lines}
+              dataSource={groupBillLines(preliminaryBill.lines)}
               columns={[
                 { title: 'Позиция', dataIndex: 'title', key: 'title', width: 310 },
                 { title: 'Что учтено', dataIndex: 'kind', key: 'kind', width: 130, render: (kind: HospitalPreliminaryBillLine['kind']) => preliminaryBillKindLabels[kind] },
-                { title: 'Количество', dataIndex: 'quantity', key: 'quantity', width: 110, align: 'right', render: (value: HospitalPreliminaryBillLine['quantity']) => Number(value).toLocaleString('ru-RU') },
-                { title: 'Цена', dataIndex: 'unitPrice', key: 'unitPrice', width: 110, align: 'right', render: (value: HospitalPreliminaryBillLine['unitPrice']) => formatMoney(value) },
+                { title: 'Количество', dataIndex: 'quantity', key: 'quantity', width: 110, align: 'right', render: (_, line) => billQuantityText(line) },
+                { title: 'Цена', dataIndex: 'unitPrice', key: 'unitPrice', width: 110, align: 'right', render: (_, line) => billPriceText(line, formatMoney) },
                 { title: 'Сумма', dataIndex: 'totalAmount', key: 'totalAmount', width: 120, align: 'right', render: (value: HospitalPreliminaryBillLine['totalAmount']) => <strong>{formatMoney(value)}</strong> },
               ]}
               locale={{ emptyText: 'Пока нет выполненных позиций и календарных дней' }}

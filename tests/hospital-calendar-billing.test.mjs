@@ -29,3 +29,26 @@ test('calendar handles month and DST boundaries in clinic timezone', () => {
   source.hospitalBox = box;
   assert.equal(Number(calculateHospitalStayDayLines(source, new Date('2026-01-31T21:01:00Z'))[0].quantity), 2);
 });
+
+test('first priced tariff covers all earlier unpriced calendar dates for any stay', () => {
+ const admitted = new Date('2026-09-18T08:00:00Z');
+ const selected = new Date('2026-09-29T13:00:00Z');
+ const source = {...stay(), startedAt: admitted, dailyRateSnapshot:d(1000), ratePeriods:[
+  {hospitalBoxId:'box',hospitalBox:box,dailyRate:d(0),serviceId:null,serviceTitle:null,startedAt:admitted,endedAt:selected},
+  {hospitalBoxId:'box',hospitalBox:box,dailyRate:d(1000),serviceId:'s',serviceTitle:'Стационар',startedAt:selected,endedAt:null},
+ ]};
+ const lines=calculateHospitalStayDayLines(source,selected);
+ assert.equal(lines.length,1);
+ assert.equal(Number(lines[0].quantity),12);
+ assert.equal(Number(lines[0].totalAmount),12000);
+ assert.equal(Number(calculateHospitalStayDayLines(source,new Date('2026-09-29T21:00:00Z'))[0].totalAmount),13000);
+});
+test('zero price after a paid period remains free; no selected tariff remains zero', () => {
+ const changed=new Date('2026-09-26T09:00:00Z');
+ const source={...stay(),ratePeriods:[
+  {hospitalBoxId:'box',hospitalBox:box,dailyRate:d(100),serviceId:'s',serviceTitle:'Стационар',startedAt:start,endedAt:changed},
+  {hospitalBoxId:'box',hospitalBox:box,dailyRate:d(0),serviceId:null,serviceTitle:null,startedAt:changed,endedAt:null},
+ ]};
+ assert.equal(calculateHospitalStayDayLines(source,new Date('2026-09-27T09:00:00Z')).reduce((s,l)=>s+Number(l.totalAmount),0),100);
+ assert.equal(Number(calculateHospitalStayDayLines({...stay(),dailyRateSnapshot:d(0)},start)[0].totalAmount),0);
+});

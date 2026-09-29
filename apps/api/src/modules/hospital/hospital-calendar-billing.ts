@@ -24,14 +24,19 @@ export function calculateHospitalStayDayLines(stay: RateSource, asOf: Date) {
   const first = hospitalDateKey(stay.startedAt, timezone);
   const last = hospitalDateKey(asOf, timezone);
   const periods = [...stay.ratePeriods].sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
+  // The first priced tariff also covers earlier dates whose price was never set.
+  // Later tariff changes (including an explicit free period) retain their dates.
+  const firstPriced = [...periods].reverse().find((period) => period.startedAt <= asOf && period.dailyRate.greaterThan(0));
   const grouped = new Map<string, {
     id: string; kind: 'STAY'; title: string; serviceId: string | null;
     quantity: Prisma.Decimal; unitPrice: Prisma.Decimal; totalAmount: Prisma.Decimal; completedAt: Date;
   }>();
   for (let date = first; date <= last;) {
-    const period = periods.find((candidate) => candidate.startedAt <= asOf
+    let period = periods.find((candidate) => candidate.startedAt <= asOf
       && hospitalDateKey(candidate.startedAt, timezone) <= date
       && (!candidate.endedAt || hospitalDateKey(candidate.endedAt, timezone) >= date));
+    if (firstPriced && date < hospitalDateKey(firstPriced.startedAt, timezone)
+      && (!period || period.dailyRate.isZero())) period = firstPriced;
     const boxId = period?.hospitalBoxId ?? stay.hospitalBox.id;
     const unitPrice = new Prisma.Decimal(period?.dailyRate ?? stay.dailyRateSnapshot ?? stay.hospitalBox.dailyRate);
     const serviceId = period?.serviceId ?? null;

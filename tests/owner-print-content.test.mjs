@@ -83,3 +83,14 @@ test('preliminary hospital bill prints logo, own lines and escaped titles withou
  assert.match(html, /data-clinic-logo/); assert.match(html, /&lt;Лечение&gt;/); assert.match(html, /Промежуточный счёт стационара/);
  assert.doesNotMatch(html, /CLINIC_SECRET|123456|<Лечение>/);
 });
+
+test('preliminary hospital bill groups catalog items and prints billing units, not consumed ml', () => {
+ let html;
+ const module=loadPrintModule('hospital/hospitalPrint.ts', value=>{html=value;});
+ const line={id:'r1',kind:'PRODUCT',productId:'p',title:'Препарат для счёта',quantity:1,stockQuantity:0.3,billingUnit:'введение',stockUnit:'мл',unitPrice:120,totalAmount:120};
+ module.printHospitalPreliminaryBill({animal:{nickname:'Тест'},owner:{fullName:'Тест'},startedAt:'2026-09-18T08:00:00Z'}, {generatedAt:'2026-09-29T10:00:00Z',totalAmount:360,lines:[line,{...line,id:'r2',stockQuantity:0.5},{...line,id:'r3',stockQuantity:0.7}]});
+ assert.equal((html.match(/Препарат для счёта/g)||[]).length,1);
+ assert.match(html,/3 введение/);
+ assert.doesNotMatch(html,/1,5 мл/);
+ assert.match(html,/360/);
+});

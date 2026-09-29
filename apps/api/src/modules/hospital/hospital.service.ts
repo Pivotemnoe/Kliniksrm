@@ -194,6 +194,7 @@ export class HospitalService {
                     serviceId: true,
                     title: true,
                     quantity: true,
+                    stockQuantity: true,
                     unitPrice: true,
                     totalAmount: true,
                   },
@@ -218,6 +219,12 @@ export class HospitalService {
 
     if (stay.status !== HospitalStayStatus.ACTIVE) throw new BadRequestException('Госпитализация закрыта. Откройте итоговый счёт');
 
+    const productIds = [...new Set(stay.sourceVisit.hospitalRecords.map((record) => record.billItem?.productId ?? getEffectivePlannedCatalog(record).productId).filter((id): id is string => Boolean(id)))];
+    const products = await this.prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true, billingUnit: true, writeOffUnit: true, stockUnit: true } });
+    const units = (productId: string | null) => {
+      const product = products.find((item) => item.id === productId);
+      return { billingUnit: product?.billingUnit || product?.writeOffUnit || product?.stockUnit || (productId ? 'ед.' : 'усл.'), stockUnit: product?.writeOffUnit || product?.stockUnit || 'ед.' };
+    };
     let legacyBilledAmount = decimal(0);
     const catalogLines = stay.sourceVisit.hospitalRecords.flatMap((record) => {
       if (record.billItem && record.billItem.bill.hospitalStayId !== stay.id
@@ -230,6 +237,8 @@ export class HospitalService {
           id: `record:${record.id}`,
           kind: record.billItem.serviceId ? 'SERVICE' as const : 'PRODUCT' as const,
           title: record.billItem.title,
+          productId: record.billItem.productId, serviceId: record.billItem.serviceId,
+          stockQuantity: record.billItem.stockQuantity, ...units(record.billItem.productId),
           quantity: record.billItem.quantity,
           unitPrice: record.billItem.unitPrice,
           totalAmount: record.billItem.totalAmount,
@@ -251,6 +260,8 @@ export class HospitalService {
         id: `record:${record.id}`,
         kind: line.serviceId ? 'SERVICE' as const : 'PRODUCT' as const,
         title: line.title,
+        productId: line.productId ?? null, serviceId: line.serviceId ?? null,
+        stockQuantity: line.stockQuantity, ...units(line.productId ?? null),
         quantity: line.quantity,
         unitPrice: line.unitPrice,
         totalAmount: line.totalAmount,
@@ -258,7 +269,7 @@ export class HospitalService {
       }];
     });
     const stayLines = calculateHospitalStayDayLines(stay, stay.completedAt ?? generatedAt);
-    const lines = [...catalogLines, ...stayLines];
+    const lines = [...catalogLines, ...stayLines.map((line) => ({ ...line, billingUnit: 'дн.', stockQuantity: null, stockUnit: null, productId: null }))];
     const totalAmount = lines.reduce((sum, line) => sum.plus(line.totalAmount), decimal(0));
 
     return {

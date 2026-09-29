@@ -1,3 +1,4 @@
+import { groupHospitalBillItems, billQuantityText, billPriceText } from './groupBillLines';
 import { printBrandHeader, printImagesScript } from '../../shared/print/branding';
 import {
   CheckCircleOutlined,
@@ -320,6 +321,8 @@ function BillDueAtModal({
 }
 
 function BillItemsTab({ bill, canEdit }: { bill: Bill; canEdit: boolean }) {
+  const ItemsWrapper = bill.source === 'HOSPITAL' ? 'details' : 'div';
+  const groupedItems = groupHospitalBillItems(bill.items);
   const queryClient = useQueryClient();
   const { message } = App.useApp();
   const [modalOpen, setModalOpen] = useState(false);
@@ -446,6 +449,15 @@ function BillItemsTab({ bill, canEdit }: { bill: Bill; canEdit: boolean }) {
       {!canEdit && bill.status !== 'CANCELLED' && toMoneyNumber(bill.paidAmount) > 0 ? (
         <Typography.Text type="secondary">Позиции оплаченного счёта нельзя менять без возврата оплаты.</Typography.Text>
       ) : null}
+      {bill.source === 'HOSPITAL' ? <Table rowKey="id" size="small" pagination={false} dataSource={groupedItems} scroll={{ x: 650 }} columns={[
+        { title: 'Позиция', dataIndex: 'title', key: 'title' },
+        { title: 'Количество', key: 'quantity', render: (_, line) => billQuantityText(line) },
+        { title: 'Цена', key: 'price', render: (_, line) => billPriceText(line, formatMoney) },
+        { title: 'Скидка', key: 'discount', render: (_, line) => formatMoney(line.discount) },
+        { title: 'Сумма', key: 'total', render: (_, line) => formatMoney(line.totalAmount) },
+      ]} /> : null}
+      <ItemsWrapper>
+      {bill.source === 'HOSPITAL' ? <summary>Подробные начисления и исправления</summary> : null}
       <Table<BillItem>
         rowKey="id"
         className="dense-table bill-items-table"
@@ -468,6 +480,7 @@ function BillItemsTab({ bill, canEdit }: { bill: Bill; canEdit: boolean }) {
           </Table.Summary>
         )}
       />
+      </ItemsWrapper>
       <BillItemModal
         open={modalOpen}
         item={editingItem}
@@ -1229,14 +1242,15 @@ function printBillDocument(bill: Bill, settings: BillPrintSettings) {
 
   const debt = Math.max(toMoneyNumber(bill.totalAmount) - toMoneyNumber(bill.paidAmount), 0);
   const overdue = Boolean(bill.dueAt && debt > 0 && new Date(bill.dueAt) < new Date());
-  const itemRows = bill.items
+  const printItems = bill.source === 'HOSPITAL' ? groupHospitalBillItems(bill.items) : bill.items;
+  const itemRows = printItems
     .map(
       (item, index) => `
         <tr>
           <td>${index + 1}</td>
           <td>${escapeHtml(item.title)}</td>
-          <td class="num">${escapeHtml(String(item.quantity))}</td>
-          <td class="num">${escapeHtml(formatMoney(item.unitPrice))}</td>
+          <td class="num">${escapeHtml(bill.source === 'HOSPITAL' ? billQuantityText(item) : String(item.quantity))}</td>
+          <td class="num">${escapeHtml(bill.source === 'HOSPITAL' ? billPriceText(item, formatMoney) : formatMoney(item.unitPrice))}</td>
           <td class="num">${escapeHtml(formatMoney(item.discount))}</td>
           <td class="num">${escapeHtml(formatMoney(item.totalAmount))}</td>
         </tr>
@@ -1257,8 +1271,8 @@ function printBillDocument(bill: Bill, settings: BillPrintSettings) {
         )
         .join('')
     : '<tr><td colspan="4">Оплат пока нет</td></tr>';
-  const receiptItems = bill.items
-    .map((item) => `<div class="receipt-item"><span>${escapeHtml(item.title)} × ${escapeHtml(String(item.quantity))}</span><strong>${escapeHtml(formatMoney(item.totalAmount))}</strong></div>`)
+  const receiptItems = printItems
+    .map((item) => `<div class="receipt-item"><span>${escapeHtml(item.title)} × ${escapeHtml(bill.source === 'HOSPITAL' ? billQuantityText(item) : String(item.quantity))}</span><strong>${escapeHtml(formatMoney(item.totalAmount))}</strong></div>`)
     .join('');
   const isReceipt = settings.paper !== 'A4';
   const pageWidth = settings.paper === 'RECEIPT_58' ? '58mm' : '80mm';

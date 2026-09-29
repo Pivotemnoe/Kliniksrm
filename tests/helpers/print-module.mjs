@@ -18,6 +18,10 @@ export function loadPrintModule(name, capture = () => {}) {
     require: (id) => { if (!(id in imports)) throw Error(`Unexpected import ${id}`); return imports[id]; },
     window: { location: { href: 'http://127.0.0.1:4319/' }, open: () => ({ document: { write: capture, close() {} } }) },
   };
+  const grouping = {};
+  const groupingSource = readFileSync(new URL('../../apps/web/src/features/billing/groupBillLines.ts', import.meta.url), 'utf8');
+  vm.runInNewContext(ts.transpileModule(groupingSource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText, { exports: grouping });
+  imports['../billing/groupBillLines'] = grouping;
   const branding = {};
   const brandingSource = readFileSync(new URL('../../apps/web/src/shared/print/branding.ts', import.meta.url), 'utf8');
   vm.runInNewContext(ts.transpileModule(brandingSource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText, { ...context, exports: branding });

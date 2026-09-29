@@ -1,3 +1,4 @@
+import { groupBillLines, billQuantityText, billPriceText } from '../billing/groupBillLines';
 import { printLogoUrl, printImagesScript } from '../../shared/print/branding';
 import { appConfig } from '../../app/config';
 import type { OrganizationPrintProfile } from '../organization/types';
@@ -321,7 +322,7 @@ export function printHospitalPreliminaryBill(stay: HospitalStay, bill: HospitalP
     @page{size:A4;margin:12mm}body{font:12px/1.4 Arial,sans-serif;color:#162f47}header{display:flex;align-items:center;gap:12px;border-bottom:1px solid #bbcbd5;padding-bottom:10px}img{width:55px;height:55px;object-fit:contain}table{width:100%;border-collapse:collapse;margin-top:15px}td,th{border:1px solid #ccd6df;padding:6px;text-align:left;overflow-wrap:anywhere}td:nth-child(n+2),th:nth-child(n+2){text-align:right}tr{break-inside:avoid}tfoot{font-weight:bold}h1{font-size:19px}
     </style></head><body><header><img data-clinic-logo src="${escapeHtml(printLogoUrl(organization?.logoUrl))}" alt="Логотип"><strong>${escapeHtml(organization?.displayName || appConfig.brandName)}</strong></header>
     <h1>Промежуточный счёт стационара</h1><p>Пациент: ${escapeHtml(stay.animal?.nickname || '—')}<br>Владелец: ${escapeHtml(stay.owner?.fullName || '—')}<br>Расчёт на: ${escapeHtml(new Date(bill.generatedAt).toLocaleString('ru-RU', { timeZone: stay.timezone }))}</p>
-    <table><thead><tr><th>Позиция</th><th>Количество</th><th>Цена, ₽</th><th>Сумма, ₽</th></tr></thead><tbody>${bill.lines.map((line) => `<tr><td>${escapeHtml(line.title)}</td><td>${Number(line.quantity).toLocaleString('ru-RU')}</td><td>${money(line.unitPrice)}</td><td>${money(line.totalAmount)}</td></tr>`).join('')}</tbody><tfoot><tr><td colspan="3">Итого</td><td>${money(bill.totalAmount)}</td></tr></tfoot></table><p>Расчёт включает выполненное лечение и календарные дни содержания. Счёт первичного приёма оформляется отдельно. Не подтверждает оплату.</p>${printImagesScript()}</body></html>`);
+    <table><thead><tr><th>Позиция</th><th>Количество</th><th>Цена, ₽</th><th>Сумма, ₽</th></tr></thead><tbody>${groupBillLines(bill.lines).map((line) => `<tr><td>${escapeHtml(line.title)}</td><td>${escapeHtml(billQuantityText(line))}</td><td>${escapeHtml(billPriceText(line, money))}</td><td>${money(line.totalAmount)}</td></tr>`).join('')}</tbody><tfoot><tr><td colspan="3">Итого</td><td>${money(bill.totalAmount)}</td></tr></tfoot></table><p>Расчёт включает выполненное лечение и календарные дни содержания. Счёт первичного приёма оформляется отдельно. Не подтверждает оплату.</p>${printImagesScript()}</body></html>`);
   popup.document.close();
   return true;
 }
