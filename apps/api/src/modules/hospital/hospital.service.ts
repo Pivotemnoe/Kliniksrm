@@ -161,6 +161,7 @@ export class HospitalService {
       where: { OR: [{ id: stayId }, { sourceVisitId: stayId }] },
       select: {
         id: true,
+        status: true,
         sourceVisitId: true,
         startedAt: true,
         completedAt: true,
@@ -214,6 +215,8 @@ export class HospitalService {
     if (!stay) {
       throw new NotFoundException('Госпитализация не найдена');
     }
+
+    if (stay.status !== HospitalStayStatus.ACTIVE) throw new BadRequestException('Госпитализация закрыта. Откройте итоговый счёт');
 
     let legacyBilledAmount = decimal(0);
     const catalogLines = stay.sourceVisit.hospitalRecords.flatMap((record) => {

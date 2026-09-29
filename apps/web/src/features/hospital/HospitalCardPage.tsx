@@ -93,6 +93,7 @@ export function HospitalCardPage() {
     queryKey: ['hospital', stayId],
     queryFn: () => getHospitalStay(stayId),
     enabled: Boolean(stayId),
+    refetchInterval: 30_000,
   });
   const resourcesQuery = useQuery({ queryKey: ['hospital', 'resources'], queryFn: getHospitalResources });
   const organizationQuery = useQuery({ queryKey: ['organization-print-profile'], queryFn: getOrganizationPrintProfile });
@@ -286,7 +287,7 @@ export function HospitalCardPage() {
               </dl>
               <Space wrap className="hospital-summary-toolbar">
                 {canManage && active ? <HospitalSummaryEditor stay={stay} onSaved={refresh} /> : null}
-                {stay.status !== 'CANCELLED' ? <Button icon={<FileTextOutlined />} loading={preliminaryBillMutation.isPending} onClick={() => preliminaryBillMutation.mutate()}>Сформировать промежуточный счёт</Button> : null}
+                {active ? <Button icon={<FileTextOutlined />} loading={preliminaryBillMutation.isPending} onClick={() => preliminaryBillMutation.mutate()}>Сформировать промежуточный счёт</Button> : null}
                 {stay.bill ? <Button onClick={() => navigate(`/bills/${stay.bill!.id}`)}>Итоговый счёт стационара</Button> : null}
                 {stay.primaryBill ? <Button onClick={() => navigate(`/bills/${stay.primaryBill!.id}`)}>{stay.hasLegacyHospitalCharges ? 'Старый общий счёт приёма и стационара' : 'Счёт первичного приёма'}</Button> : null}
                 {!active ? <Tag color={hospitalStatusColors[stay.status]}>{stay.dischargeReason === 'DECEASED' ? 'Погиб' : hospitalStatusLabels[stay.status]}</Tag> : null}
