@@ -107,3 +107,13 @@ test('товар без накладной ставится на остаток 
   assert.match(service, /StockMovementType\.INVENTORY/);
   assert.match(service, /stockDocumentItem\.update/);
 });
+
+
+test('оплаченный отдельный счёт стационара сохраняется в начислениях ответственному врачу', () => {
+ const { Prisma } = require('@prisma/client');
+ const { calculateEmployeePayroll } = require('../apps/api/dist/modules/payroll/payroll.service.js');
+ const d = value => new Prisma.Decimal(value);
+ const entry = calculateEmployeePayroll({ employeeId: 'doctor', employee: { id: 'doctor', fullName: 'Врач' }, fixedAmount: d(0), shiftRate: d(0), servicePercent: d(10), productPercent: d(0), serviceRules: [], productRules: [] }, [], [{ id: 'hospital-bill', visit: null, sale: null, hospitalStay: { employeeId: 'doctor', status: 'DISCHARGED' }, totalAmount: d(1000), paidAmount: d(500), items: [{ serviceId: 'care', productId: null, totalAmount: d(1000) }] }], []);
+ assert.equal(entry.serviceRevenue.toString(), '500');
+ assert.equal(entry.serviceAmount.toString(), '50');
+});

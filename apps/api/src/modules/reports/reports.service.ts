@@ -19,7 +19,7 @@ export class ReportsService {
     const range = resolveReportRange(query);
     const dateWhere = { gte: range.start, lte: range.end };
     const employeeVisitWhere = query.employeeId ? { employeeId: query.employeeId } : {};
-    const employeeBillWhere = query.employeeId ? { visit: { employeeId: query.employeeId } } : {};
+    const employeeBillWhere: Prisma.BillWhereInput = query.employeeId ? { OR: [{ visit: { employeeId: query.employeeId } }, { hospitalStay: { employeeId: query.employeeId } }] } : {};
     const now = new Date();
     const expiresSoon = new Date(now.getTime() + 30 * 86_400_000);
 
@@ -54,6 +54,7 @@ export class ReportsService {
           totalAmount: true,
           paidAmount: true,
           owner: { select: { id: true, fullName: true } },
+          hospitalStay: { select: { employee: { select: { id: true, fullName: true, position: true } } } },
           visit: {
             select: {
               employee: { select: { id: true, fullName: true, position: true } },
@@ -74,7 +75,7 @@ export class ReportsService {
       this.prisma.payment.findMany({
         where: {
           paidAt: dateWhere,
-          ...(query.employeeId ? { bill: { visit: { employeeId: query.employeeId } } } : {}),
+          ...(query.employeeId ? { bill: employeeBillWhere } : {}),
         },
         select: {
           id: true,
@@ -435,7 +436,7 @@ function aggregateEmployees(
   }
 
   for (const bill of bills) {
-    const employee = bill.visit?.employee;
+    const employee = bill.visit?.employee ?? bill.hospitalStay?.employee;
     if (!employee) continue;
     const row = rows.get(employee.id);
     if (row) row.billedAmount += number(bill.totalAmount);
@@ -644,6 +645,7 @@ type ReportBill = {
   paidAmount: Prisma.Decimal;
   owner: { id: string; fullName: string } | null;
   visit: { employee: ReportEmployee | null } | null;
+  hospitalStay?: { employee: ReportEmployee | null } | null;
   items: Array<{
     serviceId: string | null;
     productId: string | null;

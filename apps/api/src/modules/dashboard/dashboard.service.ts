@@ -287,7 +287,7 @@ export class DashboardService {
         activePatients: activeHospital,
         admittedToday: admittedHospitalToday,
         dischargedToday: dischargedHospitalToday,
-        items: hospitalItems.map(({ sourceVisit, ...stay }) => ({ ...stay, totalAmount: sourceVisit.totalAmount, bill: sourceVisit.bill })),
+        items: hospitalItems.map((stay) => ({ ...stay, totalAmount: stay.bill?.totalAmount ?? 0 })),
       } : { activePatients: 0, admittedToday: 0, dischargedToday: 0, items: [] },
       stock: canRead('stock.read') ? {
         lowStockProducts: lowStockProducts.length,
@@ -515,12 +515,7 @@ const hospitalStaySelect = {
   animal: { select: { id: true, nickname: true, species: true, breed: true, sex: true } },
   employee: { select: { id: true, fullName: true, position: true } },
   hospitalBox: { select: { id: true, name: true } },
-  sourceVisit: {
-    select: {
-      totalAmount: true,
-      bill: { select: { id: true, status: true, totalAmount: true, paidAmount: true } },
-    },
-  },
+  bill: { select: { id: true, status: true, totalAmount: true, paidAmount: true } },
 } satisfies Prisma.HospitalStaySelect;
 
 const onlineRequestSelect = {

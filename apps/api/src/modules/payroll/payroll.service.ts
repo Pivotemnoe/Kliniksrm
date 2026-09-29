@@ -14,6 +14,7 @@ type PayrollSourceBill = {
   paidAmount: Prisma.Decimal;
   visit: { employeeId: string | null; status: string } | null;
   sale: { employeeId: string | null } | null;
+  hospitalStay?: { employeeId: string | null; status: string } | null;
   items: Array<{
     serviceId: string | null;
     productId: string | null;
@@ -390,6 +391,7 @@ export class PayrollService {
             OR: [
               { visit: { employeeId: { in: employeeIds }, status: 'COMPLETED' } },
               { sale: { employeeId: { in: employeeIds } } },
+              { hospitalStay: { employeeId: { in: employeeIds }, status: 'DISCHARGED' } },
             ],
           },
           select: {
@@ -398,6 +400,7 @@ export class PayrollService {
             paidAmount: true,
             visit: { select: { employeeId: true, status: true } },
             sale: { select: { employeeId: true } },
+            hospitalStay: { select: { employeeId: true, status: true } },
             items: { select: { serviceId: true, productId: true, totalAmount: true } },
           },
         }),
@@ -441,7 +444,7 @@ export function calculateEmployeePayroll(
   let sourceBills = 0;
 
   for (const bill of bills) {
-    const employeeId = bill.visit?.employeeId ?? bill.sale?.employeeId ?? null;
+    const employeeId = bill.visit?.employeeId ?? bill.hospitalStay?.employeeId ?? bill.sale?.employeeId ?? null;
     if (employeeId !== profile.employeeId) continue;
     const paidShare = resolvePaidShare(bill.totalAmount, bill.paidAmount);
     if (!paidShare) continue;
