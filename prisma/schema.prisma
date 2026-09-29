@@ -2628,3 +2628,19 @@ model DataTransferEntityLink {
   @@index([targetEntityType, targetEntityId])
   @@index([sourceEntityType, sourceEntityId])
 }
+
+// Public GAR reference data only; loaded independently from clinical records.
+model AddressCatalogEntry {
+  id            BigInt @id
+  region        Int
+  level         Int
+  label         String
+  priority      Int @default(100)
+  sourceVersion Int
+  name          String
+  localityNames String
+  searchText    String
+  searchVector  Unsupported("tsvector")? @default(dbgenerated())
+
+  @@index([priority, level], map: "AddressCatalogEntry_priority_idx")
+}

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AddressesModule } from './modules/addresses/addresses.module';
 import { AnimalsModule } from './modules/animals/animals.module';
 import { AppointmentsModule } from './modules/appointments/appointments.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -42,6 +43,7 @@ import { PrismaModule } from './prisma/prisma.module';
 @Module({
   imports: [
     PrismaModule,
+    AddressesModule,
     BackupsModule,
     AuthModule,
     HealthModule,
