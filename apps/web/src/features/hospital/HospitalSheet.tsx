@@ -160,6 +160,7 @@ function getEffectivePlannedRecord(record: HospitalRecord) {
 function describeCompletedPosting(record: HospitalRecord) {
   const item = record.billItem;
   if (!item) {
+    if (record.recordStatus !== 'COMPLETED') return '';
     const staged = getEffectivePlannedRecord(record);
     if (staged.plannedProductId) {
       const unit = staged.plannedProduct?.writeOffUnit || staged.plannedProduct?.stockUnit || 'ед.';

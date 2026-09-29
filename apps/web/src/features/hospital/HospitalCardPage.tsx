@@ -282,7 +282,7 @@ export function HospitalCardPage() {
                 <div><dt>Состояние</dt><dd><AnimalStatusTag status={stay.animal?.status} /></dd></div>
                 <div><dt>Вес</dt><dd>{stay.weightKg != null ? `${stay.weightKg} кг` : 'Не указан'}</dd></div>
                 <div><dt>Задаток</dt><dd>{formatMoney(stay.depositAmount)}</dd></div>
-                <div><dt>Счёт стационара</dt><dd>{stay.bill ? <Typography.Link onClick={() => navigate(`/bills/${stay.bill!.id}`)}>{formatMoney(stay.bill.totalAmount)} · оплачено {formatMoney(stay.bill.paidAmount)}</Typography.Link> : 'Формируется при выписке'}</dd></div>
+                <div><dt>Счёт стационара</dt><dd>{stay.bill ? <Typography.Link onClick={() => navigate(`/bills/${stay.bill!.id}`)}>{formatMoney(stay.bill.totalAmount)} · оплачено {formatMoney(stay.bill.paidAmount)}</Typography.Link> : active ? 'Формируется при выписке' : stay.hasLegacyHospitalCharges ? 'Старый общий счёт приёма и стационара' : '—'}</dd></div>
                 <div className="hospital-summary-wide"><dt>Диагноз стационара</dt><dd>{stay.diagnosis || 'Не указан'}</dd></div>
               </dl>
               <Space wrap className="hospital-summary-toolbar">

@@ -31,4 +31,13 @@ Assert ((Read-DiagnosticJson (Join-Path $temp 'report.json')).ok) 'Report write/
 $timedOut=$false
 try { Invoke-DiagnosticTool "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" '-NoProfile -Command Start-Sleep -Seconds 5' $temp '' 1 | Out-Null } catch { $timedOut=$true }
 Assert $timedOut 'Hung probe did not time out'
-Write-Output 'DIAGNOSTICS_TESTS_OK: 13 assertions; no production changes'
+$s=New-Snapshot
+$webRevision='bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+$splitConfig=[PSCustomObject]@{expectedRevision=$revision;expectedWebRevision=$webRevision}
+$s.containers.web.revision=$webRevision
+$s.containers.web.image="ghcr.io/pivotemnoe/kliniksrm-web:$webRevision"
+$s.resolved.web=$s.containers.web.image; $s.remote.web=$s.containers.web.image
+Assert (@(Get-DiagnosticIssues $s $splitConfig $now).Count -eq 0) 'Web-only release rejected'
+$s.containers.web.revision=$revision
+Assert ((Get-DiagnosticIssues $s $splitConfig $now).code -contains 'version.web') 'Web-only rollback missed'
+Write-Output 'DIAGNOSTICS_TESTS_OK: 15 assertions; no production changes'
