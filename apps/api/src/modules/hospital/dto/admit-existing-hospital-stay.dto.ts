@@ -5,7 +5,7 @@ export class AdmitExistingHospitalStayDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  dailyServiceId?: string;
+  dailyServiceId?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()

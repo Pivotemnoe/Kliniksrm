@@ -19,12 +19,12 @@ test('hospital care and independent bills against isolated PostgreSQL', { skip: 
   const employee = await db.employee.create({ data: { fullName: 'Тестовый врач' } });
   const dailyService = await db.service.create({ data: { title: 'Инфекционный стационар до 7 кг', price: 100 } });
   const treatment = await db.service.create({ data: { title: 'Тестовая процедура', price: 250 } });
-  const box = await db.hospitalBox.create({ data: { officeId: office.id, name: 'Бокс тестовый', dailyServices: { connect: { id: dailyService.id } } } });
-  async function fixture({ paid = false, daysAgo = 3 } = {}) {
+  const box = await db.hospitalBox.create({ data: { officeId: office.id, name: 'Бокс тестовый' } });
+  async function fixture({ paid = false, daysAgo = 3, dailyPrice } = {}) {
     const owner = await db.owner.create({ data: { fullName: 'Вымышленный владелец' } });
     const animal = await db.animal.create({ data: { ownerId: owner.id, nickname: 'Тестовый пациент', weights: { create: { weightKg: 4.2 } } } });
     const visit = await db.visit.create({ data: { ownerId: owner.id, animalId: animal.id, employeeId: employee.id, status: 'IN_PROGRESS', visitType: 'PRIMARY', totalAmount: 500, diagnoses: { create: { title: 'Первичный диагноз', diagnosisType: 'Клинический' } }, bill: { create: { ownerId: owner.id, animalId: animal.id, source: 'VISIT', totalAmount: 500, paidAmount: paid ? 500 : 0, status: paid ? 'PAID' : 'UNPAID', items: { create: { title: 'Первичный приём', quantity: 1, unitPrice: 500, totalAmount: 500 } } } } }, include: { bill: true } });
-    const stay = await service.admitExisting(visit.id, { hospitalBoxId: box.id, dailyServiceId: dailyService.id }, employee.id);
+    const stay = await service.admitExisting(visit.id, { hospitalBoxId: box.id, ...(dailyPrice === undefined ? { dailyServiceId: dailyService.id } : { dailyServicePrice: dailyPrice }) }, employee.id);
     const start = new Date(); start.setUTCDate(start.getUTCDate() - daysAgo);
     await db.hospitalStay.update({ where: { id: stay.id }, data: { startedAt: start, ratePeriods: { updateMany: { where: {}, data: { startedAt: start } } } } });
     return { stay, visit, animal, owner, start };
@@ -39,7 +39,27 @@ test('hospital care and independent bills against isolated PostgreSQL', { skip: 
     assert.equal(await db.payment.count(), 0);
     const portal = toOwnerHospitalStay(await db.hospitalStay.findUnique({ where: { id: f.stay.id }, select: ownerHospitalSelect }));
     assert.ok(!JSON.stringify(portal).includes('ВНУТРЕННИЙ')); assert.ok(!('internalNotes' in portal));
-    await assert.rejects(service.updateStay(f.stay.id, { dailyServiceId: 'missing' }, employee.id), /не привязана/);
+    await assert.rejects(service.updateStay(f.stay.id, { dailyServiceId: 'missing' }, employee.id), /не найдена/);
+  });
+  await t.test('daily price belongs to each stay, independently of box and catalogue price', async () => {
+    const first = await fixture({ daysAgo: 0 });
+    const second = await fixture({ daysAgo: 0, dailyPrice: 950 });
+    await service.updateStay(first.stay.id, { dailyServiceId: dailyService.id, dailyServicePrice: 700 }, employee.id);
+    await service.updateStay(second.stay.id, { dailyServiceId: null, dailyServicePrice: 950 }, employee.id);
+    assert.equal(Number((await service.getPreliminaryBill(first.stay.id)).totalAmount), 700);
+    assert.equal(Number((await service.getPreliminaryBill(second.stay.id)).totalAmount), 950);
+    assert.equal(Number((await db.service.findUnique({ where: { id: dailyService.id } })).price), 100);
+    assert.equal(Number((await db.hospitalBox.findUnique({ where: { id: box.id } })).dailyRate), 0);
+    const otherBox = await db.hospitalBox.create({ data: { officeId: office.id, name: 'Другой бокс', dailyRate: 9999 } });
+    await service.updateStay(first.stay.id, { hospitalBoxId: otherBox.id }, employee.id);
+    const moved = await service.getHospitalStay(first.stay.id);
+    assert.equal(Number(moved.dailyRateSnapshot), 700);
+    assert.equal(moved.dailyServiceId, dailyService.id);
+    assert.equal(Number((await service.getPreliminaryBill(first.stay.id)).totalAmount), 700);
+    assert.equal(Number((await service.discharge(second.stay.id, employee.id)).bill.totalAmount), 950);
+    const historical = await fixture({ daysAgo: 2 });
+    await service.updateStay(historical.stay.id, { dailyServicePrice: 300 }, employee.id);
+    assert.equal(Number((await service.getPreliminaryBill(historical.stay.id)).totalAmount), 500);
   });
   await t.test('4 days out of 5: performed billed, pending cancelled, initial bill unchanged, repeat discharge safe', async () => {
     const f = await fixture({ paid: true });

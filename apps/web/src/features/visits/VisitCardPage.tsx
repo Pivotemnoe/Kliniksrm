@@ -71,6 +71,8 @@ export function VisitCardPage() {
       ]);
       setHospitalModalOpen(false);
       setHospitalBoxId(undefined);
+      setHospitalDailyServiceId(undefined);
+      setHospitalDailyServicePrice(undefined);
       message.success('Пациент помещён в стационар');
       navigate(`/hospital/${stay.id}`);
     },
@@ -558,10 +560,12 @@ export function VisitCardPage() {
         okText="Поместить"
         cancelText="Отмена"
         confirmLoading={hospitalAdmissionMutation.isPending}
-        okButtonProps={{ disabled: !hospitalBoxId }}
+        okButtonProps={{ disabled: !hospitalBoxId || hospitalDailyServicePrice === undefined }}
         onCancel={() => {
           setHospitalModalOpen(false);
           setHospitalBoxId(undefined);
+      setHospitalDailyServiceId(undefined);
+      setHospitalDailyServicePrice(undefined);
         }}
         onOk={() => hospitalBoxId && hospitalAdmissionMutation.mutate(hospitalBoxId)}
       >
@@ -573,7 +577,7 @@ export function VisitCardPage() {
           placeholder="Выберите свободный бокс"
           loading={hospitalResourcesQuery.isLoading}
           options={hospitalResourcesQuery.data?.boxes.map((box) => ({ value: box.id, label: box.name })) ?? []}
-          onChange={(id) => { setHospitalBoxId(id); setHospitalDailyServiceId(undefined); setHospitalDailyServicePrice(undefined); }}
+          onChange={setHospitalBoxId}
           className="full-width"
         />
         <HospitalTariffSelect box={hospitalResourcesQuery.data?.boxes.find((box) => box.id === hospitalBoxId)} value={hospitalDailyServiceId} price={hospitalDailyServicePrice} onChange={(id, price) => { setHospitalDailyServiceId(id); setHospitalDailyServicePrice(price); }} />

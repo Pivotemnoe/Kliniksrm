@@ -212,7 +212,7 @@ const admitSchema = z.object({
   animalId: z.string().min(1, 'Выберите пациента'),
   hospitalBoxId: z.string().min(1, 'Выберите бокс'),
   dailyServiceId: z.string().optional(),
-  dailyServicePrice: z.number().optional(),
+  dailyServicePrice: z.number().min(0).optional(),
   employeeId: z.string().optional(),
   admittedAt: z.string().optional(),
   purpose: z.string().trim().optional(),
@@ -282,7 +282,7 @@ function AdmitModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   });
 
   return (
-    <Modal title="Поместить в стационар" open={open} onCancel={onClose} onOk={handleSubmit((values) => mutation.mutate(values))} confirmLoading={mutation.isPending} destroyOnHidden width={680}>
+    <Modal title="Поместить в стационар" okButtonProps={{ disabled: watch('dailyServicePrice') === undefined }} open={open} onCancel={onClose} onOk={handleSubmit((values) => mutation.mutate(values))} confirmLoading={mutation.isPending} destroyOnHidden width={680}>
       <Form layout="vertical">
         <div className="form-grid two-columns">
           <Controller
@@ -331,7 +331,7 @@ function AdmitModal({ open, onClose }: { open: boolean; onClose: () => void }) {
             name="hospitalBoxId"
             render={({ field, fieldState }) => (
               <Form.Item label="Бокс" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
-                <Select {...field} onChange={(value) => { field.onChange(value); setValue('dailyServiceId', undefined); setValue('dailyServicePrice', undefined); }} options={resourcesQuery.data?.boxes.map((box) => ({ value: box.id, label: box.name })) ?? []} />
+                <Select {...field} onChange={field.onChange} options={resourcesQuery.data?.boxes.map((box) => ({ value: box.id, label: box.name })) ?? []} />
               </Form.Item>
             )}
           />

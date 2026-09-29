@@ -959,7 +959,7 @@ export class HospitalService {
     );
 
     const box = await this.schedulingService.ensureHospitalBoxExists(dto.hospitalBoxId);
-    const tariff = this.resolveDailyTariff(box, dto);
+    const tariff = await this.resolveDailyTariff(dto);
     const responsibleEmployeeId = dto.employeeId ?? visit.employeeId;
 
     if (responsibleEmployeeId) {
@@ -1025,7 +1025,7 @@ export class HospitalService {
   async admit(dto: AdmitHospitalPatientDto, actorId: string) {
     const ownerId = await this.schedulingService.resolveAnimalOwner(dto.animalId, dto.ownerId);
     const box = await this.schedulingService.ensureHospitalBoxExists(dto.hospitalBoxId);
-    const tariff = this.resolveDailyTariff(box, dto);
+    const tariff = await this.resolveDailyTariff(dto);
     const admittedAt = dto.admittedAt ? new Date(dto.admittedAt) : new Date();
 
     if (dto.employeeId) {
@@ -1102,7 +1102,10 @@ export class HospitalService {
     }
     const tariffRequested = nextBox !== null || dto.dailyServiceId !== undefined || dto.dailyServicePrice !== undefined;
     const box = tariffRequested ? nextBox ?? await this.schedulingService.ensureHospitalBoxExists(existing.hospitalBoxId) : null;
-    const tariff = box ? this.resolveDailyTariff(box, dto) : null;
+    const tariff = box ? await this.resolveDailyTariff({
+      dailyServiceId: dto.dailyServiceId === undefined ? existing.ratePeriods[0]?.serviceId : dto.dailyServiceId,
+      dailyServicePrice: dto.dailyServicePrice ?? (dto.dailyServiceId === undefined ? Number(existing.dailyRateSnapshot ?? 0) : undefined),
+    }) : null;
     const changedAt = new Date();
     await this.prisma.$transaction(async (tx) => {
       await this.lockActiveStay(tx, existing.id);
@@ -1383,15 +1386,14 @@ export class HospitalService {
     } });
   }
 
-  private resolveDailyTariff(box: { dailyRate: Prisma.Decimal; dailyServices: Array<Prisma.ServiceGetPayload<{}>> }, dto: { dailyServiceId?: string; dailyServicePrice?: number }) {
+  private async resolveDailyTariff(dto: { dailyServiceId?: string | null; dailyServicePrice?: number }) {
     if (!dto.dailyServiceId) {
-      if (box.dailyServices.some((service) => service.isActive)) throw new BadRequestException('Выберите услугу содержания для этого пациента');
-      if (dto.dailyServicePrice !== undefined) throw new BadRequestException('Сначала выберите услугу содержания');
-      return { dailyRate: box.dailyRate, serviceId: null, serviceTitle: null };
+      if (dto.dailyServicePrice === undefined) throw new BadRequestException('Укажите цену бокса за день для этой госпитализации');
+      return { dailyRate: decimal(dto.dailyServicePrice), serviceId: null, serviceTitle: null };
     }
-    const service = box.dailyServices.find((item) => item.id === dto.dailyServiceId && item.isActive);
-    if (!service) throw new BadRequestException('Услуга не привязана к выбранному боксу или отключена');
-    return { dailyRate: decimal(resolveServiceUnitPrice(service, dto.dailyServicePrice)), serviceId: service.id, serviceTitle: service.title };
+    const service = await this.prisma.service.findUnique({ where: { id: dto.dailyServiceId } });
+    if (!service?.isActive) throw new BadRequestException('Услуга не найдена или отключена');
+    return { dailyRate: decimal(dto.dailyServicePrice ?? resolveServiceUnitPrice(service)), serviceId: service.id, serviceTitle: service.title };
   }
 
   private async lockActiveStay(tx: Prisma.TransactionClient, id: string) {
@@ -1716,6 +1718,7 @@ export class HospitalService {
         startedAt: true,
         completedAt: true,
         dailyRateSnapshot: true,
+        ratePeriods: { orderBy: { startedAt: 'desc' }, take: 1, select: { serviceId: true } },
         hospitalBox: {
           select: {
             dailyRate: true,

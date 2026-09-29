@@ -29,7 +29,7 @@ export class UpdateHospitalStayDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  dailyServiceId?: string;
+  dailyServiceId?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()

@@ -24,8 +24,8 @@ test('все числовые поля принимают десятичную �
   const consumers = sources.filter(({ source }) => source.includes('<InputNumber'));
   const inputCount = consumers.reduce((total, { source }) => total + (source.match(/<InputNumber/g)?.length ?? 0), 0);
 
-  assert.equal(consumers.length, 21);
-  assert.equal(inputCount, 57);
+  assert.equal(consumers.length, 20);
+  assert.equal(inputCount, 56);
   assert.ok(wrapper.includes("replace(/[\\s\\u00a0]/g, '').replace(/,/g, '.')"));
   assert.ok(wrapper.includes("inputMode={inputMode ?? 'decimal'}"));
   assert.match(wrapper, /parser=\{parser \?\?/);

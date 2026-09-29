@@ -124,7 +124,7 @@ export function HospitalCardPage() {
   }
 
   const transferMutation = useMutation({
-    mutationFn: (nextBoxId: string) => updateHospitalStay(stayId, { hospitalBoxId: nextBoxId, dailyServiceId, dailyServicePrice: dailyServiceId ? dailyServicePrice : undefined }),
+    mutationFn: (nextBoxId: string) => updateHospitalStay(stayId, { hospitalBoxId: nextBoxId, dailyServiceId: dailyServiceId ?? null, dailyServicePrice }),
     onSuccess: async () => { await refresh(); message.success('Бокс и услуга содержания сохранены'); },
     onError: (error) => message.error(getErrorMessage(error)),
   });
@@ -294,16 +294,16 @@ export function HospitalCardPage() {
               </Space>
               {canManage && active ? (
                 <div className="hospital-card-actions">
-                  <details className="hospital-placement-editor"><summary>Бокс и услуга: {stay.hospitalBox?.name} · {stay.dailyServiceTitle || 'Тариф бокса'} · {formatMoney(stay.dailyRateSnapshot ?? 0)} / день</summary><div className="hospital-placement-fields">
+                  <details className="hospital-placement-editor"><summary>Бокс и услуга: {stay.hospitalBox?.name} · {stay.dailyServiceTitle || 'Цена бокса'} · {formatMoney(stay.dailyRateSnapshot ?? 0)} / день</summary><div className="hospital-placement-fields">
                   <Select
                     value={boxId}
                     placeholder="Выберите бокс"
                     options={resourcesQuery.data?.boxes.map((box) => ({ value: box.id, label: box.name })) ?? []}
                     className="visit-hospital-select"
-                    onChange={(id) => { setBoxId(id); setDailyServiceId(undefined); setDailyServicePrice(undefined); }}
+                    onChange={setBoxId}
                   />
-                  <HospitalTariffSelect box={resourcesQuery.data?.boxes.find((box) => box.id === boxId)} value={dailyServiceId} price={dailyServicePrice} onChange={(id, price) => { setDailyServiceId(id); setDailyServicePrice(price); }} />
-                  <Button icon={<SwapOutlined />} disabled={!boxId || (boxId === stay.hospitalBoxId && dailyServiceId === (stay.dailyServiceId ?? undefined) && dailyServicePrice === Number(stay.dailyRateSnapshot))} loading={transferMutation.isPending} onClick={() => boxId && transferMutation.mutate(boxId)}>Сохранить бокс и услугу</Button></div></details>
+                  <HospitalTariffSelect selectedTitle={stay.dailyServiceTitle} box={resourcesQuery.data?.boxes.find((box) => box.id === boxId)} value={dailyServiceId} price={dailyServicePrice} onChange={(id, price) => { setDailyServiceId(id); setDailyServicePrice(price); }} />
+                  <Button icon={<SwapOutlined />} disabled={!boxId || dailyServicePrice === undefined || (boxId === stay.hospitalBoxId && dailyServiceId === (stay.dailyServiceId ?? undefined) && dailyServicePrice === Number(stay.dailyRateSnapshot))} loading={transferMutation.isPending} onClick={() => boxId && transferMutation.mutate(boxId)}>Сохранить бокс и услугу</Button></div></details>
                   <HospitalDischargeButton onConfirm={() => actionMutation.mutateAsync('discharge')} />
                   <Button danger icon={<CloseOutlined />} loading={actionMutation.isPending} onClick={() => modal.confirm({ title: 'Отменить госпитализацию?', okText: 'Отменить', cancelText: 'Назад', okButtonProps: { danger: true }, onOk: () => actionMutation.mutateAsync('cancel') })}>Отменить</Button>
                 </div>

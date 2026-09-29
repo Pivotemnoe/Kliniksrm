@@ -237,7 +237,7 @@ export type HospitalTreatmentPlan = {
 };
 
 export type AdmitHospitalInput = {
-  dailyServiceId?: string;
+  dailyServiceId?: string | null;
   dailyServicePrice?: number;
   ownerId: string;
   animalId: string;
