@@ -55,7 +55,7 @@ export function HospitalDischargeButton({ onConfirm, size }: {
           type="warning"
           showIcon
           message="Выписка завершит текущее пребывание"
-          description="Проверьте пациента, назначения и выполненные действия. Итоговые начисления будут перенесены в счёт."
+          description="Невыполненные назначения будут отменены с сохранением истории. Выполненное лечение и календарные дни содержания попадут в отдельный счёт стационара."
         />
         <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>
           Кнопка подтверждения станет доступна через 5 секунд.

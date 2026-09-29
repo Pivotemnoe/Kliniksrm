@@ -1,3 +1,5 @@
+import { listServices } from '../stock/stock.api';
+import { useDebouncedValue } from '../../shared/hooks/useDebouncedValue';
 import { EditOutlined, PlusOutlined, SaveOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -47,6 +49,7 @@ const resourceSchema = z.object({
   officeId: z.string().trim().min(1, 'Выберите филиал'),
   name: z.string().trim().min(2, 'Укажите название').max(160),
   dailyRate: z.number().min(0, 'Цена не может быть отрицательной').optional(),
+  dailyServiceIds: z.array(z.string()).optional(),
 });
 
 type OfficeFormValues = z.infer<typeof officeSchema>;
@@ -124,6 +127,7 @@ export function ClinicResourcesPage() {
   const saveOfficeMutation = useMutation({
     mutationFn: (values: OfficeFormValues) => updateClinicOffice(selectedOffice!.id, values),
     onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['hospital', 'resources'] });
       await queryClient.invalidateQueries({ queryKey: ['scheduling', 'settings'] });
       await queryClient.invalidateQueries({ queryKey: ['scheduling', 'resources'] });
       message.success('Филиал сохранён');
@@ -133,6 +137,7 @@ export function ClinicResourcesPage() {
   const createOfficeMutation = useMutation({
     mutationFn: (values: OfficeFormValues) => createClinicOffice(values),
     onSuccess: async (office) => {
+      await queryClient.invalidateQueries({ queryKey: ['hospital', 'resources'] });
       await queryClient.invalidateQueries({ queryKey: ['scheduling', 'settings'] });
       await queryClient.invalidateQueries({ queryKey: ['scheduling', 'resources'] });
       setSelectedOfficeId(office.id);
@@ -446,6 +451,7 @@ function OfficeScheduleTab({ office, canManage }: { office?: ClinicOfficeSetting
   const saveMutation = useMutation({
     mutationFn: (workingHours: OfficeWorkingHours) => updateClinicOffice(office!.id, { workingHours }),
     onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['hospital', 'resources'] });
       await queryClient.invalidateQueries({ queryKey: ['scheduling', 'settings'] });
       await queryClient.invalidateQueries({ queryKey: ['scheduling', 'resources'] });
       message.success('График работы сохранён');
@@ -628,20 +634,25 @@ function ResourceTable({
   const { message } = App.useApp();
   const [modalOpen, setModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<ResourceItem | null>(null);
+  const [serviceSearch, setServiceSearch] = useState('');
+  const debouncedServiceSearch = useDebouncedValue(serviceSearch, 250);
+  const servicesQuery = useQuery({ queryKey: ['stock', 'hospital-daily-services', debouncedServiceSearch], queryFn: () => listServices({ search: debouncedServiceSearch || undefined, limit: 100 }), enabled: modalOpen && kind === 'hospitalBoxes' });
+  const serviceOptions = [...new Map([...(editingItem && 'dailyServices' in editingItem ? editingItem.dailyServices ?? [] : []), ...(servicesQuery.data?.items ?? [])].map((s) => [s.id, { value: s.id, label: s.title }])).values()];
   const { control, handleSubmit, reset } = useForm<ResourceFormValues>({
     resolver: zodResolver(resourceSchema),
-    defaultValues: { officeId: selectedOfficeId ?? '', name: '', dailyRate: 0 },
+    defaultValues: { officeId: selectedOfficeId ?? '', name: '', dailyRate: 0, dailyServiceIds: [] },
   });
 
   useEffect(() => {
     if (!modalOpen) {
-      reset({ officeId: selectedOfficeId ?? '', name: '', dailyRate: 0 });
+      reset({ officeId: selectedOfficeId ?? '', name: '', dailyRate: 0, dailyServiceIds: [] });
     }
   }, [modalOpen, reset, selectedOfficeId]);
 
   const saveMutation = useMutation({
     mutationFn: (values: ResourceFormValues) => saveResource(kind, editingItem?.id, values),
     onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['hospital', 'resources'] });
       await queryClient.invalidateQueries({ queryKey: ['scheduling', 'settings'] });
       await queryClient.invalidateQueries({ queryKey: ['scheduling', 'resources'] });
       message.success(editingItem ? 'Ресурс сохранён' : 'Ресурс создан');
@@ -666,7 +677,7 @@ function ResourceTable({
         render: (officeId: string) => <Tag>{offices.find((office) => office.id === officeId)?.name ?? 'Филиал'}</Tag>,
       },
       ...(kind === 'hospitalBoxes' ? [{
-        title: 'Цена за 24 часа',
+        title: 'Цена за день',
         key: 'dailyRate',
         width: 180,
         render: (_: unknown, record: ResourceItem) => `${Number((record as SchedulingHospitalBox).dailyRate ?? 0).toLocaleString('ru-RU')} ₽`,
@@ -688,7 +699,7 @@ function ResourceTable({
 
   function openCreate() {
     setEditingItem(null);
-    reset({ officeId: selectedOfficeId ?? offices[0]?.id ?? '', name: '', dailyRate: 0 });
+    reset({ officeId: selectedOfficeId ?? offices[0]?.id ?? '', name: '', dailyRate: 0, dailyServiceIds: [] });
     setModalOpen(true);
   }
 
@@ -697,6 +708,7 @@ function ResourceTable({
     reset({
       officeId: item.officeId,
       name: item.name,
+      dailyServiceIds: kind === 'hospitalBoxes' ? (item as SchedulingHospitalBox).dailyServices?.map((service) => service.id) ?? [] : undefined,
       dailyRate: kind === 'hospitalBoxes' ? Number((item as SchedulingHospitalBox).dailyRate ?? 0) : undefined,
     });
     setModalOpen(true);
@@ -705,7 +717,7 @@ function ResourceTable({
   function closeModal() {
     setModalOpen(false);
     setEditingItem(null);
-    reset({ officeId: selectedOfficeId ?? offices[0]?.id ?? '', name: '', dailyRate: 0 });
+    reset({ officeId: selectedOfficeId ?? offices[0]?.id ?? '', name: '', dailyRate: 0, dailyServiceIds: [] });
   }
 
   return (
@@ -760,13 +772,18 @@ function ResourceTable({
               </Form.Item>
             )}
           />
+          {kind === 'hospitalBoxes' ? <Controller control={control} name="dailyServiceIds" render={({ field }) => (
+            <Form.Item label="Услуги содержания для бокса" help="При поступлении врач выбирает подходящую услугу. Каждый календарный день считается целиком.">
+              <Select {...field} mode="multiple" showSearch filterOption={false} onSearch={setServiceSearch} options={serviceOptions} loading={servicesQuery.isFetching} />
+            </Form.Item>
+          )} /> : null}
           {kind === 'hospitalBoxes' ? (
             <Controller
               control={control}
               name="dailyRate"
               render={({ field, fieldState }) => (
                 <Form.Item
-                  label="Цена за каждые полные 24 часа, ₽"
+                  label="Цена за календарный день без выбранной услуги, ₽"
                   validateStatus={fieldState.error ? 'error' : undefined}
                   help={fieldState.error?.message ?? 'Цена фиксируется для пациента при поступлении или переводе в этот бокс.'}
                 >

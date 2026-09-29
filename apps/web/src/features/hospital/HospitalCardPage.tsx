@@ -1,3 +1,6 @@
+import { HospitalTariffSelect } from './HospitalTariffSelect';
+import { HospitalSummaryEditor } from './HospitalSummaryEditor';
+import { AnimalStatusTag } from '../animals/animalStatus';
 import {
   ArrowLeftOutlined,
   CloseOutlined,
@@ -8,7 +11,7 @@ import {
   SwapOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Checkbox, Descriptions, Dropdown, Form, Input, Modal, Radio, Select, Space, Table, Tag, Typography } from 'antd';
+import { Alert, App, Button, Checkbox, Dropdown, Form, Input, Modal, Radio, Select, Space, Table, Tag, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';
@@ -43,7 +46,7 @@ import { HospitalLaboratoryPanel } from './HospitalLaboratoryPanel';
 import { HospitalDischargeButton } from './HospitalDischargeButton';
 import { HospitalTreatmentPlanModal } from './HospitalTreatmentPlanModal';
 import { useDebouncedValue } from '../../shared/hooks/useDebouncedValue';
-import { printHospitalBoxSheet, printHospitalSheet } from './hospitalPrint';
+import { printHospitalBoxSheet, printHospitalSheet, printHospitalPreliminaryBill } from './hospitalPrint';
 import type { CreateHospitalAmendmentInput, CreateHospitalRecordInput, HospitalCatalog, HospitalPreliminaryBill, HospitalPreliminaryBillLine, HospitalRecord, HospitalRecordStatus, HospitalRecordType, UpdateHospitalRecordInput } from './types';
 
 const recordTypeOptions: Array<{ value: HospitalRecordType; label: string; defaultTitle: string }> = [
@@ -81,6 +84,8 @@ export function HospitalCardPage() {
   const [initialRecordStatus, setInitialRecordStatus] = useState<Extract<HospitalRecordStatus, 'PLANNED' | 'COMPLETED'>>('COMPLETED');
   const [initialRecordType, setInitialRecordType] = useState<HospitalRecordType>('OBSERVATION');
   const [amendmentRecord, setAmendmentRecord] = useState<HospitalRecord | null>(null);
+  const [dailyServiceId, setDailyServiceId] = useState<string>();
+  const [dailyServicePrice, setDailyServicePrice] = useState<number>();
   const [boxId, setBoxId] = useState<string>();
   const [preliminaryBill, setPreliminaryBill] = useState<HospitalPreliminaryBill | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -96,7 +101,9 @@ export function HospitalCardPage() {
 
   useEffect(() => {
     setBoxId(stay?.hospitalBoxId ?? undefined);
-  }, [stay?.hospitalBoxId]);
+    setDailyServiceId(stay?.dailyServiceId ?? undefined);
+    setDailyServicePrice(stay?.dailyRateSnapshot != null ? Number(stay.dailyRateSnapshot) : undefined);
+  }, [stay?.hospitalBoxId, stay?.dailyServiceId, stay?.dailyRateSnapshot]);
 
   useEffect(() => {
     if (!active) return;
@@ -116,8 +123,8 @@ export function HospitalCardPage() {
   }
 
   const transferMutation = useMutation({
-    mutationFn: (nextBoxId: string) => updateHospitalStay(stayId, { hospitalBoxId: nextBoxId }),
-    onSuccess: async () => { await refresh(); message.success('Пациент переведён в другой бокс'); },
+    mutationFn: (nextBoxId: string) => updateHospitalStay(stayId, { hospitalBoxId: nextBoxId, dailyServiceId, dailyServicePrice: dailyServiceId ? dailyServicePrice : undefined }),
+    onSuccess: async () => { await refresh(); message.success('Бокс и услуга содержания сохранены'); },
     onError: (error) => message.error(getErrorMessage(error)),
   });
   const actionMutation = useMutation({
@@ -221,7 +228,11 @@ export function HospitalCardPage() {
     });
   }
 
-  const treatmentReminder = getTreatmentReminder(stay?.hospitalRecords ?? [], nowMs);
+  const treatmentReminder = getTreatmentReminder(active ? stay?.hospitalRecords ?? [] : [], nowMs);
+
+  const temperatureTimes = (stay?.hospitalRecords ?? []).flatMap((record) => [record, ...(record.amendments ?? [])]).filter((record) => (record.recordStatus === 'COMPLETED' || record.recordStatus === 'AMENDMENT') && record.temperatureC != null).map((record) => new Date(record.completedAt ?? record.recordedAt).getTime()).filter((time) => time <= nowMs);
+  const lastTemperatureAt = Math.max(new Date(stay?.startedAt ?? nowMs).getTime(), ...temperatureTimes);
+  const temperatureOverdue = active && nowMs - lastTemperatureAt > 24 * 60 * 60 * 1000;
 
   if (stayQuery.isError) {
     return <div className="page"><PageHeader title="Карта стационара" /><Alert type="error" showIcon message="Не удалось открыть карту стационара" description={getErrorMessage(stayQuery.error)} /></div>;
@@ -236,6 +247,7 @@ export function HospitalCardPage() {
           <Space wrap>
             <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/hospital')}>К стационару</Button>
             {stay ? <Button icon={<FileTextOutlined />} onClick={() => navigate(`/visits/${stay.sourceVisitId}`)}>Открыть исходный приём</Button> : null}
+            {stay && canManage ? <HospitalSummaryEditor stay={stay} notesOnly onSaved={refresh} /> : null}
             {stay && canPrint ? <Button icon={<PrinterOutlined />} onClick={() => setBoxPrintOpen(true)}>Лист для бокса</Button> : null}
             {stay && canPrint ? <Dropdown.Button icon={<PrinterOutlined />} menu={{ items: [{ key: 'notes', label: 'С заметками', onClick: () => {
               if (!printHospitalSheet(stay, organizationQuery.data, true)) message.warning('Браузер заблокировал окно печати');
@@ -260,27 +272,37 @@ export function HospitalCardPage() {
         <>
           <div className="list-panel hospital-summary-panel">
             <div className="list-panel-body">
-              <Descriptions bordered column={{ xs: 1, md: 2, xl: 3 }}>
-                <Descriptions.Item label="Пациент"><Typography.Link onClick={() => navigate(`/patients/${stay.animalId}`)}>{stay.animal?.nickname ?? 'Пациент'}</Typography.Link></Descriptions.Item>
-                <Descriptions.Item label="Вид"><AnimalSpeciesLabel species={stay.animal?.species} /></Descriptions.Item>
-                <Descriptions.Item label="Возраст">{formatAnimalAge(stay.animal?.birthDate)}</Descriptions.Item>
-                <Descriptions.Item label="Владелец"><Typography.Link onClick={() => navigate(`/owners/${stay.ownerId}`)}>{stay.owner?.fullName ?? '—'}</Typography.Link></Descriptions.Item>
-                <Descriptions.Item label="Ответственный">{stay.employee?.fullName ?? 'Не назначен'}</Descriptions.Item>
-                <Descriptions.Item label="Статус"><Tag color={hospitalStatusColors[stay.status]}>{hospitalStatusLabels[stay.status]}</Tag></Descriptions.Item>
-                <Descriptions.Item label="Основной счёт">{stay.bill ? `${formatMoney(stay.bill.totalAmount)} · оплачено ${formatMoney(stay.bill.paidAmount)}` : formatMoney(0)}</Descriptions.Item>
-                <Descriptions.Item label="Причина помещения" span="filled">{stay.exam?.purpose || 'Не указана'}</Descriptions.Item>
-              </Descriptions>
+              <dl className="hospital-summary-grid">
+                <div><dt>Пациент</dt><dd><Typography.Link onClick={() => navigate(`/patients/${stay.animalId}`)}>{stay.animal?.nickname ?? 'Пациент'}</Typography.Link></dd></div>
+                <div><dt>Вид</dt><dd><AnimalSpeciesLabel species={stay.animal?.species} /></dd></div>
+                <div><dt>Возраст</dt><dd>{formatAnimalAge(stay.animal?.birthDate)}</dd></div>
+                <div><dt>Владелец</dt><dd><Typography.Link onClick={() => navigate(`/owners/${stay.ownerId}`)}>{stay.owner?.fullName ?? '—'}</Typography.Link></dd></div>
+                <div><dt>Ответственный</dt><dd>{stay.employee?.fullName ?? 'Не назначен'}</dd></div>
+                <div><dt>Состояние</dt><dd><AnimalStatusTag status={stay.animal?.status} /></dd></div>
+                <div><dt>Вес</dt><dd>{stay.weightKg != null ? `${stay.weightKg} кг` : 'Не указан'}</dd></div>
+                <div><dt>Задаток</dt><dd>{formatMoney(stay.depositAmount)}</dd></div>
+                <div><dt>Счёт стационара</dt><dd>{stay.bill ? <Typography.Link onClick={() => navigate(`/bills/${stay.bill!.id}`)}>{formatMoney(stay.bill.totalAmount)} · оплачено {formatMoney(stay.bill.paidAmount)}</Typography.Link> : 'Формируется при выписке'}</dd></div>
+                <div className="hospital-summary-wide"><dt>Диагноз стационара</dt><dd>{stay.diagnosis || 'Не указан'}</dd></div>
+              </dl>
+              <Space wrap className="hospital-summary-toolbar">
+                {canManage && active ? <HospitalSummaryEditor stay={stay} onSaved={refresh} /> : null}
+                {stay.status !== 'CANCELLED' ? <Button icon={<FileTextOutlined />} loading={preliminaryBillMutation.isPending} onClick={() => preliminaryBillMutation.mutate()}>Сформировать промежуточный счёт</Button> : null}
+                {stay.bill ? <Button onClick={() => navigate(`/bills/${stay.bill!.id}`)}>Итоговый счёт стационара</Button> : null}
+                {stay.primaryBill ? <Button onClick={() => navigate(`/bills/${stay.primaryBill!.id}`)}>{stay.hasLegacyHospitalCharges ? 'Старый общий счёт приёма и стационара' : 'Счёт первичного приёма'}</Button> : null}
+                {!active ? <Tag color={hospitalStatusColors[stay.status]}>{stay.dischargeReason === 'DECEASED' ? 'Погиб' : hospitalStatusLabels[stay.status]}</Tag> : null}
+              </Space>
               {canManage && active ? (
                 <div className="hospital-card-actions">
+                  <details className="hospital-placement-editor"><summary>Бокс и услуга: {stay.hospitalBox?.name} · {stay.dailyServiceTitle || 'Тариф бокса'} · {formatMoney(stay.dailyRateSnapshot ?? 0)} / день</summary><div className="hospital-placement-fields">
                   <Select
                     value={boxId}
                     placeholder="Выберите бокс"
                     options={resourcesQuery.data?.boxes.map((box) => ({ value: box.id, label: box.name })) ?? []}
                     className="visit-hospital-select"
-                    onChange={setBoxId}
+                    onChange={(id) => { setBoxId(id); setDailyServiceId(undefined); setDailyServicePrice(undefined); }}
                   />
-                  <Button icon={<SwapOutlined />} disabled={!boxId || boxId === stay.hospitalBoxId} loading={transferMutation.isPending} onClick={() => boxId && transferMutation.mutate(boxId)}>Перевести</Button>
-                  <Button icon={<FileTextOutlined />} loading={preliminaryBillMutation.isPending} onClick={() => preliminaryBillMutation.mutate()}>Сформировать промежуточный счёт</Button>
+                  <HospitalTariffSelect box={resourcesQuery.data?.boxes.find((box) => box.id === boxId)} value={dailyServiceId} price={dailyServicePrice} onChange={(id, price) => { setDailyServiceId(id); setDailyServicePrice(price); }} />
+                  <Button icon={<SwapOutlined />} disabled={!boxId || (boxId === stay.hospitalBoxId && dailyServiceId === (stay.dailyServiceId ?? undefined) && dailyServicePrice === Number(stay.dailyRateSnapshot))} loading={transferMutation.isPending} onClick={() => boxId && transferMutation.mutate(boxId)}>Сохранить бокс и услугу</Button></div></details>
                   <HospitalDischargeButton onConfirm={() => actionMutation.mutateAsync('discharge')} />
                   <Button danger icon={<CloseOutlined />} loading={actionMutation.isPending} onClick={() => modal.confirm({ title: 'Отменить госпитализацию?', okText: 'Отменить', cancelText: 'Назад', okButtonProps: { danger: true }, onOk: () => actionMutation.mutateAsync('cancel') })}>Отменить</Button>
                 </div>
@@ -293,34 +315,17 @@ export function HospitalCardPage() {
                 <Typography.Title level={4} className="compact-title">Полный лист стационара</Typography.Title>
                 <Typography.Text type="secondary">Всё пребывание на одном экране: назначения и их выполнение, температура, наблюдения и исправления.</Typography.Text>
               </div>
-              <Space wrap>
-                {canManage && active ? <Button onClick={() => setTreatmentPlanOpen(true)}>Назначить лечение</Button> : null}
-                {canManage && active ? <Button type="primary" onClick={() => openNewRecord('COMPLETED')}>Записать выполнение</Button> : null}
-              </Space>
+
             </div>
             <div className="list-panel-body">
+              {temperatureOverdue ? <Alert type="warning" showIcon className="hospital-treatment-reminder" message="Температура не измерялась больше суток" action={canManage ? <Button size="small" onClick={() => openNewRecord('COMPLETED', 'TEMPERATURE')}>Измерить температуру</Button> : undefined} /> : null}
               {treatmentReminder.due.length ? (
                 <Alert
                   type="warning"
                   showIcon
                   className="hospital-treatment-reminder"
                   message={`Требуется выполнить лечение: ${treatmentReminder.due.length}`}
-                  description={(
-                    <Space direction="vertical" size={3}>
-                      {treatmentReminder.due.slice(0, 5).map((record) => (
-                        <Typography.Text key={record.id}>
-                          <strong>{formatTreatmentDateTime(record.recordedAt, stay.timezone)}</strong> — {record.title}
-                        </Typography.Text>
-                      ))}
-                      {treatmentReminder.due.length > 5 ? <Typography.Text type="secondary">И ещё {treatmentReminder.due.length - 5}</Typography.Text> : null}
-                      {treatmentReminder.due.some((record) => record.canEditDirectly) ? (
-                        <Typography.Text type="secondary">Отметьте выполнение галочкой в строке назначения.</Typography.Text>
-                      ) : null}
-                      {treatmentReminder.due.some((record) => !record.canEditDirectly) ? (
-                        <Typography.Text type="secondary">Назначение прошлых суток можно отметить выполненным или отменённым; исходный план останется в истории.</Typography.Text>
-                      ) : null}
-                    </Space>
-                  )}
+
                 />
               ) : treatmentReminder.next ? (
                 <Alert
@@ -331,13 +336,7 @@ export function HospitalCardPage() {
                   description={treatmentReminder.next.title}
                 />
               ) : null}
-              <Alert
-                type="info"
-                showIcon
-                className="form-alert"
-                message={`Правило правки: записи текущих суток (${stay.timezone}) редактируются напрямую`}
-                description="Прошлые сутки не переписываются: врач добавляет исправление с причиной, автором и временем. Невыполненное назначение при этом можно отдельно отметить выполненным или отменённым."
-              />
+              <details className="hospital-edit-help"><summary>Правила правки записей</summary><Typography.Paragraph>Записи текущих суток ({stay.timezone}) редактируются напрямую. Прошлые сутки не переписываются: врач добавляет исправление с причиной, автором и временем. Невыполненное назначение при этом можно отдельно отметить выполненным или отменённым.</Typography.Paragraph></details>
               <HospitalSheet
                 records={stay.hospitalRecords ?? []}
                 timeZone={stay.timezone}
@@ -416,7 +415,7 @@ export function HospitalCardPage() {
         title="Промежуточный счёт"
         width={860}
         onCancel={() => setPreliminaryBill(null)}
-        footer={<Button type="primary" onClick={() => setPreliminaryBill(null)}>Закрыть</Button>}
+        footer={<Space>{canPrint && stay && preliminaryBill ? <Button icon={<PrinterOutlined />} onClick={() => { if (!printHospitalPreliminaryBill(stay, preliminaryBill, organizationQuery.data)) message.warning('Браузер заблокировал окно печати'); }}>Печать / PDF</Button> : null}<Button type="primary" onClick={() => setPreliminaryBill(null)}>Закрыть</Button></Space>}
       >
         {preliminaryBill ? (
           <Space direction="vertical" size={16} style={{ width: '100%' }}>
@@ -424,8 +423,9 @@ export function HospitalCardPage() {
               type="info"
               showIcon
               message="Это только расчёт на текущий момент"
-              description="В основной счёт ничего не добавлено. Учтены только выполненные услуги, использованные товары и завершённые сутки стационара; будущие назначения не включены."
+              description="Выполненные услуги, использованные товары и календарные дни содержания. Будущие назначения и счёт первичного приёма не включены."
             />
+            {Number(preliminaryBill.legacyBilledAmount ?? 0) > 0 ? <Alert type="info" showIcon message={`Ранее начислено в счёте исходного приёма: ${formatMoney(preliminaryBill.legacyBilledAmount!)}. Повторно в этот расчёт не включено.`} /> : null}
             <Table<HospitalPreliminaryBillLine>
               rowKey="id"
               pagination={false}
@@ -439,7 +439,7 @@ export function HospitalCardPage() {
                 { title: 'Цена', dataIndex: 'unitPrice', key: 'unitPrice', width: 110, align: 'right', render: (value: HospitalPreliminaryBillLine['unitPrice']) => formatMoney(value) },
                 { title: 'Сумма', dataIndex: 'totalAmount', key: 'totalAmount', width: 120, align: 'right', render: (value: HospitalPreliminaryBillLine['totalAmount']) => <strong>{formatMoney(value)}</strong> },
               ]}
-              locale={{ emptyText: 'Пока нет выполненных позиций и завершённых суток' }}
+              locale={{ emptyText: 'Пока нет выполненных позиций и календарных дней' }}
               summary={() => (
                 <Table.Summary.Row>
                   <Table.Summary.Cell index={0} colSpan={4}><strong>Итого на {formatDateTime(preliminaryBill.generatedAt)}</strong></Table.Summary.Cell>

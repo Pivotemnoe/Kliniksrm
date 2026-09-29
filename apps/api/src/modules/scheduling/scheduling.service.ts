@@ -58,7 +58,7 @@ export class SchedulingService {
       orderBy: { name: 'asc' },
       include: {
         rooms: { orderBy: { name: 'asc' } },
-        hospitalBoxes: { orderBy: { name: 'asc' } },
+        hospitalBoxes: { orderBy: { name: 'asc' }, include: { dailyServices: true } },
         warehouses: { orderBy: { name: 'asc' } },
       },
     });
@@ -87,7 +87,7 @@ export class SchedulingService {
       },
       include: {
         rooms: { orderBy: { name: 'asc' } },
-        hospitalBoxes: { orderBy: { name: 'asc' } },
+        hospitalBoxes: { orderBy: { name: 'asc' }, include: { dailyServices: true } },
         warehouses: { orderBy: { name: 'asc' } },
       },
     });
@@ -118,7 +118,7 @@ export class SchedulingService {
         },
         include: {
           rooms: { orderBy: { name: 'asc' } },
-          hospitalBoxes: { orderBy: { name: 'asc' } },
+          hospitalBoxes: { orderBy: { name: 'asc' }, include: { dailyServices: true } },
           warehouses: { orderBy: { name: 'asc' } },
         },
       });
@@ -352,8 +352,8 @@ export class SchedulingService {
 
     try {
       const box = await this.prisma.hospitalBox.create({
-        data: { officeId, name: requiredName(dto.name, 'Укажите название бокса'), dailyRate: dto.dailyRate ?? 0 },
-        include: { office: { select: { id: true, name: true } } },
+        data: { officeId, name: requiredName(dto.name, 'Укажите название бокса'), dailyRate: dto.dailyRate ?? 0, dailyServices: { connect: (dto.dailyServiceIds ?? []).map((id) => ({ id })) } },
+        include: { dailyServices: true, office: { select: { id: true, name: true } } },
       });
 
       await this.auditService.log({
@@ -381,8 +381,9 @@ export class SchedulingService {
           ...(officeId !== undefined ? { officeId } : {}),
           ...(dto.name !== undefined ? { name: requiredName(dto.name, 'Укажите название бокса') } : {}),
           ...(dto.dailyRate !== undefined ? { dailyRate: dto.dailyRate } : {}),
+          ...(dto.dailyServiceIds !== undefined ? { dailyServices: { set: dto.dailyServiceIds.map((id) => ({ id })) } } : {}),
         },
-        include: { office: { select: { id: true, name: true } } },
+        include: { dailyServices: true, office: { select: { id: true, name: true } } },
       });
 
       await this.auditService.log({
@@ -541,7 +542,7 @@ export class SchedulingService {
   async ensureHospitalBoxExists(hospitalBoxId: string) {
     const hospitalBox = await this.prisma.hospitalBox.findUnique({
       where: { id: hospitalBoxId },
-      select: { id: true, officeId: true, dailyRate: true },
+      select: { id: true, officeId: true, dailyRate: true, dailyServices: true },
     });
 
     if (!hospitalBox) {

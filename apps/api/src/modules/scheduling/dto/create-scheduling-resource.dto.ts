@@ -1,8 +1,16 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
+import { ArrayMaxSize, ArrayUnique, IsArray, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
 
 export class CreateSchedulingResourceDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @ArrayUnique()
+  @IsString({ each: true })
+  dailyServiceIds?: string[];
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsUUID()
@@ -13,7 +21,7 @@ export class CreateSchedulingResourceDto {
   @MaxLength(160)
   name!: string;
 
-  @ApiPropertyOptional({ description: 'Стоимость каждых полных 24 часов в боксе.' })
+  @ApiPropertyOptional({ description: 'Стоимость календарного дня в боксе, если услуга не выбрана.' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })

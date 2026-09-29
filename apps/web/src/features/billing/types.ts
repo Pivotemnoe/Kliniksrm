@@ -5,7 +5,7 @@ import { DecimalValue } from '../visits/types';
 
 export type PaymentStatus = 'UNPAID' | 'PARTIAL' | 'PAID' | 'REFUNDED' | 'CANCELLED';
 export type PaymentType = 'CASH' | 'CARD' | 'BANK_TRANSFER' | 'DEPOSIT' | 'OTHER';
-export type BillSource = 'VISIT' | 'SALE' | 'MANUAL';
+export type BillSource = 'VISIT' | 'SALE' | 'MANUAL' | 'HOSPITAL';
 export type BillAmountFilter = 'ZERO' | 'POSITIVE';
 
 export type BillOwner = Pick<Owner, 'id' | 'fullName' | 'phone' | 'extraPhone'>;
@@ -207,6 +207,7 @@ export const paymentStatusColors: Record<PaymentStatus, string> = {
 
 export const billSourceLabels: Record<BillSource, string> = {
   VISIT: 'Приём',
+  HOSPITAL: 'Стационар',
   SALE: 'Продажа',
   MANUAL: 'Ручной счёт',
 };

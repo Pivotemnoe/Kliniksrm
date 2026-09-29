@@ -154,6 +154,7 @@ enum BusinessDailyCloseStatus {
 }
 
 enum BillSource {
+  HOSPITAL
   VISIT
   SALE
   MANUAL
@@ -779,6 +780,7 @@ model EmployeeWarehouseAccess {
 }
 
 model HospitalBox {
+  dailyServices Service[] @relation("HospitalBoxDailyServices")
   id           String                @id @default(uuid())
   officeId     String
   office       ClinicOffice          @relation(fields: [officeId], references: [id], onDelete: Cascade)
@@ -1178,6 +1180,11 @@ model PracticeCollectionCursor {
 }
 
 model HospitalStay {
+  depositAmount Decimal @default(0) @db.Decimal(12, 2)
+  diagnosis String?
+  internalNotes String?
+  dischargeReason String?
+  bill Bill?
   id            String             @id @default(uuid())
   sourceVisitId String             @unique
   sourceVisit   Visit              @relation(fields: [sourceVisitId], references: [id], onDelete: Restrict)
@@ -1206,6 +1213,9 @@ model HospitalStay {
 }
 
 model HospitalStayRatePeriod {
+  serviceId String?
+  service Service? @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  serviceTitle String?
   id             String       @id @default(uuid())
   hospitalStayId String
   hospitalStay   HospitalStay @relation(fields: [hospitalStayId], references: [id], onDelete: Cascade)
@@ -1598,6 +1608,8 @@ model ServiceCategory {
 }
 
 model Service {
+  hospitalBoxes HospitalBox[] @relation("HospitalBoxDailyServices")
+  hospitalRatePeriods HospitalStayRatePeriod[]
   id                     String               @id @default(uuid())
   isActive               Boolean              @default(true)
   publicOnWebsite        Boolean              @default(false)
@@ -1912,6 +1924,8 @@ model SupplyInvoiceItem {
 }
 
 model Bill {
+  hospitalStayId String? @unique
+  hospitalStay HospitalStay? @relation(fields: [hospitalStayId], references: [id], onDelete: Restrict)
   id          String        @id @default(uuid())
   ownerId     String?
   owner       Owner?        @relation(fields: [ownerId], references: [id], onDelete: SetNull)

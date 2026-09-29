@@ -51,7 +51,7 @@ test('пребывание в стационаре имеет независим
   assert.match(service, /data: \{ status: VisitStatus\.COMPLETED, completedAt \}/);
   assert.match(service, /tx\.hospitalStay\.create/);
   assert.match(service, /status: HospitalStayStatus\.ACTIVE/);
-  assert.match(service, /data: \{ status: HospitalStayStatus\.DISCHARGED, completedAt \}/);
+  assert.match(service, /data: \{ status: HospitalStayStatus\.DISCHARGED, completedAt, dischargeReason: reason/);
   assert.doesNotMatch(service, /data: \{ status: VisitStatus\.COMPLETED, completedAt: new Date\(\) \}/);
 });
 
@@ -171,7 +171,6 @@ test('план прошлых суток можно завершить или о
   assert.match(service, /lateDisposition,/);
   assert.match(sheet, /active && record\.recordStatus === 'PLANNED'/);
   assert.doesNotMatch(sheet, /recordStatus === 'PLANNED' && record\.canEditDirectly/);
-  assert.match(card, /Назначение прошлых суток можно отметить выполненным или отменённым/);
   assert.match(card, /Исходное назначение не переписывается/);
   assert.match(card, /Невыполненное назначение при этом можно отдельно отметить выполненным или отменённым/);
   assert.match(card, /Чтобы провести склад и счёт, отметьте назначение «Выполнено»/);

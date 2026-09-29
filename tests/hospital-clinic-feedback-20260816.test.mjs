@@ -34,8 +34,8 @@ test('отмена имеет отдельное время и может охв
   assert.match(service, /THIS_AND_FUTURE/);
   assert.match(service, /recordedAt: \{ gte: target\.recordedAt \}/);
   assert.match(service, /cancelledAt/);
-  assert.match(sheet, /hospital-sheet-row-cancelled/);
-  assert.match(sheet, /aria-label="Отменено"/);
+  assert.match(sheet, /hospital-compact-record/);
+  assert.match(sheet, /RecordStatusTag record=\{record\}/);
   assert.doesNotMatch(sheet, /Не выполнено/);
 });
 
@@ -127,7 +127,7 @@ test('промежуточный счёт считает выполненное,
   assert.match(discharge, /const snapshot = getEffectivePlannedCatalog\(record\)/);
   assert.match(discharge, /serviceId: snapshot\.serviceId/);
   assert.match(card, /Сформировать промежуточный счёт/);
-  assert.match(card, /В основной счёт ничего не добавлено/);
+  assert.match(card, /Счёт первичного приёма|счёт первичного приёма/);
 });
 
 test('суточный тариф хранится по боксу, а связанные расходники списываются при выполнении', async () => {
@@ -141,7 +141,7 @@ test('суточный тариф хранится по боксу, а связ�
 
   assert.match(schema, /model HospitalStayRatePeriod/);
   assert.match(migration, /ADD COLUMN "dailyRate"/);
-  assert.match(scheduling, /select: \{ id: true, officeId: true, dailyRate: true \}/);
+  assert.match(scheduling, /select: \{ id: true, officeId: true, dailyRate: true, dailyServices: true \}/);
   assert.match(hospital, /writeOffLinkedHospitalProducts/);
   assert.match(hospital, /serviceLinkedProduct\.findMany/);
   assert.match(stockPage, /Связанные расходные материалы/);

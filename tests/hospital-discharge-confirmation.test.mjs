@@ -15,7 +15,7 @@ test('выписка из стационара требует повторног
   assert.match(confirmation, /disabled: secondsLeft > 0/);
   assert.match(confirmation, /Подтвердить через \$\{secondsLeft\} с/);
   assert.match(confirmation, /Оставить в стационаре/);
-  assert.match(confirmation, /Проверьте пациента, назначения и выполненные действия/);
+  assert.match(confirmation, /Невыполненные назначения будут отменены с сохранением истории/);
   assert.match(list, /<HospitalDischargeButton/);
   assert.match(card, /<HospitalDischargeButton/);
   assert.doesNotMatch(list, /actionMutation\.mutate\(\{ id: record\.id, action: 'discharge' \}\)/);

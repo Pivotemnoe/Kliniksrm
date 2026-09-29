@@ -1,0 +1,121 @@
+import 'reflect-metadata';
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { PrismaClient } from '@prisma/client';
+import { HospitalService } from '../apps/api/dist/modules/hospital/hospital.service.js';
+import { SchedulingService } from '../apps/api/dist/modules/scheduling/scheduling.service.js';
+import { ownerHospitalSelect, toOwnerHospitalStay } from '../apps/api/dist/modules/client-portal/owner-data-policy.js';
+
+const url = process.env.HOSPITAL_TEST_DATABASE_URL;
+test('hospital care and independent bills against isolated PostgreSQL', { skip: !url }, async (t) => {
+  const parsed = new URL(url);
+  assert.ok(['127.0.0.1', 'localhost'].includes(parsed.hostname) && parsed.pathname === '/hospital_qa', 'Only disposable local hospital_qa database is allowed');
+  const db = new PrismaClient({ datasources: { db: { url } } });
+  t.after(() => db.$disconnect());
+  const audit = { log: async () => {} };
+  const service = new HospitalService(db, audit, new SchedulingService(db, audit), { getDefaultBillDueAt: async () => null });
+  const org = await db.organization.create({ data: { displayName: 'Тест стационара' } });
+  const office = await db.clinicOffice.create({ data: { organizationId: org.id, name: 'Тестовая клиника' } });
+  const employee = await db.employee.create({ data: { fullName: 'Тестовый врач' } });
+  const dailyService = await db.service.create({ data: { title: 'Инфекционный стационар до 7 кг', price: 100 } });
+  const treatment = await db.service.create({ data: { title: 'Тестовая процедура', price: 250 } });
+  const box = await db.hospitalBox.create({ data: { officeId: office.id, name: 'Бокс тестовый', dailyServices: { connect: { id: dailyService.id } } } });
+  async function fixture({ paid = false, daysAgo = 3 } = {}) {
+    const owner = await db.owner.create({ data: { fullName: 'Вымышленный владелец' } });
+    const animal = await db.animal.create({ data: { ownerId: owner.id, nickname: 'Тестовый пациент', weights: { create: { weightKg: 4.2 } } } });
+    const visit = await db.visit.create({ data: { ownerId: owner.id, animalId: animal.id, employeeId: employee.id, status: 'IN_PROGRESS', visitType: 'PRIMARY', totalAmount: 500, diagnoses: { create: { title: 'Первичный диагноз', diagnosisType: 'Клинический' } }, bill: { create: { ownerId: owner.id, animalId: animal.id, source: 'VISIT', totalAmount: 500, paidAmount: paid ? 500 : 0, status: paid ? 'PAID' : 'UNPAID', items: { create: { title: 'Первичный приём', quantity: 1, unitPrice: 500, totalAmount: 500 } } } } }, include: { bill: true } });
+    const stay = await service.admitExisting(visit.id, { hospitalBoxId: box.id, dailyServiceId: dailyService.id }, employee.id);
+    const start = new Date(); start.setUTCDate(start.getUTCDate() - daysAgo);
+    await db.hospitalStay.update({ where: { id: stay.id }, data: { startedAt: start, ratePeriods: { updateMany: { where: {}, data: { startedAt: start } } } } });
+    return { stay, visit, animal, owner, start };
+  }
+  await t.test('own diagnosis, latest weight, informational deposit and privacy', async () => {
+    const f = await fixture();
+    const updated = await service.updateStay(f.stay.id, { diagnosis: 'Уточнённый диагноз', depositAmount: 1500, animalStatus: 'Без изменений', internalNotes: 'ВНУТРЕННИЙ КОММЕНТАРИЙ' }, employee.id);
+    assert.equal(updated.diagnosis, 'Уточнённый диагноз'); assert.equal(Number(updated.weightKg), 4.2);
+    assert.equal(Number(updated.depositAmount), 1500); assert.equal(updated.animal.status, 'Без изменений');
+    assert.equal((await db.visitDiagnosis.findFirst({ where: { visitId: f.visit.id } })).title, 'Первичный диагноз');
+    assert.equal(Number((await db.owner.findUnique({ where: { id: f.owner.id } })).balance), 0);
+    assert.equal(await db.payment.count(), 0);
+    const portal = toOwnerHospitalStay(await db.hospitalStay.findUnique({ where: { id: f.stay.id }, select: ownerHospitalSelect }));
+    assert.ok(!JSON.stringify(portal).includes('ВНУТРЕННИЙ')); assert.ok(!('internalNotes' in portal));
+    await assert.rejects(service.updateStay(f.stay.id, { dailyServiceId: 'missing' }, employee.id), /не привязана/);
+  });
+  await t.test('4 days out of 5: performed billed, pending cancelled, initial bill unchanged, repeat discharge safe', async () => {
+    const f = await fixture({ paid: true });
+    const primaryBefore = await db.bill.findUnique({ where: { id: f.visit.bill.id }, include: { items: true } });
+    await service.createRecord(f.stay.id, { recordType: 'PROCEDURE', title: 'Процедура', serviceId: treatment.id, quantity: 2 }, employee.id);
+    await db.hospitalRecord.create({ data: { visitId: f.visit.id, recordType: 'PROCEDURE', recordStatus: 'PLANNED', createdAsPlan: true, title: 'Завтра', recordedAt: new Date(Date.now() + 86400000), plannedServiceId: treatment.id, plannedQuantity: 1, plannedUnitPrice: 250 } });
+    const preview = await service.getPreliminaryBill(f.stay.id);
+    assert.equal(preview.completedDays, 4); assert.equal(Number(preview.totalAmount), 900);
+    assert.equal(await db.bill.count({ where: { hospitalStayId: f.stay.id } }), 0);
+    const closed = await service.discharge(f.stay.id, employee.id);
+    assert.equal(closed.status, 'DISCHARGED'); assert.equal(Number(closed.bill.totalAmount), 900);
+    assert.equal(closed.hospitalRecords.filter((r) => r.recordStatus === 'PLANNED').length, 0);
+    assert.equal(closed.hospitalRecords.filter((r) => r.recordStatus === 'SKIPPED').length, 1);
+    assert.equal(closed.hospitalRecords.filter((r) => r.recordStatus === 'COMPLETED').length, 1);
+    const ownBill = await db.bill.findUnique({ where: { hospitalStayId: f.stay.id }, include: { items: true } });
+    assert.equal(ownBill.visitId, null); assert.equal(ownBill.source, 'HOSPITAL');
+    assert.equal(ownBill.items.find((i) => i.serviceId === dailyService.id).quantity.toNumber(), 4);
+    await Promise.all([service.discharge(f.stay.id, employee.id), service.discharge(f.stay.id, employee.id)]);
+    assert.equal(await db.billItem.count({ where: { billId: ownBill.id } }), 2);
+    assert.deepEqual(await db.bill.findUnique({ where: { id: f.visit.bill.id }, include: { items: true } }), primaryBefore);
+    await assert.rejects(service.createRecord(f.stay.id, { recordType: 'OBSERVATION', title: 'Поздно' }, employee.id), /закрыт/);
+  });
+  await t.test('death closes stay atomically, saves diagnosis and cancels future treatment', async () => {
+    const f = await fixture({ daysAgo: 0 });
+    await db.hospitalRecord.create({ data: { visitId: f.visit.id, recordType: 'CARE', recordStatus: 'PLANNED', title: 'Будущий уход' } });
+    const closed = await service.updateStay(f.stay.id, { animalStatus: 'Погиб', diagnosis: 'Заключительный диагноз', depositAmount: 300 }, employee.id);
+    assert.equal(closed.dischargeReason, 'DECEASED'); assert.equal(closed.animal.status, 'Погиб'); assert.equal(closed.diagnosis, 'Заключительный диагноз');
+    assert.equal(Number(closed.bill.totalAmount), 100); assert.equal(closed.hospitalRecords[0].recordStatus, 'SKIPPED');
+  });
+  await t.test('unpaid legacy hospital line moves to own bill, unrelated initial item remains', async () => {
+    const f = await fixture({ daysAgo: 0 });
+    const item = await db.billItem.create({ data: { billId: f.visit.bill.id, serviceId: treatment.id, title: treatment.title, quantity: 1, unitPrice: 250, totalAmount: 250 } });
+    await db.hospitalRecord.create({ data: { visitId: f.visit.id, recordType: 'PROCEDURE', recordStatus: 'COMPLETED', title: treatment.title, billItemId: item.id } });
+    const closed = await service.discharge(f.stay.id, employee.id);
+    assert.equal(Number(closed.bill.totalAmount), 350);
+    assert.equal(Number((await db.bill.findUnique({ where: { id: f.visit.bill.id } })).totalAmount), 500);
+    assert.equal((await db.billItem.findUnique({ where: { id: item.id } })).billId, closed.bill.id);
+  });
+  await t.test('paid legacy line never charged twice', async () => {
+    const f = await fixture({ daysAgo: 0, paid: true });
+    const item = await db.billItem.create({ data: { billId: f.visit.bill.id, serviceId: treatment.id, title: treatment.title, quantity: 1, unitPrice: 250, totalAmount: 250 } });
+    await db.hospitalRecord.create({ data: { visitId: f.visit.id, recordType: 'PROCEDURE', recordStatus: 'COMPLETED', title: treatment.title, billItemId: item.id } });
+    const preview = await service.getPreliminaryBill(f.stay.id);
+    assert.equal(Number(preview.totalAmount), 100); assert.equal(Number(preview.legacyBilledAmount), 250);
+    const closed = await service.discharge(f.stay.id, employee.id);
+    assert.equal(Number(closed.bill.totalAmount), 100); assert.equal((await db.billItem.findUnique({ where: { id: item.id } })).billId, f.visit.bill.id);
+  });
+  await t.test('only consumed product is written off and billed; future dose never charged', async () => {
+    const f = await fixture({ daysAgo: 0 });
+    const warehouse = await db.warehouse.create({ data: { officeId: office.id, name: 'Тестовый склад' } });
+    const product = await db.product.create({ data: { title: 'Тестовый препарат', retailPrice: 50, stockUnit: 'мл', writeOffUnit: 'мл', billingUnit: 'мл' } });
+    const batch = await db.stockBatch.create({ data: { productId: product.id, warehouseId: warehouse.id, quantity: 10, rest: 10 } });
+    await service.createRecord(f.stay.id, { recordType: 'MEDICATION', title: product.title, productId: product.id, quantity: 2, stockQuantity: 2 }, employee.id);
+    await db.hospitalRecord.create({ data: { visitId: f.visit.id, recordType: 'MEDICATION', recordStatus: 'PLANNED', title: product.title, plannedProductId: product.id, plannedQuantity: 3, plannedStockQuantity: 3, plannedUnitPrice: 50, recordedAt: new Date(Date.now() + 86400000) } });
+    const closed = await service.discharge(f.stay.id, employee.id);
+    assert.equal(Number(closed.bill.totalAmount), 200);
+    assert.equal(Number((await db.stockBatch.findUnique({ where: { id: batch.id } })).rest), 8);
+    assert.equal(await db.stockMovement.count({ where: { productId: product.id } }), 1);
+  });
+  await t.test('unperformed legacy unpaid charge is removed, completed and primary items kept', async () => {
+    const f = await fixture({ daysAgo: 0 });
+    const item = await db.billItem.create({ data: { billId: f.visit.bill.id, serviceId: treatment.id, title: treatment.title, quantity: 1, unitPrice: 250, totalAmount: 250 } });
+    await db.hospitalRecord.create({ data: { visitId: f.visit.id, recordType: 'PROCEDURE', recordStatus: 'PLANNED', title: treatment.title, billItemId: item.id } });
+    const closed = await service.discharge(f.stay.id, employee.id);
+    assert.equal(Number(closed.bill.totalAmount), 100);
+    assert.equal(await db.billItem.findUnique({ where: { id: item.id } }), null);
+    assert.equal(Number((await db.bill.findUnique({ where: { id: f.visit.bill.id } })).totalAmount), 500);
+  });
+  await t.test('concurrent completion and discharge leaves no planned rows and bills completion exactly once', async () => {
+    const f = await fixture({ daysAgo: 0 });
+    const row = await db.hospitalRecord.create({ data: { visitId: f.visit.id, recordType: 'PROCEDURE', recordStatus: 'PLANNED', createdAsPlan: true, title: treatment.title, plannedServiceId: treatment.id, plannedQuantity: 1, plannedUnitPrice: 250 } });
+    const results = await Promise.allSettled([service.updateRecord(f.stay.id, row.id, { recordStatus: 'COMPLETED' }, employee.id), service.discharge(f.stay.id, employee.id)]);
+    assert.equal(results[1].status, 'fulfilled');
+    const record = await db.hospitalRecord.findUnique({ where: { id: row.id } });
+    const bill = await db.bill.findUnique({ where: { hospitalStayId: f.stay.id } });
+    assert.ok(['COMPLETED', 'SKIPPED'].includes(record.recordStatus));
+    assert.equal(Number(bill.totalAmount), record.recordStatus === 'COMPLETED' ? 350 : 100);
+  });
+});

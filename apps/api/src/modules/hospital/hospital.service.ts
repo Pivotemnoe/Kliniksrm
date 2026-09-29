@@ -31,6 +31,8 @@ import { toStockQuantity } from '../stock/stock-units';
 import { resolveServiceUnitPrice, servicePricingSelect } from '../stock/service-pricing';
 import { assertPrimaryVisitDiagnosesReady } from '../visits/visit-diagnosis-rules';
 
+import { calculateHospitalStayDayLines } from './hospital-calendar-billing';
+
 type WarehouseScope = string[] | null;
 
 @Injectable()
@@ -79,7 +81,7 @@ export class HospitalService {
   async getResources() {
     const boxes = await this.prisma.hospitalBox.findMany({
       orderBy: { name: 'asc' },
-      include: { office: { select: { id: true, name: true } } },
+      include: { dailyServices: { where: { isActive: true }, select: servicePricingSelect }, office: { select: { id: true, name: true } } },
     });
 
     return { boxes };
@@ -163,11 +165,12 @@ export class HospitalService {
         startedAt: true,
         completedAt: true,
         dailyRateSnapshot: true,
-        hospitalBox: { select: { id: true, name: true, dailyRate: true } },
+        hospitalBox: { select: { id: true, name: true, dailyRate: true, office: { select: { timezone: true } } } },
         ratePeriods: {
           orderBy: { startedAt: 'asc' },
           select: {
             hospitalBoxId: true,
+            serviceId: true, serviceTitle: true,
             dailyRate: true,
             startedAt: true,
             endedAt: true,
@@ -185,6 +188,7 @@ export class HospitalService {
                 completedAt: true,
                 billItem: {
                   select: {
+                    bill: { select: { hospitalStayId: true, paidAmount: true, status: true, payments: { select: { id: true } } } },
                     productId: true,
                     serviceId: true,
                     title: true,
@@ -211,7 +215,13 @@ export class HospitalService {
       throw new NotFoundException('Госпитализация не найдена');
     }
 
+    let legacyBilledAmount = decimal(0);
     const catalogLines = stay.sourceVisit.hospitalRecords.flatMap((record) => {
+      if (record.billItem && record.billItem.bill.hospitalStayId !== stay.id
+        && (record.billItem.bill.paidAmount.greaterThan(0) || record.billItem.bill.payments.length > 0 || record.billItem.bill.status === PaymentStatus.CANCELLED)) {
+        legacyBilledAmount = legacyBilledAmount.plus(record.billItem.totalAmount);
+        return [];
+      }
       if (record.billItem) {
         return [{
           id: `record:${record.id}`,
@@ -253,6 +263,7 @@ export class HospitalService {
       generatedAt,
       completedDays: stayLines.reduce((sum, line) => sum + decimalToNumber(line.quantity), 0),
       completedRecords: catalogLines.length,
+      legacyBilledAmount,
       lines,
       totalAmount,
     };
@@ -279,6 +290,7 @@ export class HospitalService {
     const warehouseScope = hasCatalogItem ? await this.getWarehouseScope(actorId) : null;
 
     const record = await this.prisma.$transaction(async (tx) => {
+      await this.lockActiveStay(tx, stay.id);
       const line = hasCatalogItem ? await this.resolveCatalogLine(tx, dto) : null;
       const created = await tx.hospitalRecord.create({
         data: {
@@ -347,6 +359,7 @@ export class HospitalService {
     }
 
     const plan = await this.prisma.$transaction(async (tx) => {
+      await this.lockActiveStay(tx, stay.id);
       const records: Prisma.HospitalRecordCreateWithoutTreatmentPlanInput[] = [];
 
       for (const item of dto.items) {
@@ -519,6 +532,7 @@ export class HospitalService {
       : null;
 
     const record = await this.prisma.$transaction(async (tx) => {
+      await this.lockActiveStay(tx, stay.id);
       let postedLine: HospitalCatalogLine | null = null;
 
       if (shouldStagePlannedCatalog) {
@@ -730,21 +744,24 @@ export class HospitalService {
 
     const cancelSeries = dto.scope === 'THIS_AND_FUTURE' && Boolean(target.treatmentPlanItemId);
     const cancelledAt = new Date();
-    const result = await this.prisma.hospitalRecord.updateMany({
-      where: {
-        visitId: stay.sourceVisitId,
-        recordStatus: HospitalRecordStatus.PLANNED,
-        ...(cancelSeries
-          ? { treatmentPlanItemId: target.treatmentPlanItemId, recordedAt: { gte: target.recordedAt } }
-          : { id: target.id }),
-      },
-      data: {
-        recordStatus: HospitalRecordStatus.SKIPPED,
-        completedAt: null,
-        performedById: null,
-        cancelledById: actorId,
-        cancelledAt,
-      },
+    const result = await this.prisma.$transaction(async (tx) => {
+      await this.lockActiveStay(tx, stay.id);
+      return tx.hospitalRecord.updateMany({
+        where: {
+          visitId: stay.sourceVisitId,
+          recordStatus: HospitalRecordStatus.PLANNED,
+          ...(cancelSeries
+            ? { treatmentPlanItemId: target.treatmentPlanItemId, recordedAt: { gte: target.recordedAt } }
+            : { id: target.id }),
+        },
+        data: {
+          recordStatus: HospitalRecordStatus.SKIPPED,
+          completedAt: null,
+          performedById: null,
+          cancelledById: actorId,
+          cancelledAt,
+        },
+      });
     });
     if (result.count === 0) {
       throw new BadRequestException('Назначение уже обработано другим сотрудником. Обновите лист стационара');
@@ -915,7 +932,7 @@ export class HospitalService {
         visitType: true,
         status: true,
         startedAt: true,
-        diagnoses: { select: { diagnosisType: true } },
+        diagnoses: { select: { diagnosisType: true, title: true, description: true } },
         exam: { select: { purpose: true } },
         hospitalStay: { select: { id: true } },
       },
@@ -939,6 +956,7 @@ export class HospitalService {
     );
 
     const box = await this.schedulingService.ensureHospitalBoxExists(dto.hospitalBoxId);
+    const tariff = this.resolveDailyTariff(box, dto);
     const responsibleEmployeeId = dto.employeeId ?? visit.employeeId;
 
     if (responsibleEmployeeId) {
@@ -974,12 +992,13 @@ export class HospitalService {
           employeeId: responsibleEmployeeId,
           hospitalBoxId: box.id,
           purpose: visit.exam?.purpose,
+          diagnosis: visit.diagnoses.map((d) => [d.title, d.description].filter(Boolean).join(": ")).join("; "),
           startedAt: completedAt,
-          dailyRateSnapshot: box.dailyRate,
+          dailyRateSnapshot: tariff.dailyRate,
           ratePeriods: {
             create: {
               hospitalBoxId: box.id,
-              dailyRate: box.dailyRate,
+              ...tariff,
               startedAt: completedAt,
             },
           },
@@ -1003,6 +1022,7 @@ export class HospitalService {
   async admit(dto: AdmitHospitalPatientDto, actorId: string) {
     const ownerId = await this.schedulingService.resolveAnimalOwner(dto.animalId, dto.ownerId);
     const box = await this.schedulingService.ensureHospitalBoxExists(dto.hospitalBoxId);
+    const tariff = this.resolveDailyTariff(box, dto);
     const admittedAt = dto.admittedAt ? new Date(dto.admittedAt) : new Date();
 
     if (dto.employeeId) {
@@ -1031,11 +1051,11 @@ export class HospitalService {
           hospitalBoxId: box.id,
           purpose: dto.purpose?.trim() || null,
           startedAt: admittedAt,
-          dailyRateSnapshot: box.dailyRate,
+          dailyRateSnapshot: tariff.dailyRate,
           ratePeriods: {
             create: {
               hospitalBoxId: box.id,
-              dailyRate: box.dailyRate,
+              ...tariff,
               startedAt: admittedAt,
             },
           },
@@ -1073,42 +1093,39 @@ export class HospitalService {
       await this.schedulingService.ensureEmployeeActive(dto.employeeId);
     }
 
-    const boxChanged = Boolean(nextBox && nextBox.id !== existing.hospitalBoxId);
+    if (dto.animalStatus === 'Погиб') {
+      // Closing, remaining-plan cancellation and billing are one transaction.
+      return this.discharge(existing.id, actorId, 'DECEASED', dto);
+    }
+    const tariffRequested = nextBox !== null || dto.dailyServiceId !== undefined || dto.dailyServicePrice !== undefined;
+    const box = tariffRequested ? nextBox ?? await this.schedulingService.ensureHospitalBoxExists(existing.hospitalBoxId) : null;
+    const tariff = box ? this.resolveDailyTariff(box, dto) : null;
     const changedAt = new Date();
     await this.prisma.$transaction(async (tx) => {
-      if (boxChanged && nextBox) {
+      await this.lockActiveStay(tx, existing.id);
+      if (box && tariff) {
         const closed = await tx.hospitalStayRatePeriod.updateMany({
-          where: { hospitalStayId: existing.id, endedAt: null },
-          data: { endedAt: changedAt },
+          where: { hospitalStayId: existing.id, endedAt: null }, data: { endedAt: changedAt },
         });
         if (closed.count === 0) {
-          await tx.hospitalStayRatePeriod.create({
-            data: {
-              hospitalStayId: existing.id,
-              hospitalBoxId: existing.hospitalBoxId,
-              dailyRate: existing.dailyRateSnapshot ?? existing.hospitalBox.dailyRate,
-              startedAt: existing.startedAt,
-              endedAt: changedAt,
-            },
-          });
+          await tx.hospitalStayRatePeriod.create({ data: {
+            hospitalStayId: existing.id, hospitalBoxId: existing.hospitalBoxId,
+            dailyRate: existing.dailyRateSnapshot ?? existing.hospitalBox.dailyRate,
+            startedAt: existing.startedAt, endedAt: changedAt,
+          } });
         }
-        await tx.hospitalStayRatePeriod.create({
-          data: {
-            hospitalStayId: existing.id,
-            hospitalBoxId: nextBox.id,
-            dailyRate: nextBox.dailyRate,
-            startedAt: changedAt,
-          },
-        });
+        await tx.hospitalStayRatePeriod.create({ data: {
+          hospitalStayId: existing.id, hospitalBoxId: box.id, ...tariff, startedAt: changedAt,
+        } });
       }
-
-      await tx.hospitalStay.update({
-        where: { id: existing.id },
-        data: {
-          ...(nextBox ? { hospitalBoxId: nextBox.id, dailyRateSnapshot: nextBox.dailyRate } : {}),
-          ...(dto.employeeId !== undefined ? { employeeId: dto.employeeId } : {}),
-        },
-      });
+      await tx.hospitalStay.update({ where: { id: existing.id }, data: {
+        ...(box && tariff ? { hospitalBoxId: box.id, dailyRateSnapshot: tariff.dailyRate } : {}),
+        ...(dto.employeeId !== undefined ? { employeeId: dto.employeeId } : {}),
+        ...(dto.depositAmount !== undefined ? { depositAmount: dto.depositAmount } : {}),
+        ...(dto.diagnosis !== undefined ? { diagnosis: dto.diagnosis.trim() } : {}),
+        ...(dto.internalNotes !== undefined ? { internalNotes: dto.internalNotes } : {}),
+      } });
+      if (dto.animalStatus !== undefined) await tx.animal.update({ where: { id: existing.animalId }, data: { status: dto.animalStatus } });
     });
 
     await this.auditService.log({
@@ -1122,7 +1139,7 @@ export class HospitalService {
     return this.getHospitalStay(existing.id);
   }
 
-  async discharge(stayId: string, actorId: string) {
+  async discharge(stayId: string, actorId: string, reason: 'DISCHARGED' | 'DECEASED' = 'DISCHARGED', metadata?: Pick<UpdateHospitalStayDto, 'diagnosis' | 'depositAmount' | 'internalNotes'>) {
     const existing = await this.getExistingHospitalStay(stayId);
 
     if (existing.status === HospitalStayStatus.CANCELLED) {
@@ -1140,11 +1157,12 @@ export class HospitalService {
           startedAt: true,
           completedAt: true,
           dailyRateSnapshot: true,
-          hospitalBox: { select: { id: true, name: true, dailyRate: true } },
+          hospitalBox: { select: { id: true, name: true, dailyRate: true, office: { select: { timezone: true } } } },
           ratePeriods: {
             orderBy: { startedAt: 'asc' },
             select: {
               hospitalBoxId: true,
+              serviceId: true, serviceTitle: true,
               dailyRate: true,
               startedAt: true,
               endedAt: true,
@@ -1158,11 +1176,26 @@ export class HospitalService {
       }
       if (lockedStay.status === HospitalStayStatus.DISCHARGED) return;
 
-      const bill = await this.getEditableHospitalBill(tx, existing.sourceVisitId, dueAt);
+      const bill = await this.getEditableHospitalBill(tx, existing.id, dueAt);
+      await tx.$queryRaw`SELECT "id" FROM "Bill" WHERE "visitId" = ${existing.sourceVisitId} FOR UPDATE`;
+      // Old unpaid hospital lines may still belong to the source visit. Move only
+      // explicitly linked completed records, never payments or unrelated visit items.
+      const legacyRecords = await tx.hospitalRecord.findMany({ where: {
+        visitId: existing.sourceVisitId, parentRecordId: null, recordStatus: HospitalRecordStatus.COMPLETED,
+        billItem: { bill: { visitId: existing.sourceVisitId, paidAmount: 0, payments: { none: {} }, status: { not: PaymentStatus.CANCELLED } } },
+      }, select: { billItem: { select: { id: true, billId: true } } } });
+      const legacyBills = new Set<string>();
+      for (const record of legacyRecords) {
+        if (!record.billItem) continue;
+        legacyBills.add(record.billItem.billId);
+        await tx.billItem.update({ where: { id: record.billItem.id }, data: { billId: bill.id } });
+      }
+      for (const legacyBillId of legacyBills) await this.recalculateHospitalBill(tx, legacyBillId, existing.sourceVisitId);
       const pendingRecords = await tx.hospitalRecord.findMany({
         where: {
           visitId: existing.sourceVisitId,
           recordStatus: HospitalRecordStatus.COMPLETED,
+          parentRecordId: null,
           billItemId: null,
           OR: [{ plannedProductId: { not: null } }, { plannedServiceId: { not: null } },
             { amendments: { some: { OR: [{ plannedProductId: { not: null } }, { plannedServiceId: { not: null } }] } } }],
@@ -1213,6 +1246,7 @@ export class HospitalService {
         await tx.billItem.create({
           data: {
             billId: bill.id,
+            serviceId: line.serviceId,
             title: line.title,
             quantity: line.quantity,
             unitPrice: line.unitPrice,
@@ -1222,14 +1256,20 @@ export class HospitalService {
         });
       }
 
+      await this.cancelRemainingPlans(tx, existing.sourceVisitId, actorId, completedAt);
       await this.recalculateHospitalBill(tx, bill.id, existing.sourceVisitId);
+      if (reason === 'DECEASED') await tx.animal.update({ where: { id: existing.animalId }, data: { status: 'Погиб' } });
       await tx.hospitalStayRatePeriod.updateMany({
         where: { hospitalStayId: existing.id, endedAt: null },
         data: { endedAt: completedAt },
       });
       await tx.hospitalStay.update({
         where: { id: existing.id },
-        data: { status: HospitalStayStatus.DISCHARGED, completedAt },
+        data: { status: HospitalStayStatus.DISCHARGED, completedAt, dischargeReason: reason,
+          ...(metadata?.diagnosis !== undefined ? { diagnosis: metadata.diagnosis.trim() } : {}),
+          ...(metadata?.depositAmount !== undefined ? { depositAmount: metadata.depositAmount } : {}),
+          ...(metadata?.internalNotes !== undefined ? { internalNotes: metadata.internalNotes } : {}),
+        },
       });
     });
 
@@ -1248,16 +1288,14 @@ export class HospitalService {
     const existing = await this.getExistingHospitalStay(stayId);
     const completedAt = new Date();
 
-    await this.prisma.$transaction([
-      this.prisma.hospitalStayRatePeriod.updateMany({
-        where: { hospitalStayId: existing.id, endedAt: null },
-        data: { endedAt: completedAt },
-      }),
-      this.prisma.hospitalStay.update({
-        where: { id: existing.id },
-        data: { status: HospitalStayStatus.CANCELLED, completedAt },
-      }),
-    ]);
+    await this.prisma.$transaction(async (tx) => {
+      await this.lockActiveStay(tx, existing.id);
+      const performed = await tx.hospitalRecord.count({ where: { visitId: existing.sourceVisitId, recordStatus: HospitalRecordStatus.COMPLETED } });
+      if (performed) throw new BadRequestException('Уже есть выполненные записи. Используйте выписку, чтобы сохранить лечение и сформировать счёт');
+      await this.cancelRemainingPlans(tx, existing.sourceVisitId, actorId, completedAt);
+      await tx.hospitalStayRatePeriod.updateMany({ where: { hospitalStayId: existing.id, endedAt: null }, data: { endedAt: completedAt } });
+      await tx.hospitalStay.update({ where: { id: existing.id }, data: { status: HospitalStayStatus.CANCELLED, completedAt } });
+    });
 
     await this.auditService.log({
       actorId,
@@ -1329,46 +1367,49 @@ export class HospitalService {
     });
   }
 
-  private async getEditableHospitalBill(
-    tx: Prisma.TransactionClient,
-    visitId: string,
-    dueAt: Date | null,
-  ) {
-    const visit = await tx.visit.findUnique({
-      where: { id: visitId },
-      select: { id: true, ownerId: true, animalId: true },
-    });
-    if (!visit) {
-      throw new NotFoundException('Приём, связанный со стационаром, не найден');
-    }
-
-    const existing = await tx.bill.findUnique({
-      where: { visitId },
-      select: { id: true, status: true, totalAmount: true, paidAmount: true },
-    });
+  private async getEditableHospitalBill(tx: Prisma.TransactionClient, hospitalStayId: string, dueAt: Date | null) {
+    const stay = await tx.hospitalStay.findUniqueOrThrow({ where: { id: hospitalStayId } });
+    const existing = await tx.bill.findUnique({ where: { hospitalStayId } });
     if (existing) {
-      if (existing.status === PaymentStatus.CANCELLED) {
-        const status = resolvePaymentStatus(existing.totalAmount, existing.paidAmount);
-        return tx.bill.update({
-          where: { id: existing.id },
-          data: { status },
-          select: { id: true, status: true, paidAmount: true },
-        });
-      }
+      this.ensureBillEditable(existing);
       return existing;
     }
+    return tx.bill.create({ data: {
+      ownerId: stay.ownerId, animalId: stay.animalId, hospitalStayId,
+      source: BillSource.HOSPITAL, status: PaymentStatus.UNPAID, dueAt,
+    } });
+  }
 
-    return tx.bill.create({
-      data: {
-        ownerId: visit.ownerId,
-        animalId: visit.animalId,
-        visitId,
-        source: BillSource.VISIT,
-        status: PaymentStatus.UNPAID,
-        dueAt,
-      },
-      select: { id: true, status: true, paidAmount: true },
-    });
+  private resolveDailyTariff(box: { dailyRate: Prisma.Decimal; dailyServices: Array<Prisma.ServiceGetPayload<{}>> }, dto: { dailyServiceId?: string; dailyServicePrice?: number }) {
+    if (!dto.dailyServiceId) {
+      if (box.dailyServices.some((service) => service.isActive)) throw new BadRequestException('Выберите услугу содержания для этого пациента');
+      if (dto.dailyServicePrice !== undefined) throw new BadRequestException('Сначала выберите услугу содержания');
+      return { dailyRate: box.dailyRate, serviceId: null, serviceTitle: null };
+    }
+    const service = box.dailyServices.find((item) => item.id === dto.dailyServiceId && item.isActive);
+    if (!service) throw new BadRequestException('Услуга не привязана к выбранному боксу или отключена');
+    return { dailyRate: decimal(resolveServiceUnitPrice(service, dto.dailyServicePrice)), serviceId: service.id, serviceTitle: service.title };
+  }
+
+  private async lockActiveStay(tx: Prisma.TransactionClient, id: string) {
+    await tx.$queryRaw`SELECT "id" FROM "HospitalStay" WHERE "id" = ${id} FOR UPDATE`;
+    const stay = await tx.hospitalStay.findUniqueOrThrow({ where: { id }, select: { status: true } });
+    if (stay.status !== HospitalStayStatus.ACTIVE) throw new BadRequestException('Госпитализация уже закрыта. Обновите карточку');
+  }
+
+  private async cancelRemainingPlans(tx: Prisma.TransactionClient, visitId: string, actorId: string, cancelledAt: Date) {
+    const unperformed = await tx.hospitalRecord.findMany({ where: { visitId, recordStatus: HospitalRecordStatus.PLANNED, billItemId: { not: null } }, include: { billItem: { include: { bill: true } } } });
+    const billIds = new Set<string>();
+    for (const record of unperformed) {
+      if (!record.billItem) continue;
+      this.ensureBillEditable(record.billItem.bill);
+      billIds.add(record.billItem.billId);
+      await tx.billItem.delete({ where: { id: record.billItem.id } });
+    }
+    for (const billId of billIds) await this.recalculateHospitalBill(tx, billId, visitId);
+    await tx.hospitalRecord.updateMany({ where: { visitId, recordStatus: HospitalRecordStatus.PLANNED }, data: {
+      recordStatus: HospitalRecordStatus.SKIPPED, cancelledAt, cancelledById: actorId, completedAt: null, performedById: null,
+    } });
   }
 
   private ensureBillEditable(bill: { id: string; status: PaymentStatus; paidAmount: Prisma.Decimal } | null) {
@@ -1632,7 +1673,7 @@ export class HospitalService {
     const paidAmount = bill.payments.reduce((sum, payment) => sum.plus(payment.amount), decimal(0));
     const status = resolvePaymentStatus(totalAmount, paidAmount);
     await tx.bill.update({ where: { id: billId }, data: { totalAmount, paidAmount, status } });
-    await tx.visit.update({ where: { id: visitId }, data: { totalAmount } });
+    if (bill.visitId) await tx.visit.update({ where: { id: bill.visitId }, data: { totalAmount } });
   }
 
   private async getWarehouseScope(employeeId: string): Promise<WarehouseScope> {
@@ -1666,6 +1707,7 @@ export class HospitalService {
       select: {
         id: true,
         sourceVisitId: true,
+        animalId: true,
         hospitalBoxId: true,
         status: true,
         startedAt: true,
@@ -1779,8 +1821,10 @@ const hospitalRecordInclude = {
 } satisfies Prisma.HospitalRecordInclude;
 
 const hospitalStayInclude = {
+  bill: { select: { id: true, status: true, totalAmount: true, paidAmount: true } },
+  ratePeriods: { orderBy: { startedAt: 'desc' as const }, take: 1 },
   owner: { select: { id: true, fullName: true, phone: true, extraPhone: true } },
-  animal: { select: { id: true, nickname: true, species: true, breed: true, sex: true, birthDate: true, status: true } },
+  animal: { select: { id: true, nickname: true, species: true, breed: true, sex: true, birthDate: true, status: true, weights: { orderBy: { measuredAt: 'desc' as const }, take: 1 } } },
   employee: { select: { id: true, fullName: true, position: true } },
   hospitalBox: {
     select: {
@@ -1825,7 +1869,15 @@ function serializeHospitalStay(stay: HospitalStayWithRelations) {
     completedAt: stay.completedAt,
     createdAt: stay.createdAt,
     updatedAt: stay.updatedAt,
-    totalAmount: stay.sourceVisit.totalAmount,
+    totalAmount: stay.bill?.totalAmount ?? 0,
+    depositAmount: stay.depositAmount,
+    diagnosis: stay.diagnosis,
+    internalNotes: stay.internalNotes,
+    dischargeReason: stay.dischargeReason,
+    weightKg: stay.animal.weights[0]?.weightKg ?? null,
+    dailyServiceId: stay.ratePeriods[0]?.serviceId ?? null,
+    dailyServiceTitle: stay.ratePeriods[0]?.serviceTitle ?? null,
+    dailyRateSnapshot: stay.dailyRateSnapshot,
     owner: stay.owner,
     animal: stay.animal,
     employee: stay.employee,
@@ -1839,7 +1891,9 @@ function serializeHospitalStay(stay: HospitalStayWithRelations) {
     exam: stay.sourceVisit.exam,
     diagnoses: stay.sourceVisit.diagnoses,
     recommendation: stay.sourceVisit.recommendation,
-    bill: stay.sourceVisit.bill,
+    bill: stay.bill,
+    primaryBill: stay.sourceVisit.bill,
+    hasLegacyHospitalCharges: !stay.bill && stay.sourceVisit.hospitalRecords.some((record) => record.billItemId !== null),
     hospitalRecords: stay.sourceVisit.hospitalRecords.map((record) => ({
       ...record,
       canEditDirectly: stay.status === HospitalStayStatus.ACTIVE
@@ -1860,62 +1914,6 @@ function dateKeyInTimeZone(value: Date, timeZone: string) {
   }).formatToParts(value);
   const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   return `${values.year}-${values.month}-${values.day}`;
-}
-
-type HospitalStayRateSource = {
-  startedAt: Date;
-  dailyRateSnapshot: Prisma.Decimal | null;
-  hospitalBox: { id: string; name: string; dailyRate: Prisma.Decimal };
-  ratePeriods: Array<{
-    hospitalBoxId: string;
-    dailyRate: Prisma.Decimal;
-    startedAt: Date;
-    endedAt: Date | null;
-    hospitalBox: { name: string };
-  }>;
-};
-
-function calculateHospitalStayDayLines(stay: HospitalStayRateSource, asOf: Date) {
-  const dayMs = 24 * 60 * 60 * 1000;
-  const completedDays = Math.max(0, Math.floor((asOf.getTime() - stay.startedAt.getTime()) / dayMs));
-  const grouped = new Map<string, {
-    id: string;
-    kind: 'STAY';
-    title: string;
-    quantity: Prisma.Decimal;
-    unitPrice: Prisma.Decimal;
-    totalAmount: Prisma.Decimal;
-    completedAt: Date;
-  }>();
-
-  for (let dayIndex = 0; dayIndex < completedDays; dayIndex += 1) {
-    const dayStartedAt = new Date(stay.startedAt.getTime() + dayIndex * dayMs);
-    const period = stay.ratePeriods.find((candidate) =>
-      candidate.startedAt.getTime() <= dayStartedAt.getTime()
-      && (!candidate.endedAt || candidate.endedAt.getTime() > dayStartedAt.getTime()));
-    const hospitalBoxId = period?.hospitalBoxId ?? stay.hospitalBox.id;
-    const hospitalBoxName = period?.hospitalBox.name ?? stay.hospitalBox.name;
-    const unitPrice = decimal(period?.dailyRate ?? stay.dailyRateSnapshot ?? stay.hospitalBox.dailyRate);
-    const key = `${hospitalBoxId}:${unitPrice.toString()}`;
-    const current = grouped.get(key);
-    if (current) {
-      current.quantity = current.quantity.plus(1);
-      current.totalAmount = current.quantity.mul(current.unitPrice);
-      current.completedAt = new Date(dayStartedAt.getTime() + dayMs);
-    } else {
-      grouped.set(key, {
-        id: `stay:${key}`,
-        kind: 'STAY',
-        title: `Стационар: ${hospitalBoxName}`,
-        quantity: decimal(1),
-        unitPrice,
-        totalAmount: unitPrice,
-        completedAt: new Date(dayStartedAt.getTime() + dayMs),
-      });
-    }
-  }
-
-  return [...grouped.values()];
 }
 
 function calculateCatalogLine(input: {

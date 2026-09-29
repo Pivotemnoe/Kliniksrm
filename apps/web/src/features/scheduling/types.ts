@@ -14,6 +14,7 @@ export type SchedulingRoom = {
 };
 
 export type SchedulingHospitalBox = {
+  dailyServices?: Array<{ id: string; title: string }>;
   id: string;
   officeId: string;
   name: string;
@@ -80,6 +81,7 @@ export type SchedulingResourcePayload = {
   officeId?: string;
   name: string;
   dailyRate?: number;
+  dailyServiceIds?: string[];
 };
 
 export type EmployeeShift = {

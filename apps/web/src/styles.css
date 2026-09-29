@@ -5154,3 +5154,43 @@ body {
 .schedule-appointment-meta, .schedule-shift-meta, .shift-chip-meta {
   white-space: normal; overflow-wrap: anywhere; text-overflow: clip; overflow: visible;
 }
+
+/* Hospital: a two-line overview with full clinical details available on demand. */
+.hospital-box-name.ant-typography { margin: 0; line-height: 1.35; overflow-wrap: normal; }
+.hospital-summary-toolbar { margin-top: 10px; }
+.hospital-summary-panel .ant-descriptions-item-content { overflow-wrap: anywhere; }
+.hospital-tariff-select { flex: 1 1 320px; min-width: 220px; margin-top: 8px; }
+.hospital-tariff-select .ant-form-item { margin-bottom: 6px; }
+.hospital-compact-record { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 8px; padding: 5px 9px; border-top: 1px solid #e4ebef; align-items: start; }
+.hospital-compact-time { display: grid; line-height: 1.35; }
+.hospital-compact-time small { color: #6b7d8a; }
+.hospital-record-details { min-width: 0; }
+.hospital-record-details summary { cursor: pointer; position: relative; padding-left: 14px; list-style: none; }
+.hospital-record-details summary::-webkit-details-marker { display: none; }
+.hospital-record-details summary::before { content: '▸'; position: absolute; left: 0; color: #526a7c; }
+.hospital-record-details[open] summary::before { content: '▾'; }
+.hospital-compact-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; line-height: 1.4; }
+.hospital-compact-subline { display: flex; align-items: center; gap: 4px; min-width: 0; font-size: 12px; line-height: 1.4; }
+.hospital-compact-subline > span:not(.ant-tag) { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.hospital-compact-subline .ant-tag { margin: 0; font-size: 11px; line-height: 16px; }
+.hospital-record-expanded { display: grid; gap: 4px; padding: 8px 14px; overflow-wrap: anywhere; }
+.hospital-compact-actions { display: grid; justify-items: end; gap: 2px; }
+.hospital-compact-actions small { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #637789; }
+.hospital-compact-actions .ant-checkbox-wrapper { font-size: 12px; }
+.hospital-compact-record.hospital-sheet-row-skipped { color: #7a8490; }
+@media(max-width: 700px) {
+  .hospital-compact-record { grid-template-columns: 44px minmax(0, 1fr); }
+  .hospital-compact-actions { grid-column: 2; justify-items: start; }
+  .hospital-compact-subline { flex-wrap: wrap; }
+}
+.hospital-summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 0; margin: 0; border: 1px solid #e4ebef; border-radius: 6px; overflow: hidden; }
+.hospital-summary-grid > div { padding: 7px 10px; min-width: 0; border-right: 1px solid #e4ebef; border-bottom: 1px solid #e4ebef; }
+.hospital-summary-grid dt { color: #637789; font-size: 12px; line-height: 1.3; }
+.hospital-summary-grid dd { margin: 3px 0 0; line-height: 1.35; overflow-wrap: break-word; word-break: normal; }
+.hospital-summary-wide { grid-column: 1 / -1; }
+.hospital-placement-editor { flex: 1 1 100%; min-width: 0; font-size: 13px; }
+.hospital-placement-editor > summary { cursor: pointer; color: #365a74; overflow-wrap: break-word; }
+.hospital-placement-fields { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 0; align-items: center; }
+
+.hospital-edit-help { margin: 6px 0 12px; color: #637789; font-size: 12px; }
+.hospital-edit-help summary { cursor: pointer; }

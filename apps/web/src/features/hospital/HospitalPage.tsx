@@ -1,3 +1,5 @@
+import { HospitalTariffSelect } from './HospitalTariffSelect';
+import { AnimalStatusTag } from '../animals/animalStatus';
 import { CloseOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -76,35 +78,35 @@ export function HospitalPage() {
 
   const columns = useMemo<ColumnsType<HospitalStay>>(
     () => [
-      { title: 'Бокс', width: 80, key: 'box', render: (_, record) => record.hospitalBox?.name ?? '—' },
+      { title: 'Бокс', width: 180, key: 'box', render: (_, record) => <Typography.Paragraph className="hospital-box-name" ellipsis={{ rows: 2, expandable: true, symbol: 'Ещё' }}>{record.hospitalBox?.name ?? '—'}</Typography.Paragraph> },
       {
         title: 'Пациент',
-        key: 'animal', width: 180, fixed: 'left',
+        key: 'animal', width: 140,
         render: (_, record) => (
           <Button type="link" className="table-link" onClick={() => navigate(`/patients/${record.animalId}`)}>
             {record.animal?.nickname ?? 'Пациент'}
-            <span className="table-patient-details"><AnimalSpeciesLabel species={record.animal?.species} /> · {formatAnimalAge(record.animal?.birthDate)}</span>
+            <span className="table-patient-details"><AnimalSpeciesLabel species={record.animal?.species} /> · {record.weightKg ? `${record.weightKg} кг` : formatAnimalAge(record.animal?.birthDate)}</span>
           </Button>
         ),
       },
-      { title: 'Владелец', key: 'owner', width: 190, render: (_, record) => <>{record.owner?.fullName ?? '—'}<span className="table-patient-details">Сотрудник: {record.employee?.fullName ?? '—'}</span></> },
-      { title: 'Поступил', key: 'startedAt', width: 140, render: (_, record) => <>{formatDateTime(record.startedAt)}<span className="table-patient-details">В стационаре: {getStayDuration(record.startedAt, record.completedAt)}</span></> },
+      { title: 'Владелец', key: 'owner', width: 150, render: (_, record) => <>{record.owner?.fullName ?? '—'}<span className="table-patient-details">Сотрудник: {record.employee?.fullName ?? '—'}</span></> },
+      { title: 'Поступил', key: 'startedAt', width: 110, render: (_, record) => <>{formatDateTime(record.startedAt)}<span className="table-patient-details">В стационаре: {getStayDuration(record.startedAt, record.completedAt)}</span></> },
       {
         title: 'Лечение сейчас',
-        key: 'treatment', width: 230,
+        key: 'treatment', width: 165,
         render: (_, record) => {
           if (record.status !== 'ACTIVE') return '—';
           const treatment = getStayTreatmentStatus(record, nowMs);
-          return <>{treatment.dueCount > 0 ? <Tag color="red">Выполнить: {treatment.dueCount}</Tag> : treatment.nextAt ? <Tag color="blue">Следующее {formatTreatmentTime(treatment.nextAt, record.timezone)}</Tag> : <Typography.Text type="secondary">Нет назначений</Typography.Text>}<span className="table-patient-details">{record.exam?.purpose || record.recommendation?.careNotes || '—'}</span></>;
+          return <>{treatment.dueCount > 0 ? <Tag color="red">Выполнить: {treatment.dueCount}</Tag> : treatment.nextAt ? <Tag color="blue">Следующее {formatTreatmentTime(treatment.nextAt, record.timezone)}</Tag> : <Typography.Text type="secondary">Нет назначений</Typography.Text>}<span className="table-patient-details">{record.diagnosis || '—'}</span></>;
         },
       },
       {
-        title: 'Статус', key: 'status', width: 140,
-        render: (_, record) => <><Tag color={hospitalStatusColors[record.status]}>{hospitalStatusLabels[record.status]}</Tag><span className="table-patient-details">Счёт: {record.bill ? `${formatMoney(record.bill.paidAmount)} / ${formatMoney(record.bill.totalAmount)}` : '—'}</span></>,
+        title: 'Состояние', key: 'status', width: 110,
+        render: (_, record) => <>{record.status === 'ACTIVE' ? <AnimalStatusTag status={record.animal?.status} /> : <Tag color={hospitalStatusColors[record.status]}>{hospitalStatusLabels[record.status]}</Tag>}<span className="table-patient-details">Счёт: {record.bill ? `${formatMoney(record.bill.paidAmount)} / ${formatMoney(record.bill.totalAmount)}` : '—'}</span></>,
       },
       {
         title: 'Действия',
-        key: 'actions', width: 200, fixed: 'right',
+        key: 'actions', width: 145,
         render: (_, record) => (
           <Space wrap>
             <Button size="small" type="primary" onClick={() => navigate(`/hospital/${record.id}`)}>
@@ -195,7 +197,7 @@ export function HospitalPage() {
             rowKey="id"
             className="dense-table"
             columns={columns}
-            scroll={{ x: 1160 }}
+            scroll={{ x: 1000 }}
             onRow={(record) => ({ onDoubleClick: () => navigate(`/hospital/${record.id}`) })}
           />
         </div>
@@ -209,6 +211,8 @@ const admitSchema = z.object({
   ownerId: z.string().min(1, 'Выберите владельца'),
   animalId: z.string().min(1, 'Выберите пациента'),
   hospitalBoxId: z.string().min(1, 'Выберите бокс'),
+  dailyServiceId: z.string().optional(),
+  dailyServicePrice: z.number().optional(),
   employeeId: z.string().optional(),
   admittedAt: z.string().optional(),
   purpose: z.string().trim().optional(),
@@ -327,10 +331,11 @@ function AdmitModal({ open, onClose }: { open: boolean; onClose: () => void }) {
             name="hospitalBoxId"
             render={({ field, fieldState }) => (
               <Form.Item label="Бокс" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
-                <Select {...field} options={resourcesQuery.data?.boxes.map((box) => ({ value: box.id, label: box.name })) ?? []} />
+                <Select {...field} onChange={(value) => { field.onChange(value); setValue('dailyServiceId', undefined); setValue('dailyServicePrice', undefined); }} options={resourcesQuery.data?.boxes.map((box) => ({ value: box.id, label: box.name })) ?? []} />
               </Form.Item>
             )}
           />
+          <HospitalTariffSelect box={resourcesQuery.data?.boxes.find((box) => box.id === watch('hospitalBoxId'))} value={watch('dailyServiceId')} price={watch('dailyServicePrice')} onChange={(id, price) => { setValue('dailyServiceId', id); setValue('dailyServicePrice', price); }} />
           <Controller
             control={control}
             name="employeeId"

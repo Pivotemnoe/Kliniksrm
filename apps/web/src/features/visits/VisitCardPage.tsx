@@ -1,3 +1,4 @@
+import { HospitalTariffSelect } from '../hospital/HospitalTariffSelect';
 import { CheckOutlined, CloseOutlined, FileTextOutlined, HomeOutlined, LeftOutlined, PlayCircleOutlined, PrinterOutlined, UndoOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, App, Button, Card, Descriptions, Input, Modal, Select, Space, Tabs, Tag, Typography } from 'antd';
@@ -43,6 +44,8 @@ export function VisitCardPage() {
   const canPrintDocuments = hasPermission(auth?.employee, 'documents.print');
   const isDirector = Boolean(auth?.employee.roles.includes('director'));
   const [hospitalModalOpen, setHospitalModalOpen] = useState(false);
+  const [hospitalDailyServiceId, setHospitalDailyServiceId] = useState<string>();
+  const [hospitalDailyServicePrice, setHospitalDailyServicePrice] = useState<number>();
   const [hospitalBoxId, setHospitalBoxId] = useState<string>();
   const [restoreModalOpen, setRestoreModalOpen] = useState(false);
   const [restoreReason, setRestoreReason] = useState('');
@@ -59,7 +62,7 @@ export function VisitCardPage() {
   });
   const organizationQuery = useQuery({ queryKey: ['organization-print-profile'], queryFn: getOrganizationPrintProfile });
   const hospitalAdmissionMutation = useMutation({
-    mutationFn: (boxId: string) => admitExistingHospitalStay(visitId!, { hospitalBoxId: boxId }),
+    mutationFn: (boxId: string) => admitExistingHospitalStay(visitId!, { hospitalBoxId: boxId, dailyServiceId: hospitalDailyServiceId, dailyServicePrice: hospitalDailyServicePrice }),
     onSuccess: async (stay) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['visits', visitId] }),
@@ -570,9 +573,10 @@ export function VisitCardPage() {
           placeholder="Выберите свободный бокс"
           loading={hospitalResourcesQuery.isLoading}
           options={hospitalResourcesQuery.data?.boxes.map((box) => ({ value: box.id, label: box.name })) ?? []}
-          onChange={setHospitalBoxId}
+          onChange={(id) => { setHospitalBoxId(id); setHospitalDailyServiceId(undefined); setHospitalDailyServicePrice(undefined); }}
           className="full-width"
         />
+        <HospitalTariffSelect box={hospitalResourcesQuery.data?.boxes.find((box) => box.id === hospitalBoxId)} value={hospitalDailyServiceId} price={hospitalDailyServicePrice} onChange={(id, price) => { setHospitalDailyServiceId(id); setHospitalDailyServicePrice(price); }} />
       </Modal>
     </div>
   );

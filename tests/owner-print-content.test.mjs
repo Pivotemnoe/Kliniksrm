@@ -55,11 +55,11 @@ test('box sheet defaults to identity only; explicit option includes assignments 
  let html;
  const module = loadPrintModule('hospital/hospitalPrint.ts', value => { html = value; });
  const stay = { animal: { nickname: 'ТЕСТ кот' }, owner: { fullName: 'ТЕСТ владелец' },
-  hospitalBox: { name: 'Бокс 2' }, diagnoses: [{ title: 'ТЕСТ диагноз' }],
+  hospitalBox: { name: 'Бокс 2' }, diagnosis: 'ТЕСТ диагноз', diagnoses: [{ title: 'СТАРЫЙ диагноз' }], internalNotes: 'CLINIC_SECRET',
   hospitalRecords: [{ ...base, title: 'MEDICATION_SENTINEL', recordType: 'MEDICATION', recordedAt: new Date().toISOString() }] };
  module.printHospitalBoxSheet(stay);
  assert.match(html, /ТЕСТ кот/); assert.match(html, /ТЕСТ владелец/); assert.match(html, /ТЕСТ диагноз/); assert.match(html, /Бокс 2/);
- assert.doesNotMatch(html, /MEDICATION_SENTINEL|<h1>Назначения|<input class="paper-check"/);
+ assert.doesNotMatch(html, /CLINIC_SECRET|СТАРЫЙ диагноз|MEDICATION_SENTINEL|<h1>Назначения|<input class="paper-check"/);
  module.printHospitalBoxSheet(stay, undefined, true);
  assert.match(html, /MEDICATION_SENTINEL/); assert.match(html, /<h1>Назначения/); assert.match(html, /class="paper-check" type="checkbox"/);
 });
@@ -72,4 +72,14 @@ test('visit print uses current recommendation draft and preserves explicitly cle
  assert.match(html, /NEW_PLAN/); assert.doesNotMatch(html, /OLD_PLAN|OLD_CARE/);
  module.printVisitRecommendation(visit, { treatmentPlan: '', careNotes: 'NEW_CARE' });
  assert.match(html, /NEW_CARE/); assert.doesNotMatch(html, /OLD_PLAN|OLD_CARE/);
+});
+
+
+test('preliminary hospital bill prints logo, own lines and escaped titles without internal comments', () => {
+ let html;
+ const module = loadPrintModule('hospital/hospitalPrint.ts', value => { html = value; });
+ const stay = { timezone: 'Europe/Moscow', animal: { nickname: 'Тест' }, owner: { fullName: 'Владелец' }, internalNotes: 'CLINIC_SECRET', primaryBill: { totalAmount: '123456' } };
+ module.printHospitalPreliminaryBill(stay, { generatedAt: '2026-09-29T10:00:00Z', totalAmount: 300, lines: [{ title: '<Лечение>', quantity: 1, unitPrice: 300, totalAmount: 300 }] });
+ assert.match(html, /data-clinic-logo/); assert.match(html, /&lt;Лечение&gt;/); assert.match(html, /Промежуточный счёт стационара/);
+ assert.doesNotMatch(html, /CLINIC_SECRET|123456|<Лечение>/);
 });

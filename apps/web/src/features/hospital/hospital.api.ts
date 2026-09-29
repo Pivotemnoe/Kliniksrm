@@ -68,7 +68,7 @@ export function createHospitalAmendment(stayId: string, recordId: string, input:
   return apiRequest<HospitalRecord>(`/v1/hospital/${stayId}/records/${recordId}/amendments`, { method: 'POST', body: input });
 }
 
-export function admitExistingHospitalStay(visitId: string, input: Pick<AdmitHospitalInput, 'hospitalBoxId' | 'employeeId'>) {
+export function admitExistingHospitalStay(visitId: string, input: Pick<AdmitHospitalInput, 'hospitalBoxId' | 'employeeId' | 'dailyServiceId' | 'dailyServicePrice'>) {
   return apiRequest<HospitalStay>(`/v1/hospital/${visitId}/admit`, { method: 'POST', body: input });
 }
 
@@ -76,7 +76,7 @@ export function admitHospitalPatient(input: AdmitHospitalInput) {
   return apiRequest<HospitalStay>('/v1/hospital', { method: 'POST', body: input });
 }
 
-export function updateHospitalStay(stayId: string, input: Partial<Pick<AdmitHospitalInput, 'employeeId' | 'hospitalBoxId'>>) {
+export function updateHospitalStay(stayId: string, input: Partial<Pick<AdmitHospitalInput, 'employeeId' | 'hospitalBoxId' | 'dailyServiceId' | 'dailyServicePrice'>> & { depositAmount?: number; diagnosis?: string; internalNotes?: string; animalStatus?: string }) {
   return apiRequest<HospitalStay>(`/v1/hospital/${stayId}`, { method: 'PATCH', body: input });
 }
 

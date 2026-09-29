@@ -20,7 +20,7 @@ test('карта стационара печатает отдельный вну
   assert.match(print, /ФИО владельца/);
   assert.match(print, /Кличка животного/);
   assert.match(print, /Диагноз животного/);
-  assert.match(print, /stay\.diagnoses\?\.map/);
+  assert.match(print, /stay\.diagnosis\?\.trim/);
   assert.match(print, /Назначения на \$\{escapeHtml\(sheetDate\)\}/);
   assert.match(print, /recordStatus === 'PLANNED' \|\| record\.recordStatus === 'COMPLETED'/);
   assert.match(print, /dateKey\(new Date\(record\.recordedAt\), timeZone\) === dateKey\(now, timeZone\)/);

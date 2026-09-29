@@ -31,7 +31,7 @@ export function HospitalSheet({
   const groups = groupHospitalRecords(records, timeZone);
   const temperatures = records
     .flatMap((record) => [record, ...(record.amendments ?? [])])
-    .filter((record) => record.recordStatus !== 'PLANNED' && record.temperatureC !== null)
+    .filter((record) => (record.recordStatus === 'COMPLETED' || record.recordStatus === 'AMENDMENT') && record.temperatureC !== null)
     .map((record) => ({ at: record.completedAt ?? record.recordedAt, value: Number(record.temperatureC) }))
     .filter((point) => Number.isFinite(point.value))
     .sort((left, right) => new Date(left.at).getTime() - new Date(right.at).getTime());
@@ -59,89 +59,35 @@ export function HospitalSheet({
                 ) : null}
               </Space>
             </header>
-            <div className="hospital-sheet-table-scroll">
-              <div className="hospital-sheet-grid hospital-sheet-grid-head" aria-hidden="true">
-                <div>Время</div>
-                <div>Назначение / запись</div>
-                <div>Выполнение / результат</div>
-                <div>Исполнитель и действия</div>
-              </div>
-              {group.records.map((record) => record.recordStatus === 'SKIPPED' ? (
-                <article className="hospital-sheet-row-cancelled" key={record.id} aria-label="Отменено">
-                  <Tag>Отменено</Tag>
-                </article>
-              ) : (
-                <article className={`hospital-sheet-grid hospital-sheet-row hospital-sheet-row-${record.recordStatus.toLowerCase()}`} key={record.id}>
-                <div className="hospital-sheet-time">
-                  <strong>{formatTime(record.recordedAt, timeZone)}</strong>
-                  {record.createdAsPlan && record.recordStatus === 'COMPLETED' && record.completedAt ? (
-                    <Typography.Text type="secondary">выполнено {formatTime(record.completedAt, timeZone)}</Typography.Text>
-                  ) : null}
-                </div>
-                <div>
-                  <Space wrap size={6}>
-                    <Tag color={recordTypeColor[record.recordType]}>{recordTypeLabel[record.recordType]}</Tag>
-                    <RecordStatusTag record={record} />
-                  </Space>
-                  <Typography.Paragraph strong className="hospital-sheet-title">{record.title}</Typography.Paragraph>
-                  {record.treatmentPlan?.title ? <Typography.Text type="secondary">План: {record.treatmentPlan.title}</Typography.Text> : null}
-                  {record.createdAsPlan ? <Typography.Text type="secondary">Назначено на {formatDateTime(record.recordedAt, timeZone)}</Typography.Text> : null}
-                  {record.createdAsPlan ? <Typography.Text type="secondary">Назначил: {record.recordedBy?.fullName ?? '—'}</Typography.Text> : null}
-                </div>
-                <div>
-                  {record.recordStatus === 'PLANNED' ? (
-                    <Space direction="vertical" size={2}>
-                      <Typography.Text type="secondary">Ожидает выполнения</Typography.Text>
-                      {describePlannedPosting(record) ? <Typography.Text>{describePlannedPosting(record)}</Typography.Text> : null}
-                    </Space>
-                  ) : (
-                    <RecordResult record={record} />
-                  )}
-                  {record.amendments?.length ? (
-                    <div className="hospital-amendments">
-                      {record.amendments.map((amendment) => (
-                        <div className="hospital-amendment" key={amendment.id}>
-                          <Typography.Text strong>Исправление {formatDateTime(amendment.recordedAt, timeZone)}</Typography.Text>
-                          <Typography.Text type="secondary">Причина: {amendment.amendmentReason}</Typography.Text>
-                          <RecordResult record={amendment} />
-                          <Typography.Text type="secondary">{amendment.recordedBy?.fullName ?? 'Сотрудник'}</Typography.Text>
-                        </div>
-                      ))}
+            <div className="hospital-compact-records">
+              {group.records.map((record) => (
+                <article className={`hospital-compact-record hospital-sheet-row-${record.recordStatus.toLowerCase()}`} key={record.id}>
+                  <div className="hospital-compact-time"><strong>{formatTime(record.recordedAt, timeZone)}</strong>{record.completedAt ? <small>{formatTime(record.completedAt, timeZone)}</small> : null}</div>
+                  <details className="hospital-record-details">
+                    <summary>
+                      <span className="hospital-compact-title">{record.title}</span>
+                      <span className="hospital-compact-subline"><Tag color={recordTypeColor[record.recordType]}>{recordTypeLabel[record.recordType]}</Tag><RecordStatusTag record={record} /><span>{record.temperatureC != null ? `${record.temperatureC} °C` : record.value || (record.recordStatus === 'PLANNED' ? describePlannedPosting(record) : describeCompletedPosting(record))}</span>{record.amendments?.length ? <Tag>Исправления: {record.amendments.length}</Tag> : null}</span>
+                    </summary>
+                    <div className="hospital-record-expanded">
+                      <Typography.Text strong>{record.title}</Typography.Text>
+                      {record.createdAsPlan ? <Typography.Text type="secondary">Назначено на {formatDateTime(record.recordedAt, timeZone)} · Назначил: {record.recordedBy?.fullName ?? '—'}</Typography.Text> : null}
+                      {record.treatmentPlan?.title ? <Typography.Text>План: {record.treatmentPlan.title}</Typography.Text> : null}
+                      <RecordActor record={record} />
+                      <RecordResult record={record} />
+                      {record.amendments?.map((amendment) => <div className="hospital-amendment" key={amendment.id}><Typography.Text strong>Исправление {formatDateTime(amendment.recordedAt, timeZone)}</Typography.Text><Typography.Text>Причина: {amendment.amendmentReason}</Typography.Text><RecordResult record={amendment} /><Typography.Text>{amendment.recordedBy?.fullName}</Typography.Text></div>)}
                     </div>
-                  ) : null}
-                </div>
-                <div className="hospital-sheet-actions">
-                  <RecordActor record={record} />
-                  {canManage ? (
-                    <Space wrap size={4}>
-                      {active && record.recordStatus === 'PLANNED' ? (
-                        <>
-                          <Checkbox
-                            className="hospital-complete-checkbox"
-                            checked={updatingRecordId === record.id}
-                            disabled={updatingRecordId === record.id}
-                            onChange={(event) => {
-                              if (event.target.checked) onQuickComplete(record);
-                            }}
-                          >
-                            Выполнено
-                          </Checkbox>
-                          {record.canEditDirectly ? (
-                            <Button size="small" type="link" onClick={() => onComplete(record)}>Указать результат</Button>
-                          ) : null}
-                          <Button size="small" icon={<StopOutlined />} onClick={() => onSkip(record)}>Отменить назначение</Button>
-                        </>
-                      ) : null}
-                      {active && record.canEditDirectly ? (
-                        <Button size="small" icon={<EditOutlined />} onClick={() => onEdit(record)}>Изменить</Button>
-                      ) : (
-                        <Tooltip title="Прошлые сутки и закрытые пребывания не переписываются">
-                          <Button size="small" icon={<FileAddOutlined />} onClick={() => onAmend(record)}>Исправление</Button>
-                        </Tooltip>
-                      )}
-                    </Space>
-                  ) : null}
-                </div>
+                  </details>
+                  <div className="hospital-compact-actions">
+                    {canManage && record.recordStatus !== 'SKIPPED' ? <Space size={4}>
+                      {active && record.recordStatus === 'PLANNED' ? <>
+                        <Checkbox className="hospital-complete-checkbox" checked={updatingRecordId === record.id} disabled={updatingRecordId === record.id} onChange={(event) => { if (event.target.checked) onQuickComplete(record); }}>Выполнено</Checkbox>
+                        {record.canEditDirectly ? <Tooltip title="Указать результат"><Button aria-label="Указать результат" size="small" icon={<PlusOutlined />} onClick={() => onComplete(record)} /></Tooltip> : null}
+                        <Tooltip title="Отменить назначение"><Button aria-label="Отменить назначение" size="small" icon={<StopOutlined />} onClick={() => onSkip(record)} /></Tooltip>
+                      </> : null}
+                      {active && record.canEditDirectly ? <Tooltip title="Изменить"><Button aria-label="Изменить" size="small" icon={<EditOutlined />} onClick={() => onEdit(record)} /></Tooltip> : <Tooltip title="Исправление"><Button aria-label="Исправление" size="small" icon={<FileAddOutlined />} onClick={() => onAmend(record)} /></Tooltip>}
+                    </Space> : null}
+                    {record.recordStatus === 'COMPLETED' ? <small title={record.performedBy?.fullName ?? '—'}>{record.performedBy?.fullName ?? '—'}</small> : null}
+                  </div>
                 </article>
               ))}
             </div>

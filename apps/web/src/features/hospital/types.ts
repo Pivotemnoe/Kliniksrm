@@ -6,6 +6,7 @@ export type HospitalStayStatus = 'ACTIVE' | 'DISCHARGED' | 'CANCELLED';
 export type HospitalRecordStatus = 'PLANNED' | 'COMPLETED' | 'SKIPPED' | 'AMENDMENT';
 
 export type HospitalBox = {
+  dailyServices?: HospitalCatalog['services'];
   id: string;
   officeId: string;
   name: string;
@@ -31,6 +32,7 @@ export type HospitalPreliminaryBill = {
   generatedAt: string;
   completedDays: number;
   completedRecords: number;
+  legacyBilledAmount?: DecimalValue;
   lines: HospitalPreliminaryBillLine[];
   totalAmount: DecimalValue;
 };
@@ -61,6 +63,16 @@ export type HospitalCatalog = {
 };
 
 export type HospitalStay = {
+  depositAmount: DecimalValue;
+  diagnosis: string | null;
+  internalNotes: string | null;
+  dischargeReason: string | null;
+  weightKg: DecimalValue | null;
+  dailyServiceId: string | null;
+  dailyServiceTitle: string | null;
+  dailyRateSnapshot: DecimalValue | null;
+  primaryBill?: HospitalStay['bill'];
+  hasLegacyHospitalCharges?: boolean;
   id: string;
   sourceVisitId: string;
   ownerId: string;
@@ -225,6 +237,8 @@ export type HospitalTreatmentPlan = {
 };
 
 export type AdmitHospitalInput = {
+  dailyServiceId?: string;
+  dailyServicePrice?: number;
   ownerId: string;
   animalId: string;
   hospitalBoxId: string;

@@ -1,7 +1,7 @@
 import { printLogoUrl, printImagesScript } from '../../shared/print/branding';
 import { appConfig } from '../../app/config';
 import type { OrganizationPrintProfile } from '../organization/types';
-import type { HospitalRecord, HospitalStay } from './types';
+import type { HospitalPreliminaryBill, HospitalRecord, HospitalStay } from './types';
 
 export function printHospitalSheet(stay: HospitalStay, organization?: OrganizationPrintProfile | null, includeNotes = false) {
   const printWindow = window.open('', '_blank', 'width=1100,height=820');
@@ -70,7 +70,7 @@ export function printHospitalSheet(stay: HospitalStay, organization?: Organizati
       <div><span>Пациент</span><strong>${escapeHtml(patient || '-')}</strong></div>
       <div><span>Владелец</span><strong>${escapeHtml(stay.owner?.fullName ?? '-')}</strong></div>
       <div><span>Период пребывания</span><strong>${escapeHtml(stayPeriod)}</strong></div>
-      <div><span>Причина помещения</span><strong>${escapeHtml(stay.exam?.purpose ?? stay.purpose ?? '-')}</strong></div>
+      <div><span>Диагноз стационара</span><strong>${escapeHtml(stay.diagnosis || 'Не указан')}</strong></div>
     </section>
     ${recordsMarkup}
     <section class="signatures"><div class="signature">Представитель клиники / подпись</div><div class="signature">Дата</div></section>
@@ -94,7 +94,7 @@ export function printHospitalBoxSheet(stay: HospitalStay, organization?: Organiz
   const boxName = stay.hospitalBox?.name?.trim() || 'Не указан';
   const patientName = stay.animal?.nickname?.trim() || 'Не указана';
   const ownerName = stay.owner?.fullName?.trim() || 'Не указан';
-  const diagnosis = stay.diagnoses?.map((item) => item.title.trim()).filter(Boolean).join('; ') || 'Не указан';
+  const diagnosis = stay.diagnosis?.trim() || 'Не указан';
   const occurrences = assignments.flatMap((group) => group.occurrences);
   const assignmentMarkup = assignments.length
     ? `<section class="assignment-list">${assignments.map(renderHospitalBoxAssignment).join('')}</section>`
@@ -311,4 +311,17 @@ function formatBoxDateTime(value: string, timeZone: string) {
 
 function escapeHtml(value: string) {
   return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
+}
+
+export function printHospitalPreliminaryBill(stay: HospitalStay, bill: HospitalPreliminaryBill, organization?: OrganizationPrintProfile | null) {
+  const popup = window.open('', '_blank', 'width=900,height=800');
+  if (!popup) return false;
+  const money = (value: string | number) => Number(value).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  popup.document.write(`<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Промежуточный счёт стационара</title><style>
+    @page{size:A4;margin:12mm}body{font:12px/1.4 Arial,sans-serif;color:#162f47}header{display:flex;align-items:center;gap:12px;border-bottom:1px solid #bbcbd5;padding-bottom:10px}img{width:55px;height:55px;object-fit:contain}table{width:100%;border-collapse:collapse;margin-top:15px}td,th{border:1px solid #ccd6df;padding:6px;text-align:left;overflow-wrap:anywhere}td:nth-child(n+2),th:nth-child(n+2){text-align:right}tr{break-inside:avoid}tfoot{font-weight:bold}h1{font-size:19px}
+    </style></head><body><header><img data-clinic-logo src="${escapeHtml(printLogoUrl(organization?.logoUrl))}" alt="Логотип"><strong>${escapeHtml(organization?.displayName || appConfig.brandName)}</strong></header>
+    <h1>Промежуточный счёт стационара</h1><p>Пациент: ${escapeHtml(stay.animal?.nickname || '—')}<br>Владелец: ${escapeHtml(stay.owner?.fullName || '—')}<br>Расчёт на: ${escapeHtml(new Date(bill.generatedAt).toLocaleString('ru-RU', { timeZone: stay.timezone }))}</p>
+    <table><thead><tr><th>Позиция</th><th>Количество</th><th>Цена, ₽</th><th>Сумма, ₽</th></tr></thead><tbody>${bill.lines.map((line) => `<tr><td>${escapeHtml(line.title)}</td><td>${Number(line.quantity).toLocaleString('ru-RU')}</td><td>${money(line.unitPrice)}</td><td>${money(line.totalAmount)}</td></tr>`).join('')}</tbody><tfoot><tr><td colspan="3">Итого</td><td>${money(bill.totalAmount)}</td></tr></tfoot></table><p>Расчёт включает выполненное лечение и календарные дни содержания. Счёт первичного приёма оформляется отдельно. Не подтверждает оплату.</p>${printImagesScript()}</body></html>`);
+  popup.document.close();
+  return true;
 }

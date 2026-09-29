@@ -1,7 +1,19 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { IsDateString, IsOptional, IsNumber, Min, Max,  IsString, IsUUID, MaxLength } from 'class-validator';
 
 export class AdmitHospitalPatientDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  dailyServiceId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(999999999)
+  dailyServicePrice?: number;
+
   @ApiProperty()
   @IsUUID()
   ownerId!: string;
