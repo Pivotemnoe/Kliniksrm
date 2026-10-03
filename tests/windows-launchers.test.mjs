@@ -138,3 +138,8 @@ test('серверный запускатель с русским текстом
   const bytes = await readFile(new URL('scripts/start-clinic-server.ps1', projectRoot));
   assert.deepEqual([...bytes.subarray(0, 3)], [0xef, 0xbb, 0xbf]);
 });
+
+test('отсутствующий необязательный Docker-образ не прерывает серверный запуск', async () => {
+  const starter = await readProjectFile('scripts/start-clinic-server.ps1');
+  assert.match(starter, /function Test-DockerImage\(\$Image\) \{\s*\$ErrorActionPreference = "SilentlyContinue"\s*docker image inspect \$Image \*> \$null\s*return \$LASTEXITCODE -eq 0/);
+});

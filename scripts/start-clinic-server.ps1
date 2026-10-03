@@ -415,6 +415,7 @@ function Test-DockerRunning {
 }
 
 function Test-DockerImage($Image) {
+  $ErrorActionPreference = "SilentlyContinue"
   docker image inspect $Image *> $null
   return $LASTEXITCODE -eq 0
 }
