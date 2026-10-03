@@ -133,3 +133,8 @@ test('чистая Windows-установка тихо проверяет ещё
   assert.match(installer, /return Test-DockerCommand -Arguments @\("container", "inspect", \$Container\)/);
   assert.doesNotMatch(installer, /docker container inspect clinic-crm-postgres \*> \$null/);
 });
+
+test('серверный запускатель с русским текстом имеет UTF-8 BOM для Windows PowerShell 5.1', async () => {
+  const bytes = await readFile(new URL('scripts/start-clinic-server.ps1', projectRoot));
+  assert.deepEqual([...bytes.subarray(0, 3)], [0xef, 0xbb, 0xbf]);
+});
