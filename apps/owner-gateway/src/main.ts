@@ -5,6 +5,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { NextFunction, Request, Response } from 'express';
 import { AppModule } from './app.module';
 import { assertGatewaySecurityConfiguration } from './runtime-config';
+import { setGatewaySecurityHeaders } from './security-headers';
 
 async function bootstrap() {
   assertGatewaySecurityConfiguration();
@@ -22,13 +23,10 @@ async function bootstrap() {
     },
     methods: ['GET', 'POST', 'OPTIONS'],
     allowedHeaders: ['Content-Type'],
-    credentials: false,
+    credentials: true,
   });
   app.use((_request: Request, response: Response, next: NextFunction) => {
-    response.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
-    response.setHeader('Referrer-Policy', 'no-referrer');
-    response.setHeader('X-Content-Type-Options', 'nosniff');
-    response.setHeader('X-Frame-Options', 'DENY');
+    setGatewaySecurityHeaders(response);
     next();
   });
   app.useGlobalPipes(

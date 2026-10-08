@@ -57,8 +57,47 @@ model OwnerSnapshot {
   pushSubscriptions PortalPushSubscription[]
   bookingRequests   PortalBookingRequest[]
   documents         PortalDocument[]
+  conversations     ClinicConversation[]
+  notificationPreference OwnerNotificationPreference?
+  notificationDeliveries OwnerNotificationDelivery[]
 
   @@index([syncedAt])
+}
+
+// Owner notifications default on; saved opt-outs always take precedence.
+model OwnerNotificationPreference {
+  ownerId String @id
+  owner OwnerSnapshot @relation(fields: [ownerId], references: [ownerId], onDelete: Cascade)
+  enabled Boolean @default(true)
+  appointmentChanges Boolean @default(true)
+  appointmentReminders Boolean @default(true)
+  revisitReminders Boolean @default(true)
+  vaccinationReminders Boolean @default(true)
+  channel MessengerChannel @default(MAX)
+  timezone String @default("Europe/Moscow")
+  quietStartMinute Int @default(1320)
+  quietEndMinute Int @default(480)
+  version Int @default(1)
+  consentAt DateTime?
+  updatedAt DateTime @updatedAt
+}
+
+model OwnerNotificationDelivery {
+  id String @id
+  ownerId String
+  owner OwnerSnapshot @relation(fields: [ownerId], references: [ownerId], onDelete: Cascade)
+  fingerprint String
+  kind String
+  status String
+  consentVersion Int
+  channel MessengerChannel
+  dayKey String
+  attemptedAt DateTime @default(now())
+  completedAt DateTime?
+  providerMessageId String?
+  error String?
+  @@index([ownerId, dayKey, attemptedAt])
+  @@index([status, attemptedAt])
 }
 
 model PortalDocument {
@@ -161,6 +200,7 @@ model PortalInvitation {
   status     PortalInviteStatus  @default(ACTIVE)
   expiresAt  DateTime
   redeemedAt DateTime?
+  maxLinkedUserId String?
   createdAt  DateTime            @default(now())
   updatedAt  DateTime            @updatedAt
   sessions   PortalSession[]
@@ -218,4 +258,99 @@ model PortalPushSubscription {
 
   @@index([ownerId, disabledAt])
   @@index([sessionId])
+}
+
+// Website and MAX conversation state lives outside the LAN CRM.
+model ClinicConversation {
+  id String @id @default(uuid())
+  sessionHash String? @unique
+  sessionExpiresAt DateTime?
+  ownerId String?
+  owner OwnerSnapshot? @relation(fields: [ownerId], references: [ownerId], onDelete: SetNull)
+  source String @default("SITE_CHAT")
+  mode String @default("ASSISTANT")
+  needsAttention Boolean @default(false)
+  contactName String?
+  phone String?
+  animalNickname String?
+  preferredAt DateTime?
+  contactConsent Boolean @default(false)
+  maxUserId String? @unique
+  maxConsent Boolean @default(false)
+  sequence Int @default(0)
+  bookingSequence Int @default(0)
+  bookingDraft Json?
+  acknowledgedSequence Int @default(0)
+  crmRequestId String?
+  messages ClinicChatMessage[]
+  links ClinicChatLink[]
+  bookingOperations ClinicBookingOperation[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([needsAttention, updatedAt])
+}
+
+// Durable requests are pulled by the LAN CRM; the public gateway never opens the LAN.
+model ClinicBookingOperation {
+  id String @id @default(uuid())
+  conversationId String
+  conversation ClinicConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  ownerId String
+  clientKey String
+  kind String
+  status String @default("PENDING")
+  bookingSequence Int?
+  input Json
+  result Json?
+  error String?
+  createdAt DateTime @default(now())
+  completedAt DateTime?
+  @@unique([conversationId, clientKey])
+  @@index([status, createdAt])
+}
+
+model ClinicChatMessage {
+  id String @id @default(uuid())
+  conversationId String
+  conversation ClinicConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sequence Int
+  author String
+  channel String
+  text String
+  clientKey String
+  deliveryStatus String @default("AVAILABLE")
+  providerMessageId String?
+  attemptedAt DateTime?
+  assistantRun ClinicAssistantRun?
+  createdAt DateTime @default(now())
+  @@unique([conversationId, clientKey])
+  @@unique([conversationId, sequence])
+  @@index([deliveryStatus, createdAt])
+}
+
+model ClinicAssistantRun {
+  id String @id @default(uuid())
+  messageId String @unique
+  message ClinicChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  status String @default("PENDING")
+  model String?
+  reservedMicroUsd Int @default(0)
+  chargedMicroUsd Int?
+  inputTokens Int?
+  outputTokens Int?
+  intent String?
+  errorCode String?
+  startedAt DateTime?
+  finishedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([status, createdAt])
+  @@index([startedAt])
+}
+
+model ClinicChatLink {
+  tokenHash String @id
+  conversationId String
+  conversation ClinicConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt DateTime?
 }

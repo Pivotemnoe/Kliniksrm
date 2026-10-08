@@ -8,9 +8,12 @@ COPY apps/web/package.json apps/web/package.json
 COPY apps/owner-gateway/package.json apps/owner-gateway/package.json
 COPY packages/shared/package.json packages/shared/package.json
 
-RUN npm ci --workspace @clinic-crm/owner-gateway --include-workspace-root=false
+RUN npm ci --workspace @clinic-crm/owner-gateway --workspace @clinic-crm/web --include-workspace-root=false
 
 COPY apps/owner-gateway apps/owner-gateway
+COPY apps/web apps/web
+COPY packages/shared packages/shared
+RUN npm --workspace @clinic-crm/web run assistant:build
 RUN npm --workspace @clinic-crm/owner-gateway run build
 
 FROM node:22-alpine AS runtime

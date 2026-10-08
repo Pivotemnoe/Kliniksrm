@@ -8,6 +8,7 @@ import { SchedulingService } from '../scheduling/scheduling.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { ListAppointmentsQueryDto } from './dto/list-appointments-query.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
+import { cancelAppointmentReminders } from '../notifications/assistant-reminder.service';
 
 @Injectable()
 export class AppointmentsService {
@@ -60,14 +61,21 @@ export class AppointmentsService {
   }
 
   async createAppointment(dto: CreateAppointmentDto, actorId: string) {
-    const data = await this.resolveAppointmentData(dto);
+    return this.prisma.$transaction(tx => this.createAppointmentInTransaction(tx, dto, actorId));
+  }
+
+  // Shared by request confirmation: appointment, request and audit commit together.
+  async createAppointmentInTransaction(tx: Prisma.TransactionClient, dto: CreateAppointmentDto, actorId?: string) {
+    await lockAppointmentSchedule(tx);
+    const data = await this.resolveAppointmentData(dto, undefined, tx);
     await this.ensureEmployeeIsAvailable({
       employeeId: data.employeeId,
+      roomId: data.roomId,
       startsAt: data.startsAt!,
       endsAt: data.endsAt,
-    });
+    }, undefined, tx);
 
-    const appointment = await this.prisma.appointment.create({
+    const appointment = await tx.appointment.create({
       data: data as Prisma.AppointmentUncheckedCreateInput,
       include: appointmentInclude,
     });
@@ -84,7 +92,7 @@ export class AppointmentsService {
         startsAt: appointment.startsAt,
         status: appointment.status,
       },
-    });
+    }, tx);
 
     return appointment;
   }
@@ -103,23 +111,28 @@ export class AppointmentsService {
   }
 
   async updateAppointment(appointmentId: string, dto: UpdateAppointmentDto, actorId: string) {
-    const existing = await this.getExistingAppointment(appointmentId);
-    const data = await this.resolveAppointmentData(dto, existing);
+    return this.prisma.$transaction(async tx => {
+    await lockAppointmentSchedule(tx);
+    const existing = await this.getExistingAppointment(appointmentId, tx);
+    const data = await this.resolveAppointmentData(dto, existing, tx);
 
-    await this.ensureEmployeeIsAvailable(
+    if (isActiveAppointment(data.status ?? existing.status)) await this.ensureEmployeeIsAvailable(
       {
         employeeId: data.employeeId !== undefined ? data.employeeId : existing.employeeId,
+        roomId: data.roomId !== undefined ? data.roomId : existing.roomId,
         startsAt: data.startsAt ?? existing.startsAt,
         endsAt: data.endsAt !== undefined ? data.endsAt : existing.endsAt,
       },
       appointmentId,
+      tx,
     );
 
-    const appointment = await this.prisma.appointment.update({
+    const appointment = await tx.appointment.update({
       where: { id: appointmentId },
       data: data as Prisma.AppointmentUncheckedUpdateInput,
       include: appointmentInclude,
     });
+    if (['ownerId', 'animalId', 'officeId', 'employeeId', 'roomId', 'startsAt', 'endsAt', 'status'].some(key => String((appointment as unknown as Record<string, unknown>)[key]) !== String((existing as unknown as Record<string, unknown>)[key]))) await cancelAppointmentReminders(tx, appointmentId);
 
     await this.auditService.log({
       actorId,
@@ -127,9 +140,10 @@ export class AppointmentsService {
       entityType: 'Appointment',
       entityId: appointment.id,
       metadata: { changedFields: Object.keys(dto), status: appointment.status },
-    });
+    }, tx);
 
     return appointment;
+    });
   }
 
   async arriveAppointment(appointmentId: string, actorId: string) {
@@ -149,13 +163,19 @@ export class AppointmentsService {
   }
 
   private async setStatus(appointmentId: string, status: AppointmentStatus, actorId: string, action: string) {
-    await this.getExistingAppointment(appointmentId);
+    return this.prisma.$transaction(async tx => {
+    await lockAppointmentSchedule(tx);
+    const existing = await this.getExistingAppointment(appointmentId, tx);
+    if (isActiveAppointment(status)) {
+      await this.ensureEmployeeIsAvailable(existing, appointmentId, tx);
+    }
 
-    const appointment = await this.prisma.appointment.update({
+    const appointment = await tx.appointment.update({
       where: { id: appointmentId },
       data: { status },
       include: appointmentInclude,
     });
+    if (existing.status !== status) await cancelAppointmentReminders(tx, appointmentId);
 
     await this.auditService.log({
       actorId,
@@ -163,14 +183,16 @@ export class AppointmentsService {
       entityType: 'Appointment',
       entityId: appointment.id,
       metadata: { status },
-    });
+    }, tx);
 
     return appointment;
+    });
   }
 
   private async resolveAppointmentData(
     dto: CreateAppointmentDto | UpdateAppointmentDto,
     existing?: ExistingAppointment,
+    db: Prisma.TransactionClient = this.prisma,
   ): Promise<AppointmentMutationData> {
     const ownerId = dto.ownerId ?? existing?.ownerId;
     const animalId = dto.animalId ?? existing?.animalId;
@@ -179,16 +201,16 @@ export class AppointmentsService {
       throw new BadRequestException('Appointment must have owner and animal');
     }
 
-    await this.schedulingService.ensureOwnerExists(ownerId);
+    await this.schedulingService.ensureOwnerExists(ownerId, db);
     const resolvedOwnerId = await this.schedulingService.resolveAnimalOwner(animalId, ownerId, {
       allowArchived: Boolean(existing && animalId === existing.animalId),
-    });
+    }, db);
 
-    const room = dto.roomId ? await this.schedulingService.ensureRoomExists(dto.roomId) : undefined;
-    const officeId = dto.officeId ?? room?.officeId ?? (existing ? undefined : await this.schedulingService.getDefaultOfficeId());
+    const room = dto.roomId ? await this.schedulingService.ensureRoomExists(dto.roomId, db) : undefined;
+    const officeId = dto.officeId ?? room?.officeId ?? (existing ? undefined : await this.schedulingService.getDefaultOfficeId(db));
 
     if (officeId) {
-      await this.schedulingService.ensureOfficeExists(officeId);
+      await this.schedulingService.ensureOfficeExists(officeId, db);
     }
 
     if (room && officeId && room.officeId !== officeId) {
@@ -196,7 +218,7 @@ export class AppointmentsService {
     }
 
     if (dto.employeeId) {
-      await this.schedulingService.ensureEmployeeActive(dto.employeeId);
+      await this.schedulingService.ensureEmployeeActive(dto.employeeId, db);
     }
 
     const startsAt = dto.startsAt !== undefined ? new Date(dto.startsAt) : existing?.startsAt;
@@ -232,17 +254,21 @@ export class AppointmentsService {
   private async ensureEmployeeIsAvailable(
     data: AppointmentAvailabilityData,
     appointmentIdToIgnore?: string,
+    db: Prisma.TransactionClient = this.prisma,
   ) {
-    if (!data.employeeId) {
+    if (!data.employeeId && !data.roomId) {
       return;
     }
 
     const startsAt = data.startsAt;
     const endsAt = data.endsAt ?? addMinutes(startsAt, DEFAULT_APPOINTMENT_MINUTES);
 
-    const overlappingAppointment = await this.prisma.appointment.findFirst({
+    const overlappingAppointment = await db.appointment.findFirst({
       where: {
-        employeeId: data.employeeId,
+        AND: [{ OR: [
+          ...(data.employeeId ? [{ employeeId: data.employeeId }] : []),
+          ...(data.roomId ? [{ roomId: data.roomId }] : []),
+        ] }],
         ...(appointmentIdToIgnore ? { id: { not: appointmentIdToIgnore } } : {}),
         status: { in: [AppointmentStatus.PLANNED, AppointmentStatus.ARRIVED, AppointmentStatus.IN_PROGRESS] },
         startsAt: { lt: endsAt },
@@ -252,12 +278,12 @@ export class AppointmentsService {
     });
 
     if (overlappingAppointment) {
-      throw new BadRequestException('Employee already has appointment at this time');
+      throw new BadRequestException('Врач или кабинет уже занят в это время');
     }
   }
 
-  private async getExistingAppointment(appointmentId: string) {
-    const appointment = await this.prisma.appointment.findUnique({
+  private async getExistingAppointment(appointmentId: string, db: Prisma.TransactionClient = this.prisma) {
+    const appointment = await db.appointment.findUnique({
       where: { id: appointmentId },
       select: {
         id: true,
@@ -321,6 +347,7 @@ type ExistingAppointment = Prisma.AppointmentGetPayload<{
 
 type AppointmentAvailabilityData = {
   employeeId?: string | null;
+  roomId?: string | null;
   startsAt: Date;
   endsAt?: Date | null;
 };
@@ -343,4 +370,14 @@ function addMinutes(date: Date | undefined, minutes: number) {
   }
 
   return new Date(date.getTime() + minutes * 60 * 1000);
+}
+
+// One short transaction at a time for schedule writes, including manual edits.
+// This prevents check-then-insert races for overlapping intervals.
+async function lockAppointmentSchedule(tx: Prisma.TransactionClient) {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(20261008, 1)`;
+}
+
+function isActiveAppointment(status: AppointmentStatus) {
+  return status === AppointmentStatus.PLANNED || status === AppointmentStatus.ARRIVED || status === AppointmentStatus.IN_PROGRESS;
 }

@@ -1,3 +1,4 @@
+import { ConversationPanel } from './ConversationPanel';
 import {
   CalendarOutlined,
   CheckCircleOutlined,
@@ -16,9 +17,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Alert, Button, Drawer, Dropdown, Form, Input, Popconfirm, QRCode, Select, Space, Tag, Typography } from 'antd';
 import type { MenuProps } from 'antd';
 import { ColumnsType } from 'antd/es/table';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
 import { hasPermission } from '../../auth/permissions';
@@ -31,6 +32,9 @@ import { formatDateTime, fromDatetimeLocal, toDatetimeLocal } from '../../shared
 import { getSchedulingResources } from '../scheduling/scheduling.api';
 import { listOwnerAnimals, listOwners } from '../owners/owners.api';
 import {
+  claimOnlineRequest,
+  releaseOnlineRequest,
+  getOnlineRequest,
   acceptOnlineRequest,
   archiveOnlineRequest,
   cancelOnlineRequest,
@@ -79,6 +83,17 @@ type RequestDrawerIntent = 'confirm' | 'edit';
 export function OnlineRequestsPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [params, setParams] = useSearchParams();
+  const highlightedRequestId = params.get('request');
+  const highlightedRequest = useQuery({ queryKey: ['online-request-card', highlightedRequestId], queryFn: () => getOnlineRequest(highlightedRequestId!), enabled: Boolean(highlightedRequestId) });
+  const openedFromLink = useRef<string | null>(null);
+  useEffect(() => {
+    if (!highlightedRequestId) openedFromLink.current = null;
+    if (highlightedRequest.data && openedFromLink.current !== highlightedRequestId) {
+      openedFromLink.current = highlightedRequestId;
+      setSelectedRequest(highlightedRequest.data); setDrawerIntent('edit');
+    }
+  }, [highlightedRequestId, highlightedRequest.data]);
   const { message } = App.useApp();
   const { data: auth } = useCurrentEmployee();
   const canManage = hasPermission(auth?.employee, 'appointments.manage');
@@ -92,13 +107,28 @@ export function OnlineRequestsPage() {
     queryKey: ['online-requests', { search, status }],
     queryFn: ({ limit, offset }) => listOnlineRequests({ search, status, limit, offset }),
   });
+  const claimMutation = useMutation({
+    mutationFn: claimOnlineRequest,
+    onSuccess: async () => {
+      await Promise.all(['online-requests', 'online-request-attention', 'online-request-card'].map(key => queryClient.invalidateQueries({ queryKey: [key] })));
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
+  const releaseMutation = useMutation({
+    mutationFn: releaseOnlineRequest,
+    onSuccess: async () => {
+      await Promise.all(['online-requests', 'online-request-attention', 'staff-alerts'].map(key => queryClient.invalidateQueries({ queryKey: [key] })));
+      message.success('Заявка возвращена в очередь');
+    },
+    onError: error => message.error(getErrorMessage(error)),
+  });
   const actionMutation = useMutation({
     mutationFn: ({ request, action }: { request: OnlineAppointmentRequest; action: 'cancel' | 'archive' }) =>
       action === 'cancel' ? cancelOnlineRequest(request.id) : archiveOnlineRequest(request.id),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['online-requests'] });
+      await Promise.all(['online-requests', 'online-request-attention', 'staff-alerts'].map(key => queryClient.invalidateQueries({ queryKey: [key] })));
       message.success('Статус заявки обновлён');
-      setSelectedRequest(null);
+      closeRequest();
     },
     onError: (error) => message.error(getErrorMessage(error)),
   });
@@ -109,6 +139,7 @@ export function OnlineRequestsPage() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['online-requests'] }),
         queryClient.invalidateQueries({ queryKey: ['appointments'] }),
+        queryClient.invalidateQueries({ queryKey: ['online-request-attention'] }),
       ]);
       message.success('Запись подтверждена и добавлена в расписание');
     },
@@ -116,8 +147,14 @@ export function OnlineRequestsPage() {
   });
 
   function openRequest(request: OnlineAppointmentRequest, intent: RequestDrawerIntent) {
+    openedFromLink.current = request.id;
     setDrawerIntent(intent);
     setSelectedRequest(request);
+    setParams(current => { current.set('request', request.id); return current; }, { replace: true });
+  }
+  function closeRequest() {
+    setSelectedRequest(null);
+    setParams(current => { current.delete('request'); return current; }, { replace: true });
   }
 
   function answerRequest(request: OnlineAppointmentRequest) {
@@ -138,7 +175,7 @@ export function OnlineRequestsPage() {
         dataIndex: 'status',
         key: 'status',
         width: 120,
-        render: (value: OnlineRequestStatus) => <Tag color={onlineRequestStatusColors[value]}>{onlineRequestStatusLabels[value]}</Tag>,
+        render: (value: OnlineRequestStatus, request) => <Space direction="vertical" size={0}><Tag color={onlineRequestStatusColors[value]}>{onlineRequestStatusLabels[value]}</Tag>{request.assignedEmployee ? <Typography.Text type="secondary">{request.assignedEmployee.fullName}</Typography.Text> : null}</Space>,
       },
       {
         title: 'Клиент',
@@ -183,14 +220,16 @@ export function OnlineRequestsPage() {
         width: 430,
         fixed: 'right',
         render: (_, request) => {
-          const locked = isRequestLocked(request);
+          const assignedElsewhere = Boolean(request.assignedEmployeeId && request.assignedEmployeeId !== auth?.employee.id && request.assignedEmployee?.status !== 'BLOCKED');
+          const locked = isRequestLocked(request) || assignedElsewhere;
           const quickAcceptInput = getQuickAcceptInput(request);
           const accepting = quickAcceptMutation.isPending && quickAcceptMutation.variables?.request.id === request.id;
           const contactItems = getContactItems(request, navigate, message);
 
           return (
             <Space wrap size={[6, 6]}>
-              {canManage && !locked && !isOwnerAppointmentChange(request) ? (
+              {canManage && !locked && (!request.assignedEmployeeId || request.assignedEmployee?.status === 'BLOCKED') ? <Button size="small" loading={claimMutation.isPending} onClick={() => claimMutation.mutate(request.id)}>Взять в работу</Button> : null}
+              {canManage && !locked && !isOwnerAppointmentChange(request) && !request.appointmentId ? (
                 quickAcceptInput ? (
                   <Popconfirm
                     title="Подтвердить запись?"
@@ -217,6 +256,7 @@ export function OnlineRequestsPage() {
                   Ответить
                 </Button>
               ) : null}
+              {canManage && (activeStatuses.includes(request.status) || request.conversationId) && request.assignedEmployeeId === auth?.employee.id ? <Button size="small" loading={releaseMutation.isPending} onClick={() => releaseMutation.mutate(request.id)}>Вернуть в очередь</Button> : null}
               <Dropdown menu={{ items: contactItems }} trigger={['click']}>
                 <Button size="small" icon={<PhoneOutlined />}>
                   Связаться <DownOutlined />
@@ -227,7 +267,7 @@ export function OnlineRequestsPage() {
         },
       },
     ],
-    [canManage, message, navigate, quickAcceptMutation],
+    [canManage, message, navigate, quickAcceptMutation, claimMutation, releaseMutation, auth?.employee.id],
   );
 
   return (
@@ -284,6 +324,7 @@ export function OnlineRequestsPage() {
             />
           </Space>
           <Space wrap>
+            {import.meta.env.VITE_CLINIC_ASSISTANT_PREVIEW === 'true' ? <Button onClick={() => navigate('/assistant-preview')}>Проверить чат</Button> : null}
             <Button icon={<InboxOutlined />} onClick={() => setStatus(undefined)}>
               Все
             </Button>
@@ -308,9 +349,9 @@ export function OnlineRequestsPage() {
       <RequestDrawer
         request={selectedRequest}
         intent={drawerIntent}
-        canManage={canManage}
+        canManage={canManage && (!selectedRequest?.assignedEmployeeId || selectedRequest.assignedEmployeeId === auth?.employee.id)}
         actionLoading={actionMutation.isPending}
-        onClose={() => setSelectedRequest(null)}
+        onClose={closeRequest}
         onAction={(request, action) => actionMutation.mutate({ request, action })}
       />
     </div>
@@ -363,7 +404,7 @@ function RequestDrawer({
   const updateMutation = useMutation({
     mutationFn: (values: UpdateOnlineRequestInput) => updateOnlineRequest(request!.id, values),
     onSuccess: async (updated) => {
-      await queryClient.invalidateQueries({ queryKey: ['online-requests'] });
+      await Promise.all(['online-requests', 'online-request-attention', 'staff-alerts'].map(key => queryClient.invalidateQueries({ queryKey: [key] })));
       message.success('Заявка сохранена');
       updateForm.reset(getRequestDefaults(updated));
     },
@@ -375,6 +416,7 @@ function RequestDrawer({
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['online-requests'] }),
         queryClient.invalidateQueries({ queryKey: ['appointments'] }),
+        queryClient.invalidateQueries({ queryKey: ['online-request-attention'] }),
       ]);
       message.success('Заявка переведена в запись');
       onClose();
@@ -421,6 +463,7 @@ function RequestDrawer({
     >
       {request ? (
         <div className={`online-request-drawer-sections online-request-drawer-${intent}`}>
+          {request.conversationId ? <ConversationPanel requestId={request.id} /> : null}
           <div className="online-request-edit-section">
             <Alert
               type="info"
@@ -442,7 +485,7 @@ function RequestDrawer({
               <Alert type="info" showIcon message="Обращение об изменении существующей записи" description="Исходная запись указана в тексте обращения. Проверьте её в расписании, согласуйте перенос или отмену с владельцем и после обработки закройте заявку. Новая запись здесь не создаётся." />
               {canManage && request.status !== 'ARCHIVED' ? <Button loading={actionLoading} onClick={() => onAction(request, 'archive')}>Закрыть обработанное обращение</Button> : null}
             </Space>
-          ) : (
+          ) : request.appointmentId ? null : (
           <div className="list-panel online-request-confirm-section">
             <div className="list-panel-header">
               <Space direction="vertical" size={0}>

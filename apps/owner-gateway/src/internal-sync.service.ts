@@ -14,7 +14,7 @@ import { OwnerDocumentMetadataDto, UploadOwnerDocumentContentDto } from './dto/s
 
 const allowedSnapshotKeys = new Set([
   'owner', 'animals', 'appointments', 'visits', 'files', 'bills', 'notifications',
-  'laboratoryOrders', 'hospitalStays', 'bookingRequests', 'historyLimits', 'syncedAt',
+  'laboratoryOrders', 'hospitalStays', 'bookingRequests', 'revisitReminders', 'historyLimits', 'syncedAt',
 ]);
 const MAX_DOCUMENT_BYTES = 15 * 1024 * 1024;
 

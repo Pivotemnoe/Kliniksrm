@@ -84,6 +84,7 @@ test('снимок выдаёт анализы и активный стацио�
     fileObject: delegate('files', []), bill: delegate('bills', []), notificationOutbox: delegate('notifications', []),
     laboratoryOrder: delegate('labs', [{ ...order('IN_PROGRESS', [item('COMPLETED'), item('ORDERED')]), visit: { id: 'open-visit', animal: { id: 'cat', nickname: 'Мурка' } } }]),
     hospitalStay: delegate('hospital', []), onlineAppointmentRequest: delegate('bookings', []),
+    task: delegate('revisits', [{ id: 'revisit-a', dueAt: new Date('2099-10-09T10:00:00Z'), animal: { id: 'cat', nickname: 'Мурка' } }]),
   };
   const snapshot = await new ClientPortalService(db, {}, {}).buildOwnerGatewaySnapshot('owner-a');
   assert.equal(snapshot.visits.length, 0);
@@ -95,6 +96,9 @@ test('снимок выдаёт анализы и активный стацио�
   assert.equal(queries.hospital.where.status, 'ACTIVE');
   assert.equal(queries.bookings.select.internalComment, undefined);
   assert.equal(snapshot.historyLimits.visits, 30);
+  assert.equal(snapshot.revisitReminders[0].timezone, 'Europe/Moscow');
+  assert.equal(queries.revisits.where.ownerId, 'owner-a'); assert.equal(queries.revisits.where.taskType, 'revisit'); assert.equal(queries.revisits.where.status, 'OPEN');
+  assert.equal(queries.revisits.select.comment, undefined); assert.equal(queries.revisits.select.title, undefined);
 
   // Exercise the receiving service with the actual CRM builder output: adding a
   // section must not silently break the authenticated production exchange.

@@ -2,6 +2,7 @@ import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@ne
 import { NotificationChannel, NotificationStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { OwnerGatewayClient, OwnerMessengerChannel } from './providers/owner-gateway.client';
+import { AssistantReminderService } from './assistant-reminder.service';
 
 const MAX_DELIVERY_ATTEMPTS = 5;
 const STUCK_DELIVERY_MINUTES = 10;
@@ -15,6 +16,7 @@ export class NotificationDispatcherService implements OnApplicationBootstrap, On
   constructor(
     private readonly prisma: PrismaService,
     private readonly ownerGatewayClient: OwnerGatewayClient,
+    private readonly assistantReminders: AssistantReminderService,
   ) {}
 
   async onApplicationBootstrap() {
@@ -43,6 +45,9 @@ export class NotificationDispatcherService implements OnApplicationBootstrap, On
           channel: NotificationChannel.MESSENGER,
           status: NotificationStatus.QUEUED,
           scheduledAt: { lte: new Date() },
+          ...(!this.assistantReminders?.enabled() ? { OR: [
+            { dedupeKey: null }, { NOT: { dedupeKey: { startsWith: 'assistant-' } } },
+          ] } : {}),
         },
         orderBy: [{ scheduledAt: 'asc' }, { createdAt: 'asc' }],
         take: 20,
@@ -62,6 +67,8 @@ export class NotificationDispatcherService implements OnApplicationBootstrap, On
   }
 
   private async dispatch(item: NotificationDispatchItem) {
+    if (this.assistantReminders?.handles(item.metadata)) { await this.assistantReminders.dispatch(item.id); return; }
+    if (isJsonObject(item.metadata) && item.metadata.source === 'assistant-reminder') return;
     const claim = await this.prisma.notificationOutbox.updateMany({
       where: { id: item.id, status: NotificationStatus.QUEUED },
       data: {

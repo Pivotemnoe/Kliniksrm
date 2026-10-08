@@ -139,6 +139,7 @@ export class ClientPortalService {
       },
       owner: { ...snapshot.owner, animals: snapshot.animals },
       appointments: snapshot.appointments,
+      revisitReminders: snapshot.revisitReminders,
       visits: snapshot.visits,
       files: snapshot.files,
       laboratoryOrders: snapshot.laboratoryOrders,
@@ -165,7 +166,7 @@ export class ClientPortalService {
   }
 
   async buildOwnerGatewaySnapshot(ownerId: string) {
-    const [owner, appointments, visits, files, bills, notifications, laboratoryOrders, hospitalStays, bookingRequests] = await this.prisma.$transaction([
+    const [owner, appointments, visits, files, bills, notifications, laboratoryOrders, hospitalStays, bookingRequests, revisits] = await this.prisma.$transaction([
       this.prisma.owner.findUnique({
         where: { id: ownerId },
         select: {
@@ -345,6 +346,12 @@ export class ClientPortalService {
           appointment: { select: { id: true, startsAt: true, endsAt: true, status: true } },
         },
       }),
+      this.prisma.task.findMany({
+        where: { ownerId, taskType: 'revisit', status: 'OPEN', dueAt: { gt: new Date() }, OR: [{ animalId: null }, { animal: { ownerId, archivedAt: null } }] },
+        orderBy: { dueAt: 'asc' }, take: 30,
+        // A staff task title/comment may contain internal clinical notes.
+        select: { id: true, dueAt: true, animal: { select: { id: true, nickname: true } } },
+      }),
     ]);
 
     if (!owner) {
@@ -389,7 +396,8 @@ export class ClientPortalService {
       laboratoryOrders: laboratoryOrders.map((order) => ({ ...toOwnerLaboratoryOrder(order), visitId: order.visit.id, animal: order.visit.animal })),
       hospitalStays: hospitalStays.map(toOwnerHospitalStay),
       bookingRequests,
-      historyLimits: { visits: 30, appointments: 30, bills: 30, files: 200, laboratoryOrders: 100, notifications: 20, bookingRequests: 50 },
+      revisitReminders: revisits.map(item => ({ ...item, timezone: 'Europe/Moscow' })),
+      historyLimits: { visits: 30, appointments: 30, bills: 30, files: 200, laboratoryOrders: 100, notifications: 20, bookingRequests: 50, revisitReminders: 30 },
       syncedAt: new Date().toISOString(),
     };
   }

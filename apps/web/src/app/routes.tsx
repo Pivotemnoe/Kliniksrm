@@ -44,6 +44,7 @@ const OrganizationSettingsPage = lazyPage(
   () => import('../features/organization/OrganizationSettingsPage'),
   'OrganizationSettingsPage',
 );
+const ClinicAssistantPreviewPage = lazyPage(() => import('../features/clinicAssistant/ClinicAssistantPreviewPage'), 'ClinicAssistantPreviewPage');
 const OnlineRequestsPage = lazyPage(() => import('../features/onlineRequests/OnlineRequestsPage'), 'OnlineRequestsPage');
 const PublicOnlineRequestPage = lazyPage(
   () => import('../features/onlineRequests/PublicOnlineRequestPage'),
@@ -70,6 +71,7 @@ const SaleCardPage = lazyPage(() => import('../features/sales/SaleCardPage'), 'S
 const SalesPage = lazyPage(() => import('../features/sales/SalesPage'), 'SalesPage');
 const ClinicResourcesPage = lazyPage(() => import('../features/scheduling/ClinicResourcesPage'), 'ClinicResourcesPage');
 const SettingsOverviewPage = lazyPage(() => import('../features/settings/SettingsOverviewPage'), 'SettingsOverviewPage');
+const AssistantBookingSettingsPage = lazyPage(() => import('../features/clinicAssistant/AssistantBookingSettingsPage'), 'AssistantBookingSettingsPage');
 const StaffMessagesPage = lazyPage(() => import('../features/internalMessages/StaffMessagesPage'), 'StaffMessagesPage');
 const StockPage = lazyPage(() => import('../features/stock/StockPage'), 'StockPage');
 const StockOperationsPage = lazyPage(() => import('../features/stock/StockOperationsPage'), 'StockOperationsPage');
@@ -155,6 +157,7 @@ export const routes: RouteObject[] = [
           { path: '/store/labels', element: <StorePage /> },
           { path: '/employees', element: <EmployeesPage /> },
           { path: '/settings', element: <SettingsOverviewPage /> },
+          { path: '/settings/assistant-booking', element: <AssistantBookingSettingsPage /> },
           { path: '/settings/organization', element: <OrganizationSettingsPage /> },
           { path: '/settings/organization/profile', element: <OrganizationSettingsPage /> },
           { path: '/settings/organization/details', element: <OrganizationSettingsPage /> },
@@ -179,6 +182,7 @@ export const routes: RouteObject[] = [
           { path: '/settings/import', element: <VetafImportPage /> },
           { path: '/messages', element: <MessagesPage /> },
           { path: '/staff-messages', element: <StaffMessagesPage /> },
+          { path: '/assistant-preview', element: <ClinicAssistantPreviewPage /> },
           { path: '/online-requests', element: <OnlineRequestsPage /> },
         ],
       },

@@ -1,10 +1,12 @@
+import { DoctorAssistantDraft } from './DoctorAssistantPanel';
+import { appendDoctorDraft } from './doctorAssistantDraft';
 import { useEffect, useRef, useState } from 'react';
 import { enqueueRecommendationSave, readRecommendationDraft, writeRecommendationDraft, clearRecommendationDraft } from './recommendationDraft';
 import { PrinterOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Alert, Button, Form, Space, Typography } from 'antd';
-import { Controller, useForm } from 'react-hook-form';
+import { Controller, useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
 import { nullToEmpty, optionalString } from '../../shared/utils/forms';
@@ -32,10 +34,11 @@ type VisitRecommendationTabProps = {
 
 export function VisitRecommendationTab({ visit, canManage, locked, organization, onDraftChange }: VisitRecommendationTabProps) {
   const queryClient = useQueryClient();
-  const { control, getValues, handleSubmit, reset } = useForm<RecommendationInput, unknown, RecommendationValues>({
+  const { control, getValues, handleSubmit, reset, setValue } = useForm<RecommendationInput, unknown, RecommendationValues>({
     resolver: zodResolver(recommendationSchema),
     defaultValues: getDefaultValues(visit),
   });
+  const treatmentPlanDraft = useWatch({ control, name: 'treatmentPlan' });
   const disabled = locked || !canManage;
   const draftKey = `temichevvet:visit-recommendation-draft:${visit.id}`;
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -131,6 +134,11 @@ export function VisitRecommendationTab({ visit, canManage, locked, organization,
       {locked ? <Alert type="info" showIcon message="Редактирование закрыто: отменённый приём нельзя менять, завершённый доступен директору или в течение 60 минут после завершения." className="form-alert" /> : null}
       {mutation.isError ? <Alert type="error" showIcon message={getErrorMessage(mutation.error)} className="form-alert" /> : null}
 
+      <DoctorAssistantDraft disabled={disabled} context={{ nickname: visit.animal.nickname, exam: visit.exam, diagnoses: visit.diagnoses, treatmentPlan: treatmentPlanDraft }} onAccept={text => {
+        const next = appendDoctorDraft(getValues('careNotes'), text);
+        setValue('careNotes', next, { shouldDirty: true });
+        updateDraft('careNotes', next);
+      }} />
       <Controller
         control={control}
         name="treatmentPlan"

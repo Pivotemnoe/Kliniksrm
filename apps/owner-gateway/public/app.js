@@ -104,7 +104,7 @@ function portalData(response) {
     ...visits.flatMap((visit) => array(visit.documents).map((document) => ({ ...document, visit, documentKind: 'signed' }))),
   ];
   return { snapshot, animals, pets: animals.filter((animal) => !selectedAnimalId || animal.id === selectedAnimalId), visits, documents,
-    appointments: forPet(snapshot.appointments), bills: forPet(snapshot.bills), hospital: forPet(snapshot.hospitalStays),
+    appointments: forPet(snapshot.appointments), revisits: forPet(snapshot.revisitReminders), bills: forPet(snapshot.bills), hospital: forPet(snapshot.hospitalStays),
     labs: forPet(snapshot.laboratoryOrders ?? array(snapshot.visits).flatMap((visit) => array(visit.laboratoryOrders).map((order) => ({ ...order, animal: visit.animal })))) };
 }
 
@@ -112,7 +112,7 @@ function renderPortal(response) {
   if (portalResponse && portalResponse.ownerId !== response.ownerId) { selectedAnimalId = ''; bookingDraft = {}; bookingAttempt = null; bookingDirty = false; }
   portalResponse = response;
   const data = portalData(response);
-  const { snapshot, animals, pets, appointments, visits, documents, bills, labs, hospital } = data;
+  const { snapshot, animals, pets, appointments, revisits, visits, documents, bills, labs, hospital } = data;
   const owner = snapshot.owner || {};
   const notifications = array(snapshot.notifications);
   const unread = getUnreadNotificationCount(response.ownerId, notifications);
@@ -122,7 +122,7 @@ function renderPortal(response) {
       <div><p class="eyebrow">Личный кабинет</p><h1>Мои питомцы</h1><p>${escapeHtml(owner.fullName || response.displayName || '')}</p></div>
       <div class="hero-meta"><span id="freshness">${freshnessText(response.syncedAt)}</span><button id="refresh-portal" class="button secondary" type="button">Обновить</button><span id="refresh-status" role="status"></span></div>
     </section>
-    <div class="pet-toolbar"><label for="pet-filter">Питомец</label><select id="pet-filter"><option value="">Все питомцы · ${animals.length}</option>${animals.map((animal) => `<option value="${escapeHtml(animal.id)}"${animal.id === selectedAnimalId ? ' selected' : ''}>${escapeHtml(animal.nickname)}</option>`).join('')}</select><button class="button" data-open="booking" type="button">Записаться</button></div>
+    <div class="pet-toolbar"><label for="pet-filter">Питомец</label><select id="pet-filter"><option value="">Все питомцы · ${animals.length}</option>${animals.map((animal) => `<option value="${escapeHtml(animal.id)}"${animal.id === selectedAnimalId ? ' selected' : ''}>${escapeHtml(animal.nickname)}</option>`).join('')}</select><button class="button" data-open="booking" type="button">Записаться</button>${response.assistantEnabled ? '<a class="button secondary" href="/assistant">Чат клиники</a>' : ''}</div>
     <nav class="portal-menu" aria-label="Разделы кабинета"><div class="tabs" role="tablist">
       ${[['home', 'Главная'], ['health', 'Здоровье'], ['appointments', 'Записи'], ['documents', 'Документы'], ['bills', 'Счета'], ['notifications', 'Сообщения']].map(([key, label]) => tabButton(key, label, key === activeTab, key === 'notifications' ? unread : 0)).join('')}
     </div></nav>
@@ -133,7 +133,7 @@ function renderPortal(response) {
       <h3 id="laboratory" class="subheading">Анализы</h3>${historyNotice(snapshot.laboratoryOrders, snapshot.historyLimits?.laboratoryOrders, 'исследований')}${renderLaboratory(labs)}
       <h3 id="prevention" class="subheading">Профилактика</h3>${renderPrevention(pets)}
       <h3 id="visit-history" class="subheading">История приёмов</h3>${historyNotice(snapshot.visits, snapshot.historyLimits?.visits, 'приёмов')}${renderVisits(visits)}`, activeTab !== 'health')}
-    ${section('appointments', 'Записи в клинику', `${historyNotice(snapshot.appointments, snapshot.historyLimits?.appointments, 'записей')}${renderAppointments(appointments)}<h3 class="subheading">Заявка в клинику</h3>${renderBookingForm(animals)}`, activeTab !== 'appointments')}
+    ${section('appointments', 'Записи в клинику', `${historyNotice(snapshot.appointments, snapshot.historyLimits?.appointments, 'записей')}${renderAppointments(appointments)}${revisits.length ? `<h3 class="subheading">Повторные визиты</h3>${renderRevisits(revisits)}` : ''}<h3 class="subheading">Заявка в клинику</h3>${renderBookingForm(animals)}`, activeTab !== 'appointments')}
     ${section('documents', 'Документы', `<label class="search-label">Поиск в загруженных документах<input id="document-search" type="search" placeholder="Название или категория" value="${escapeHtml(documentQuery)}"></label>${historyNotice(snapshot.files, snapshot.historyLimits?.files, 'файлов')}<div id="document-results">${renderDocuments(searchDocuments(documents))}</div>`, activeTab !== 'documents')}
     ${section('bills', 'Счета и оплаты', `${!selectedAnimalId ? `<p class="muted">Баланс владельца по данным клиники: <strong>${formatMoney(owner.balance)}</strong></p>` : '<p class="muted">Показаны счета выбранного питомца. Счета без привязки к питомцу доступны при выборе «Все питомцы».</p>'}${historyNotice(snapshot.bills, snapshot.historyLimits?.bills, 'счетов')}${renderBills(bills)}`, activeTab !== 'bills')}
     ${section('notifications', 'Сообщения клиники', '<p class="muted">Общие сообщения владельцу — для всех питомцев.</p>' + historyNotice(notifications, snapshot.historyLimits?.notifications, 'сообщений') + renderNotifications(notifications), activeTab !== 'notifications')}
@@ -418,6 +418,9 @@ function renderAnimals(items) {
     </article>`);
 }
 
+function renderRevisits(items) {
+  return renderGrid(items, item => `<article class="card"><h3>Повторный визит: ${escapeHtml(new Intl.DateTimeFormat('ru-RU', { timeZone: item.timezone || 'Europe/Moscow', dateStyle: 'long' }).format(new Date(item.dueAt)))}</h3>${item.animal ? `<p>Питомец: ${escapeHtml(item.animal.nickname)}</p>` : ''}<p>Это напоминание клиники. Время приёма ещё не выбрано.</p><button type="button" class="button" data-open="booking">Выбрать время</button></article>`);
+}
 function renderAppointments(items) {
   return renderGrid(items, (item) => `
     <article class="card"><h3>${formatDateTime(item.startsAt)}</h3>

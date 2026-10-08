@@ -5233,3 +5233,33 @@ body {
 
 .hospital-edit-help { margin: 6px 0 12px; color: #637789; font-size: 12px; }
 .hospital-edit-help summary { cursor: pointer; }
+
+.incoming-request-alert {
+  position: fixed;
+  top: 84px;
+  right: 24px;
+  z-index: 1050;
+  width: min(440px, calc(100vw - 32px));
+  max-height: calc(100dvh - 108px);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px;
+  background: #fff;
+  border: 2px solid #1677ff;
+  border-radius: 12px;
+  box-shadow: 0 12px 40px #001b3b33;
+}
+.incoming-request-alert .ant-typography { margin: 0; }
+.incoming-request-comment { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
+@media (max-width: 600px) { .incoming-request-alert { right: 16px; top: 72px; max-height: calc(100dvh - 90px); } }
+
+.clinic-conversation-panel, .clinic-chat-pilot { display: flex; flex-direction: column; gap: 12px; padding: 20px; border: 1px solid #d6e4ff; border-radius: 12px; background: #fff; }
+.clinic-chat-pilot { max-width: 780px; margin-top: 20px; }
+.clinic-chat-history { display: flex; flex-direction: column; gap: 10px; max-height: 380px; overflow: auto; }
+.clinic-chat-message { padding: 12px 14px; border-radius: 10px; background: #f5f7fa; overflow-wrap: anywhere; }
+.clinic-chat-message p { white-space: pre-wrap; margin: 6px 0; }
+.clinic-chat-owner { background: #e6f4ff; }
+.clinic-chat-intake { display: flex; flex-direction: column; gap: 12px; }
+.doctor-assistant-draft { padding: 16px; border: 1px solid #d6e4ff; border-radius: 10px; margin-bottom: 20px; background: #f7faff; }

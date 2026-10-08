@@ -90,6 +90,7 @@ export class PortalController {
   async logout(@Headers('cookie') cookieHeader: string | undefined, @Res({ passthrough: true }) response: Response) {
     await this.portalService.revokeSession(requireSessionToken(cookieHeader));
     response.clearCookie(getSessionCookieName(), { path: '/' });
+    response.clearCookie('clinic_assistant_session', { path: '/' });
     return { ok: true };
   }
 }

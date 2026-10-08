@@ -16,6 +16,7 @@
     "web:build": "npm --workspace @clinic-crm/web run build",
     "web:typecheck": "npm --workspace @clinic-crm/web run typecheck",
     "owner-gateway:build": "npm --workspace @clinic-crm/owner-gateway run build",
+    "assistant:build": "npm --workspace @clinic-crm/web run assistant:build && npm run owner-gateway:build",
     "db:generate": "npm --workspace @clinic-crm/api run db:generate",
     "db:migrate": "npm --workspace @clinic-crm/api run db:migrate",
     "db:seed": "npm --workspace @clinic-crm/api run db:seed",

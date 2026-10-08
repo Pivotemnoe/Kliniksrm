@@ -32,6 +32,13 @@ type SettingsSection = {
 
 const settingsSections: SettingsSection[] = [
   {
+    title: 'Запись из чата',
+    description: 'Разрешённые услуги, врачи, кабинеты и ограничения самостоятельной записи.',
+    path: '/settings/assistant-booking',
+    icon: <MessageOutlined />,
+    permission: 'settings.read',
+  },
+  {
     title: 'Организация',
     description: 'Название клиники, юридические реквизиты и данные для печатных форм.',
     path: '/settings/organization',

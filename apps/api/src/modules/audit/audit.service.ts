@@ -26,8 +26,8 @@ export class AuditService {
   private readonly logger = new Logger(AuditService.name);
   constructor(private readonly prisma: PrismaService) {}
 
-  async log(input: AuditInput) {
-    const entry = await this.prisma.auditLog.create({
+  async log(input: AuditInput, db: Prisma.TransactionClient = this.prisma) {
+    const entry = await db.auditLog.create({
       data: {
         actorId: input.actorId ?? null,
         action: input.action,
@@ -38,7 +38,7 @@ export class AuditService {
       },
     });
     if (process.env.OWNER_GATEWAY_URL?.trim() && process.env.OWNER_GATEWAY_SYNC_SECRET?.trim()) {
-      await queueOwnerRefreshForChange(this.prisma, input).catch(() => {
+      await queueOwnerRefreshForChange(db, input).catch(() => {
         this.logger.warn('Не удалось поставить обновление кабинета в очередь; данные будут сверены при периодическом обновлении.');
       });
     }

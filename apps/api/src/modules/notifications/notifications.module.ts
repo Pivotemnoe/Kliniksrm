@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AssistantReminderService } from './assistant-reminder.service';
 import { AuditModule } from '../audit/audit.module';
 import { ClientPortalModule } from '../client-portal/client-portal.module';
 import { FilesModule } from '../files/files.module';
@@ -13,7 +14,7 @@ import { PublicClinicCatalogSyncService } from './public-clinic-catalog-sync.ser
 @Module({
   imports: [AuditModule, ClientPortalModule, FilesModule],
   controllers: [NotificationsController],
-  providers: [NotificationsService, NotificationDispatcherService, OwnerGatewaySnapshotSyncService, PublicClinicCatalogSyncService, MaxBotClient, OwnerGatewayClient],
+  providers: [AssistantReminderService, NotificationsService, NotificationDispatcherService, OwnerGatewaySnapshotSyncService, PublicClinicCatalogSyncService, MaxBotClient, OwnerGatewayClient],
   exports: [OwnerGatewayClient, OwnerGatewaySnapshotSyncService],
 })
 export class NotificationsModule {}

@@ -297,7 +297,11 @@ export class NotificationsService {
   }
 
   async retryOutbox(notificationId: string, actorId: string) {
-    await this.ensureOutboxExists(notificationId);
+    const current = await this.ensureOutboxExists(notificationId);
+    const metadata = current.metadata;
+    if (metadata && typeof metadata === 'object' && !Array.isArray(metadata) && metadata.deliveryUnknown === true) {
+      throw new BadRequestException('Доставка не подтверждена. Повтор может создать дубликат; проверьте результат другим способом');
+    }
     const message = await this.prisma.notificationOutbox.update({
       where: { id: notificationId },
       data: {
@@ -696,11 +700,12 @@ export class NotificationsService {
   }
 
   private async ensureOutboxExists(notificationId: string) {
-    const message = await this.prisma.notificationOutbox.findUnique({ where: { id: notificationId }, select: { id: true } });
+    const message = await this.prisma.notificationOutbox.findUnique({ where: { id: notificationId }, select: { id: true, metadata: true } });
 
     if (!message) {
       throw new NotFoundException('Уведомление не найдено');
     }
+    return message;
   }
 
   private async buildTemplateContext(ownerId: string | null, animalId: string | null, scheduledAt: Date) {

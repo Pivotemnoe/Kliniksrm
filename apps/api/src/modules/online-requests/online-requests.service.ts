@@ -1,4 +1,5 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { ClinicConversationSyncService } from './clinic-conversation-sync.service';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { OnlineRequestStatus, Prisma } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
 import { withRussianSearchVariants } from '../../common/search-ranking';
@@ -10,6 +11,7 @@ import { SchedulingService } from '../scheduling/scheduling.service';
 import { AcceptOnlineRequestDto } from './dto/accept-online-request.dto';
 import { CreateOnlineRequestDto } from './dto/create-online-request.dto';
 import { ListOnlineRequestsQueryDto } from './dto/list-online-requests-query.dto';
+import { lockOnlineRequest } from './online-request-attention.service';
 import { UpdateOnlineRequestDto } from './dto/update-online-request.dto';
 
 @Injectable()
@@ -19,6 +21,7 @@ export class OnlineRequestsService {
     private readonly auditService: AuditService,
     private readonly schedulingService: SchedulingService,
     private readonly appointmentsService: AppointmentsService,
+    private readonly conversations: ClinicConversationSyncService,
   ) {}
 
   async listRequests(query: ListOnlineRequestsQueryDto) {
@@ -108,12 +111,22 @@ export class OnlineRequestsService {
   }
 
   async updateRequest(requestId: string, dto: UpdateOnlineRequestDto, actorId: string) {
-    await this.getRequest(requestId);
     await this.validateLinks(dto.ownerId, dto.animalId);
+    if (dto.status === OnlineRequestStatus.ACCEPTED) throw new BadRequestException('Подтвердите время через действие «Подтвердить»');
 
-    const request = await this.prisma.onlineAppointmentRequest.update({
+    const request = await this.prisma.$transaction(async (tx) => {
+      await lockOnlineRequest(tx, requestId);
+      const current = await tx.onlineAppointmentRequest.findUniqueOrThrow({ where: { id: requestId } });
+      assertAssignee(current.assignedEmployeeId, actorId);
+      if (current.status !== 'NEW' && current.status !== 'IN_REVIEW' && dto.status && dto.status !== current.status) {
+        throw new ConflictException('Обработанную заявку нельзя вернуть в работу');
+      }
+      if (dto.status === 'NEW' || dto.status === 'IN_REVIEW') await tx.onlineRequestSnooze.deleteMany({ where: { requestId } });
+      return tx.onlineAppointmentRequest.update({
       where: { id: requestId },
       data: {
+        ...(dto.status === 'IN_REVIEW' ? { assignedEmployeeId: actorId, claimedAt: current.claimedAt ?? new Date() } : {}),
+        ...(dto.status === 'NEW' ? { assignedEmployeeId: null, claimedAt: null } : {}),
         ...(dto.status !== undefined ? { status: dto.status } : {}),
         ...(dto.ownerName !== undefined ? { ownerName: required(dto.ownerName, 'Укажите имя владельца') } : {}),
         ...(dto.phone !== undefined ? { phone: normalizeRussianPhone(required(dto.phone, 'Укажите телефон'))! } : {}),
@@ -128,6 +141,7 @@ export class OnlineRequestsService {
         ...(dto.animalId !== undefined ? { animalId: dto.animalId } : {}),
       },
       include: onlineRequestInclude,
+      });
     });
 
     await this.auditService.log({
@@ -142,14 +156,16 @@ export class OnlineRequestsService {
   }
 
   async acceptRequest(requestId: string, dto: AcceptOnlineRequestDto, actorId: string) {
-    const request = await this.getRequest(requestId);
-
-    if (request.source === 'OWNER_GATEWAY' && /^(Отмена|Перенос) записи от .+ \(№ [^)]+\)\./.test(request.comment ?? '')) {
+    const preview = await this.getRequest(requestId);
+    if (preview.source === 'OWNER_GATEWAY' && /^(Отмена|Перенос) записи от .+ \(№ [^)]+\)\./.test(preview.comment ?? '')) {
       throw new BadRequestException('Это обращение об изменении существующей записи. Обработайте его в расписании и закройте заявку; создавать новую запись не нужно.');
     }
-
-    if (request.status === OnlineRequestStatus.ACCEPTED && request.appointmentId) {
-      throw new BadRequestException('Заявка уже переведена в запись');
+    return this.prisma.$transaction(async tx => {
+    await lockOnlineRequest(tx, requestId);
+    const request = await tx.onlineAppointmentRequest.findUniqueOrThrow({ where: { id: requestId }, include: onlineRequestInclude });
+    assertAssignee(request.assignedEmployeeId, actorId);
+    if (request.appointmentId) {
+      return request;
     }
 
     if (request.status === OnlineRequestStatus.CANCELLED || request.status === OnlineRequestStatus.ARCHIVED) {
@@ -162,7 +178,8 @@ export class OnlineRequestsService {
       throw new BadRequestException('Укажите дату и время записи');
     }
 
-    const appointment = await this.appointmentsService.createAppointment(
+    const appointment = await this.appointmentsService.createAppointmentInTransaction(
+      tx,
       {
         officeId: dto.officeId,
         ownerId: dto.ownerId,
@@ -176,10 +193,12 @@ export class OnlineRequestsService {
       actorId,
     );
 
-    const updatedRequest = await this.prisma.onlineAppointmentRequest.update({
+    const updatedRequest = await tx.onlineAppointmentRequest.update({
       where: { id: request.id },
       data: {
         status: OnlineRequestStatus.ACCEPTED,
+        assignedEmployeeId: actorId,
+        claimedAt: request.claimedAt ?? new Date(),
         ownerId: dto.ownerId,
         animalId: dto.animalId,
         appointmentId: appointment.id,
@@ -188,23 +207,25 @@ export class OnlineRequestsService {
       include: onlineRequestInclude,
     });
 
+    await this.conversations?.queueConfirmation(tx, request, appointment);
     await this.auditService.log({
       actorId,
       action: 'online_request.accept',
       entityType: 'OnlineAppointmentRequest',
       entityId: request.id,
       metadata: { appointmentId: appointment.id, ownerId: dto.ownerId, animalId: dto.animalId },
-    });
+    }, tx);
 
     return updatedRequest;
+    });
   }
 
   async setRequestStatus(requestId: string, status: OnlineRequestStatus, actorId: string) {
-    await this.getRequest(requestId);
-    const request = await this.prisma.onlineAppointmentRequest.update({
-      where: { id: requestId },
-      data: { status },
-      include: onlineRequestInclude,
+    const request = await this.prisma.$transaction(async (tx) => {
+      await lockOnlineRequest(tx, requestId);
+      const current = await tx.onlineAppointmentRequest.findUniqueOrThrow({ where: { id: requestId } });
+      assertAssignee(current.assignedEmployeeId, actorId);
+      return tx.onlineAppointmentRequest.update({ where: { id: requestId }, data: { status, conversationNeedsAttention: false }, include: onlineRequestInclude });
     });
 
     await this.auditService.log({
@@ -230,6 +251,7 @@ export class OnlineRequestsService {
 }
 
 const onlineRequestInclude = {
+  assignedEmployee: { select: { id: true, fullName: true, status: true } },
   owner: { select: { id: true, fullName: true, phone: true } },
   animal: { select: { id: true, nickname: true, species: true, breed: true } },
   appointment: {
@@ -255,4 +277,8 @@ function required(value: string | null | undefined, message: string) {
 function emptyToNull(value: string | null | undefined) {
   const normalized = value?.trim();
   return normalized ? normalized : null;
+}
+
+function assertAssignee(assignedEmployeeId: string | null, actorId: string) {
+  if (assignedEmployeeId && assignedEmployeeId !== actorId) throw new ConflictException('Заявку уже обрабатывает другой сотрудник');
 }

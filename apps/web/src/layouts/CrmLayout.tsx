@@ -20,6 +20,7 @@ import { listInternalMessageConversations } from '../features/internalMessages/i
 import { StaffAlertsPopover } from '../features/staffAlerts/StaffAlertsPopover';
 import { getEmployeeDefaultRoute } from '../shared/routes/defaultRoutes';
 import { GlobalSearch } from './GlobalSearch';
+import { IncomingRequestAlert } from './IncomingRequestAlert';
 import { GlobalOperationalAlerts } from './GlobalOperationalAlerts';
 import { getAccessibleMenuItems, getSelectedMenuKey } from './menu';
 import { useActivityTracking } from './useActivityTracking';
@@ -211,6 +212,10 @@ export function CrmLayout() {
           </Space>
         </Header>
         <Content className="crm-content">
+          <IncomingRequestAlert enabled={Boolean(employee &&
+            (employee.roles.includes('administrator') || employee.roles.includes('director')) &&
+            hasPermission(employee, 'appointments.manage') &&
+            (data?.accessType !== 'REMOTE' || employee.roles.includes('director')))} />
           <GlobalOperationalAlerts
             clinicalOnly={Boolean(employee?.roles.includes('doctor') && !employee?.roles.includes('director'))}
             internalMessages={internalMessagesQuery.data}

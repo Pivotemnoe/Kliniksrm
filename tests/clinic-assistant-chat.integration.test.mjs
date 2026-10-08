@@ -1,0 +1,166 @@
+import 'reflect-metadata';
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { PrismaClient as GatewayDb } from '../apps/owner-gateway/src/generated/client/index.js';
+import { PrismaClient } from '@prisma/client';
+import { ClinicChatService } from '../apps/owner-gateway/dist/clinic-chat.service.js';
+import { ClinicChatDeliveryService } from '../apps/owner-gateway/dist/clinic-chat-delivery.service.js';
+import { ClinicConversationSyncService } from '../apps/api/dist/modules/online-requests/clinic-conversation-sync.service.js';
+import { OnlineRequestAttentionService } from '../apps/api/dist/modules/online-requests/online-request-attention.service.js';
+import { hashToken } from '../apps/owner-gateway/dist/security.js';
+import { MaxWebhookService } from '../apps/owner-gateway/dist/max-webhook.service.js';
+import { randomBytes } from 'node:crypto';
+const url = process.env.ASSISTANT_TEST_DATABASE_URL;
+const gatewayUrl = process.env.ASSISTANT_TEST_GATEWAY_DATABASE_URL;
+test('isolated PostgreSQL: chat, CRM, MAX handoff and durable delivery', { skip: !url || !gatewayUrl }, async t => {
+  for (const [value, name] of [[url, 'crm_assistant_qa'], [gatewayUrl, 'crm_assistant_gateway_qa']]) {
+    const parsed = new URL(value); assert.ok(parsed.hostname === '127.0.0.1' && parsed.port === '15488' && parsed.pathname === `/${name}`);
+  }
+  process.env.CLINIC_ASSISTANT_ENABLED = 'true'; process.env.MAX_BOT_USERNAME = 'synthetic_qa_only_bot';
+  process.env.CLINIC_ASSISTANT_APPROVED_ADDRESS = 'QA address';
+  const gateway = new GatewayDb({ datasources: { db: { url: gatewayUrl } } });
+  const db = new PrismaClient({ datasources: { db: { url } } });
+  const chat = new ClinicChatService(gateway); const sync = new ClinicConversationSyncService(db); const attention = new OnlineRequestAttentionService(db);
+  const staff = await db.employee.create({ data: { fullName: 'Chat QA admin' } });
+  const priorRequests = await db.onlineAppointmentRequest.findMany({ where: { OR: [{ status: { in: ['NEW', 'IN_REVIEW'] } }, { conversationNeedsAttention: true }] }, select: { id: true } });
+  if (priorRequests.length) await db.onlineRequestSnooze.createMany({ data: priorRequests.map(row => ({ requestId: row.id, employeeId: staff.id, until: new Date(Date.now() + 3600_000) })) });
+  t.after(async () => { await db.onlineRequestSnooze.deleteMany({ where: { employeeId: staff.id } }); await gateway.$disconnect(); await db.$disconnect(); });
+  const start = await chat.start(); const id = start.conversation.id;
+  await t.test('expired portal cookie allows a guest chat without attaching an owner', async () => {
+    const guest = await chat.start('expired-synthetic-portal-cookie');
+    assert.equal(guest.conversation.ownerId, null);
+  });
+  await t.test('existing MAX bot name is supported; registration invite cannot be claimed by two users', async () => {
+    const username = process.env.MAX_BOT_USERNAME;
+    delete process.env.MAX_BOT_USERNAME; process.env.MAX_BOT_NAME = '@qa_existing_bot';
+    const link = await chat.link(start.token);
+    assert.equal(new URL(link.url).pathname, '/qa_existing_bot');
+    process.env.MAX_BOT_USERNAME = username;
+    const portalOwnerId = `qa_owner_${Date.now()}`;
+    await gateway.ownerSnapshot.create({ data: { ownerId: portalOwnerId, displayName: 'QA portal owner', payload: {}, sourceVersion: 'qa', sourceUpdatedAt: new Date() } });
+    const token = randomBytes(32).toString('hex');
+    const invite = await gateway.portalInvitation.create({ data: { ownerId: portalOwnerId, tokenHash: hashToken(token), channel: 'MAX', expiresAt: new Date(Date.now() + 60000) } });
+    const secret = 'synthetic-webhook-secret-20261008'; process.env.MAX_WEBHOOK_SECRET = secret;
+    let deliveries = 0;
+    const webhook = new MaxWebhookService(gateway, { sendPortalButton: async () => { deliveries++; } }, chat);
+    const update = userId => ({ update_type: 'bot_started', payload: token, user: { user_id: userId }, chat_id: userId });
+    const userA = Date.now() + 1000; const userB = userA + 1;
+    await assert.rejects(webhook.handle('wrong-secret', update(userA)));
+    const results = await Promise.allSettled([webhook.handle(secret, update(userA)), webhook.handle(secret, update(userB))]);
+    assert.equal(results.filter(x => x.status === 'fulfilled' && x.value.handled).length, 1);
+    const stored = await gateway.portalInvitation.findUniqueOrThrow({ where: { id: invite.id } });
+    const winner = stored.maxLinkedUserId;
+    assert.ok([String(userA), String(userB)].includes(winner)); assert.equal(deliveries, 1);
+    const loser = winner === String(userA) ? userB : userA;
+    assert.equal((await webhook.handle(secret, update(loser))).handled, false);
+    assert.equal((await gateway.messengerBinding.findUniqueOrThrow({ where: { ownerId_channel: { ownerId: portalOwnerId, channel: 'MAX' } } })).externalUserId, winner);
+  });
+  await t.test('repeat messages and bookings stay single; takeover suppresses assistant replies', async () => {
+    const dto = { clientKey: 'synthetic_message_0001', text: 'Где вы?' };
+    await Promise.all([chat.message(start.token, dto), chat.message(start.token, dto)]);
+    assert.equal((await chat.read(start.token)).messages.filter(x => x.author === 'OWNER').length, 1);
+    await chat.message(start.token, { clientKey: 'synthetic_message_0002', text: 'Позови администратора' });
+    const before = (await chat.read(start.token)).messages.filter(x => x.author === 'ASSISTANT').length;
+    await chat.message(start.token, { clientKey: 'synthetic_message_0003', text: 'Где вы?' });
+    assert.equal((await chat.read(start.token)).messages.filter(x => x.author === 'ASSISTANT').length, before);
+    const booking = { clientKey: 'synthetic_booking_0001', contactName: 'QA visitor', phone: '+79990000001', animalNickname: 'QA cat', comment: 'Плановый осмотр', contactConsent: true };
+    await chat.booking(start.token, booking); await chat.booking(start.token, booking);
+    assert.equal((await chat.read(start.token)).messages.filter(x => x.clientKey === booking.clientKey).length, 1);
+  });
+  let request;
+  await t.test('CRM import survives lost acknowledgement and does not link by phone', async () => {
+    const snapshot = await chat.view(id);
+    const [first, second] = await Promise.all([sync.importConversation(snapshot), sync.importConversation(snapshot)]);
+    assert.equal(first.id, second.id); request = first; assert.equal(first.ownerId, null);
+    assert.ok((await attention.list(staff.id)).items.some(x => x.id === request.id));
+    await chat.acknowledge(id, snapshot.sequence, request.id);
+    assert.ok(!(await chat.pending()).items.some(x => x.id === id));
+    await attention.claim(request.id, staff.id);
+  });
+  await t.test('staff reply queue survives gateway outage and retry is idempotent', async () => {
+    const input = { clientKey: `reply_${id}`, action: 'REPLY', text: 'Проверю время для записи' };
+    await sync.enqueue(request.id, staff.id, input); await sync.enqueue(request.id, staff.id, input);
+    assert.equal((await sync.jobs(request.id)).length, 1);
+    const outsider = await db.employee.create({ data: { fullName: 'Other QA admin' } });
+    await assert.rejects(sync.enqueue(request.id, outsider.id, { ...input, clientKey: 'synthetic_other_reply01' }), /возьмите/);
+    sync.gateway = async () => { throw new Error('Offline'); };
+    await sync.syncNow(); assert.equal((await sync.jobs(request.id))[0].status, 'PENDING');
+    const job = (await sync.jobs(request.id))[0];
+    await db.backgroundJob.update({ where: { id: job.id }, data: { payload: { ...job.payload, nextAttemptAt: new Date(0).toISOString() } } });
+    sync.gateway = async (path, body) => {
+      if (path === '/pending') return chat.pending();
+      const conversationId = decodeURIComponent(path.split('/')[1]);
+      // A separate booking test deliberately has no gateway conversation.
+      if (conversationId.startsWith('qa_')) return { ok: true };
+      if (path.endsWith('/ack')) return chat.acknowledge(conversationId, body.sequence, body.crmRequestId);
+      return chat.command(conversationId, body);
+    };
+    await sync.syncNow(); await sync.syncNow();
+    assert.equal((await sync.jobs(request.id))[0].status, 'DONE');
+    assert.equal((await chat.view(id)).messages.filter(x => x.clientKey === input.clientKey).length, 1);
+  });
+  await t.test('one-use MAX link binds a chat, never an owner account; replay and expired link fail', async () => {
+    const link = await chat.link(start.token); const token = new URL(link.url).searchParams.get('start');
+    const maxId = String(Date.now());
+    assert.ok(await chat.bindMax(token, maxId)); assert.equal(await chat.bindMax(token, `${maxId}1`), false);
+    assert.equal((await chat.view(id)).ownerId, null);
+    await chat.fromMax(maxId, 'max:synthetic_mid01', 'Вопрос после заявки'); await chat.fromMax(maxId, 'max:synthetic_mid01', 'Вопрос после заявки');
+    assert.equal((await chat.view(id)).messages.filter(x => x.clientKey === 'max:synthetic_mid01').length, 1);
+    const another = await chat.start(); const expired = await chat.link(another.token); const expiredToken = new URL(expired.url).searchParams.get('start');
+    await gateway.clinicChatLink.update({ where: { tokenHash: hashToken(expiredToken) }, data: { expiresAt: new Date(0) } });
+    assert.equal(await chat.bindMax(expiredToken, `${maxId}2`), false);
+    await assert.rejects(chat.read('wrong-session-token'), /заново/);
+  });
+  await t.test('ambiguous MAX timeout becomes visible and is never retried automatically', async () => {
+    let calls = 0;
+    const delivery = new ClinicChatDeliveryService(gateway, { sendMessage: async () => { calls++; throw new Error('timeout'); } });
+    await delivery.runOnce(); assert.equal(calls, 1);
+    assert.ok((await chat.view(id)).messages.some(x => x.deliveryStatus === 'UNKNOWN'));
+    await new ClinicChatDeliveryService(gateway, { sendMessage: async () => assert.fail('must not resend') }).runOnce();
+  });
+  await t.test('MAX opt-out cancels pending delivery and repeated stop is harmless', async () => {
+    await chat.disconnectMax(start.token);
+    const before = await chat.view(id);
+    await chat.fromMax(before.maxUserId, 'max:stop', '/stop');
+    assert.equal((await chat.view(id)).sequence, before.sequence);
+    assert.equal(before.maxConsent, false);
+    assert.ok(before.messages.every(x => x.deliveryStatus !== 'PENDING'));
+    await new ClinicChatDeliveryService(gateway, { sendMessage: async () => assert.fail('opted out') }).runOnce();
+  });
+  await t.test('MAX receipt and explicit rejection remain distinct; two workers cannot send the same message', async () => {
+    const row = await gateway.clinicConversation.create({ data: { maxUserId: `qa_delivery_${Date.now()}`, maxConsent: true } });
+    const item = await gateway.clinicChatMessage.create({ data: { conversationId: row.id, sequence: 1, author: 'STAFF', channel: 'MAX', clientKey: 'qa_send', text: 'QA receipt', deliveryStatus: 'PENDING' } });
+    let calls = 0;
+    const provider = { sendMessage: async () => { calls++; return { messageId: 'qa_receipt_mid' }; } };
+    await Promise.all([new ClinicChatDeliveryService(gateway, provider).runOnce(), new ClinicChatDeliveryService(gateway, provider).runOnce()]);
+    assert.equal(calls, 1);
+    const sent = await gateway.clinicChatMessage.findUniqueOrThrow({ where: { id: item.id } });
+    assert.equal(sent.deliveryStatus, 'SENT'); assert.equal(sent.providerMessageId, 'qa_receipt_mid');
+    await gateway.clinicChatMessage.update({ where: { id: item.id }, data: { attemptedAt: new Date(0) } });
+    const rejected = await gateway.clinicChatMessage.create({ data: { conversationId: row.id, sequence: 3, author: 'STAFF', channel: 'MAX', clientKey: 'qa_reject', text: 'QA rejected', deliveryStatus: 'PENDING' } });
+    await new ClinicChatDeliveryService(gateway, { sendMessage: async () => { throw Object.assign(new Error('403'), { maxRejected: true }); } }).runOnce();
+    assert.equal((await gateway.clinicChatMessage.findUniqueOrThrow({ where: { id: rejected.id } })).deliveryStatus, 'FAILED');
+  });
+  await db.onlineAppointmentRequest.update({ where: { id: request.id }, data: { status: 'ARCHIVED', conversationNeedsAttention: false } });
+  await t.test('new messages keep closed history; a new booking creates a separate episode exactly once', async () => {
+    await chat.message(start.token, { clientKey: 'qa_closed_message', text: 'Ещё вопрос' });
+    const same = await sync.importConversation(await chat.view(id));
+    assert.equal(same.id, request.id); assert.equal(same.status, 'ARCHIVED'); assert.equal(same.conversationNeedsAttention, true);
+    await chat.acknowledge(id, same.conversationVersion, same.id);
+    await chat.booking(start.token, { clientKey: 'qa_second_booking', contactName: 'QA visitor', phone: '+79990000001', animalNickname: 'QA cat', comment: 'Новый осмотр', contactConsent: true });
+    const snapshot = await chat.view(id);
+    const [a, b] = await Promise.all([sync.importConversation(snapshot), sync.importConversation(snapshot)]);
+    assert.notEqual(a.id, request.id); assert.equal(a.id, b.id); assert.equal(a.appointmentId, null);
+    await chat.acknowledge(id, snapshot.sequence, a.id);
+    await attention.claim(a.id, staff.id);
+    const job = await sync.enqueue(a.id, staff.id, { clientKey: `resolve_${id}`, action: 'RESOLVE' });
+    assert.equal((await db.onlineAppointmentRequest.findUniqueOrThrow({ where: { id: a.id } })).status, 'ARCHIVED');
+    await db.backgroundJob.update({ where: { id: job.id }, data: { status: 'FAILED' } });
+    const retry = await sync.retry(a.id, job.id, staff.id);
+    assert.equal(retry.status, 'PENDING'); assert.equal(retry.payload.clientKey, job.payload.clientKey);
+    await sync.syncNow();
+    assert.equal((await sync.jobs(a.id))[0].status, 'DONE');
+    assert.equal((await chat.view(id)).mode, 'RESOLVED');
+    assert.ok(!(await attention.list(staff.id)).items.some(x => x.id === a.id));
+  });
+});

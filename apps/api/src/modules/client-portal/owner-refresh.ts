@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 
 type Change = { action: string; entityType: string; entityId?: string | null; actorId?: string | null; metadata?: Prisma.InputJsonValue };
-const entityTypes = new Set(['Owner', 'Animal', 'AnimalWeightRecord', 'Vaccination', 'Visit', 'VisitDiagnosis', 'VisitDocument', 'LaboratoryOrder', 'LaboratoryOrderItem', 'HospitalStay', 'HospitalRecord', 'HospitalTreatmentPlan', 'Bill', 'BillItem', 'Payment', 'Appointment', 'OnlineAppointmentRequest', 'FileObject']);
+const entityTypes = new Set(['Owner', 'Animal', 'AnimalWeightRecord', 'Vaccination', 'Visit', 'VisitDiagnosis', 'VisitDocument', 'LaboratoryOrder', 'LaboratoryOrderItem', 'HospitalStay', 'HospitalRecord', 'HospitalTreatmentPlan', 'Bill', 'BillItem', 'Payment', 'Appointment', 'OnlineAppointmentRequest', 'Task', 'FileObject']);
 
 export async function queueOwnerRefreshForChange(db: Prisma.TransactionClient, change: Change) {
   // Sync completion itself is audited as an Owner event; do not create a feedback loop.
@@ -56,6 +56,7 @@ async function resolveOwnerId(db: Prisma.TransactionClient, change: Change, meta
     case 'Visit': return (await db.visit.findUnique({ where, select: { ownerId: true } }))?.ownerId;
     case 'Bill': return (await db.bill.findUnique({ where, select: { ownerId: true } }))?.ownerId;
     case 'Appointment': return (await db.appointment.findUnique({ where, select: { ownerId: true } }))?.ownerId;
+    case 'Task': return (await db.task.findUnique({ where, select: { ownerId: true } }))?.ownerId;
     case 'HospitalStay': return (await db.hospitalStay.findUnique({ where, select: { ownerId: true } }))?.ownerId;
     case 'OnlineAppointmentRequest': return (await db.onlineAppointmentRequest.findUnique({ where, select: { ownerId: true } }))?.ownerId;
     case 'LaboratoryOrder': return (await db.laboratoryOrder.findUnique({ where, select: visitSelect }))?.visit.ownerId;

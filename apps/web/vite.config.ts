@@ -10,6 +10,7 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/api': apiProxyTarget,
+      ...(process.env.VITE_DEV_CHAT_PROXY_TARGET ? { '/assistant-chat-api': { target: process.env.VITE_DEV_CHAT_PROXY_TARGET, rewrite: (path: string) => path.replace(/^\/assistant-chat-api/, '/v1/public/assistant') } } : {}),
     },
   },
   preview: {

@@ -74,6 +74,7 @@ export const taskTypeOptions = [
   { value: 'call', label: 'Звонок клиенту' },
   { value: 'revaccination', label: 'Ревакцинация' },
   { value: 'follow_up', label: 'Контроль лечения' },
+  { value: 'revisit', label: 'Напоминание владельцу о повторном визите' },
   { value: 'document', label: 'Документы' },
   { value: 'stock', label: 'Склад' },
   { value: 'other', label: 'Другое' },

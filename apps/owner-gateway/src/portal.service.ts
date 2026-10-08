@@ -101,6 +101,7 @@ export class PortalService {
       sourceUpdatedAt: session.owner.sourceUpdatedAt,
       syncedAt: session.owner.syncedAt,
       sessionExpiresAt,
+      assistantEnabled: process.env.CLINIC_ASSISTANT_ENABLED === 'true',
     };
   }
 

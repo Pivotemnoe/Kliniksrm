@@ -23,6 +23,11 @@ test('изменение лабораторного показателя ста�
   assert.equal(db.created[0].payload.ownerId, 'owner-a');
   assert.equal(db.queries[0].where.status, 'PENDING');
 });
+test('смена даты или закрытие задачи повторного визита обновляет кабинет владельца', async () => {
+  const db = database(); db.task = { findUnique: async () => ({ ownerId: 'owner-a' }) };
+  await queueOwnerRefreshForChange(db, { action: 'task.done', entityType: 'Task', entityId: 'revisit-a' });
+  assert.equal(db.created[0].payload.ownerId, 'owner-a');
+});
 test('обновление снимка не запускает само себя, отключённый кабинет не получает новые задачи', async () => {
   const db = database({ access: 'DISABLED' });
   await queueOwnerRefreshForChange(db, { action: 'client_portal.snapshot_sync_automatic', entityType: 'Owner', entityId: 'owner-a' });

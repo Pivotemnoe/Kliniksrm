@@ -49,6 +49,12 @@ test('сводка стационара использует дату измер
   const html = context.renderHospital([{ latestTemperature: { value: '38.2', measuredAt: '2026-09-13T09:00:00Z' }, completedCare: [{ type: 'CARE', count: 1 }] }]);
   assert.match(html, /38.2 °C/); assert.match(html, /13 сент/); assert.doesNotMatch(html, /стабил/i);
 });
+test('повторный визит показывает дату клиники и питомца, но не выдаёт напоминание за подтверждённый приём', () => {
+  const context = ui();
+  const html = context.renderRevisits([{ dueAt: '2099-10-08T22:00:00Z', timezone: 'Europe/Moscow', animal: { nickname: '<Кот>' }, title: 'INTERNAL_MARKER', comment: 'INTERNAL_MARKER' }]);
+  assert.match(html, /9 октября 2099/); assert.match(html, /&lt;Кот&gt;/); assert.match(html, /Время приёма ещё не выбрано/);
+  assert.doesNotMatch(html, /INTERNAL_MARKER|Запись подтверждена/);
+});
 
 test('ошибка обновления сохраняет данные и объясняет их давность; отзыв сессии убирает кабинет', async () => {
   const context = ui();

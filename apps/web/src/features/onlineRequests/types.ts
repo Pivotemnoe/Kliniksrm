@@ -8,6 +8,12 @@ export type OnlineAppointmentRequest = {
   id: string;
   status: OnlineRequestStatus;
   source: string;
+  conversationId?: string | null;
+  conversationNeedsAttention?: boolean;
+  conversationSnapshot?: ClinicConversation | null;
+  assignedEmployeeId: string | null;
+  claimedAt: string | null;
+  assignedEmployee?: { id: string; fullName: string; status?: 'ACTIVE' | 'BLOCKED' } | null;
   ownerName: string;
   phone: string;
   email: string | null;
@@ -84,3 +90,7 @@ export const onlineRequestStatusColors: Record<OnlineRequestStatus, string> = {
   CANCELLED: 'red',
   ARCHIVED: 'default',
 };
+
+export type ClinicChatMessage = { id: string; sequence: number; author: string; channel: string; text: string; deliveryStatus: string; clientKey: string; createdAt: string };
+export type ClinicBookingDraft = { revision: number; serviceQuery: string | null; preferredTimeText: string | null };
+export type ClinicConversation = { id: string; mode: string; sequence: number; source: string; ownerId?: string | null; canAutoBook?: boolean; bookingDraft?: ClinicBookingDraft | null; maxUserId: string | null; maxConsent: boolean; contactConsent: boolean; historyLimited?: boolean; messages: ClinicChatMessage[] };

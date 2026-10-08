@@ -1,3 +1,6 @@
+import { ConversationCommandDto } from './dto/conversation-command.dto';
+import { ClinicConversationSyncService } from './clinic-conversation-sync.service';
+import { OnlineRequestAttentionService } from './online-request-attention.service';
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { AuthEmployee } from '../auth/auth.types';
@@ -16,6 +19,8 @@ import { OwnerGatewayBookingSyncService } from './owner-gateway-booking-sync.ser
 export class OnlineRequestsController {
   constructor(
     private readonly onlineRequestsService: OnlineRequestsService,
+    private readonly conversations: ClinicConversationSyncService,
+    private readonly attentionService: OnlineRequestAttentionService,
     private readonly ownerGatewayBookingSyncService: OwnerGatewayBookingSyncService,
   ) {}
 
@@ -38,6 +43,50 @@ export class OnlineRequestsController {
   @ApiCreatedResponse({ description: 'Public online appointment request created.' })
   createRequest(@Body() dto: CreateOnlineRequestDto) {
     return this.onlineRequestsService.createRequest(dto);
+  }
+
+  @Get('attention')
+  @RequirePermissions('appointments.manage')
+  attention(@CurrentEmployee() actor: AuthEmployee) {
+    return this.attentionService.list(actor.id);
+  }
+
+  @Post(':requestId/claim')
+  @RequirePermissions('appointments.manage')
+  claim(@Param('requestId') requestId: string, @CurrentEmployee() actor: AuthEmployee) {
+    return this.attentionService.claim(requestId, actor.id);
+  }
+
+  @Post(':requestId/snooze')
+  @RequirePermissions('appointments.manage')
+  snooze(@Param('requestId') requestId: string, @CurrentEmployee() actor: AuthEmployee) {
+    return this.attentionService.snooze(requestId, actor.id);
+  }
+
+  @Post(':requestId/release')
+  @RequirePermissions('appointments.manage')
+  release(@Param('requestId') requestId: string, @CurrentEmployee() actor: AuthEmployee) {
+    return this.attentionService.release(requestId, actor.id);
+  }
+
+  @Post('sync-conversations')
+  @RequirePermissions('appointments.manage')
+  syncConversations() { return this.conversations.syncNow(); }
+
+  @Get(':requestId/conversation-jobs')
+  @RequirePermissions('appointments.read')
+  conversationJobs(@Param('requestId') requestId: string) { return this.conversations.jobs(requestId); }
+
+  @Post(':requestId/conversation-jobs/:jobId/retry')
+  @RequirePermissions('appointments.manage')
+  retryConversationJob(@Param('requestId') requestId: string, @Param('jobId') jobId: string, @CurrentEmployee() actor: AuthEmployee) {
+    return this.conversations.retry(requestId, jobId, actor.id);
+  }
+
+  @Post(':requestId/conversation')
+  @RequirePermissions('appointments.manage')
+  conversationCommand(@Param('requestId') requestId: string, @Body() dto: ConversationCommandDto, @CurrentEmployee() actor: AuthEmployee) {
+    return this.conversations.enqueue(requestId, actor.id, dto);
   }
 
   @Get(':requestId')

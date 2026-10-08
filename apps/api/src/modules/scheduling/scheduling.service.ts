@@ -451,8 +451,8 @@ export class SchedulingService {
     }
   }
 
-  async getDefaultOfficeId() {
-    const office = await this.prisma.clinicOffice.findFirst({
+  async getDefaultOfficeId(db: Prisma.TransactionClient = this.prisma) {
+    const office = await db.clinicOffice.findFirst({
       orderBy: { createdAt: 'asc' },
       select: { id: true },
     });
@@ -464,8 +464,8 @@ export class SchedulingService {
     return office.id;
   }
 
-  async ensureOfficeExists(officeId: string) {
-    const office = await this.prisma.clinicOffice.findUnique({
+  async ensureOfficeExists(officeId: string, db: Prisma.TransactionClient = this.prisma) {
+    const office = await db.clinicOffice.findUnique({
       where: { id: officeId },
       select: { id: true },
     });
@@ -484,8 +484,8 @@ export class SchedulingService {
     return this.getDefaultOfficeId();
   }
 
-  async ensureOwnerExists(ownerId: string) {
-    const owner = await this.prisma.owner.findUnique({
+  async ensureOwnerExists(ownerId: string, db: Prisma.TransactionClient = this.prisma) {
+    const owner = await db.owner.findUnique({
       where: { id: ownerId },
       select: { id: true },
     });
@@ -495,8 +495,8 @@ export class SchedulingService {
     }
   }
 
-  async resolveAnimalOwner(animalId: string, ownerId?: string, options?: { allowArchived?: boolean }) {
-    const animal = await this.prisma.animal.findUnique({
+  async resolveAnimalOwner(animalId: string, ownerId?: string, options?: { allowArchived?: boolean }, db: Prisma.TransactionClient = this.prisma) {
+    const animal = await db.animal.findUnique({
       where: { id: animalId },
       select: { id: true, ownerId: true, archivedAt: true },
     });
@@ -515,8 +515,8 @@ export class SchedulingService {
     return animal.ownerId;
   }
 
-  async ensureEmployeeActive(employeeId: string) {
-    const employee = await this.prisma.employee.findUnique({
+  async ensureEmployeeActive(employeeId: string, db: Prisma.TransactionClient = this.prisma) {
+    const employee = await db.employee.findUnique({
       where: { id: employeeId },
       select: { id: true, status: true },
     });
@@ -526,8 +526,8 @@ export class SchedulingService {
     }
   }
 
-  async ensureRoomExists(roomId: string) {
-    const room = await this.prisma.room.findUnique({
+  async ensureRoomExists(roomId: string, db: Prisma.TransactionClient = this.prisma) {
+    const room = await db.room.findUnique({
       where: { id: roomId },
       select: { id: true, officeId: true },
     });

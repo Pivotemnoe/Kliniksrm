@@ -16,7 +16,7 @@ export class MaxBotClient {
 
   async sendMessage(maxUserId: string, text: string) {
     const publicUrl = normalizeBaseUrl(process.env.OWNER_GATEWAY_PUBLIC_URL);
-    await this.send(maxUserId, text, publicUrl ? `${publicUrl}/portal` : null);
+    return this.send(maxUserId, text, publicUrl ? `${publicUrl}/portal` : null);
   }
 
   private async send(maxUserId: string, text: string, portalUrl: string | null) {
@@ -47,7 +47,12 @@ export class MaxBotClient {
     });
 
     if (!response.ok) {
-      throw new BadGatewayException(`MAX API не подтвердил отправку: HTTP ${response.status}`);
+      const rejected = new BadGatewayException(`MAX API не подтвердил отправку: HTTP ${response.status}`);
+      Object.assign(rejected, { maxRejected: response.status >= 400 && response.status < 500 });
+      throw rejected;
     }
+    const payload = await response.json() as { message?: { body?: { mid?: string } } };
+    if (!payload.message?.body?.mid) throw new BadGatewayException('MAX не вернул идентификатор сообщения');
+    return { messageId: payload.message.body.mid };
   }
 }

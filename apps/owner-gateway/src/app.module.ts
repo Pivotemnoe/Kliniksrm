@@ -1,3 +1,11 @@
+import { ClinicChatController, ClinicChatInternalController } from './clinic-chat.controller';
+import { OwnerNotificationController, OwnerNotificationInternalController } from './owner-notification.controller';
+import { OwnerNotificationService } from './owner-notification.service';
+import { ClinicChatService } from './clinic-chat.service';
+import { ClinicChatBookingService } from './clinic-chat-booking.service';
+import { ClinicChatDeliveryService } from './clinic-chat-delivery.service';
+import { ClinicAssistantOpenAiClient } from './clinic-assistant-openai.client';
+import { ClinicAssistantRunnerService } from './clinic-assistant-runner.service';
 import { Module } from '@nestjs/common';
 import { HealthController } from './health.controller';
 import { InternalSyncController } from './internal-sync.controller';
@@ -21,6 +29,8 @@ import { PublicClinicCatalogService } from './public-clinic-catalog.service';
 @Module({
   controllers: [
     HealthController,
+    OwnerNotificationController, OwnerNotificationInternalController,
+    ClinicChatController, ClinicChatInternalController,
     InternalSyncController,
     PortalController,
     PortalPageController,
@@ -31,6 +41,8 @@ import { PublicClinicCatalogService } from './public-clinic-catalog.service';
   ],
   providers: [
     PrismaService,
+    OwnerNotificationService,
+    ClinicChatService, ClinicChatBookingService, ClinicChatDeliveryService, ClinicAssistantOpenAiClient, ClinicAssistantRunnerService,
     InternalSyncService,
     PortalService,
     MaxBotClient,

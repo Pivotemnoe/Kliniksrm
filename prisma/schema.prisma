@@ -366,6 +366,7 @@ model Employee {
   shifts                        EmployeeShift[]
   queueEntries                  QueueEntry[]
   appointments                  Appointment[]
+  assistantBookingRules         AssistantBookingRule[]
   visits                        Visit[]
   hospitalStays                 HospitalStay[]
   hospitalRecords               HospitalRecord[]             @relation("HospitalRecordAuthor")
@@ -379,6 +380,8 @@ model Employee {
   createdNewsPosts              NewsPost[]                   @relation("NewsPostCreator")
   newsReads                     NewsPostRead[]
   staffAlertReads               StaffAlertRead[]
+  claimedOnlineRequests         OnlineAppointmentRequest[]   @relation("OnlineRequestAssignee")
+  onlineRequestSnoozes           OnlineRequestSnooze[]
   visitOverdueAlerts            VisitOverdueAlert[]          @relation("VisitOverdueAlertEmployee")
   sentInternalMessages          InternalMessage[]            @relation("InternalMessageSender")
   receivedInternalMessages      InternalMessage[]            @relation("InternalMessageRecipient")
@@ -715,6 +718,7 @@ model ClinicOffice {
   cashboxes           Cashbox[]
   owners              Owner[]
   appointments        Appointment[]
+  assistantBookingRules AssistantBookingRule[]
   queueEntries        QueueEntry[]
   businessEntries     BusinessEntry[]
   businessDailyCloses BusinessDailyClose[]
@@ -729,6 +733,7 @@ model Room {
   name         String
   queueEntries QueueEntry[]
   appointments Appointment[]
+  assistantBookingRules AssistantBookingRule[]
   queueWorkstations QueueWorkstation[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
@@ -1098,6 +1103,13 @@ model OnlineAppointmentRequest {
   status            OnlineRequestStatus @default(NEW)
   source            String              @default("PUBLIC_FORM")
   externalRequestId String?             @unique
+  assistantBookingKey String?            @unique
+  assistantBookingFingerprint String?
+  assistantBookingSequence Int?
+  conversationId String?
+  conversationVersion Int @default(0)
+  conversationNeedsAttention Boolean @default(false)
+  conversationSnapshot Json?
   ownerName         String
   phone             String              @db.VarChar(32)
   email             String?
@@ -1107,6 +1119,10 @@ model OnlineAppointmentRequest {
   preferredAt       DateTime?
   comment           String?
   internalComment   String?
+  assignedEmployeeId String?
+  assignedEmployee Employee? @relation("OnlineRequestAssignee", fields: [assignedEmployeeId], references: [id], onDelete: SetNull)
+  claimedAt         DateTime?
+  snoozes           OnlineRequestSnooze[]
   ownerId           String?
   owner             Owner?              @relation(fields: [ownerId], references: [id], onDelete: SetNull)
   animalId          String?
@@ -1117,9 +1133,21 @@ model OnlineAppointmentRequest {
   updatedAt         DateTime            @updatedAt
 
   @@index([status, createdAt])
+  @@index([assignedEmployeeId, status])
+  @@index([conversationId, createdAt])
+  @@unique([conversationId, assistantBookingSequence])
   @@index([phone])
   @@index([ownerId])
   @@index([animalId])
+}
+
+model OnlineRequestSnooze {
+  requestId String
+  employeeId String
+  until DateTime
+  request OnlineAppointmentRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  @@id([requestId, employeeId])
 }
 
 model Visit {
@@ -1501,6 +1529,15 @@ model Task {
   @@index([assigneeRoleCode])
 }
 
+model AssistantReminderSource {
+  id String @id
+  ownerId String
+  fingerprint String
+  revision Int @default(1)
+  observedAt DateTime @default(now())
+  @@index([ownerId])
+}
+
 model NotificationOutbox {
   id              String                @id @default(uuid())
   ownerId         String?
@@ -1631,11 +1668,34 @@ model Service {
   laboratoryTests        LaboratoryTest[]
   laboratoryProfiles     LaboratoryProfile[]
   payrollRules           PayrollServiceRule[]
+  assistantBookingRules  AssistantBookingRule[]
   createdAt              DateTime             @default(now())
   updatedAt              DateTime             @updatedAt
 
   @@index([title])
   @@index([isActive, title])
+}
+
+model AssistantBookingRule {
+  id String @id @default(uuid())
+  officeId String
+  office ClinicOffice @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  serviceId String
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  employeeId String
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  roomId String
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  isActive Boolean @default(false)
+  durationMinutes Int @default(30)
+  stepMinutes Int @default(15)
+  minimumLeadMinutes Int @default(60)
+  maximumDaysAhead Int @default(14)
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([officeId, serviceId, employeeId, roomId])
+  @@index([isActive, serviceId])
 }
 
 model ServiceLinkedProduct {
