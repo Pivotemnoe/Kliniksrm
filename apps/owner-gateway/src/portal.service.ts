@@ -1,14 +1,17 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, HttpException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PortalInviteChannel, PortalInviteStatus } from './generated/client';
 import { randomBytes } from 'node:crypto';
 import { PrismaService } from './prisma.service';
 import { hashToken } from './security';
+import { BoundedRateLimiter } from './abuse-protection';
+import { snapshotContact } from './clinic-contact';
 import { PortalPushSubscriptionDto } from './dto/portal-push-subscription.dto';
 import { WebPushService } from './web-push.service';
 import { CreatePortalBookingRequestDto } from './dto/create-portal-booking-request.dto';
 
 @Injectable()
 export class PortalService {
+  private readonly transferLimits = new BoundedRateLimiter();
   constructor(
     private readonly prisma: PrismaService,
     private readonly webPushService: WebPushService,
@@ -69,6 +72,7 @@ export class PortalService {
 
   async createSessionTransfer(sessionToken: string) {
     const session = await this.resolveSession(sessionToken);
+    this.transferLimits.consume(`transfer:${session.ownerId}`, 5);
     const transferToken = randomBytes(32).toString('hex');
     const expiresAt = addMinutes(new Date(), getTransferMinutes());
 
@@ -239,33 +243,41 @@ export class PortalService {
       throw new BadRequestException('Выберите будущую дату и время');
     }
 
-    return this.prisma.portalBookingRequest.upsert({
-      where: {
-        ownerId_clientRequestId: {
+    return this.prisma.$transaction(async tx => {
+      await tx.$queryRaw`SELECT "ownerId" FROM "OwnerSnapshot" WHERE "ownerId" = ${session.ownerId} FOR UPDATE`;
+      const key = { ownerId: session.ownerId, clientRequestId: dto.clientRequestId.trim() };
+      const previous = await tx.portalBookingRequest.findUnique({ where: { ownerId_clientRequestId: key }, select: { id: true, animalId: true, animalNickname: true, animalSpecies: true, preferredAt: true, comment: true, status: true, createdAt: true } });
+      if (previous) return previous;
+      if (await tx.portalBookingRequest.count({ where: { ownerId: session.ownerId, createdAt: { gte: new Date(Date.now() - 600_000) } } }) >= 5) throw new HttpException('Слишком много заявок. Попробуйте позже.', 429);
+      if ((!dto.requestType || dto.requestType === 'NEW') && !snapshotContact(session.owner.payload)) throw new BadRequestException('Для записи на приём нужен телефон для связи. Уточните его у администратора');
+      return tx.portalBookingRequest.upsert({
+        where: {
+          ownerId_clientRequestId: {
+            ownerId: session.ownerId,
+            clientRequestId: dto.clientRequestId.trim(),
+          },
+        },
+        create: {
           ownerId: session.ownerId,
           clientRequestId: dto.clientRequestId.trim(),
+          animalId: selectedAnimal?.id ?? null,
+          animalNickname,
+          animalSpecies: clean(selectedAnimal?.species ?? dto.animalSpecies),
+          preferredAt,
+          comment,
+          contactConsent: true,
         },
-      },
-      create: {
-        ownerId: session.ownerId,
-        clientRequestId: dto.clientRequestId.trim(),
-        animalId: selectedAnimal?.id ?? null,
-        animalNickname,
-        animalSpecies: clean(selectedAnimal?.species ?? dto.animalSpecies),
-        preferredAt,
-        comment,
-        contactConsent: true,
-      },
-      update: {},
-      select: {
-        id: true,
-        animalId: true,
-        animalNickname: true,
-        preferredAt: true,
-        comment: true,
-        status: true,
-        createdAt: true,
-      },
+        update: {},
+        select: {
+          id: true,
+          animalId: true,
+          animalNickname: true,
+          preferredAt: true,
+          comment: true,
+          status: true,
+          createdAt: true,
+        },
+      });
     });
   }
 

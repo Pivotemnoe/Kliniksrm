@@ -10,6 +10,8 @@ import { AssistantBookDto, AssistantBookingOptionsDto, AssistantBookingRuleDto }
 import { withinOfficeHours } from './assistant-booking-hours';
 import { matchesBookingDate, selectBookingDate, selectBookingService } from './assistant-booking-selection';
 
+import { requireContactPhone } from '../../common/phone';
+
 const minute = 60_000, day = 86400_000;
 const includeRule = { office: true, room: true, service: true, employee: { include: { roles: { include: { role: true } } } } } satisfies Prisma.AssistantBookingRuleInclude;
 type Rule = Prisma.AssistantBookingRuleGetPayload<{ include: typeof includeRule }>;
@@ -109,7 +111,7 @@ export class AssistantBookingService {
   async book(input: AssistantBookDto, now = new Date(), allowNew = true) {
     this.assertEnabled();
     if (!input.contactConsent || !input.appointmentConsent) throw new BadRequestException('Подтвердите выбранное время и согласие на связь по записи');
-    const fingerprint = createHash('sha256').update(JSON.stringify({ ownerId: input.ownerId, animalId: input.animalId, conversationId: input.conversationId, bookingSequence: input.bookingSequence, offerToken: input.offerToken, comment: input.comment?.trim() || '' })).digest('hex');
+    const fingerprint = createHash('sha256').update(JSON.stringify({ ownerId: input.ownerId, animalId: input.animalId, conversationId: input.conversationId, bookingSequence: input.bookingSequence, offerToken: input.offerToken, comment: input.comment?.trim() || '', ...(input.contactPhone ? { contactPhone: requireContactPhone(input.contactPhone) } : {}) })).digest('hex');
     return this.prisma.$transaction(async tx => {
       // Arbitrate initial request linkage and idempotency before schedule locking.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(20261008, 5)`;
@@ -141,6 +143,7 @@ export class AssistantBookingService {
       const owner = await tx.owner.findUnique({ where: { id: input.ownerId } });
       const animal = await tx.animal.findUnique({ where: { id: input.animalId } });
       if (!owner || !animal || animal.ownerId !== owner.id || animal.archivedAt) throw new BadRequestException('Выберите действующего питомца своего личного кабинета');
+      const phone = requireContactPhone(input.contactPhone || owner.phone);
       // Serialize linkage with the ordinary conversation importer as well.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(20261008, 3)`;
       const latest = await tx.onlineAppointmentRequest.findFirst({ where: { conversationId: input.conversationId }, orderBy: { createdAt: 'desc' } });
@@ -155,10 +158,10 @@ export class AssistantBookingService {
       } else {
         const snapshot = latest?.conversationSnapshot as Prisma.JsonObject | null;
         if (latest && Math.max(Number(snapshot?.bookingSequence || 0), latest.assistantBookingSequence || 0) >= input.bookingSequence) throw new ConflictException('Эта заявка уже обработана');
-        request = await tx.onlineAppointmentRequest.create({ data: { ownerName: owner.fullName, phone: owner.phone || 'личный кабинет', animalNickname: animal.nickname, source: 'ASSISTANT_BOOKING', conversationId: input.conversationId, ownerId: owner.id, animalId: animal.id, comment: input.comment?.trim() || current.service.title } });
+        request = await tx.onlineAppointmentRequest.create({ data: { ownerName: owner.fullName, phone, animalNickname: animal.nickname, source: 'ASSISTANT_BOOKING', conversationId: input.conversationId, ownerId: owner.id, animalId: animal.id, comment: input.comment?.trim() || current.service.title } });
       }
       const appointment = await this.appointments.createAppointmentInTransaction(tx, { ownerId: owner.id, animalId: animal.id, officeId: current.officeId, employeeId: current.employeeId, roomId: current.roomId, startsAt: start.toISOString(), endsAt: end.toISOString(), comment: `${current.service.title}${input.comment?.trim() ? `: ${input.comment.trim()}` : ''}` });
-      const confirmed = await tx.onlineAppointmentRequest.update({ where: { id: request.id }, data: { status: 'ACCEPTED', ownerId: owner.id, animalId: animal.id, appointmentId: appointment.id, preferredAt: start, assistantBookingKey: input.clientKey, assistantBookingFingerprint: fingerprint, assistantBookingSequence: input.bookingSequence, conversationVersion: Math.max(request.conversationVersion, input.bookingSequence), conversationNeedsAttention: false }, include: resultInclude });
+      const confirmed = await tx.onlineAppointmentRequest.update({ where: { id: request.id }, data: { status: 'ACCEPTED', phone, ownerId: owner.id, animalId: animal.id, appointmentId: appointment.id, preferredAt: start, assistantBookingKey: input.clientKey, assistantBookingFingerprint: fingerprint, assistantBookingSequence: input.bookingSequence, conversationVersion: Math.max(request.conversationVersion, input.bookingSequence), conversationNeedsAttention: false }, include: resultInclude });
       await this.conversations.queueConfirmation(tx, confirmed, appointment);
       await this.audit.log({ action: 'assistant_booking.confirm', entityType: 'OnlineAppointmentRequest', entityId: confirmed.id, metadata: { appointmentId: appointment.id, ruleId: current.id, serviceId: current.serviceId, bookingSequence: input.bookingSequence, contactConsent: true, appointmentConsent: true } }, tx);
       return this.result(confirmed);

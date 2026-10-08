@@ -1,7 +1,7 @@
 import { ConflictException, HttpException, Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { AssistantBookingService } from './assistant-booking.service';
 
-type Operation = { id: string; kind: string; ownerId: string; conversationId: string; bookingSequence: number; input: { serviceId?: string; serviceQuery?: string; preferredTimeText?: string; date?: string; from?: string; days?: number; animalId: string; offerToken: string; comment?: string; contactConsent: boolean; appointmentConsent: boolean }; conversation: { mode: string } };
+type Operation = { id: string; kind: string; ownerId: string; conversationId: string; bookingSequence: number; input: { serviceId?: string; serviceQuery?: string; preferredTimeText?: string; date?: string; from?: string; days?: number; animalId: string; offerToken: string; comment?: string; contactPhone?: string; contactConsent: boolean; appointmentConsent: boolean }; conversation: { mode: string } };
 @Injectable()
 export class AssistantBookingSyncService implements OnApplicationBootstrap, OnModuleDestroy {
   private timer?: NodeJS.Timeout;
@@ -27,7 +27,7 @@ export class AssistantBookingSyncService implements OnApplicationBootstrap, OnMo
             // Identity and episode come from the authenticated gateway queue, never public text.
             // A late replay may return an already committed booking after takeover, but cannot create one.
             result = await this.booking.book({ ownerId: item.ownerId, conversationId: item.conversationId, bookingSequence: item.bookingSequence,
-              clientKey: item.id, animalId: item.input.animalId, offerToken: item.input.offerToken, comment: item.input.comment,
+              clientKey: item.id, animalId: item.input.animalId, offerToken: item.input.offerToken, comment: item.input.comment, contactPhone: item.input.contactPhone,
               contactConsent: item.input.contactConsent, appointmentConsent: item.input.appointmentConsent }, new Date(), item.conversation.mode === 'ASSISTANT');
           } else throw new ConflictException('Неизвестный запрос записи');
         } catch (error) {

@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsEmail, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsDateString, IsEmail, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 
 export class CreateOnlineRequestDto {
   @ApiProperty()
@@ -10,7 +10,11 @@ export class CreateOnlineRequestDto {
   @ApiProperty()
   @IsString()
   @MaxLength(32)
+  @Matches(/^(?=(?:[^0-9]*[0-9]){10,15}[^0-9]*$)[+0-9 ()-]{10,32}$/)
   phone!: string;
+
+  @IsOptional() @IsString() @MaxLength(200)
+  website?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

@@ -93,4 +93,4 @@ export const onlineRequestStatusColors: Record<OnlineRequestStatus, string> = {
 
 export type ClinicChatMessage = { id: string; sequence: number; author: string; channel: string; text: string; deliveryStatus: string; clientKey: string; createdAt: string };
 export type ClinicBookingDraft = { revision: number; serviceQuery: string | null; preferredTimeText: string | null };
-export type ClinicConversation = { id: string; mode: string; sequence: number; source: string; ownerId?: string | null; canAutoBook?: boolean; bookingDraft?: ClinicBookingDraft | null; maxUserId: string | null; maxConsent: boolean; contactConsent: boolean; historyLimited?: boolean; messages: ClinicChatMessage[] };
+export type ClinicConversation = { id: string; mode: string; sequence: number; source: string; ownerId?: string | null; contactName?: string | null; phone?: string | null; introductionComplete?: boolean; canAutoBook?: boolean; bookingDraft?: ClinicBookingDraft | null; maxUserId: string | null; maxConsent: boolean; contactConsent: boolean; historyLimited?: boolean; messages: ClinicChatMessage[] };

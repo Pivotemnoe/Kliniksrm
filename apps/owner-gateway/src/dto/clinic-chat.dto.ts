@@ -3,14 +3,22 @@ export class ClinicChatMessageDto {
   @IsString() @Matches(/^[A-Za-z0-9_-]{16,100}$/) clientKey!: string;
   @IsString() @MinLength(1) @MaxLength(4000) text!: string;
 }
+export class ClinicChatContactDto {
+  @IsString() @Matches(/^[A-Za-z0-9_-]{16,100}$/) clientKey!: string;
+  @IsOptional() @IsString() @MaxLength(120) contactName?: string;
+  @IsOptional() @IsString() @MaxLength(32) phone?: string;
+  @IsOptional() @IsBoolean() declined?: boolean;
+  @IsOptional() @IsString() @MaxLength(200) website?: string;
+}
 export class ClinicChatBookingDto {
   @IsString() @Matches(/^[A-Za-z0-9_-]{16,100}$/) clientKey!: string;
   @IsString() @MinLength(1) @MaxLength(120) contactName!: string;
-  @IsString() @Matches(/^[+\d\s()\-]{10,32}$/) phone!: string;
+  @IsString() @Matches(/^(?=(?:[^0-9]*[0-9]){10,15}[^0-9]*$)[+0-9 ()-]{10,32}$/) phone!: string;
   @IsString() @MinLength(1) @MaxLength(160) animalNickname!: string;
   @IsString() @MinLength(1) @MaxLength(1000) comment!: string;
   @IsOptional() @IsISO8601() preferredAt?: string;
   @IsBoolean() contactConsent!: boolean;
+  @IsOptional() @IsString() @MaxLength(200) website?: string;
 }
 export class ClinicChatCommandDto {
   @IsString() @Matches(/^[A-Za-z0-9_-]{16,100}$/) clientKey!: string;

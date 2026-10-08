@@ -67,6 +67,8 @@ export class OnlineRequestsService {
   }
 
   async createRequest(dto: CreateOnlineRequestDto) {
+    if (dto.website?.trim()) throw new BadRequestException('Не удалось отправить сообщение');
+    if (!/^\+?[0-9 ()-]{10,32}$/.test(dto.phone.trim()) || dto.phone.replace(/\D/g, '').length < 10 || dto.phone.replace(/\D/g, '').length > 15) throw new BadRequestException('Укажите телефон: от 10 до 15 цифр');
     const preferredAt = dto.preferredAt ? new Date(dto.preferredAt) : null;
     if (preferredAt && Number.isNaN(preferredAt.getTime())) {
       throw new BadRequestException('Укажите корректную дату записи');

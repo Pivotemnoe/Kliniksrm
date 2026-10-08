@@ -33,4 +33,5 @@ export class AssistantBookDto {
   @IsBoolean() contactConsent!: boolean;
   @IsBoolean() appointmentConsent!: boolean;
   @IsOptional() @IsString() @MaxLength(1000) comment?: string;
+  @IsOptional() @IsString() @MaxLength(32) contactPhone?: string;
 }

@@ -150,7 +150,7 @@ test('разрешённый документ выдаётся только из
 
 function gatewayForBookings() {
   const created = new Map();
-  const snapshot = { animals: [{ id: 'cat', nickname: 'Мурка' }], appointments: [{ id: 'appointment-a', status: 'PLANNED', startsAt: '2099-01-01T10:00:00Z', animal: { id: 'cat' } }], bookingRequests: [{ externalRequestId: 'saved-request', status: 'ACCEPTED', updatedAt: '2026-09-13', appointment: { startsAt: '2099-01-01T10:00:00Z', status: 'PLANNED' }, internalComment: 'INTERNAL_MARKER' }] };
+  const snapshot = { owner: { phone: '+79990000001' }, animals: [{ id: 'cat', nickname: 'Мурка' }], appointments: [{ id: 'appointment-a', status: 'PLANNED', startsAt: '2099-01-01T10:00:00Z', animal: { id: 'cat' } }], bookingRequests: [{ externalRequestId: 'saved-request', status: 'ACCEPTED', updatedAt: '2026-09-13', appointment: { startsAt: '2099-01-01T10:00:00Z', status: 'PLANNED' }, internalComment: 'INTERNAL_MARKER' }] };
   const db = {
     portalSession: { findUnique: async () => ({ ownerId: 'owner-a', expiresAt: new Date(Date.now() + 60_000), owner: { payload: snapshot } }) },
     portalBookingRequest: {
@@ -158,6 +158,10 @@ function gatewayForBookings() {
       upsert: async (query) => { const key = query.where.ownerId_clientRequestId.clientRequestId; if (!created.has(key)) created.set(key, query.create); return created.get(key); },
     },
   };
+  db.$queryRaw = async () => [{ ownerId: 'owner-a' }];
+  db.$transaction = async work => work(db);
+  db.portalBookingRequest.findUnique = async query => created.get(query.where.ownerId_clientRequestId.clientRequestId) || null;
+  db.portalBookingRequest.count = async () => created.size;
   return { service: new PortalService(db), created };
 }
 test('заявка получает подтверждённое время из CRM без служебного комментария', async () => {

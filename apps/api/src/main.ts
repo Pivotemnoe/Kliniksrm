@@ -6,15 +6,17 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { assertRuntimeSecurityConfiguration, isApiDocumentationEnabled } from './config/runtime-config';
 import { SESSION_COOKIE_NAME } from './modules/auth/session-cookie';
+import { apiAbuseProtection, apiBodyParsers } from './common/abuse-protection';
 
 async function bootstrap() {
   assertRuntimeSecurityConfiguration();
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false });
   const appUrl = process.env.APP_URL ?? 'http://127.0.0.1:3000';
   const bodyLimit = process.env.API_BODY_LIMIT ?? '25mb';
+  app.set('trust proxy', 1);
+  app.use(apiAbuseProtection());
 
-  app.useBodyParser('json', { limit: bodyLimit });
-  app.useBodyParser('urlencoded', { limit: bodyLimit, extended: true });
+  app.use(apiBodyParsers(bodyLimit));
 
   app.setGlobalPrefix('api');
   app.enableCors({

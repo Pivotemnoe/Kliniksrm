@@ -90,7 +90,7 @@ test('чат клиники отвечает сам и передаёт слож
   assert.doesNotMatch(contract, /wa\.me|WhatsApp/i);
   assert.match(gatewaySchema, /model PublicClinicInquiry/);
   assert.match(publicController, /@Post\('inquiries'\)/);
-  assert.match(publicService, /assertRateLimit/);
+  assert.match(publicService, /BoundedRateLimiter/);
   assert.match(publicService, /clean\(dto\.website\)/);
   assert.match(publicService, /!dto\.contactConsent/);
   assert.match(publicService, /publicClinicInquiry\.upsert/);

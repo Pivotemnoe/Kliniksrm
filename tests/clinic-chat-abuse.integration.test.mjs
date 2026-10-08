@@ -1,0 +1,80 @@
+import 'reflect-metadata';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { randomUUID, randomBytes } from 'node:crypto';
+import { PrismaClient } from '../apps/owner-gateway/src/generated/client/index.js';
+import { ClinicChatService } from '../apps/owner-gateway/dist/clinic-chat.service.js';
+import { PortalService } from '../apps/owner-gateway/dist/portal.service.js';
+import { hashToken } from '../apps/owner-gateway/dist/security.js';
+
+const url = process.env.ASSISTANT_TEST_GATEWAY_DATABASE_URL;
+test('isolated PostgreSQL: contact privacy, nonblocking refusal, durable anti-spam and legitimate retries', { skip: !url }, async t => {
+  const parsed = new URL(url); assert.equal(parsed.hostname, '127.0.0.1'); assert.equal(parsed.port, '15488'); assert.equal(parsed.pathname, '/crm_assistant_gateway_qa');
+  Object.assign(process.env, { CLINIC_ASSISTANT_ENABLED: 'true', CLINIC_ASSISTANT_MODEL_ENABLED: 'false', CLINIC_ASSISTANT_APPROVED_ADDRESS: 'Synthetic clinic address' });
+  const db = new PrismaClient({ datasources: { db: { url } } }), chat = new ClinicChatService(db);
+  const ids = [], owners = [];
+  t.after(async () => { await db.clinicConversation.deleteMany({ where: { id: { in: ids } } }); await db.ownerSnapshot.deleteMany({ where: { ownerId: { in: owners } } }); await db.$disconnect(); });
+  const start = async () => { const s = await chat.start(); ids.push(s.conversation.id); return s; };
+  const contact = (phone = '+79990000001') => ({ clientKey: randomUUID(), contactName: 'Синтетический посетитель', phone });
+  const booking = () => ({ clientKey: randomUUID(), contactName: 'QA', phone: '+79990000001', animalNickname: 'QA cat', comment: 'QA routine visit', contactConsent: true });
+  const ownerId = `security-qa-${randomUUID()}`; owners.push(ownerId);
+  await db.ownerSnapshot.create({ data: { ownerId, displayName: 'PRIVATE_STORED_OWNER_MARKER', payload: { owner: { phone: '+79990000001' }, animals: [{ id: 'qa-cat', nickname: 'QA cat' }] }, sourceVersion: 'synthetic', sourceUpdatedAt: new Date() } });
+  await t.test('guest supplied known phone never enumerates owners; verified session may personalise', async () => {
+    const guest = await start(); assert.match(guest.conversation.messages[0].text, /имя.*номер телефона/);
+    const view = await chat.contact(guest.token, contact());
+    assert.equal(view.ownerId, null); assert.equal(view.phone, '+79990000001'); assert.equal(view.introductionComplete, true);
+    assert.ok(!JSON.stringify(view).includes('PRIVATE_STORED_OWNER_MARKER'));
+    const token = randomBytes(32).toString('hex');
+    await db.portalSession.create({ data: { ownerId, tokenHash: hashToken(token), expiresAt: new Date(Date.now() + 3600000) } });
+    const verified = await chat.start(token); ids.push(verified.conversation.id);
+    assert.match(verified.conversation.messages[0].text, /Здравствуйте, PRIVATE_STORED_OWNER_MARKER/);
+    assert.equal(verified.conversation.phone, '+79990000001');
+  });
+  await t.test('phone/name in ordinary dialogue and repeated refusal do not trap a visitor', async () => {
+    const a = await start(); await chat.message(a.token, { clientKey: randomUUID(), text: 'Иван' });
+    await chat.message(a.token, { clientKey: randomUUID(), text: '+7 (999) 000-00-01' });
+    assert.equal((await chat.read(a.token)).contactName, 'Иван'); assert.equal((await chat.read(a.token)).introductionComplete, true);
+    const b = await start(); await chat.message(b.token, { clientKey: randomUUID(), text: 'Не хочу вводить телефон' });
+    await chat.message(b.token, { clientKey: randomUUID(), text: 'Не хочу вводить телефон' });
+    assert.equal((await chat.read(b.token)).introductionComplete, true);
+    await chat.message(b.token, { clientKey: randomUUID(), text: 'Где вы?' });
+    assert.equal((await chat.read(b.token)).messages.at(-1).text, 'Synthetic clinic address');
+    const declined = await start(); await chat.contact(declined.token, { clientKey: randomUUID(), phone: '123', declined: true });
+    assert.equal((await chat.read(declined.token)).phone, null);
+    await chat.message(declined.token, { clientKey: randomUUID(), text: 'Где вы?' });
+    assert.equal((await chat.read(declined.token)).messages.at(-1).text, 'Synthetic clinic address');
+    await assert.rejects(chat.booking(declined.token, { ...booking(), phone: '----------' }), e => e.getStatus() === 400);
+    await assert.rejects(chat.contact(declined.token, { ...contact(), website: 'spam.example' }), e => e.getStatus() === 400);
+  });
+  await t.test('messages stay limited across service reconstruction and MAX; duplicate retries still succeed', async () => {
+    const s = await start();
+    await db.clinicChatMessage.createMany({ data: Array.from({ length: 60 }, (_, i) => ({ conversationId: s.conversation.id, sequence: i + 2, author: 'OWNER', channel: 'SITE_CHAT', text: 'Synthetic quota fixture', clientKey: `quota-${i}-${s.conversation.id}` })) });
+    await db.clinicConversation.update({ where: { id: s.conversation.id }, data: { sequence: 61, maxUserId: `qa-max-${randomUUID()}`, maxConsent: true } });
+    const restarted = new ClinicChatService(db);
+    await assert.rejects(restarted.message(s.token, { clientKey: randomUUID(), text: 'Где вы?' }), e => e.getStatus() === 429);
+    await assert.doesNotReject(restarted.message(s.token, { clientKey: `quota-0-${s.conversation.id}`, text: 'Synthetic quota fixture' }));
+    const row = await db.clinicConversation.findUniqueOrThrow({ where: { id: s.conversation.id } });
+    await assert.rejects(restarted.fromMax(row.maxUserId, `max:${randomUUID()}`, 'Где вы?'), e => e.getStatus() === 429);
+    await restarted.fromMax(row.maxUserId, `max:${randomUUID()}`, '/stop');
+    assert.equal((await chat.read(s.token)).maxConsent, false);
+    assert.equal(await db.clinicAssistantRun.count({ where: { message: { conversationId: s.conversation.id } } }), 0);
+  });
+  await t.test('parallel booking spam is capped under row lock; successful request and retry stay single', async () => {
+    const s = await start(); const dto = booking();
+    await chat.booking(s.token, dto); await chat.booking(s.token, dto);
+    const results = await Promise.allSettled(Array.from({ length: 8 }, () => chat.booking(s.token, booking())));
+    assert.equal(results.filter(x => x.status === 'fulfilled').length, 4);
+    assert.equal(results.filter(x => x.status === 'rejected' && x.reason.getStatus() === 429).length, 4);
+    assert.equal(await db.clinicChatMessage.count({ where: { conversationId: s.conversation.id, clientKey: { startsWith: 'receipt:' } } }), 5);
+    await assert.doesNotReject(new ClinicChatService(db).booking(s.token, dto));
+  });
+  await t.test('personal-cabinet booking quota is owner-scoped and durable, including concurrent different keys', async () => {
+    const token = randomBytes(32).toString('hex'); await db.portalSession.create({ data: { ownerId, tokenHash: hashToken(token), expiresAt: new Date(Date.now() + 3600000) } });
+    const portal = new PortalService(db, {}); const dto = { clientRequestId: randomUUID(), animalId: 'qa-cat', contactConsent: true };
+    await portal.createBookingRequest(token, dto);
+    const results = await Promise.allSettled(Array.from({ length: 8 }, () => portal.createBookingRequest(token, { ...dto, clientRequestId: randomUUID() })));
+    assert.equal(results.filter(x => x.status === 'fulfilled').length, 4);
+    assert.equal(results.filter(x => x.status === 'rejected' && x.reason.getStatus() === 429).length, 4);
+    await assert.doesNotReject(new PortalService(db, {}).createBookingRequest(token, dto));
+  });
+});

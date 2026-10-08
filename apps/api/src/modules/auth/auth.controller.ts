@@ -10,6 +10,7 @@ import { getCookieOptions, SESSION_COOKIE_NAME } from './session-cookie';
 import { REMOTE_DEVICE_COOKIE_NAME } from '../remote-access/remote-access.constants';
 import { isRemoteGatewayRequest } from '../remote-access/remote-request';
 import { parseCookie } from './session-cookie';
+import { clientIp } from '../../common/abuse-protection';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -83,13 +84,7 @@ function accessTypeFor(remoteRequest: boolean): 'LOCAL' | 'REMOTE' {
 }
 
 function getIpAddress(request: AuthenticatedRequest) {
-  const forwardedFor = request.headers['x-forwarded-for'];
-
-  if (typeof forwardedFor === 'string') {
-    return forwardedFor.split(',')[0]?.trim() ?? null;
-  }
-
-  return request.ip ?? request.socket?.remoteAddress ?? null;
+  return clientIp(request);
 }
 
 function getUserAgent(request: AuthenticatedRequest) {

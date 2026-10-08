@@ -10,6 +10,9 @@ import { shouldExposePortalDebugCode } from '../../config/runtime-config';
 import { ObjectStorageService } from '../files/object-storage.service';
 import { isOwnerDiagnosis, ownerGatewayFileWhere, ownerHospitalSelect, ownerLaboratorySelect, toOwnerHospitalStay, toOwnerLaboratoryOrder } from './owner-data-policy';
 
+import { BoundedRateLimiter } from '../../common/abuse-protection';
+import { normalizePhoneForLookup } from '../../common/phone';
+
 const PORTAL_CODE_TTL_MINUTES = Number(process.env.CLIENT_PORTAL_CODE_TTL_MINUTES ?? 10);
 const PORTAL_CODE_MAX_ATTEMPTS = Number(process.env.CLIENT_PORTAL_CODE_MAX_ATTEMPTS ?? 5);
 const PORTAL_PHONE_TOKEN_DAYS = Number(process.env.CLIENT_PORTAL_PHONE_TOKEN_DAYS ?? 30);
@@ -17,6 +20,7 @@ const PORTAL_ONLINE_REQUESTS_ENABLED = process.env.CLIENT_PORTAL_ONLINE_REQUESTS
 
 @Injectable()
 export class ClientPortalService {
+  private readonly codeLimits = new BoundedRateLimiter();
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
@@ -24,6 +28,7 @@ export class ClientPortalService {
   ) {}
 
   async requestLoginCode(dto: RequestPortalCodeDto) {
+    this.codeLimits.consume(`request:${normalizePhoneForLookup(dto.phone)}`, 5);
     const owner = await this.findPortalOwnerByPhone(dto.phone);
     const access = this.requirePhoneLoginAccess(owner.portalAccess);
     const code = randomInt(100000, 1000000).toString();
@@ -54,6 +59,7 @@ export class ClientPortalService {
   }
 
   async verifyLoginCode(dto: VerifyPortalCodeDto) {
+    this.codeLimits.consume(`verify:${normalizePhoneForLookup(dto.phone)}`, 15);
     const owner = await this.findPortalOwnerByPhone(dto.phone);
     const access = this.requirePhoneLoginAccess(owner.portalAccess);
 

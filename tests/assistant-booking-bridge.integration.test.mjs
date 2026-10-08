@@ -44,7 +44,7 @@ test('isolated PostgreSQL: durable chat booking bridge', { skip: !url || !gatewa
     const startAt = new Date(Math.ceil((Date.now() + 3600_000) / 900_000) * 900_000);
     await db.employeeShift.create({ data: { employeeId: doctor.id, startsAt: startAt, endsAt: new Date(startAt.getTime() + 3 * 3600_000) } });
     const rule = await booking.saveRule({ officeId: office.id, roomId: room.id, employeeId: doctor.id, serviceId: service.id, isActive: true, durationMinutes: 30, stepMinutes: 15, minimumLeadMinutes: 0, maximumDaysAhead: 2 }, doctor.id); rules.push(rule.id);
-    await gateway.ownerSnapshot.create({ data: { ownerId: owner.id, displayName: 'Synthetic verified owner', payload: {}, sourceVersion: 'synthetic', sourceUpdatedAt: new Date() } });
+    await gateway.ownerSnapshot.create({ data: { ownerId: owner.id, displayName: 'Synthetic verified owner', payload: { owner: { phone: owner.phone } }, sourceVersion: 'synthetic', sourceUpdatedAt: new Date() } });
     const portalToken = randomBytes(32).toString('base64url');
     const portal = await gateway.portalSession.create({ data: { ownerId: owner.id, tokenHash: hashToken(portalToken), expiresAt: new Date(Date.now() + 3600_000) } });
     const session = await chat.start(portalToken); ids.push(session.conversation.id);
@@ -65,6 +65,21 @@ test('isolated PostgreSQL: durable chat booking bridge', { skip: !url || !gatewa
     return result;
   }
   function confirmation(f, result) { return { clientKey: randomUUID(), optionsId: result.id, animalId: f.animal.id, offerToken: result.result.offers[0].offerToken, contactConsent: true, appointmentConsent: true }; }
+  await t.test('a supplied contact phone reaches CRM without rewriting the owner record', async () => {
+    const f = await fixture();
+    await db.owner.update({ where: { id: f.owner.id }, data: { phone: null } });
+    await gateway.clinicConversation.update({ where: { id: f.session.conversation.id }, data: { phone: null } });
+    await gateway.ownerSnapshot.update({ where: { ownerId: f.owner.id }, data: { payload: { owner: { phone: null } } } });
+    const result = await options(f);
+    const dto = confirmation(f, result);
+    await assert.rejects(slots.confirm(f.session.token, f.portalToken, dto), /телефон/);
+    await chat.contact(f.session.token, { clientKey: randomUUID(), phone: '+79990000009', contactName: 'Synthetic contact' });
+    const operation = await slots.confirm(f.session.token, f.portalToken, dto); await worker().syncNow();
+    const completed = await slots.read(f.session.token, f.portalToken, operation.id); assert.equal(completed.status, 'DONE');
+    const request = await db.onlineAppointmentRequest.findUniqueOrThrow({ where: { id: completed.result.requestId } });
+    assert.equal(request.phone, '+79990000009');
+    assert.equal((await db.owner.findUniqueOrThrow({ where: { id: f.owner.id } })).phone, null);
+  });
   await t.test('guest, wrong owner, revoked session and foreign operation never disclose slots or pets', async () => {
     const f = await fixture(), other = await fixture(), guest = await chat.start();
     assert.deepEqual(await slots.latest(f.session.token, f.portalToken), { operation: null });

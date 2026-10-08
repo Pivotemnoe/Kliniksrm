@@ -272,6 +272,8 @@ model ClinicConversation {
   needsAttention Boolean @default(false)
   contactName String?
   phone String?
+  introductionComplete Boolean @default(false)
+  introductionReminded Boolean @default(false)
   animalNickname String?
   preferredAt DateTime?
   contactConsent Boolean @default(false)

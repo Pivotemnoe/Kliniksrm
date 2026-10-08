@@ -6,12 +6,14 @@ import type { NextFunction, Request, Response } from 'express';
 import { AppModule } from './app.module';
 import { assertGatewaySecurityConfiguration } from './runtime-config';
 import { setGatewaySecurityHeaders } from './security-headers';
+import { gatewayAbuseProtection } from './abuse-protection';
 
 async function bootstrap() {
   assertGatewaySecurityConfiguration();
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false });
-  app.set('trust proxy', process.env.OWNER_GATEWAY_TRUST_PROXY === 'true');
-  app.useBodyParser('json', { limit: process.env.OWNER_GATEWAY_BODY_LIMIT?.trim() || '24mb' });
+  // The port is loopback-only behind one nginx hop; never trust a client chain.
+  app.set('trust proxy', process.env.OWNER_GATEWAY_TRUST_PROXY === 'true' ? 1 : false);
+  app.use(gatewayAbuseProtection());
   const allowedOrigins = publicSiteOrigins();
   app.enableCors({
     origin: (origin, callback) => {

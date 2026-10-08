@@ -8,6 +8,7 @@ import { AuthenticatedRequest } from './auth.types';
 import { IS_PUBLIC_KEY } from './decorators/public.decorator';
 import { ALLOW_REMOTE_MUTATION_KEY } from './decorators/allow-remote-mutation.decorator';
 import { parseCookie, SESSION_COOKIE_NAME } from './session-cookie';
+import { clientIp, limitStaffMutation } from '../../common/abuse-protection';
 
 @Injectable()
 export class SessionAuthGuard implements CanActivate {
@@ -110,6 +111,7 @@ export class SessionAuthGuard implements CanActivate {
       remoteDeviceId: session.remoteDeviceId,
       employee,
     };
+    limitStaffMutation(request);
 
     const allowRemoteMutation = this.reflector.getAllAndOverride<boolean>(ALLOW_REMOTE_MUTATION_KEY, [
       context.getHandler(),
@@ -166,11 +168,5 @@ function isMutationMethod(method?: string) {
 }
 
 function getIpAddress(request: AuthenticatedRequest) {
-  const forwardedFor = request.headers['x-forwarded-for'];
-
-  if (typeof forwardedFor === 'string') {
-    return forwardedFor.split(',')[0]?.trim() ?? null;
-  }
-
-  return request.ip ?? request.socket?.remoteAddress ?? null;
+  return clientIp(request);
 }

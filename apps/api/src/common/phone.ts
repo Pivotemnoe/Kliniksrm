@@ -1,5 +1,11 @@
 import { BadRequestException } from '@nestjs/common';
 
+export function requireContactPhone(value?: string | null) {
+  const text = value?.trim() || ''; const digits = text.replace(/\D/g, '');
+  if (!/^\+?[0-9 ()-]{10,32}$/.test(text) || digits.length < 10 || digits.length > 15) throw new BadRequestException('Для записи на приём укажите телефон для связи');
+  return '+' + (digits.length === 10 ? '7' + digits : digits.length === 11 && digits[0] === '8' ? '7' + digits.slice(1) : digits);
+}
+
 export function normalizeDisplayName(value: string) {
   return value.trim().replace(/\s+/g, ' ');
 }

@@ -1,15 +1,19 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, HttpException, ConflictException, Injectable, NotFoundException, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import { Prisma } from './generated/client';
 import { PrismaService } from './prisma.service';
 import { hashToken } from './security';
 import { clinicChatReply, clinicSafetyIntent } from './clinic-chat-policy';
 import { autoBookingReply, bookingDraft, fallbackBookingHints, nextBookingDraft } from './clinic-booking-dialog';
-import { ClinicChatBookingDto, ClinicChatCommandDto, ClinicChatMessageDto } from './dto/clinic-chat.dto';
+import { ClinicChatBookingDto, ClinicChatCommandDto, ClinicChatContactDto, ClinicChatMessageDto } from './dto/clinic-chat.dto';
+
+import { BoundedRateLimiter } from './abuse-protection';
+import { contactPhone, snapshotContact, introduction } from './clinic-contact';
 
 type Db = Prisma.TransactionClient;
 @Injectable()
 export class ClinicChatService {
+  private readonly maxIngress = new BoundedRateLimiter();
   constructor(private readonly prisma: PrismaService) {}
   assertEnabled() {
     if (process.env.CLINIC_ASSISTANT_ENABLED !== 'true') throw new NotFoundException('Чат пока не включён');
@@ -25,8 +29,11 @@ export class ClinicChatService {
     }
     const token = randomBytes(32).toString('base64url');
     const conversation = await this.prisma.$transaction(async tx => {
-      const row = await tx.clinicConversation.create({ data: { sessionHash: hashToken(token), sessionExpiresAt: new Date(Date.now() + 7 * 86400_000), ownerId } });
-      await this.append(tx, row.id, 'ASSISTANT', 'SITE_CHAT', 'Здравствуйте! Помогу оставить заявку на приём или передать вопрос администратору.', 'welcome');
+      const owner = ownerId ? await tx.ownerSnapshot.findUnique({ where: { ownerId }, select: { displayName: true, payload: true } }) : null;
+      const phone = snapshotContact(owner?.payload);
+      const row = await tx.clinicConversation.create({ data: { sessionHash: hashToken(token), sessionExpiresAt: new Date(Date.now() + 7 * 86400_000), ownerId, contactName: owner?.displayName || null, phone, introductionComplete: Boolean(owner && phone) } });
+      const welcome = owner ? `Здравствуйте, ${owner.displayName}! Чем можем помочь?${phone ? '' : ' Для записи на приём понадобится номер телефона.'}` : introduction;
+      await this.append(tx, row.id, 'ASSISTANT', 'SITE_CHAT', welcome, 'welcome');
       return row;
     });
     return { token, conversation: await this.view(conversation.id) };
@@ -59,12 +66,34 @@ export class ClinicChatService {
     return this.prisma.$transaction(async tx => {
       const row = await this.lock(tx, conversationId);
       if (await tx.clinicChatMessage.findUnique({ where: { conversationId_clientKey: { conversationId, clientKey } } })) return;
+      await this.ownerMessageQuota(tx, row.id);
       const cleaned = text.trim();
       if (!cleaned || cleaned.length > 4000) throw new BadRequestException('Сообщение должно содержать от 1 до 4000 символов');
       const message = await this.append(tx, row.id, 'OWNER', channel, cleaned, clientKey);
+      let suppliedPhone: string | undefined;
+      try { if (/^\+?[0-9 ()-]{10,32}$/.test(cleaned)) suppliedPhone = contactPhone(cleaned); } catch {}
+      if (suppliedPhone) await tx.clinicConversation.update({ where: { id: row.id }, data: { phone: suppliedPhone } });
       if (row.mode !== 'ASSISTANT') {
         await tx.clinicConversation.update({ where: { id: row.id }, data: { needsAttention: true, mode: 'HUMAN' } });
         return;
+      }
+      if (suppliedPhone && row.introductionComplete) {
+        await this.append(tx, row.id, 'ASSISTANT', channel, 'Спасибо! Телефон для связи сохранён. Чем можем помочь?', `reply:${clientKey}`); return;
+      }
+      if (!row.introductionComplete && !clinicSafetyIntent(cleaned)) {
+        const phoneText = cleaned.match(/\+?[0-9][0-9 ()-]{8,30}[0-9]/)?.[0];
+        let phone: string | undefined;
+        try { if (phoneText) phone = contactPhone(phoneText); } catch {}
+        const name = /(?:меня зовут|обращайтесь(?: ко мне)?|можно называть)\s+([\p{L} -]{1,120})/iu.exec(cleaned)?.[1]?.trim() || (/^[А-ЯЁа-яё]{2,40}(?:[ -][А-ЯЁа-яё]{2,40}){0,2}$/.test(cleaned) && !/здравств|привет|добрый|адрес|телефон|запис|при[её]м|режим|работ|где|помог|хочу|цена|стоим|отказ|не хочу|нет/i.test(cleaned) ? cleaned : undefined);
+        const decline = /не (?:хочу|буду|дам|давать|вводить)|без (?:телефона|номера)|отказываюсь/i.test(cleaned);
+        if (phone || name || decline || /^(?:здравствуйте|привет|добрый (?:день|вечер|утро))[.! ]*$/i.test(cleaned)) {
+          const complete = Boolean((phone || row.phone) && (name || row.contactName)) || decline && row.introductionReminded;
+          await tx.clinicConversation.update({ where: { id: row.id }, data: { ...(phone ? { phone } : {}), ...(name ? { contactName: name } : {}), introductionReminded: true, introductionComplete: complete } });
+          const reply = complete ? 'Спасибо! Чем можем помочь? Для записи на приём нужен телефон для связи.' : phone ? 'Спасибо! Напишите, пожалуйста, ваше имя или как к вам обращаться.' : decline ? 'Можно продолжить без телефона. Как к вам обращаться? Для записи на приём всё же понадобится номер для связи.' : 'Как к вам обращаться? Напишите имя и телефон для связи. Если не хотите, можете сразу задать вопрос.';
+          await this.append(tx, row.id, 'ASSISTANT', channel, reply, `reply:${clientKey}`); return;
+        }
+        // A visitor can ask their question immediately without completing intake.
+        await tx.clinicConversation.update({ where: { id: row.id }, data: { introductionComplete: true } });
       }
       if (process.env.CLINIC_ASSISTANT_MODEL_ENABLED === 'true') {
         await tx.clinicAssistantRun.create({ data: { messageId: message.id } });
@@ -88,14 +117,17 @@ export class ClinicChatService {
   }
   async booking(token: string | undefined, dto: ClinicChatBookingDto) {
     const row = await this.resolve(token);
+    if (dto.website?.trim()) throw new BadRequestException('Не удалось отправить сообщение');
+    const phone = contactPhone(dto.phone);
     if (!dto.contactConsent) throw new BadRequestException('Разрешите клинике связаться с вами по заявке');
     if (![dto.contactName, dto.phone, dto.animalNickname, dto.comment].every(x => x.trim())) throw new BadRequestException('Заполните обязательные поля');
     await this.prisma.$transaction(async tx => {
       await this.lock(tx, row.id);
       if (await tx.clinicChatMessage.findUnique({ where: { conversationId_clientKey: { conversationId: row.id, clientKey: dto.clientKey } } })) return;
+      if (await tx.clinicChatMessage.count({ where: { conversationId: row.id, clientKey: { startsWith: 'receipt:' }, createdAt: { gte: new Date(Date.now() - 600_000) } } }) >= 5) throw new HttpException('Слишком много заявок. Попробуйте позже.', 429);
       if (await tx.clinicBookingOperation.count({ where: { conversationId: row.id, kind: 'CONFIRM', status: 'PENDING' } })) throw new ConflictException('Проверяем выбранное время. Дождитесь результата записи перед новой заявкой');
       await tx.clinicConversation.update({ where: { id: row.id }, data: {
-        contactName: dto.contactName.trim(), phone: dto.phone.trim(), animalNickname: dto.animalNickname.trim(),
+        contactName: dto.contactName.trim(), phone, introductionComplete: true, animalNickname: dto.animalNickname.trim(),
         preferredAt: dto.preferredAt ? new Date(dto.preferredAt) : null, contactConsent: true, mode: 'HUMAN', needsAttention: true,
       } });
       const bookingMessage = await this.append(tx, row.id, 'OWNER', 'SITE_CHAT', `Заявка: ${dto.animalNickname.trim()}. ${dto.comment.trim()}`, dto.clientKey);
@@ -103,6 +135,31 @@ export class ClinicChatService {
       await this.append(tx, row.id, 'SYSTEM', 'SITE_CHAT', 'Заявка получена. Время ещё не подтверждено. Администратор ответит здесь.', `receipt:${dto.clientKey}`);
     });
     return this.view(row.id);
+  }
+  async contact(token: string | undefined, dto: ClinicChatContactDto) {
+    const row = await this.resolve(token);
+    if (dto.website?.trim()) throw new BadRequestException('Не удалось отправить сообщение');
+    const phone = !dto.declined && dto.phone?.trim() ? contactPhone(dto.phone) : undefined;
+    const name = dto.contactName?.trim();
+    if (!dto.declined && !name && !phone) throw new BadRequestException('Напишите, как к вам обращаться, или продолжите без телефона');
+    await this.prisma.$transaction(async tx => {
+      const current = await this.lock(tx, row.id);
+      if (await tx.clinicChatMessage.findUnique({ where: { conversationId_clientKey: { conversationId: row.id, clientKey: dto.clientKey } } })) return;
+      await this.ownerMessageQuota(tx, row.id);
+      await tx.clinicConversation.update({ where: { id: row.id }, data: { ...(name ? { contactName: name } : {}), ...(phone ? { phone } : {}), introductionComplete: Boolean(dto.declined || (name || current.contactName) && (phone || current.phone)), introductionReminded: true } });
+      // A supplied phone is contact information, never proof of account ownership.
+      await this.append(tx, row.id, 'OWNER', 'SITE_CHAT', dto.declined ? 'Продолжить без телефона' : 'Контактные данные для связи предоставлены.', dto.clientKey);
+      if (current.mode === 'ASSISTANT') await this.append(tx, row.id, 'ASSISTANT', 'SITE_CHAT', dto.declined ? 'Можно продолжить без телефона. Если удобно, напишите, как к вам обращаться. Для записи на приём нужен номер для связи. Чем можем помочь?' : phone && !name && !current.contactName ? 'Спасибо! Напишите, пожалуйста, ваше имя или как к вам обращаться.' : `Спасибо${name ? ', ' + name : ''}! Чем можем помочь?${phone ? '' : ' Для записи на приём понадобится телефон.'}`, `reply:${dto.clientKey}`);
+    });
+    return this.view(row.id);
+  }
+  private async ownerMessageQuota(tx: Db, id: string) {
+    const now = Date.now();
+    const [short, daily] = await Promise.all([
+      tx.clinicChatMessage.count({ where: { conversationId: id, author: 'OWNER', createdAt: { gte: new Date(now - 600_000) } } }),
+      tx.clinicChatMessage.count({ where: { conversationId: id, author: 'OWNER', createdAt: { gte: new Date(now - 86400_000) } } }),
+    ]);
+    if (short >= 60 || daily >= 200) throw new HttpException('Слишком много сообщений. Попробуйте позже.', 429);
   }
   async link(token?: string) {
     const row = await this.resolve(token);
@@ -148,12 +205,15 @@ export class ClinicChatService {
   }
   async fromMax(maxUserId: string, clientKey: string, text: string) {
     this.assertEnabled();
+    const stop = /^(?:\/stop(?:@\w+)?|стоп|отписаться|отключить (?:max|макс))\s*$/i.test(text.trim());
     let conversation = await this.prisma.clinicConversation.findUnique({ where: { maxUserId } });
+    if (stop) { if (conversation) await this.stopMax(conversation.id); return; }
+    if (conversation && await this.prisma.clinicChatMessage.findUnique({ where: { conversationId_clientKey: { conversationId: conversation.id, clientKey } } })) return;
+    this.maxIngress.consume(`max:${maxUserId}`, 20, 60_000);
     if (!conversation) {
       const binding = await this.prisma.messengerBinding.findUnique({ where: { channel_externalUserId: { channel: 'MAX', externalUserId: maxUserId } } });
       conversation = await this.prisma.clinicConversation.upsert({ where: { maxUserId }, create: { maxUserId, ownerId: binding?.ownerId, source: 'MAX', maxConsent: true }, update: {} });
     }
-    if (/^(?:\/stop(?:@\w+)?|стоп|отписаться|отключить (?:max|макс))\s*$/i.test(text.trim())) { await this.stopMax(conversation.id); return; }
     if (!conversation.maxConsent) await this.prisma.clinicConversation.update({ where: { id: conversation.id }, data: { mode: 'HUMAN' } });
     await this.receive(conversation.id, clientKey, text, 'MAX');
   }

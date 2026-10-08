@@ -3,22 +3,17 @@ import { buildClinicSiteAnalyticsSummary } from './clinic-site-analytics';
 import { CreatePublicClinicAnalyticsEventDto } from './dto/create-public-clinic-analytics-event.dto';
 import { CreatePublicClinicInquiryDto } from './dto/create-public-clinic-inquiry.dto';
 import { PrismaService } from './prisma.service';
-
-type RateWindow = { startedAt: number; count: number };
-
-const RATE_WINDOW_DURATION_MS = 10 * 60 * 1000;
-const MAX_TRACKED_RATE_LIMIT_CLIENTS = 10_000;
-const RATE_LIMIT_CLIENTS_AFTER_PRUNE = 9_000;
+import { BoundedRateLimiter } from './abuse-protection';
+import { contactPhone } from './clinic-contact';
 
 @Injectable()
 export class PublicClinicService {
-  private readonly inquiryRateWindows = new Map<string, RateWindow>();
-  private readonly analyticsRateWindows = new Map<string, RateWindow>();
+  private readonly limits = new BoundedRateLimiter();
 
   constructor(private readonly prisma: PrismaService) {}
 
   async createInquiry(dto: CreatePublicClinicInquiryDto, clientIp: string) {
-    this.assertRateLimit(this.inquiryRateWindows, clientIp, 5);
+    this.limits.consume(`inquiry:${clientIp}`, 5);
     if (clean(dto.website)) {
       throw new BadRequestException('Не удалось отправить сообщение');
     }
@@ -31,7 +26,7 @@ export class PublicClinicService {
       create: {
         clientRequestId: dto.clientRequestId.trim(),
         contactName: required(dto.contactName),
-        phone: required(dto.phone),
+        phone: contactPhone(dto.phone),
         animalNickname: required(dto.animalNickname),
         message: required(dto.message),
         contactConsent: true,
@@ -44,7 +39,7 @@ export class PublicClinicService {
   }
 
   async createAnalyticsEvent(dto: CreatePublicClinicAnalyticsEventDto, clientIp: string) {
-    this.assertRateLimit(this.analyticsRateWindows, clientIp, 240);
+    this.limits.consume(`analytics:${clientIp}`, 240);
     const event = await this.prisma.publicClinicAnalyticsEvent.upsert({
       where: { eventId: dto.eventId.trim() },
       create: {
@@ -99,35 +94,7 @@ export class PublicClinicService {
     });
   }
 
-  private assertRateLimit(windows: Map<string, RateWindow>, clientIp: string, maximum: number) {
-    const now = Date.now();
-    this.pruneRateWindows(windows, now);
-    const current = windows.get(clientIp);
-    if (!current || now - current.startedAt >= RATE_WINDOW_DURATION_MS) {
-      windows.set(clientIp, { startedAt: now, count: 1 });
-      return;
-    }
-    if (current.count >= maximum) {
-      throw new HttpException('Слишком много запросов. Попробуйте позднее.', HttpStatus.TOO_MANY_REQUESTS);
-    }
-    current.count += 1;
-  }
 
-  private pruneRateWindows(windows: Map<string, RateWindow>, now: number) {
-    if (windows.size < MAX_TRACKED_RATE_LIMIT_CLIENTS) return;
-
-    for (const [clientIp, window] of windows) {
-      if (now - window.startedAt >= RATE_WINDOW_DURATION_MS) windows.delete(clientIp);
-    }
-    if (windows.size < MAX_TRACKED_RATE_LIMIT_CLIENTS) return;
-
-    let overflow = windows.size - RATE_LIMIT_CLIENTS_AFTER_PRUNE;
-    for (const clientIp of windows.keys()) {
-      windows.delete(clientIp);
-      overflow -= 1;
-      if (overflow <= 0) break;
-    }
-  }
 }
 
 function clean(value: string | null | undefined) {

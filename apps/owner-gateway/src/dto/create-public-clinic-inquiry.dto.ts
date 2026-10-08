@@ -12,7 +12,7 @@ export class CreatePublicClinicInquiryDto {
   contactName!: string;
 
   @IsString()
-  @Matches(/^[+\d\s()\-]{10,32}$/)
+  @Matches(/^(?=(?:[^0-9]*[0-9]){10,15}[^0-9]*$)[+0-9 ()-]{10,32}$/)
   phone!: string;
 
   @IsString()

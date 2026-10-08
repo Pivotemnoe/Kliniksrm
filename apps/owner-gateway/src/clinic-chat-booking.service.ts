@@ -5,6 +5,7 @@ import { ClinicChatService } from './clinic-chat.service';
 import { hashToken } from './security';
 import { ClinicChatBookingResultDto, ClinicChatConfirmDto, ClinicChatSlotsDto } from './dto/clinic-chat-slots.dto';
 import { bookingDraft } from './clinic-booking-dialog';
+import { contactPhone, snapshotContact } from './clinic-contact';
 
 @Injectable()
 export class ClinicChatBookingService {
@@ -29,6 +30,7 @@ export class ClinicChatBookingService {
       await tx.$queryRaw`SELECT "id" FROM "ClinicConversation" WHERE "id" = ${row.id} FOR UPDATE`;
       const previous = await tx.clinicBookingOperation.findUnique({ where: { conversationId_clientKey: { conversationId: row.id, clientKey: dto.clientKey } } });
       if (previous) { this.same(previous.kind, previous.input, 'OPTIONS', input); return publicOperation(previous); }
+      if (await tx.clinicBookingOperation.count({ where: { conversationId: row.id, createdAt: { gte: new Date(Date.now() - 600_000) } } }) >= 30) throw new ConflictException('Слишком много запросов времени. Попробуйте позже');
       const current = await tx.clinicConversation.findUniqueOrThrow({ where: { id: row.id } });
       if (current.mode !== 'ASSISTANT') throw new ConflictException('Обращение сейчас обрабатывает администратор');
       if (dto.draftRevision && bookingDraft(current.bookingDraft)?.revision !== dto.draftRevision) throw new ConflictException('Условия записи изменились. Обновите свободное время');
@@ -44,9 +46,13 @@ export class ClinicChatBookingService {
       await tx.$queryRaw`SELECT "id" FROM "ClinicConversation" WHERE "id" = ${row.id} FOR UPDATE`;
       const previous = await tx.clinicBookingOperation.findUnique({ where: { conversationId_clientKey: { conversationId: row.id, clientKey: dto.clientKey } } });
       if (previous) { this.same(previous.kind, previous.input, 'CONFIRM', input); return publicOperation(previous); }
+      if (await tx.clinicBookingOperation.count({ where: { conversationId: row.id, createdAt: { gte: new Date(Date.now() - 600_000) } } }) >= 30) throw new ConflictException('Слишком много запросов времени. Попробуйте позже');
       const current = await tx.clinicConversation.findUniqueOrThrow({ where: { id: row.id } });
       if (current.mode !== 'ASSISTANT') throw new ConflictException('Обращение сейчас обрабатывает администратор');
       if (await tx.clinicBookingOperation.count({ where: { conversationId: row.id, status: 'PENDING' } })) throw new ConflictException('Предыдущий запрос ещё проверяется');
+      const owner = await tx.ownerSnapshot.findUnique({ where: { ownerId: row.ownerId! }, select: { payload: true } });
+      const phone = current.phone ? contactPhone(current.phone) : snapshotContact(owner?.payload);
+      if (!phone) throw new BadRequestException('Для записи на приём укажите телефон для связи');
       const options = await tx.clinicBookingOperation.findUnique({ where: { id: dto.optionsId } });
       const result = options?.result as { animals?: { id: string; nickname: string }[]; offers?: { offerToken: string; serviceTitle: string; startsAt: string; timezone: string }[] } | null;
       const offer = result?.offers?.find(x => x.offerToken === dto.offerToken);
@@ -55,13 +61,13 @@ export class ClinicChatBookingService {
       if (draftRevision && bookingDraft(current.bookingDraft)?.revision !== draftRevision) throw new ConflictException('Условия записи изменились. Обновите свободное время');
       // Each option search is one booking episode. A new key cannot repeat it.
       if (await tx.clinicBookingOperation.findFirst({ where: { conversationId: row.id, kind: 'CONFIRM', status: { in: ['PENDING', 'DONE'] }, input: { path: ['optionsId'], equals: dto.optionsId } } })) throw new ConflictException('Эта запись уже подтверждается или подтверждена');
-      const updated = await tx.clinicConversation.update({ where: { id: row.id }, data: { sequence: { increment: 1 }, contactConsent: true, animalNickname: result.animals!.find(x => x.id === dto.animalId)!.nickname } });
+      const updated = await tx.clinicConversation.update({ where: { id: row.id }, data: { sequence: { increment: 1 }, phone, contactConsent: true, animalNickname: result.animals!.find(x => x.id === dto.animalId)!.nickname } });
       const bookingSequence = updated.sequence;
       await tx.clinicConversation.update({ where: { id: row.id }, data: { bookingSequence } });
       const date = new Intl.DateTimeFormat('ru-RU', { dateStyle: 'long', timeStyle: 'short', timeZone: offer.timezone }).format(new Date(offer.startsAt));
       const label = offer.timezone === 'Europe/Moscow' ? 'московское время' : `время филиала, ${offer.timezone}`;
       await tx.clinicChatMessage.create({ data: { conversationId: row.id, sequence: bookingSequence, author: 'OWNER', channel: 'SITE_CHAT', clientKey: `booking:${dto.clientKey}`, text: `Выбрано время: ${date} (${label}). ${offer.serviceTitle}. Проверяем запись в клинике; время ещё не подтверждено.`, deliveryStatus: 'AVAILABLE' } });
-      return publicOperation(await tx.clinicBookingOperation.create({ data: { conversationId: row.id, ownerId: row.ownerId!, clientKey: dto.clientKey, kind: 'CONFIRM', bookingSequence, input } }));
+      return publicOperation(await tx.clinicBookingOperation.create({ data: { conversationId: row.id, ownerId: row.ownerId!, clientKey: dto.clientKey, kind: 'CONFIRM', bookingSequence, input: { ...input, contactPhone: phone } } }));
     });
   }
   async read(token: string | undefined, portalToken: string | undefined, id: string) {
@@ -112,6 +118,8 @@ export class ClinicChatBookingService {
     });
   }
   private same(kind: string, previous: unknown, expectedKind: string, input: unknown) {
+    // Contact phone is a server-added immutable queue field, not a public choice.
+    if (expectedKind === 'CONFIRM' && previous && typeof previous === 'object') { const { contactPhone: _phone, ...choices } = previous as Record<string, unknown>; previous = choices; }
     if (kind !== expectedKind || JSON.stringify(previous) !== JSON.stringify(input)) {
       // PostgreSQL JSONB key order differs from JS insertion order.
       if (kind !== expectedKind || canonical(previous) !== canonical(input)) throw new ConflictException('Ключ уже использован для другого запроса');
