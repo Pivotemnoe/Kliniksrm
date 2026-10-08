@@ -28,6 +28,7 @@ import {
   deleteService,
   getStockResources,
   getCatalogQuality,
+  listConsumableRules,
   listProducts,
   listServices,
   listStockBatches,
@@ -46,6 +47,7 @@ import { SupplierModal } from './SupplierModal';
 import { StockCatalogLabelPrinter, toClinicProductPrintItem, toClinicServicePrintItem, type StockPrintLine } from './StockCatalogLabelPrinter';
 import { useProductCatalogPicker } from './useCatalogPicker';
 import { LabelPreview, printCatalogLabels } from '../../shared/ui/CatalogLabelPrinter';
+import { SyringeRuleSettings } from './SyringeRuleSettings';
 
 export function StockPage() {
   const location = useLocation();
@@ -128,7 +130,7 @@ export function StockPage() {
         title="Склад"
         description="Товары, услуги, остатки и приёмка на склад."
         extra={
-          canManage && activeTab !== 'labels' ? (
+          canManage && !['labels', 'syringes'].includes(activeTab) ? (
             <Space wrap>
               <Button icon={<PlusOutlined />} onClick={() => setProductOpen(true)}>
                 Добавить товар
@@ -144,7 +146,7 @@ export function StockPage() {
           ) : null
         }
       />
-      {activeTab !== 'labels' && catalogQualityQuery.data && catalogQualityQuery.data.qualityPercent < 100 ? (
+      {!['labels', 'syringes'].includes(activeTab) && catalogQualityQuery.data && catalogQualityQuery.data.qualityPercent < 100 ? (
         <Alert
           type={catalogQualityQuery.data.qualityPercent >= 80 ? 'warning' : 'error'}
           showIcon
@@ -160,7 +162,7 @@ export function StockPage() {
             setActiveTab(key);
             navigate(stockTabPaths[key] ?? '/stock');
           }}
-          tabBarExtraContent={activeTab !== 'labels' ? (
+          tabBarExtraContent={!['labels', 'syringes'].includes(activeTab) ? (
             <Space wrap>
               <Input
                 allowClear
@@ -234,6 +236,7 @@ export function StockPage() {
                 setSupplyOpen(true);
               }} />,
             },
+            { key: 'syringes', label: 'Шприцы', children: <SyringeRuleSettings canManage={canManage} /> },
           ]}
         />
       </div>
@@ -285,6 +288,7 @@ export function StockPage() {
             <Descriptions.Item label="Артикул / SKU">{selectedProduct.sku || '—'}</Descriptions.Item>
             <Descriptions.Item label="Штрих-код">{selectedProduct.barcode || '—'}</Descriptions.Item>
             <Descriptions.Item label="Учёт и списание">{formatProductUnits(selectedProduct)}</Descriptions.Item>
+            {selectedProduct.autoSyringe ? <Descriptions.Item label="Списывать шприц">Да</Descriptions.Item> : null}
             <Descriptions.Item label="Минимальный остаток">{selectedProduct.minStock ?? '—'} {selectedProduct.minStock === null ? '' : selectedProduct.stockUnit ?? ''}</Descriptions.Item>
             <Descriptions.Item label="Годен до">{formatDate(selectedProduct.defaultExpiresAt)}</Descriptions.Item>
             <Descriptions.Item label="НДС">{selectedProduct.vatRate === null ? 'Без НДС' : `${selectedProduct.vatRate}%`}</Descriptions.Item>
@@ -401,6 +405,7 @@ export function StockPage() {
 }
 
 const stockTabPaths: Record<string, string> = {
+  syringes: '/stock/syringes',
   products: '/stock/goods',
   services: '/stock/services',
   labels: '/stock/labels',
@@ -409,6 +414,7 @@ const stockTabPaths: Record<string, string> = {
 };
 
 function getStockTabFromPath(pathname: string) {
+  if (pathname.startsWith('/stock/syringes')) return 'syringes';
   if (pathname.startsWith('/stock/labels')) {
     return 'labels';
   }
@@ -849,6 +855,7 @@ const productSchema = z
       'Каждый дополнительный штрих-код должен содержать только цифры',
     ).optional(),
     generateBarcode: z.boolean().optional(),
+    autoSyringe: z.boolean().optional(),
     vatRate: z.number().min(0).max(100).optional(),
     packageQuantity: z.number().min(0).optional(),
     minStock: z.number().min(0).optional(),
@@ -895,13 +902,19 @@ function ProductModal({
   const { message } = App.useApp();
   const { control, handleSubmit, reset, setValue } = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
-    defaultValues: { title: '', categoryTitle: '', sku: '', retailPrice: 0, stockUnit: 'шт', writeOffUnit: 'шт', billingUnit: 'шт', linkedProducts: [] },
+    defaultValues: { title: '', categoryTitle: '', sku: '', retailPrice: 0, stockUnit: 'шт', writeOffUnit: 'шт', billingUnit: 'шт', autoSyringe: false, linkedProducts: [] },
   });
   const linkedProductFields = useFieldArray({ control, name: 'linkedProducts' });
   const linkedProductPicker = useProductCatalogPicker(open, product?.linkedProducts?.map((item) => item.product) ?? []);
   const stockUnit = useWatch({ control, name: 'stockUnit' });
   const writeOffUnit = useWatch({ control, name: 'writeOffUnit' });
   const billingUnit = useWatch({ control, name: 'billingUnit' });
+  const autoSyringe = useWatch({ control, name: 'autoSyringe' });
+  const consumableRules = useQuery({ queryKey: ['stock', 'consumable-rules'], queryFn: listConsumableRules, enabled: open });
+  const syringeProductIds = consumableRules.data?.find((rule) => rule.code === 'SYRINGE')?.options.map((option) => option.productId) ?? [];
+  useEffect(() => {
+    if (writeOffUnit?.trim().toLocaleLowerCase('ru') !== 'мл') setValue('autoSyringe', false);
+  }, [writeOffUnit, setValue]);
   const categoryOptions = useMemo(
     () => buildCategoryOptions(defaultProductCategories, resources?.productCategories.map((category) => category.title) ?? []),
     [resources?.productCategories],
@@ -924,6 +937,7 @@ function ProductModal({
       barcode: product?.barcode ?? '',
       barcodesText: product?.barcodes?.filter((item) => !item.isPrimary).map((item) => item.value).join('\n') ?? '',
       generateBarcode: false,
+      autoSyringe: product?.autoSyringe ?? false,
       vatRate: product?.vatRate === null || product?.vatRate === undefined ? undefined : Number(product.vatRate),
       packageQuantity: product?.packageQuantity === null || product?.packageQuantity === undefined ? 1 : Number(product.packageQuantity),
       minStock: product?.minStock === null || product?.minStock === undefined ? 0 : Number(product.minStock),
@@ -1086,14 +1100,17 @@ function ProductModal({
           )}
         />
         <FormText control={control} name="description" label="Дополнительная информация" textarea />
+        {writeOffUnit?.trim().toLocaleLowerCase('ru') === 'мл' ? <Controller control={control} name="autoSyringe" render={({ field }) => <Form.Item><Checkbox checked={field.value} onChange={(event) => field.onChange(event.target.checked)}>Списывать шприц</Checkbox></Form.Item>} /> : null}
         <LinkedProductsFields
           control={control}
           fields={linkedProductFields.fields}
           append={() => linkedProductFields.append({ productId: '', quantity: 1 })}
           remove={linkedProductFields.remove}
-          products={linkedProductPicker.items.filter((item) => item.id !== product?.id)}
+          products={linkedProductPicker.items.filter((item) => item.id !== product?.id && (!autoSyringe || !syringeProductIds.includes(item.id)))}
           onSearch={linkedProductPicker.onSearch}
-          allowDoseRanges={writeOffUnit === 'мл'}
+          allowDoseRanges={!autoSyringe && Boolean(product?.linkedProducts?.some((item) => item.minDoseMl != null))}
+          hideDoseRanges={autoSyringe}
+          hiddenProductIds={autoSyringe ? syringeProductIds : []}
           setValue={setValue}
         />
       </Form>
@@ -1276,6 +1293,8 @@ function LinkedProductsFields({
   products,
   onSearch,
   allowDoseRanges = false,
+  hideDoseRanges = false,
+  hiddenProductIds = [],
   setValue,
 }: {
   control: any;
@@ -1285,6 +1304,8 @@ function LinkedProductsFields({
   products: Product[];
   onSearch: (value: string) => void;
   allowDoseRanges?: boolean;
+  hideDoseRanges?: boolean;
+  hiddenProductIds?: string[];
   setValue?: (name: any, value: any, options?: any) => void;
 }) {
   const rows = useWatch({ control, name: 'linkedProducts' }) ?? [];
@@ -1296,7 +1317,7 @@ function LinkedProductsFields({
       </Typography.Paragraph>
       {allowDoseRanges ? <Typography.Paragraph type="secondary">Для шприцев включите выбор по объёму: нижняя граница не включается, верхняя включается. Списывается 1 шт. за выполнение.</Typography.Paragraph> : null}
       <Space direction="vertical" size={8} style={{ width: '100%' }}>
-        {fields.map((field, index) => (
+        {fields.map((field, index) => (hideDoseRanges && rows[index]?.minDoseMl != null || hiddenProductIds.includes(rows[index]?.productId)) ? null : (
           <Space key={field.id} align="start" wrap style={{ width: '100%' }}>
             <Controller
               control={control}

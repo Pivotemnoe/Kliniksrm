@@ -12,11 +12,24 @@ import { UpdateServiceDto } from './dto/update-service.dto';
 import { UpsertProductDto } from './dto/upsert-product.dto';
 import { UpsertServiceDto } from './dto/upsert-service.dto';
 import { StockService } from './stock.service';
+import { UpdateSyringeRuleDto } from './dto/update-syringe-rule.dto';
 
 @ApiTags('stock')
 @Controller('v1/stock')
 export class StockController {
   constructor(private readonly stockService: StockService) {}
+
+  @Get('consumable-rules')
+  @RequirePermissions('stock.read')
+  listConsumableRules() {
+    return this.stockService.listConsumableRules();
+  }
+
+  @Patch('consumable-rules/syringe')
+  @RequirePermissions('stock.manage')
+  updateSyringeRule(@Body() dto: UpdateSyringeRuleDto, @CurrentEmployee() actor: AuthEmployee) {
+    return this.stockService.updateSyringeRule(dto, actor.id);
+  }
 
   @Get('resources')
   @RequirePermissions('stock.read')

@@ -13,7 +13,7 @@ const { prepareSupplyLine, supplyLineAmount } = stockModule;
 const { resolveLinkedConsumables, getLinkedConsumables } = linksModule;
 const ranges = [
   { product: { id: 's1', title: 'Шприц 1 мл' }, quantity: 1, minDoseMl: 0, maxDoseMl: 1 },
-  { product: { id: 's3', title: 'Шприц 3 мл' }, quantity: 1, minDoseMl: 1, maxDoseMl: 2 },
+  { product: { id: 's2', title: 'Шприц 2 мл' }, quantity: 1, minDoseMl: 1, maxDoseMl: 2 },
   { product: { id: 's5', title: 'Шприц 5 мл' }, quantity: 1, minDoseMl: 2, maxDoseMl: 5 },
   { product: { id: 's10', title: 'Шприц 10 мл' }, quantity: 1, minDoseMl: 5, maxDoseMl: 10 },
 ];
@@ -48,7 +48,7 @@ test('invoice amount determines cost per stock unit; total does not depend on ro
 });
 
 test('one syringe is selected by actual dose, including exact range boundaries', () => {
-  for (const [dose, expected] of [[0.001, 's1'], [1, 's1'], [1.001, 's3'], [2, 's3'], [2.001, 's5'], [5, 's5'], [5.001, 's10'], [10, 's10']]) {
+  for (const [dose, expected] of [[0.001, 's1'], [1, 's1'], [1.001, 's2'], [2, 's2'], [2.001, 's5'], [5, 's5'], [5.001, 's10'], [10, 's10']]) {
     const result = resolveLinkedConsumables(ranges, 99, dose);
     assert.equal(result.length, 1);
     assert.equal(result[0].productId, expected);
@@ -59,7 +59,7 @@ test('one syringe is selected by actual dose, including exact range boundaries',
   assert.throws(() => resolveLinkedConsumables([...ranges, { ...ranges[0], maxDoseMl: 2 }], 1, 1), /однозначный/);
   const fixed = { product: { id: 'gloves', title: 'Перчатки' }, quantity: 2 };
   const result = resolveLinkedConsumables([...ranges, fixed], 3, 1.5);
-  assert.deepEqual(result.map((item) => [item.productId, item.quantity.toString()]), [['s3', '1'], ['gloves', '6']]);
+  assert.deepEqual(result.map((item) => [item.productId, item.quantity.toString()]), [['s2', '1'], ['gloves', '6']]);
 });
 
 test('selection uses write-off ml rather than billed injection count; fixed service links stay compatible', async () => {

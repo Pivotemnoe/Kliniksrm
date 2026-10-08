@@ -26,7 +26,7 @@ test('supply totals and dose consumables against disposable PostgreSQL', { skip:
   const supplier = await db.supplier.create({ data: { title: 'Поставщик QA' } });
   const product = await db.product.create({ data: { title: 'Препарат QA', stockUnit: 'мл', writeOffUnit: 'мл', billingUnit: 'инъекция', retailPrice: 120 } });
   const syringes = [];
-  for (const [min, max, size] of [[0, 1, 1], [1, 2, 3], [2, 5, 5], [5, 10, 10]]) {
+  for (const [min, max, size] of [[0, 1, 1], [1, 2, 2], [2, 5, 5], [5, 10, 10]]) {
     const syringe = await db.product.create({ data: { title: `Шприц ${size} мл QA`, stockUnit: 'шт', writeOffUnit: 'шт', billingUnit: 'шт', retailPrice: 5 } });
     const batch = await db.stockBatch.create({ data: { productId: syringe.id, warehouseId: warehouse.id, quantity: 10, rest: 10 } });
     await db.productLinkedProduct.create({ data: { sourceProductId: product.id, productId: syringe.id, quantity: 1, minDoseMl: min, maxDoseMl: max } });
@@ -82,5 +82,46 @@ test('supply totals and dose consumables against disposable PostgreSQL', { skip:
     assert.equal((await db.stockBatch.findUnique({ where: { id: syringes[2].batch.id } })).rest.toNumber(), 10);
     await db.$transaction((tx) => billing.restoreBillProductItems(tx, bill));
     assert.equal((await db.stockBatch.findUnique({ where: { id: syringes[2].batch.id } })).rest.toNumber(), 10);
+  });
+  await t.test('one common setting applies to several medicines; activation replaces legacy links and keeps other materials', async () => {
+    await assert.rejects(stock.updateProduct(product.id, { autoSyringe: true }, employee.id), /Сначала выберите/);
+    await stock.updateSyringeRule({ syringe1ProductId: syringes[0].id, syringe2ProductId: syringes[1].id, syringe5ProductId: syringes[2].id, syringe10ProductId: syringes[3].id }, employee.id);
+    const gauze = await db.product.create({ data: { title: 'Марля QA', stockUnit: 'шт', writeOffUnit: 'шт' } });
+    const gauzeBatch = await db.stockBatch.create({ data: { productId: gauze.id, warehouseId: warehouse.id, quantity: 100, rest: 100 } });
+    await db.productLinkedProduct.create({ data: { sourceProductId: product.id, productId: gauze.id, quantity: 2 } });
+    const updated = await stock.updateProduct(product.id, { autoSyringe: true }, employee.id);
+    assert.equal(updated.autoSyringe, true);
+    assert.deepEqual(updated.linkedProducts.map((item) => item.productId), [gauze.id]);
+    const second = await stock.createProduct({ title: 'Другой препарат QA', stockUnit: 'мл', writeOffUnit: 'мл', billingUnit: 'инъекция', autoSyringe: true }, employee.id);
+    await db.stockBatch.create({ data: { productId: second.id, warehouseId: warehouse.id, quantity: 100, rest: 100 } });
+    assert.equal(second.autoSyringe, true);
+    const rests = async () => Promise.all(syringes.map(async ({ batch }) => (await db.stockBatch.findUnique({ where: { id: batch.id } })).rest.toNumber()));
+    const before = await rests();
+    const record = await hospital.createRecord(stay.id, { recordType: 'MEDICATION', title: product.title, productId: product.id, quantity: 1, stockQuantity: 2 }, employee.id);
+    assert.deepEqual(await rests(), before.map((value, i) => value - (i === 1 ? 1 : 0)));
+    assert.equal((await db.stockBatch.findUnique({ where: { id: gauzeBatch.id } })).rest.toNumber(), 98);
+    await hospital.updateRecord(stay.id, record.id, { stockQuantity: 4 }, employee.id);
+    assert.deepEqual(await rests(), before.map((value, i) => value - (i === 2 ? 1 : 0)));
+    const movements = await db.stockMovement.count({ where: { hospitalRecordId: record.id } });
+    await hospital.updateRecord(stay.id, record.id, { stockQuantity: 4 }, employee.id);
+    assert.equal(await db.stockMovement.count({ where: { hospitalRecordId: record.id } }), movements);
+    const priorDrugRest = (await db.stockBatch.findUnique({ where: { id: invoice.items[0].stockBatchId } })).rest.toString();
+    await assert.rejects(hospital.updateRecord(stay.id, record.id, { stockQuantity: 11 }, employee.id), /диапазоны/);
+    assert.equal((await db.stockBatch.findUnique({ where: { id: invoice.items[0].stockBatchId } })).rest.toString(), priorDrugRest);
+    const secondVisit = await db.visit.create({ data: { ownerId: owner.id, animalId: animal.id, employeeId: employee.id, status: 'IN_PROGRESS', visitType: 'PRIMARY' } });
+    const bill = await db.bill.create({ data: { ownerId: owner.id, animalId: animal.id, visitId: secondVisit.id, source: 'VISIT', totalAmount: 20, items: { create: { productId: second.id, title: second.title, quantity: 4, stockQuantity: 2, unitPrice: 5, totalAmount: 20 } } }, include: { items: true } });
+    const beforeBill = await rests();
+    await db.$transaction((tx) => billing.ensureBillProductItemsWrittenOff(tx, bill, null));
+    assert.deepEqual(await rests(), beforeBill.map((value, i) => value - (i === 1 ? 1 : 0)));
+    const billMovements = await db.stockMovement.count({ where: { billItemId: bill.items[0].id } });
+    await db.$transaction((tx) => billing.ensureBillProductItemsWrittenOff(tx, bill, null));
+    assert.equal(await db.stockMovement.count({ where: { billItemId: bill.items[0].id } }), billMovements);
+    await db.$transaction((tx) => billing.restoreBillProductItems(tx, bill));
+    assert.deepEqual(await rests(), beforeBill);
+    await assert.rejects(stock.updateProduct(syringes[1].id, { stockUnit: 'упак.', packageQuantity: 10 }, employee.id), /общем правиле/);
+    assert.equal((await db.product.findUnique({ where: { id: syringes[1].id } })).stockUnit, 'шт');
+    const disabled = await stock.updateProduct(second.id, { autoSyringe: false }, employee.id);
+    assert.equal(disabled.autoSyringe, false);
+    assert.equal((await stock.getProduct(second.id, employee.id)).autoSyringe, false);
   });
 });

@@ -14,6 +14,8 @@ import { UpsertProductDto } from './dto/upsert-product.dto';
 import { UpsertServiceDto } from './dto/upsert-service.dto';
 import { UpsertSupplierDto } from './dto/upsert-supplier.dto';
 import { unitsNeedConversion } from './stock-units';
+import { UpdateSyringeRuleDto } from './dto/update-syringe-rule.dto';
+import { SYRINGE_BANDS, SYRINGE_RULE_CODE } from './linked-consumables';
 
 type WarehouseScope = string[] | null;
 
@@ -23,6 +25,40 @@ export class StockService {
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
   ) {}
+
+  async listConsumableRules() {
+    return this.prisma.consumableRule.findMany({ orderBy: { title: 'asc' }, include: { options: { orderBy: { minValue: 'asc' }, include: { product: { select: { id: true, title: true, isActive: true, stockUnit: true, writeOffUnit: true } } } } } });
+  }
+
+  async updateSyringeRule(dto: UpdateSyringeRuleDto, actorId: string) {
+    const ids = SYRINGE_BANDS.map((band) => dto[band.field]);
+    if (new Set(ids).size !== ids.length) throw new BadRequestException('Для каждого размера выберите отдельный товар-шприц');
+    const rule = await this.prisma.$transaction(async (tx) => {
+      const products = await tx.product.findMany({ where: { id: { in: ids }, isActive: true }, select: { id: true, stockUnit: true, writeOffUnit: true } });
+      if (products.length !== ids.length || products.some((product) => clean(product.stockUnit ?? undefined)?.toLocaleLowerCase('ru') !== 'шт' || clean(product.writeOffUnit ?? product.stockUnit ?? undefined)?.toLocaleLowerCase('ru') !== 'шт')) {
+        throw new BadRequestException('Выберите четыре действующих товара-шприца, которые хранятся и списываются в штуках');
+      }
+      const options = SYRINGE_BANDS.map((band) => ({ productId: dto[band.field], minValue: band.minValue, maxValue: band.maxValue, quantity: 1 }));
+      return tx.consumableRule.upsert({
+        where: { code: SYRINGE_RULE_CODE },
+        create: { code: SYRINGE_RULE_CODE, title: 'Шприц', inputKind: 'DOSE_ML', options: { create: options } },
+        update: { isActive: true, options: { deleteMany: {}, create: options } },
+        include: { options: { orderBy: { minValue: 'asc' }, include: { product: { select: { id: true, title: true, isActive: true, stockUnit: true, writeOffUnit: true } } } } },
+      });
+    });
+    await this.auditService.log({ actorId, action: 'stock.consumable-rule.update', entityType: 'ConsumableRule', entityId: rule.id, metadata: { code: rule.code, products: ids } });
+    return rule;
+  }
+
+  private async prepareProductConsumables(autoSyringe: boolean, writeOffUnit: string | undefined, links: Array<{ productId: string; quantity: number; minDoseMl?: number; maxDoseMl?: number }>) {
+    if (!autoSyringe) return { ruleId: undefined, links, replacedLinks: [] as typeof links };
+    if (writeOffUnit?.trim().toLocaleLowerCase('ru') !== 'мл') throw new BadRequestException('Списание шприца по объёму доступно для препаратов со списанием в мл');
+    const rule = await this.prisma.consumableRule.findUnique({ where: { code: SYRINGE_RULE_CODE }, include: { options: { include: { product: { select: { isActive: true, stockUnit: true, writeOffUnit: true } } } } } });
+    if (!rule?.isActive || rule.options.length !== 4 || rule.options.some((option) => !option.product.isActive || option.product.stockUnit?.trim().toLocaleLowerCase('ru') !== 'шт' || (option.product.writeOffUnit ?? option.product.stockUnit)?.trim().toLocaleLowerCase('ru') !== 'шт')) throw new BadRequestException('Сначала выберите шприцы 1, 2, 5 и 10 мл в разделе «Склад → Шприцы»');
+    const ids = new Set(rule.options.map((option) => option.productId));
+    const replacedLinks = links.filter((link) => link.minDoseMl != null || link.maxDoseMl != null || ids.has(link.productId));
+    return { ruleId: rule.id, links: links.filter((link) => !replacedLinks.includes(link)), replacedLinks };
+  }
 
   async getResources(actorId: string) {
     const warehouseScope = await this.getWarehouseScope(actorId);
@@ -286,7 +322,8 @@ export class StockService {
     const barcodes = normalizeBarcodes([...(barcode ? [barcode] : []), ...(dto.barcodes ?? [])]);
     if (!barcode && barcodes.length) barcode = barcodes[0];
     await this.ensureBarcodesAvailable(barcodes);
-    await this.ensureLinkedProductsAvailable(dto.linkedProducts, undefined, dto.writeOffUnit ?? dto.stockUnit);
+    const consumables = await this.prepareProductConsumables(dto.autoSyringe === true, dto.writeOffUnit ?? dto.stockUnit, dto.linkedProducts ?? []);
+    await this.ensureLinkedProductsAvailable(consumables.links, undefined, dto.writeOffUnit ?? dto.stockUnit);
 
     const product = await this.prisma.product.create({
       data: {
@@ -308,8 +345,9 @@ export class StockService {
         barcodes: barcodes.length
           ? { create: barcodes.map((value) => barcodeCreate(value, value === barcode, dto.gtin)) }
           : undefined,
-        linkedProducts: dto.linkedProducts?.length
-          ? { create: dto.linkedProducts.map((item) => ({ productId: item.productId, quantity: item.quantity, minDoseMl: item.minDoseMl, maxDoseMl: item.maxDoseMl })) }
+        consumableRules: consumables.ruleId ? { create: { ruleId: consumables.ruleId } } : undefined,
+        linkedProducts: consumables.links.length
+          ? { create: consumables.links }
           : undefined,
       },
       include: productInclude,
@@ -320,7 +358,7 @@ export class StockService {
       action: 'stock.product.create',
       entityType: 'Product',
       entityId: product.id,
-      metadata: { title: product.title },
+      metadata: { title: product.title, replacedConsumableLinks: consumables.replacedLinks },
     });
 
     return serializeProduct(product);
@@ -360,6 +398,9 @@ export class StockService {
     const writeOffUnit = dto.writeOffUnit !== undefined ? clean(dto.writeOffUnit) : existing.writeOffUnit ?? undefined;
     const packageQuantity = dto.packageQuantity !== undefined ? dto.packageQuantity : decimalToOptionalNumber(existing.packageQuantity);
     this.ensureUnitConfiguration(stockUnit, writeOffUnit, packageQuantity);
+    if ((stockUnit !== existing.stockUnit || writeOffUnit !== existing.writeOffUnit) && (stockUnit?.trim().toLocaleLowerCase('ru') !== 'шт' || (writeOffUnit ?? stockUnit)?.trim().toLocaleLowerCase('ru') !== 'шт') && await this.prisma.consumableRuleOption.count({ where: { productId, rule: { isActive: true } } })) {
+      throw new BadRequestException('Этот товар выбран в общем правиле расходников и должен храниться и списываться в штуках. Сначала замените его в настройке склада');
+    }
     let barcode = await this.resolveBarcode(dto.barcode, dto.generateBarcode, existing.barcode ?? undefined, dto.barcode !== undefined, productId);
     const shouldSyncBarcodes = dto.barcodes !== undefined || dto.barcode !== undefined || Boolean(dto.generateBarcode);
     const barcodes = shouldSyncBarcodes
@@ -370,7 +411,10 @@ export class StockService {
       : undefined;
     if (!barcode && barcodes?.length) barcode = barcodes[0];
     if (barcodes) await this.ensureBarcodesAvailable(barcodes, productId);
-    await this.ensureLinkedProductsAvailable(dto.linkedProducts, productId, dto.writeOffUnit ?? dto.stockUnit ?? existing.writeOffUnit ?? existing.stockUnit ?? undefined);
+    const autoSyringe = dto.autoSyringe ?? existing.consumableRules?.some((link) => link.rule.code === SYRINGE_RULE_CODE) ?? false;
+    const previousLinks = (existing.linkedProducts ?? []).map((link) => ({ productId: link.productId, quantity: Number(link.quantity), minDoseMl: link.minDoseMl == null ? undefined : Number(link.minDoseMl), maxDoseMl: link.maxDoseMl == null ? undefined : Number(link.maxDoseMl) }));
+    const consumables = await this.prepareProductConsumables(autoSyringe, writeOffUnit ?? stockUnit, dto.linkedProducts ?? previousLinks);
+    await this.ensureLinkedProductsAvailable(consumables.links, productId, writeOffUnit ?? stockUnit);
 
     const product = await this.prisma.product.update({
       where: { id: productId },
@@ -398,10 +442,11 @@ export class StockService {
               },
             }
           : {}),
-        ...(dto.linkedProducts !== undefined ? {
+        ...(dto.autoSyringe !== undefined ? { consumableRules: { deleteMany: { ruleId: existing.consumableRules?.find((link) => link.rule.code === SYRINGE_RULE_CODE)?.ruleId ?? consumables.ruleId ?? '' }, ...(consumables.ruleId ? { create: { ruleId: consumables.ruleId } } : {}) } } : {}),
+        ...(dto.linkedProducts !== undefined || consumables.replacedLinks.length ? {
           linkedProducts: {
             deleteMany: {},
-            create: dto.linkedProducts.map((item) => ({ productId: item.productId, quantity: item.quantity, minDoseMl: item.minDoseMl, maxDoseMl: item.maxDoseMl })),
+            create: consumables.links,
           },
         } : {}),
       },
@@ -413,7 +458,7 @@ export class StockService {
       action: 'stock.product.update',
       entityType: 'Product',
       entityId: product.id,
-      metadata: { changedFields: Object.keys(dto) },
+      metadata: { changedFields: Object.keys(dto), replacedConsumableLinks: consumables.replacedLinks },
     });
 
     return serializeProduct(product);
@@ -450,6 +495,9 @@ export class StockService {
     }
     if (plannedHospitalRecords > 0) {
       throw new BadRequestException('Нельзя удалить товар: он указан в невыполненном назначении стационара');
+    }
+    if (await this.prisma.consumableRuleOption.count({ where: { productId, rule: { isActive: true } } })) {
+      throw new BadRequestException('Нельзя удалить товар: он выбран в общем правиле расходников. Сначала замените его в настройке склада');
     }
 
     await this.prisma.product.update({ where: { id: productId }, data: { isActive: false } });
@@ -1269,6 +1317,8 @@ export class StockService {
         stockUnit: true,
         writeOffUnit: true,
         packageQuantity: true,
+        consumableRules: { include: { rule: { select: { code: true } } } },
+        linkedProducts: true,
         barcodes: { select: { value: true } },
       },
     });
@@ -1357,6 +1407,7 @@ export class StockService {
 
 const productInclude = {
   category: true,
+  consumableRules: { include: { rule: { select: { code: true } } } },
   linkedProducts: { include: { product: { select: { id: true, title: true, stockUnit: true, writeOffUnit: true } } }, orderBy: { createdAt: 'asc' } },
   barcodes: { orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }] },
   batches: {
@@ -1373,6 +1424,7 @@ function getProductInclude(batchWhere?: Prisma.StockBatchWhereInput) {
 
   return {
     category: true,
+    consumableRules: { include: { rule: { select: { code: true } } } },
     linkedProducts: { include: { product: { select: { id: true, title: true, stockUnit: true, writeOffUnit: true } } }, orderBy: { createdAt: 'asc' } },
     barcodes: { orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }] },
     batches: {
@@ -1480,6 +1532,7 @@ function serializeProduct(product: Prisma.ProductGetPayload<{ include: typeof pr
 
   return {
     ...product,
+    autoSyringe: product.consumableRules?.some((link) => link.rule.code === SYRINGE_RULE_CODE) ?? false,
     barcode: selectPrimaryNumericBarcode(product),
     stockRest,
   };

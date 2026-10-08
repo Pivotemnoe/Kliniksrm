@@ -18,6 +18,8 @@ import {
   StockMovement,
   SupplierBalance,
   CatalogQualityReport,
+  ConsumableRule,
+  SyringeRuleInput,
 } from './types';
 
 export type ProductStockState = 'all' | 'zero' | 'positive';
@@ -38,6 +40,14 @@ export type StockListQuery = {
 
 export function getStockResources() {
   return apiRequest<StockResources>('/v1/stock/resources');
+}
+
+export function listConsumableRules() {
+  return apiRequest<ConsumableRule[]>('/v1/stock/consumable-rules');
+}
+
+export function updateSyringeRule(input: SyringeRuleInput) {
+  return apiRequest<ConsumableRule>('/v1/stock/consumable-rules/syringe', { method: 'PATCH', body: input });
 }
 
 export function listProducts(query: StockListQuery) {

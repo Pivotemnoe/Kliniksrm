@@ -57,6 +57,7 @@ export type Product = {
   shelfLifeDays: number | null;
   defaultExpiresAt: string | null;
   description: string | null;
+  autoSyringe?: boolean;
   linkedProducts?: LinkedProduct[];
   stockRest?: DecimalValue;
   batches?: StockBatch[];
@@ -85,6 +86,28 @@ export type LinkedProduct = {
   minDoseMl?: DecimalValue | null;
   maxDoseMl?: DecimalValue | null;
   product: Product;
+};
+
+export type ConsumableRule = {
+  id: string;
+  code: string;
+  title: string;
+  inputKind: string;
+  isActive: boolean;
+  options: Array<{
+    productId: string;
+    minValue: DecimalValue;
+    maxValue: DecimalValue;
+    quantity: DecimalValue;
+    product: Pick<Product, 'id' | 'title' | 'isActive' | 'stockUnit' | 'writeOffUnit'>;
+  }>;
+};
+
+export type SyringeRuleInput = {
+  syringe1ProductId: string;
+  syringe2ProductId: string;
+  syringe5ProductId: string;
+  syringe10ProductId: string;
 };
 
 export type StockBatch = {
@@ -192,6 +215,7 @@ export type ProductMutationInput = {
   shelfLifeDays?: number;
   defaultExpiresAt?: string | null;
   generateBarcode?: boolean;
+  autoSyringe?: boolean;
   description?: string;
   linkedProducts?: Array<{ productId: string; quantity: number; minDoseMl?: number; maxDoseMl?: number }>;
 };

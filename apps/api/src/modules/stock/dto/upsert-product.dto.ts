@@ -106,6 +106,11 @@ export class UpsertProductDto {
   @IsBoolean()
   generateBarcode?: boolean;
 
+  @ApiPropertyOptional({ description: 'Списывать один шприц по общему правилу склада.' })
+  @IsOptional()
+  @IsBoolean()
+  autoSyringe?: boolean;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
