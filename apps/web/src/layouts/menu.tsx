@@ -14,6 +14,7 @@ import {
   FileTextOutlined,
   HomeOutlined,
   IdcardOutlined,
+  InboxOutlined,
   MedicineBoxOutlined,
   MessageOutlined,
   NotificationOutlined,
@@ -36,7 +37,6 @@ import { canAccessPath } from '../auth/access';
 import type { Employee } from '../shared/types/auth';
 
 export const menuItems: MenuProps['items'] = [
-  { key: '/news', icon: <NotificationOutlined />, label: 'Новости' },
   { key: '/dashboard', icon: <DashboardOutlined />, label: 'Сводка' },
   {
     key: '/finance-workspace',
@@ -53,6 +53,17 @@ export const menuItems: MenuProps['items'] = [
   },
   { key: '/schedule', icon: <CalendarOutlined />, label: 'Расписание' },
   { key: '/queue', icon: <OrderedListOutlined />, label: 'Очередь' },
+  {
+    key: '/communications-workspace',
+    icon: <MessageOutlined />,
+    label: 'Сообщения',
+    children: [
+      { key: '/news', icon: <NotificationOutlined />, label: 'Новости' },
+      { key: '/staff-messages', icon: <TeamOutlined />, label: 'Сообщения сотрудникам' },
+      { key: '/messages', icon: <MessageOutlined />, label: 'Сообщения владельцам' },
+      { key: '/online-requests', icon: <InboxOutlined />, label: 'Заявки с сайта' },
+    ],
+  },
   { key: '/tasks', icon: <AuditOutlined />, label: 'Задачи' },
   { key: '/owners', icon: <TeamOutlined />, label: 'Владельцы' },
   { key: '/patients', icon: <MedicineBoxOutlined />, label: 'Пациенты' },
