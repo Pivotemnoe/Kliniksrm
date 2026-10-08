@@ -34,12 +34,39 @@ test('isolated PostgreSQL: booking retries, competing slots, rollback and handof
   });
   const input = { ownerId: owner.id, animalId: animal.id, officeId: office.id, employeeId: staff.id, roomId: room.id, startsAt: '2099-10-08T10:00:00Z' };
   const make = async () => { const item = await db.onlineAppointmentRequest.create({ data: { ownerName: 'QA owner', phone: '+79990000001', animalNickname: 'QA cat' } }); createdIds.push(item.id); return item; };
+  await t.test('manual chat confirmation needs a phone; adding contact preserves owner and replay', async () => {
+    const request = await make();
+    await db.onlineAppointmentRequest.update({ where: { id: request.id }, data: { conversationId: `qa_${request.id}`, phone: 'чат' } });
+    const count = await db.appointment.count();
+    const choice = { ...input, startsAt: '2099-10-08T08:00:00Z' };
+    await assert.rejects(requests.acceptRequest(request.id, choice, staff.id), /телефон/);
+    assert.equal(await db.appointment.count(), count);
+    assert.equal((await db.onlineAppointmentRequest.findUniqueOrThrow({ where: { id: request.id } })).status, 'NEW');
+    await requests.updateRequest(request.id, { phone: '+7 (999) 000-00-08' }, staff.id);
+    const confirmed = await requests.acceptRequest(request.id, choice, staff.id);
+    assert.equal(confirmed.phone, '+79990000008');
+    assert.equal((await db.owner.findUniqueOrThrow({ where: { id: owner.id } })).phone, null);
+    assert.equal((await requests.acceptRequest(request.id, choice, staff.id)).appointmentId, confirmed.appointmentId);
+    await db.backgroundJob.updateMany({ where: { queueName: 'clinic-conversation', payload: { path: ['requestId'], equals: request.id } }, data: { status: 'DONE' } });
+  });
+  await t.test('manual chat may use the selected verified owner contact when the chat has none', async () => {
+    const request = await make();
+    await db.owner.update({ where: { id: owner.id }, data: { phone: '+7 999 000 00 09' } });
+    await db.onlineAppointmentRequest.update({ where: { id: request.id }, data: { conversationId: `qa_${request.id}`, phone: 'чат' } });
+    try {
+      const confirmed = await requests.acceptRequest(request.id, { ...input, startsAt: '2099-10-08T09:00:00Z' }, staff.id);
+      assert.equal(confirmed.phone, '+79990000009');
+      assert.equal((await db.owner.findUniqueOrThrow({ where: { id: owner.id } })).phone, '+7 999 000 00 09');
+      await db.backgroundJob.updateMany({ where: { queueName: 'clinic-conversation', payload: { path: ['requestId'], equals: request.id } }, data: { status: 'DONE' } });
+    } finally { await db.owner.update({ where: { id: owner.id }, data: { phone: null } }); }
+  });
   await t.test('same request confirmed simultaneously creates exactly one appointment', async () => {
+    const count = await db.appointment.count({ where: { ownerId: owner.id } });
     const request = await make();
     const [a, b] = await Promise.all([requests.acceptRequest(request.id, input, staff.id), requests.acceptRequest(request.id, input, staff.id)]);
     assert.equal(a.appointmentId, b.appointmentId);
     assert.equal(await db.auditLog.count({ where: { entityId: request.id, action: 'online_request.accept' } }), 1);
-    assert.equal(await db.appointment.count({ where: { ownerId: owner.id } }), 1);
+    assert.equal(await db.appointment.count({ where: { ownerId: owner.id } }), count + 1);
   });
   await t.test('competing manual bookings for a room have one winner even with different doctors', async () => {
     const time = '2099-10-08T12:00:00Z';

@@ -3,7 +3,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { OnlineRequestStatus, Prisma } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
 import { withRussianSearchVariants } from '../../common/search-ranking';
-import { normalizeRussianPhone } from '../../common/phone';
+import { normalizeRussianPhone, requireContactPhone } from '../../common/phone';
 import { AppointmentsService } from '../appointments/appointments.service';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -175,6 +175,14 @@ export class OnlineRequestsService {
     }
 
     await this.validateLinks(dto.ownerId, dto.animalId);
+    let contactPhone: string | undefined;
+    if (request.conversationId) {
+      try { contactPhone = requireContactPhone(request.phone); }
+      catch {
+        const owner = dto.ownerId ? await tx.owner.findUnique({ where: { id: dto.ownerId }, select: { phone: true } }) : null;
+        contactPhone = requireContactPhone(owner?.phone);
+      }
+    }
     const startsAt = dto.startsAt ? new Date(dto.startsAt) : request.preferredAt;
     if (!startsAt || Number.isNaN(startsAt.getTime())) {
       throw new BadRequestException('Укажите дату и время записи');
@@ -204,6 +212,7 @@ export class OnlineRequestsService {
         ownerId: dto.ownerId,
         animalId: dto.animalId,
         appointmentId: appointment.id,
+        ...(contactPhone ? { phone: contactPhone } : {}),
         preferredAt: startsAt,
       },
       include: onlineRequestInclude,
