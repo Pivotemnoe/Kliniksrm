@@ -129,6 +129,9 @@ test('isolated PostgreSQL: assistant books only verified, current, conflict-free
     const { previousMonth } = await import('../apps/api/dist/modules/online-requests/assistant-intake-policy.js');
     assert.equal(previousMonth(new Date('2026-03-31T12:00:00Z')).toISOString(), '2026-02-28T12:00:00.000Z');
     assert.equal(previousMonth(new Date('2028-03-31T12:00:00Z')).toISOString(), '2028-02-29T12:00:00.000Z');
+    assert.equal(previousMonth(new Date('2026-02-28T21:30:00Z'), 'Europe/Moscow').toISOString(), '2026-01-31T21:30:00.000Z');
+    assert.equal(previousMonth(new Date('2026-03-30T21:30:00Z'), 'Europe/Moscow').toISOString(), '2026-02-27T21:30:00.000Z');
+    assert.equal(previousMonth(new Date('2026-04-15T10:00:00Z'), 'Europe/Berlin').toISOString(), '2026-03-15T11:00:00.000Z');
     const f = await fixture();
     await db.service.update({ where: { id: f.service.id }, data: { title: 'Первичный прием врача' } });
     const followup = await db.service.create({ data: { title: 'Повторный приём врача', isActive: true, publicOnWebsite: true } });

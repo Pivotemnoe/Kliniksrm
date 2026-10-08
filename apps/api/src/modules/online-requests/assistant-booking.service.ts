@@ -92,7 +92,10 @@ export class AssistantBookingService {
       serviceState: 'MATCHED', dateState: 'ANY', followupQuestion: true, message: 'Этот питомец был на приёме у нас в течение последнего месяца? Повторным считается приём в течение месяца после предыдущего визита.' } };
     let convertedToInitial = false;
     let recentVisits: Array<{ animalId: string; startedAt: Date }> = [];
-    if (requestedFollowup && input.recentVisitAnswer) recentVisits = await this.prisma.visit.findMany({ where: { ownerId: input.ownerId, animalId: { in: animals.map(a => a.id) }, status: 'COMPLETED', startedAt: { gte: previousMonth(from), lte: now } }, select: { animalId: true, startedAt: true }, orderBy: { startedAt: 'desc' }, take: 1000 });
+    if (requestedFollowup && input.recentVisitAnswer) {
+      const earliest = new Date(Math.min(...availableRules.filter(r => selectedService.services.some(s => s.id === r.serviceId)).map(r => previousMonth(from, r.office.timezone).getTime())));
+      recentVisits = await this.prisma.visit.findMany({ where: { ownerId: input.ownerId, animalId: { in: animals.map(a => a.id) }, status: 'COMPLETED', startedAt: { gte: earliest, lte: now } }, select: { animalId: true, startedAt: true }, orderBy: { startedAt: 'desc' }, take: 1000 });
+    }
     if (requestedFollowup && (!input.recentVisitAnswer || !recentVisits.length) && initial.length) {
       selectedService = { state: 'MATCHED', services: initial }; convertedToInitial = true;
     }
@@ -119,7 +122,7 @@ export class AssistantBookingService {
           if (seen.has(t) || count >= 60) continue;
           seen.add(t);
           const start = new Date(t), end = new Date(t + rule.durationMinutes * minute);
-          if (visitKind === 'FOLLOWUP' && !recentVisits.some(v => v.startedAt >= previousMonth(start))) continue;
+          if (visitKind === 'FOLLOWUP' && !recentVisits.some(v => v.startedAt >= previousMonth(start, rule.office.timezone))) continue;
           if (!matchesBookingDate(start, rule.office.timezone, selectedDate) || !withinOfficeHours(start, end, rule.office.timezone, rule.office.workingHours) || occupied.some(x => x.startsAt < end && (!x.endsAt || x.endsAt > start))) continue;
           const offer: Offer = { v: 1, ruleId: rule.id, ruleVersion: rule.version, ownerId: input.ownerId, startsAt: start.toISOString(), endsAt: end.toISOString(), expiresAt: new Date(now.getTime() + 5 * minute).toISOString() };
           offers.push({ offerToken: this.sign(offer), serviceId: rule.serviceId, serviceTitle: rule.service.title, employeeName: rule.employee.fullName, officeId: rule.officeId, officeName: rule.office.name, timezone: rule.office.timezone, startsAt: offer.startsAt, endsAt: offer.endsAt, durationMinutes: rule.durationMinutes, expiresAt: offer.expiresAt }); count++;
@@ -175,7 +178,7 @@ export class AssistantBookingService {
       const owner = await tx.owner.findUnique({ where: { id: input.ownerId } });
       const animal = await tx.animal.findUnique({ where: { id: input.animalId } });
       if (!owner || !animal || animal.ownerId !== owner.id || animal.archivedAt) throw new BadRequestException('Выберите действующего питомца своего личного кабинета');
-      if (intakeKind(current.service.title) === 'FOLLOWUP' && !await tx.visit.findFirst({ where: { ownerId: owner.id, animalId: animal.id, status: 'COMPLETED', startedAt: { gte: previousMonth(start), lte: now } }, select: { id: true } })) throw new ConflictException('Повторный приём возможен в течение месяца после предыдущего визита. Выберите первичный приём или уточните у администратора');
+      if (intakeKind(current.service.title) === 'FOLLOWUP' && !await tx.visit.findFirst({ where: { ownerId: owner.id, animalId: animal.id, status: 'COMPLETED', startedAt: { gte: previousMonth(start, current.office.timezone), lte: now } }, select: { id: true } })) throw new ConflictException('Повторный приём возможен в течение месяца после предыдущего визита. Выберите первичный приём или уточните у администратора');
       const phone = requireContactPhone(input.contactPhone || owner.phone);
       // Serialize linkage with the ordinary conversation importer as well.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(20261008, 3)`;
