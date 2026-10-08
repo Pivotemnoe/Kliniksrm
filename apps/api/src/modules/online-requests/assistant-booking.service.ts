@@ -11,6 +11,7 @@ import { withinOfficeHours } from './assistant-booking-hours';
 import { matchesBookingDate, selectBookingDate, selectBookingService } from './assistant-booking-selection';
 
 import { requireContactPhone } from '../../common/phone';
+import { intakeKind, ordinaryIntakeQuery, previousMonth } from './assistant-intake-policy';
 
 const minute = 60_000, day = 86400_000;
 const includeRule = { office: true, room: true, service: true, employee: { include: { roles: { include: { role: true } } } } } satisfies Prisma.AssistantBookingRuleInclude;
@@ -29,6 +30,15 @@ export class AssistantBookingService {
   }
 
   listRules() { return this.prisma.assistantBookingRule.findMany({ orderBy: { createdAt: 'asc' }, include: includeRule }); }
+  async readiness(now = new Date()) {
+    const rows = await this.listRules();
+    const usable = rows.filter(eligible);
+    const checks = await Promise.all(usable.map(async rule => ({ id: rule.id, hasShift: Boolean(await this.prisma.employeeShift.findFirst({
+      where: { employeeId: rule.employeeId, isActive: true, startsAt: { lt: new Date(now.getTime() + rule.maximumDaysAhead * day) }, endsAt: { gt: new Date(now.getTime() + rule.minimumLeadMinutes * minute) } }, select: { id: true },
+    })) })));
+    return { enabled: process.env.CLINIC_ASSISTANT_ENABLED === 'true' && process.env.CLINIC_ASSISTANT_AUTO_BOOKING_ENABLED === 'true',
+      totalRules: rows.length, activeRules: rows.filter(r => r.isActive).length, eligibleRules: usable.length, rulesWithShifts: checks.filter(r => r.hasShift).length };
+  }
   async resources() {
     const [offices, rooms, services, employees] = await Promise.all([
       this.prisma.clinicOffice.findMany({ select: { id: true, name: true, timezone: true }, orderBy: { name: 'asc' } }),
@@ -70,13 +80,29 @@ export class AssistantBookingService {
     const hasDate = Boolean(input.date || input.preferredTimeText?.trim());
     const to = new Date(from.getTime() + (hasDate ? 61 : Math.min(input.days ?? 2, 7)) * day);
     const availableRules = (await this.prisma.assistantBookingRule.findMany({ where: { isActive: true }, include: includeRule, orderBy: { id: 'asc' } })).filter(eligible);
-    const animals = await this.prisma.animal.findMany({ where: { ownerId: input.ownerId, archivedAt: null }, select: { id: true, nickname: true }, orderBy: { nickname: 'asc' }, take: 100 });
+    let animals = await this.prisma.animal.findMany({ where: { ownerId: input.ownerId, archivedAt: null }, select: { id: true, nickname: true }, orderBy: { nickname: 'asc' }, take: 100 });
     const allServices = [...new Map(availableRules.map(r => [r.serviceId, { id: r.serviceId, title: r.service.title }])).values()];
-    const selectedService = selectBookingService(allServices, input.serviceQuery, input.serviceId);
+    const initial = allServices.filter(s => intakeKind(s.title) === 'INITIAL');
+    const followup = allServices.filter(s => intakeKind(s.title) === 'FOLLOWUP');
+    let selectedService = selectBookingService(allServices, input.serviceQuery, input.serviceId);
+    if (initial.length && !input.serviceId && ordinaryIntakeQuery(input.serviceQuery)) selectedService = { state: 'MATCHED', services: initial };
+    if (followup.length && !input.serviceId && /повторн/i.test(input.serviceQuery || '')) selectedService = { state: 'MATCHED', services: followup };
+    const requestedFollowup = selectedService.services.length > 0 && selectedService.services.every(s => intakeKind(s.title) === 'FOLLOWUP');
+    if (requestedFollowup && input.recentVisitAnswer === undefined) return { animals, services: selectedService.services, offers: [], generatedAt: now.toISOString(), selection: {
+      serviceState: 'MATCHED', dateState: 'ANY', followupQuestion: true, message: 'Этот питомец был на приёме у нас в течение последнего месяца? Повторным считается приём в течение месяца после предыдущего визита.' } };
+    let convertedToInitial = false;
+    let recentVisits: Array<{ animalId: string; startedAt: Date }> = [];
+    if (requestedFollowup && input.recentVisitAnswer) recentVisits = await this.prisma.visit.findMany({ where: { ownerId: input.ownerId, animalId: { in: animals.map(a => a.id) }, status: 'COMPLETED', startedAt: { gte: previousMonth(from), lte: now } }, select: { animalId: true, startedAt: true }, orderBy: { startedAt: 'desc' }, take: 1000 });
+    if (requestedFollowup && (!input.recentVisitAnswer || !recentVisits.length) && initial.length) {
+      selectedService = { state: 'MATCHED', services: initial }; convertedToInitial = true;
+    }
+    const kinds = new Set(selectedService.services.map(s => intakeKind(s.title)));
+    const visitKind = kinds.size === 1 ? kinds.values().next().value ?? null : null;
+    if (visitKind === 'FOLLOWUP') animals = animals.filter(a => recentVisits.some(v => v.animalId === a.id));
     const services = selectedService.services;
     const rules = ['ANY', 'MATCHED'].includes(selectedService.state) ? availableRules.filter(r => services.some(s => s.id === r.serviceId)) : [];
     let dateNeedsClarification = false;
-    const offers: Array<{ offerToken: string; serviceId: string; serviceTitle: string; employeeName: string; officeName: string; timezone: string; startsAt: string; endsAt: string; durationMinutes: number; expiresAt: string }> = [];
+    const offers: Array<{ offerToken: string; serviceId: string; serviceTitle: string; employeeName: string; officeId: string; officeName: string; timezone: string; startsAt: string; endsAt: string; durationMinutes: number; expiresAt: string }> = [];
     for (const rule of rules) {
       const selectedDate = selectBookingDate(input.preferredTimeText, input.date, now, rule.office.timezone);
       if (selectedDate.state === 'CLARIFY') { dateNeedsClarification = true; continue; }
@@ -93,19 +119,25 @@ export class AssistantBookingService {
           if (seen.has(t) || count >= 60) continue;
           seen.add(t);
           const start = new Date(t), end = new Date(t + rule.durationMinutes * minute);
+          if (visitKind === 'FOLLOWUP' && !recentVisits.some(v => v.startedAt >= previousMonth(start))) continue;
           if (!matchesBookingDate(start, rule.office.timezone, selectedDate) || !withinOfficeHours(start, end, rule.office.timezone, rule.office.workingHours) || occupied.some(x => x.startsAt < end && (!x.endsAt || x.endsAt > start))) continue;
           const offer: Offer = { v: 1, ruleId: rule.id, ruleVersion: rule.version, ownerId: input.ownerId, startsAt: start.toISOString(), endsAt: end.toISOString(), expiresAt: new Date(now.getTime() + 5 * minute).toISOString() };
-          offers.push({ offerToken: this.sign(offer), serviceId: rule.serviceId, serviceTitle: rule.service.title, employeeName: rule.employee.fullName, officeName: rule.office.name, timezone: rule.office.timezone, startsAt: offer.startsAt, endsAt: offer.endsAt, durationMinutes: rule.durationMinutes, expiresAt: offer.expiresAt }); count++;
+          offers.push({ offerToken: this.sign(offer), serviceId: rule.serviceId, serviceTitle: rule.service.title, employeeName: rule.employee.fullName, officeId: rule.officeId, officeName: rule.office.name, timezone: rule.office.timezone, startsAt: offer.startsAt, endsAt: offer.endsAt, durationMinutes: rule.durationMinutes, expiresAt: offer.expiresAt }); count++;
         }
       }
     }
     offers.sort((a, b) => a.startsAt.localeCompare(b.startsAt) || a.offerToken.localeCompare(b.offerToken));
-    const message = selectedService.state === 'CHOOSE' ? 'Подходит несколько услуг. Выберите нужную услугу ниже.'
+    // Intake is with any available doctor. Do not make the owner choose rooms or duplicate times.
+    const visibleOffers = visitKind ? [...new Map(offers.map(o => [`${o.serviceId}|${o.officeId}|${o.startsAt}`, o])).values()] : offers;
+    const message = !availableRules.length ? 'Самостоятельная запись сейчас не настроена. Можно оставить заявку администратору — он подберёт время.'
+      : selectedService.state === 'CHOOSE' ? 'Подходит несколько услуг. Выберите нужную услугу ниже.'
       : selectedService.state === 'UNAVAILABLE' ? 'Эту услугу нельзя выбрать для самостоятельной записи. Выберите другую или позовите администратора.'
       : dateNeedsClarification ? 'Уточните удобную дату и время: например, «завтра после 15:00», или выберите дату ниже.'
       : !offers.length ? 'На выбранный период свободного времени нет. Выберите другую дату или позовите администратора.'
+      : visitKind ? `Выберите питомца и свободное время.${offers[0]?.durationMinutes ? ` Длительность приёма — ${offers[0].durationMinutes} минут.` : ''} Вас примет свободный врач. Запись подтвердится после вашего согласия и проверки клиники.`
       : 'Выберите питомца и одно из свободных времён ниже. Запись будет подтверждена после вашего согласия и проверки клиники.';
-    return { animals, services, offers: dateNeedsClarification ? [] : offers.slice(0, 60), generatedAt: now.toISOString(), selection: { serviceState: selectedService.state, dateState: dateNeedsClarification ? 'CLARIFY' : hasDate ? 'MATCHED' : 'ANY', message } };
+    return { animals, services, offers: dateNeedsClarification ? [] : visibleOffers.slice(0, 60), generatedAt: now.toISOString(), selection: { serviceState: selectedService.state, dateState: dateNeedsClarification ? 'CLARIFY' : hasDate ? 'MATCHED' : 'ANY', visitKind, followupQuestion: false,
+      message: convertedToInitial ? `${input.recentVisitAnswer ? 'В CRM нет завершённого приёма этого питомца за последний месяц.' : 'Если прошло больше месяца, приём считается первичным.'} Предлагаю первичный приём. ${message}` : message } };
   }
 
   async book(input: AssistantBookDto, now = new Date(), allowNew = true) {
@@ -143,6 +175,7 @@ export class AssistantBookingService {
       const owner = await tx.owner.findUnique({ where: { id: input.ownerId } });
       const animal = await tx.animal.findUnique({ where: { id: input.animalId } });
       if (!owner || !animal || animal.ownerId !== owner.id || animal.archivedAt) throw new BadRequestException('Выберите действующего питомца своего личного кабинета');
+      if (intakeKind(current.service.title) === 'FOLLOWUP' && !await tx.visit.findFirst({ where: { ownerId: owner.id, animalId: animal.id, status: 'COMPLETED', startedAt: { gte: previousMonth(start), lte: now } }, select: { id: true } })) throw new ConflictException('Повторный приём возможен в течение месяца после предыдущего визита. Выберите первичный приём или уточните у администратора');
       const phone = requireContactPhone(input.contactPhone || owner.phone);
       // Serialize linkage with the ordinary conversation importer as well.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(20261008, 3)`;

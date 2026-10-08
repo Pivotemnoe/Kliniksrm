@@ -14,6 +14,8 @@ export class AssistantBookingController {
   rules() { return this.booking.listRules(); }
   @Get('resources') @RequirePermissions('settings.read')
   resources() { return this.booking.resources(); }
+  @Get('readiness') @RequirePermissions('settings.read')
+  readiness() { return this.booking.readiness(); }
   @Post('rules') @RequirePermissions('settings.manage')
   createRule(@Body() dto: AssistantBookingRuleDto, @CurrentEmployee() actor: AuthEmployee) { return this.booking.saveRule(dto, actor.id); }
   @Put('rules/:id') @RequirePermissions('settings.manage')

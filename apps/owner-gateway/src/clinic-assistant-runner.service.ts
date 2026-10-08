@@ -3,12 +3,14 @@ import { PrismaService } from './prisma.service';
 import { ClinicAssistantOpenAiClient, ClinicAssistantTurn } from './clinic-assistant-openai.client';
 import { clinicIntentReply, clinicSafetyIntent } from './clinic-chat-policy';
 import { autoBookingReply, nextBookingDraft } from './clinic-booking-dialog';
+import { PublicClinicCatalogService } from './public-clinic-catalog.service';
+import { clinicPriceReply } from './clinic-price-reply';
 
 @Injectable()
 export class ClinicAssistantRunnerService implements OnApplicationBootstrap, OnModuleDestroy {
   private timer?: NodeJS.Timeout;
   private running = false;
-  constructor(private readonly prisma: PrismaService, private readonly model: ClinicAssistantOpenAiClient) {}
+  constructor(private readonly prisma: PrismaService, private readonly model: ClinicAssistantOpenAiClient, private readonly catalog: PublicClinicCatalogService = new PublicClinicCatalogService(prisma)) {}
   onApplicationBootstrap() {
     if (!this.enabled()) return;
     this.timer = setInterval(() => void this.runOnce().catch(() => undefined), 1000);
@@ -85,10 +87,16 @@ export class ClinicAssistantRunnerService implements OnApplicationBootstrap, OnM
       let reply = clinicIntentReply(intent, {
         address: process.env.CLINIC_ASSISTANT_APPROVED_ADDRESS, hours: process.env.CLINIC_ASSISTANT_APPROVED_HOURS, phone: process.env.CLINIC_ASSISTANT_APPROVED_PHONE,
       });
+      if (intent === 'PRICE') {
+        let snapshot: unknown;
+        try { snapshot = await this.catalog.get(); } catch {}
+        reply = clinicPriceReply(run.message.text, snapshot);
+      }
       if (reply.intake && run.message.channel === 'MAX') reply = { human: true, text: 'Напишите имя, телефон для связи, кличку питомца, причину и удобное время. Администратор уточнит заявку и подтвердит время.' };
-      const draft = !errorCode && intent === 'BOOKING' && run.message.channel === 'SITE_CHAT' && row.ownerId && process.env.CLINIC_ASSISTANT_AUTO_BOOKING_ENABLED === 'true'
+      const draft = !errorCode && intent === 'BOOKING' && run.message.channel === 'SITE_CHAT' && process.env.CLINIC_ASSISTANT_AUTO_BOOKING_ENABLED === 'true'
         ? nextBookingDraft(row.bookingDraft, run.message.sequence, run.message.text, response!.result) : null;
-      if (draft) reply = autoBookingReply();
+      if (draft && row.ownerId) reply = autoBookingReply();
+      else if (draft && /повторн/i.test(draft.serviceQuery || '')) reply = { human: false, intake: true, text: 'Этот питомец был на приёме у нас в течение последнего месяца? Укажите ответ в заявке ниже. Если прошло больше месяца, приём считается первичным. Время подтвердит администратор.' };
       const updated = await tx.clinicConversation.update({ where: { id: row.id }, data: { sequence: { increment: 1 }, ...(draft ? { bookingDraft: draft } : {}), ...(reply.human ? { mode: 'HUMAN', needsAttention: true } : {}) } });
       const channel = row.maxUserId && row.maxConsent ? 'MAX' : 'SITE_CHAT';
       await tx.clinicChatMessage.create({ data: { conversationId: row.id, sequence: updated.sequence, author: 'ASSISTANT', channel, clientKey: `reply:${run.message.clientKey}`, text: reply.text, deliveryStatus: channel === 'MAX' ? 'PENDING' : 'AVAILABLE' } });

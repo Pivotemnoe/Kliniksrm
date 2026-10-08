@@ -1,6 +1,6 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Checkbox, Input, QRCode, Space, Typography } from 'antd';
+import { Alert, App, Button, Checkbox, Input, QRCode, Radio, Space, Typography } from 'antd';
 import type { ClinicConversation } from '../onlineRequests/types';
 import { chatAuthor, chatDelivery } from './chatLabels';
 import { fromDatetimeLocal } from '../../shared/utils/date';
@@ -15,22 +15,32 @@ export function ClinicChat() {
   const [text, setText] = useState(''); const [booking, setBooking] = useState(false); const [link, setLink] = useState<{ url: string; expiresAt: string }>();
   const [form, setForm] = useState({ contactName: '', phone: '', animalNickname: '', comment: '', preferredAt: '', contactConsent: false, website: '' });
   const [contact, setContact] = useState({ contactName: '', phone: '', website: '' });
+  const [visitKind, setVisitKind] = useState<'INITIAL' | 'FOLLOWUP'>('INITIAL');
+  const [recentVisitAnswer, setRecentVisitAnswer] = useState<boolean>();
+  const intakeDraft = useRef<number | undefined>(undefined);
   const contactKey = useRef(crypto.randomUUID());
   const key = useRef(crypto.randomUUID()); const bookingKey = useRef(crypto.randomUUID());
   const session = useMutation({ mutationFn: () => chatRequest<ClinicConversation>('/session', {}), onSuccess: data => {
     cache.removeQueries({ queryKey: ['clinic-chat-booking'] });
     cache.removeQueries({ queryKey: ['clinic-notification-preferences'] });
     cache.setQueryData(['clinic-chat-preview'], data); setLink(undefined); setBooking(false); setStarted(true);
+    setVisitKind('INITIAL'); setRecentVisitAnswer(undefined); intakeDraft.current = undefined;
     setContact({ contactName: data.contactName || '', phone: data.phone || '', website: '' });
     setForm({ contactName: data.contactName || '', phone: data.phone || '', animalNickname: '', comment: '', preferredAt: '', contactConsent: false, website: '' });
   }, onError: e => message.error(e.message) });
   const state = useQuery({ queryKey: ['clinic-chat-preview'], queryFn: () => chatRequest<ClinicConversation>(''), enabled: started, refetchInterval: 3000, retry: false });
   const send = useMutation({ mutationFn: (value: string) => chatRequest<ClinicConversation>('/messages', { clientKey: key.current, text: value }), onSuccess: data => { cache.setQueryData(['clinic-chat-preview'], data); setText(''); key.current = crypto.randomUUID(); }, onError: e => message.error(e.message) });
-  const intake = useMutation({ mutationFn: () => chatRequest<ClinicConversation>('/booking', { ...form, preferredAt: form.preferredAt ? fromDatetimeLocal(form.preferredAt) : undefined, clientKey: bookingKey.current }), onSuccess: data => { cache.setQueryData(['clinic-chat-preview'], data); setBooking(false); bookingKey.current = crypto.randomUUID(); }, onError: e => message.error(e.message) });
+  const intake = useMutation({ mutationFn: () => chatRequest<ClinicConversation>('/booking', { ...form, visitKind, ...(visitKind === 'FOLLOWUP' && recentVisitAnswer !== undefined ? { recentVisitAnswer } : {}), preferredAt: form.preferredAt ? fromDatetimeLocal(form.preferredAt) : undefined, clientKey: bookingKey.current }), onSuccess: data => { cache.setQueryData(['clinic-chat-preview'], data); setBooking(false); bookingKey.current = crypto.randomUUID(); }, onError: e => message.error(e.message) });
   const maxLink = useMutation({ mutationFn: () => chatRequest<{ url: string; expiresAt: string }>('/max-link', {}), onSuccess: setLink, onError: e => message.error(e.message) });
   const disconnect = useMutation({ mutationFn: () => chatRequest<ClinicConversation>('/max-disconnect', {}), onSuccess: data => { cache.setQueryData(['clinic-chat-preview'], data); setLink(undefined); }, onError: e => message.error(e.message) });
   const identify = useMutation({ mutationFn: (declined: boolean) => chatRequest<ClinicConversation>('/contact', { ...(declined ? { contactName: contact.contactName, website: contact.website } : contact), declined, clientKey: contactKey.current }), onSuccess: data => { cache.setQueryData(['clinic-chat-preview'], data); contactKey.current = crypto.randomUUID(); }, onError: e => message.error(e.message) });
   const field = (name: keyof typeof form, value: string | boolean) => { setForm(old => ({ ...old, [name]: value })); bookingKey.current = crypto.randomUUID(); };
+  useEffect(() => {
+    const draft = state.data?.bookingDraft;
+    if (!draft || state.data?.canAutoBook || state.data?.mode !== 'ASSISTANT' || intakeDraft.current === draft.revision) return;
+    intakeDraft.current = draft.revision; setBooking(true); setVisitKind(/повторн/i.test(draft.serviceQuery || '') ? 'FOLLOWUP' : 'INITIAL'); setRecentVisitAnswer(undefined);
+    setForm(old => ({ ...old, contactName: old.contactName || state.data?.contactName || '', phone: old.phone || state.data?.phone || '' }));
+  }, [state.data]);
   if (!started) return <Button type="primary" loading={session.isPending} onClick={() => session.mutate()}>Открыть чат</Button>;
   if (state.error instanceof ClinicChatError && state.error.status === 401) return <Space direction="vertical"><Alert type="warning" message="Сессия изменилась. Откройте чат снова." /><Button type="primary" loading={session.isPending} onClick={() => session.mutate()}>Открыть чат</Button></Space>;
   return <section className="clinic-chat-pilot" aria-label="Чат клиники">
@@ -46,7 +56,7 @@ export function ClinicChat() {
     <Space wrap><Button type="primary" disabled={!text.trim()} loading={send.isPending} onClick={() => send.mutate(text)}>Отправить</Button><Button onClick={() => { setForm(old => ({ ...old, contactName: old.contactName || state.data?.contactName || '', phone: old.phone || state.data?.phone || '' })); setBooking(!booking); }}>Заявка на приём</Button><Button disabled={send.isPending} onClick={() => { key.current = crypto.randomUUID(); send.mutate('Хочу поговорить с администратором'); }}>Позвать администратора</Button></Space>
     {state.data?.canAutoBook ? <ClinicChatBookingPanel conversationId={state.data.id} mode={state.data.mode} draft={state.data.bookingDraft} /> : null}
     {state.data?.ownerId ? <ClinicChatNotificationPreferences /> : null}
-    {booking ? <div className="clinic-chat-intake"><input hidden aria-hidden="true" tabIndex={-1} name="website" autoComplete="off" value={form.website} onChange={e => field('website', e.target.value)} /><Input aria-label="Ваше имя" placeholder="Ваше имя" value={form.contactName} onChange={e => field('contactName', e.target.value)} /><Input aria-label="Телефон для связи" placeholder="Телефон для связи" value={form.phone} onChange={e => field('phone', e.target.value)} /><Input aria-label="Кличка питомца" placeholder="Кличка питомца" value={form.animalNickname} onChange={e => field('animalNickname', e.target.value)} /><Input.TextArea aria-label="Причина обращения" placeholder="Причина обращения" value={form.comment} onChange={e => field('comment', e.target.value)} /><Typography.Text>Удобное время</Typography.Text><Input aria-label="Удобное время" type="datetime-local" value={form.preferredAt} onChange={e => field('preferredAt', e.target.value)} /><Checkbox checked={form.contactConsent} onChange={e => field('contactConsent', e.target.checked)}>Разрешаю клинике связаться со мной по этой заявке</Checkbox><Button type="primary" disabled={!form.contactConsent} loading={intake.isPending} onClick={() => intake.mutate()}>Передать заявку</Button></div> : null}
+    {booking ? <div className="clinic-chat-intake"><input hidden aria-hidden="true" tabIndex={-1} name="website" autoComplete="off" value={form.website} onChange={e => field('website', e.target.value)} /><Input aria-label="Ваше имя" placeholder="Ваше имя" value={form.contactName} onChange={e => field('contactName', e.target.value)} /><Input aria-label="Телефон для связи" placeholder="Телефон для связи" value={form.phone} onChange={e => field('phone', e.target.value)} /><Input aria-label="Кличка питомца" placeholder="Кличка питомца" value={form.animalNickname} onChange={e => field('animalNickname', e.target.value)} /><Radio.Group aria-label="Тип приёма" value={visitKind} onChange={e => { setVisitKind(e.target.value); setRecentVisitAnswer(undefined); bookingKey.current = crypto.randomUUID(); }}><Radio value="INITIAL">Первичный приём</Radio><Radio value="FOLLOWUP">Повторный приём</Radio></Radio.Group>{visitKind === 'FOLLOWUP' ? <><Typography.Paragraph>Этот питомец был на приёме у нас в течение последнего месяца?</Typography.Paragraph><Radio.Group aria-label="Визит в течение месяца" value={recentVisitAnswer} onChange={e => { setRecentVisitAnswer(e.target.value); bookingKey.current = crypto.randomUUID(); }}><Radio value={true}>Да</Radio><Radio value={false}>Нет — первичный приём</Radio></Radio.Group></> : null}<Input.TextArea aria-label="Причина обращения" placeholder="Причина обращения" value={form.comment} onChange={e => field('comment', e.target.value)} /><Typography.Text>Удобное время</Typography.Text><Input aria-label="Удобное время" type="datetime-local" value={form.preferredAt} onChange={e => field('preferredAt', e.target.value)} /><Checkbox checked={form.contactConsent} onChange={e => field('contactConsent', e.target.checked)}>Разрешаю клинике связаться со мной по этой заявке</Checkbox><Button type="primary" disabled={!form.contactConsent || visitKind === 'FOLLOWUP' && recentVisitAnswer === undefined} loading={intake.isPending} onClick={() => intake.mutate()}>Передать заявку</Button></div> : null}
     <Typography.Paragraph>Можно подключить MAX для ответов по этому обращению.</Typography.Paragraph>{state.data?.maxConsent ? <Button loading={disconnect.isPending} onClick={() => disconnect.mutate()}>Отключить MAX</Button> : <Button loading={maxLink.isPending} onClick={() => maxLink.mutate()}>Подключить MAX</Button>}
     {link ? <Space direction="vertical"><QRCode value={link.url} /><a href={link.url} target="_blank" rel="noreferrer">Открыть бота в MAX</a><Typography.Text type="secondary">Ссылка действует 5 минут и используется один раз.</Typography.Text></Space> : null}
   </section>;

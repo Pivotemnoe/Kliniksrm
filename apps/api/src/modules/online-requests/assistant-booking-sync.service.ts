@@ -1,7 +1,7 @@
 import { ConflictException, HttpException, Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { AssistantBookingService } from './assistant-booking.service';
 
-type Operation = { id: string; kind: string; ownerId: string; conversationId: string; bookingSequence: number; input: { serviceId?: string; serviceQuery?: string; preferredTimeText?: string; date?: string; from?: string; days?: number; animalId: string; offerToken: string; comment?: string; contactPhone?: string; contactConsent: boolean; appointmentConsent: boolean }; conversation: { mode: string } };
+type Operation = { id: string; kind: string; ownerId: string; conversationId: string; bookingSequence: number; input: { serviceId?: string; serviceQuery?: string; preferredTimeText?: string; date?: string; from?: string; days?: number; recentVisitAnswer?: boolean; animalId: string; offerToken: string; comment?: string; contactPhone?: string; contactConsent: boolean; appointmentConsent: boolean }; conversation: { mode: string } };
 @Injectable()
 export class AssistantBookingSyncService implements OnApplicationBootstrap, OnModuleDestroy {
   private timer?: NodeJS.Timeout;
@@ -22,7 +22,7 @@ export class AssistantBookingSyncService implements OnApplicationBootstrap, OnMo
         try {
           if (item.kind === 'OPTIONS') {
             if (item.conversation.mode !== 'ASSISTANT') throw new ConflictException('Обращение сейчас обрабатывает администратор');
-            result = await this.booking.options({ ownerId: item.ownerId, serviceId: item.input.serviceId, serviceQuery: item.input.serviceQuery, preferredTimeText: item.input.preferredTimeText, date: item.input.date, from: item.input.from, days: item.input.days });
+            result = await this.booking.options({ ownerId: item.ownerId, serviceId: item.input.serviceId, serviceQuery: item.input.serviceQuery, preferredTimeText: item.input.preferredTimeText, date: item.input.date, from: item.input.from, days: item.input.days, recentVisitAnswer: item.input.recentVisitAnswer });
           } else if (item.kind === 'CONFIRM') {
             // Identity and episode come from the authenticated gateway queue, never public text.
             // A late replay may return an already committed booking after takeover, but cannot create one.

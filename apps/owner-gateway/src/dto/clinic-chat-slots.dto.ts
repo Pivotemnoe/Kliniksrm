@@ -9,6 +9,7 @@ export class ClinicChatSlotsDto {
   @IsOptional() @IsInt() @Min(1) @Max(2147483647) draftRevision?: number;
   @IsOptional() @IsISO8601() from?: string;
   @IsOptional() @IsInt() @Min(1) @Max(7) days?: number;
+  @IsOptional() @IsBoolean() recentVisitAnswer?: boolean;
 }
 export class ClinicChatConfirmDto {
   @IsString() @Matches(/^[A-Za-z0-9_-]{16,100}$/) clientKey!: string;

@@ -46,6 +46,28 @@ test('autobooking bridge endpoints require the dedicated shared secret', () => {
   } finally { if (old === undefined) delete process.env.OWNER_GATEWAY_SYNC_SECRET; else process.env.OWNER_GATEWAY_SYNC_SECRET = old; }
 });
 
+test('booking readiness excludes ineligible rules and distinguishes unconfigured booking from a full schedule', async () => {
+  const { AssistantBookingService } = await import('../apps/api/dist/modules/online-requests/assistant-booking.service.js');
+  const now = new Date('2099-10-08T05:00:00Z');
+  const good = { id: 'allowed', isActive: true, employeeId: 'doctor', officeId: 'office', minimumLeadMinutes: 30, maximumDaysAhead: 14,
+    service: { isActive: true, publicOnWebsite: true }, room: { officeId: 'office' }, employee: { status: 'ACTIVE', roles: [{ role: { code: 'doctor' } }] } };
+  let rows = [good, { ...good, id: 'inactive', isActive: false }, { ...good, id: 'private', service: { isActive: true, publicOnWebsite: false } }];
+  const db = { assistantBookingRule: { findMany: async () => rows }, owner: { findUnique: async () => ({ id: 'owner' }) }, animal: { findMany: async () => [] }, employeeShift: { findFirst: async input => {
+    assert.equal(input.where.employeeId, 'doctor'); assert.equal(input.where.isActive, true);
+    assert.ok(input.where.endsAt.gt > now); return { id: 'shift' };
+  } } };
+  const old = Object.fromEntries(['CLINIC_ASSISTANT_ENABLED', 'CLINIC_ASSISTANT_AUTO_BOOKING_ENABLED', 'CLINIC_ASSISTANT_BOOKING_SIGNING_SECRET'].map(k => [k, process.env[k]]));
+  Object.assign(process.env, { CLINIC_ASSISTANT_ENABLED: 'true', CLINIC_ASSISTANT_AUTO_BOOKING_ENABLED: 'true', CLINIC_ASSISTANT_BOOKING_SIGNING_SECRET: 'synthetic-readiness-signing-secret-only' });
+  try {
+    const service = new AssistantBookingService(db, {}, {}, {});
+    assert.deepEqual(await service.readiness(now), { enabled: true, totalRules: 3, activeRules: 2, eligibleRules: 1, rulesWithShifts: 1 });
+    rows = [];
+    assert.equal((await service.readiness(now)).eligibleRules, 0);
+    const options = await service.options({ ownerId: 'owner' }, now);
+    assert.equal(options.offers.length, 0); assert.match(options.selection.message, /не настроена/); assert.doesNotMatch(options.selection.message, /свободного времени нет/);
+  } finally { for (const [key, value] of Object.entries(old)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } }
+});
+
 test('isolated PostgreSQL: assistant books only verified, current, conflict-free appointments', { skip: !process.env.ASSISTANT_TEST_DATABASE_URL }, async t => {
   const url = process.env.ASSISTANT_TEST_DATABASE_URL;
   const parsed = new URL(url);
@@ -103,6 +125,32 @@ test('isolated PostgreSQL: assistant books only verified, current, conflict-free
     await db.service.update({ where: { id: f.service.id }, data: { publicOnWebsite: false } });
     assert.equal((await f.options()).offers.length, 0);
   });
+  await t.test('ordinary intake defaults to primary, pools free doctors, and followup requires a visit within a calendar month', async () => {
+    const { previousMonth } = await import('../apps/api/dist/modules/online-requests/assistant-intake-policy.js');
+    assert.equal(previousMonth(new Date('2026-03-31T12:00:00Z')).toISOString(), '2026-02-28T12:00:00.000Z');
+    assert.equal(previousMonth(new Date('2028-03-31T12:00:00Z')).toISOString(), '2028-02-29T12:00:00.000Z');
+    const f = await fixture();
+    await db.service.update({ where: { id: f.service.id }, data: { title: 'Первичный прием врача' } });
+    const followup = await db.service.create({ data: { title: 'Повторный приём врача', isActive: true, publicOnWebsite: true } });
+    await assistant.saveRule({ officeId: f.office.id, roomId: f.room.id, employeeId: f.employee.id, serviceId: followup.id, isActive: true, durationMinutes: 30, stepMinutes: 15, minimumLeadMinutes: 30, maximumDaysAhead: 2 }, f.employee.id);
+    const generic = await assistant.options({ ownerId: f.owner.id, serviceQuery: 'приём', days: 1 }, now);
+    assert.equal(generic.selection.visitKind, 'INITIAL'); assert.ok(generic.offers.length); assert.ok(generic.offers.every(x => /Первичный/.test(x.serviceTitle)));
+    assert.equal(new Set(generic.offers.map(x => `${x.serviceId}|${x.officeId}|${x.startsAt}`)).size, generic.offers.length);
+    const query = { ownerId: f.owner.id, serviceId: followup.id, days: 1 };
+    const question = await assistant.options(query, now); assert.equal(question.selection.followupQuestion, true); assert.equal(question.offers.length, 0);
+    const no = await assistant.options({ ...query, recentVisitAnswer: false }, now); assert.equal(no.selection.visitKind, 'INITIAL'); assert.match(no.selection.message, /больше месяца/);
+    const missing = await assistant.options({ ...query, recentVisitAnswer: true }, now); assert.equal(missing.selection.visitKind, 'INITIAL');
+    const recent = await db.visit.create({ data: { ownerId: f.owner.id, animalId: f.animal.id, status: 'COMPLETED', startedAt: new Date('2099-09-20T05:00:00Z'), completedAt: new Date('2099-09-20T05:30:00Z') } });
+    const yes = await assistant.options({ ...query, recentVisitAnswer: true }, now); assert.equal(yes.selection.visitKind, 'FOLLOWUP'); assert.ok(yes.offers.length); assert.equal(yes.animals[0].id, f.animal.id);
+    const offer = yes.offers[0];
+    await db.visit.update({ where: { id: recent.id }, data: { startedAt: new Date('2099-08-20T05:00:00Z') } });
+    await assert.rejects(f.book(f.input(offer)), /в течение месяца/);
+    assert.equal(await db.appointment.count({ where: { ownerId: f.owner.id } }), 0);
+    await db.visit.update({ where: { id: recent.id }, data: { startedAt: new Date('2099-09-20T05:00:00Z') } });
+    const wrongAnimal = await db.animal.create({ data: { ownerId: f.owner.id, nickname: 'Synthetic new pet' } });
+    await assert.rejects(f.book({ ...f.input(offer), animalId: wrongAnimal.id }), /в течение месяца/);
+    const result = await f.book(f.input(offer)); assert.ok(result.appointmentId);
+  });
   await t.test('concurrent identical confirmation and an expired retry create one appointment, one audit and one message', async () => {
     const f = await fixture(), input = f.input((await f.options()).offers[0]);
     const [a, b] = await Promise.all([f.book(input), f.book(input)]);
@@ -127,7 +175,7 @@ test('isolated PostgreSQL: assistant books only verified, current, conflict-free
   });
   await t.test('two owners competing for one slot have one winner and the loser leaves no request', async () => {
     const f = await fixture();
-    const owner = await db.owner.create({ data: { fullName: 'Synthetic competing owner' } });
+    const owner = await db.owner.create({ data: { fullName: 'Synthetic competing owner', phone: '+79990000002' } });
     const animal = await db.animal.create({ data: { ownerId: owner.id, nickname: 'Synthetic dog' } });
     const mine = (await f.options()).offers[0];
     const other = (await assistant.options({ ownerId: owner.id, serviceId: f.service.id, days: 1 }, now)).offers.find(x => x.startsAt === mine.startsAt);

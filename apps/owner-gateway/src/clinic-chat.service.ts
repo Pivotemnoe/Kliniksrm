@@ -9,12 +9,14 @@ import { ClinicChatBookingDto, ClinicChatCommandDto, ClinicChatContactDto, Clini
 
 import { BoundedRateLimiter } from './abuse-protection';
 import { contactPhone, snapshotContact, introduction } from './clinic-contact';
+import { PublicClinicCatalogService } from './public-clinic-catalog.service';
+import { clinicPriceReply, isClinicPriceQuestion } from './clinic-price-reply';
 
 type Db = Prisma.TransactionClient;
 @Injectable()
 export class ClinicChatService {
   private readonly maxIngress = new BoundedRateLimiter();
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly catalog: PublicClinicCatalogService = new PublicClinicCatalogService(prisma)) {}
   assertEnabled() {
     if (process.env.CLINIC_ASSISTANT_ENABLED !== 'true') throw new NotFoundException('Чат пока не включён');
   }
@@ -84,7 +86,7 @@ export class ClinicChatService {
         const phoneText = cleaned.match(/\+?[0-9][0-9 ()-]{8,30}[0-9]/)?.[0];
         let phone: string | undefined;
         try { if (phoneText) phone = contactPhone(phoneText); } catch {}
-        const name = /(?:меня зовут|обращайтесь(?: ко мне)?|можно называть)\s+([\p{L} -]{1,120})/iu.exec(cleaned)?.[1]?.trim() || (/^[А-ЯЁа-яё]{2,40}(?:[ -][А-ЯЁа-яё]{2,40}){0,2}$/.test(cleaned) && !/здравств|привет|добрый|адрес|телефон|запис|при[её]м|режим|работ|где|помог|хочу|цена|стоим|отказ|не хочу|нет/i.test(cleaned) ? cleaned : undefined);
+        const name = /(?:меня зовут|обращайтесь(?: ко мне)?|можно называть)\s+([\p{L} -]{1,120})/iu.exec(cleaned)?.[1]?.trim() || (/^[А-ЯЁа-яё]{2,40}(?:[ -][А-ЯЁа-яё]{2,40}){0,2}$/.test(cleaned) && !/здравств|привет|добрый|адрес|телефон|запис|при[её]м|режим|работ|где|помог|хочу|цен|стоим|прайс|отказ|не хочу|нет/i.test(cleaned) ? cleaned : undefined);
         const decline = /не (?:хочу|буду|дам|давать|вводить)|без (?:телефона|номера)|отказываюсь/i.test(cleaned);
         if (phone || name || decline || /^(?:здравствуйте|привет|добрый (?:день|вечер|утро))[.! ]*$/i.test(cleaned)) {
           const complete = Boolean((phone || row.phone) && (name || row.contactName)) || decline && row.introductionReminded;
@@ -94,6 +96,14 @@ export class ClinicChatService {
         }
         // A visitor can ask their question immediately without completing intake.
         await tx.clinicConversation.update({ where: { id: row.id }, data: { introductionComplete: true } });
+      }
+      if (isClinicPriceQuestion(cleaned)) {
+        let snapshot: unknown;
+        try { snapshot = await this.catalog.get(); } catch {}
+        const reply = clinicPriceReply(cleaned, snapshot);
+        await this.append(tx, row.id, 'ASSISTANT', channel, reply.text, `reply:${clientKey}`);
+        if (reply.human) await tx.clinicConversation.update({ where: { id: row.id }, data: { needsAttention: true, mode: 'HUMAN' } });
+        return;
       }
       if (process.env.CLINIC_ASSISTANT_MODEL_ENABLED === 'true') {
         await tx.clinicAssistantRun.create({ data: { messageId: message.id } });
@@ -107,9 +117,9 @@ export class ClinicChatService {
       if (bookingDraft(row.bookingDraft) && !clinicSafetyIntent(cleaned)
         && ((hints.preferredTimeText && dateOnly === hints.preferredTimeText.toLocaleLowerCase('ru')) || (hints.serviceQuery && dateOnly === hints.serviceQuery.toLocaleLowerCase('ru')))) reply = autoBookingReply();
       if (channel === 'MAX' && reply.intake) reply = { human: true, text: 'Напишите имя, телефон для связи, кличку питомца, причину и удобное время. Администратор уточнит заявку и подтвердит время.' };
-      if (reply.intake && channel === 'SITE_CHAT' && row.ownerId && process.env.CLINIC_ASSISTANT_AUTO_BOOKING_ENABLED === 'true') {
+      if (reply.intake && channel === 'SITE_CHAT' && process.env.CLINIC_ASSISTANT_AUTO_BOOKING_ENABLED === 'true') {
         await tx.clinicConversation.update({ where: { id: row.id }, data: { bookingDraft: nextBookingDraft(row.bookingDraft, message.sequence, cleaned, hints) } });
-        reply = autoBookingReply();
+        if (row.ownerId) reply = autoBookingReply();
       }
       await this.append(tx, row.id, 'ASSISTANT', channel, reply.text, `reply:${clientKey}`);
       if (reply.human) await tx.clinicConversation.update({ where: { id: row.id }, data: { needsAttention: true, mode: 'HUMAN' } });
@@ -121,6 +131,8 @@ export class ClinicChatService {
     const phone = contactPhone(dto.phone);
     if (!dto.contactConsent) throw new BadRequestException('Разрешите клинике связаться с вами по заявке');
     if (![dto.contactName, dto.phone, dto.animalNickname, dto.comment].every(x => x.trim())) throw new BadRequestException('Заполните обязательные поля');
+    if (dto.visitKind === 'FOLLOWUP' && dto.recentVisitAnswer === undefined) throw new BadRequestException('Уточните, был ли питомец на приёме в течение последнего месяца');
+    const comment = dto.visitKind ? `${dto.visitKind === 'FOLLOWUP' && dto.recentVisitAnswer ? 'Повторный приём: по словам владельца, визит был в течение месяца. Срок проверит администратор.' : 'Первичный приём.'} ${dto.comment.trim()}` : dto.comment.trim();
     await this.prisma.$transaction(async tx => {
       await this.lock(tx, row.id);
       if (await tx.clinicChatMessage.findUnique({ where: { conversationId_clientKey: { conversationId: row.id, clientKey: dto.clientKey } } })) return;
@@ -130,7 +142,7 @@ export class ClinicChatService {
         contactName: dto.contactName.trim(), phone, introductionComplete: true, animalNickname: dto.animalNickname.trim(),
         preferredAt: dto.preferredAt ? new Date(dto.preferredAt) : null, contactConsent: true, mode: 'HUMAN', needsAttention: true,
       } });
-      const bookingMessage = await this.append(tx, row.id, 'OWNER', 'SITE_CHAT', `Заявка: ${dto.animalNickname.trim()}. ${dto.comment.trim()}`, dto.clientKey);
+      const bookingMessage = await this.append(tx, row.id, 'OWNER', 'SITE_CHAT', `Заявка: ${dto.animalNickname.trim()}. ${comment}`, dto.clientKey);
       await tx.clinicConversation.update({ where: { id: row.id }, data: { bookingSequence: bookingMessage.sequence } });
       await this.append(tx, row.id, 'SYSTEM', 'SITE_CHAT', 'Заявка получена. Время ещё не подтверждено. Администратор ответит здесь.', `receipt:${dto.clientKey}`);
     });

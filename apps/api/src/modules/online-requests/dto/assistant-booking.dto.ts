@@ -21,6 +21,7 @@ export class AssistantBookingOptionsDto {
   @IsOptional() @IsString() @Matches(/^\d{4}-\d{2}-\d{2}$/) date?: string;
   @IsOptional() @IsISO8601() from?: string;
   @IsOptional() @IsInt() @Min(1) @Max(7) days?: number;
+  @IsOptional() @IsBoolean() recentVisitAnswer?: boolean;
 }
 
 export class AssistantBookDto {

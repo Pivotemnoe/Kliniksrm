@@ -1,0 +1,10 @@
+.clinic-assistant-entry{position:fixed;right:24px;bottom:24px;z-index:70;display:grid;align-content:center;gap:2px;min-height:62px;width:176px;padding:10px 20px;border:1px solid #005cba;border-radius:30px;background:#0071d6;color:#fff;box-shadow:0 6px 26px #133b6a30;text-decoration:none;font-family:inherit}
+.clinic-assistant-entry strong{font-size:17px;line-height:1.3}
+.clinic-assistant-entry small{font-size:11px;line-height:1.4}
+.clinic-assistant-entry:hover{background:#005cb9}
+.clinic-assistant-entry:focus-visible{outline:3px solid #0071d6;outline-offset:4px}
+.support-dock .chat-launcher{display:none}
+.support-dock{right:210px}
+body:has(.nav.is-open) .clinic-assistant-entry,body:has(.chat-panel) .clinic-assistant-entry{visibility:hidden}
+@media(max-width:700px){.clinic-assistant-entry{display:none}}
+@media print{.clinic-assistant-entry{display:none}}

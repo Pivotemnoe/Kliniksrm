@@ -18,6 +18,8 @@ export class ClinicChatBookingDto {
   @IsString() @MinLength(1) @MaxLength(1000) comment!: string;
   @IsOptional() @IsISO8601() preferredAt?: string;
   @IsBoolean() contactConsent!: boolean;
+  @IsOptional() @IsIn(['INITIAL', 'FOLLOWUP']) visitKind?: 'INITIAL' | 'FOLLOWUP';
+  @IsOptional() @IsBoolean() recentVisitAnswer?: boolean;
   @IsOptional() @IsString() @MaxLength(200) website?: string;
 }
 export class ClinicChatCommandDto {

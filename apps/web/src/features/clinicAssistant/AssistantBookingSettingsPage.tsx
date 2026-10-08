@@ -10,6 +10,7 @@ import { PageHeader } from '../../shared/ui/PageHeader';
 type RuleInput = { officeId: string; serviceId: string; employeeId: string; roomId: string; isActive: boolean; durationMinutes: number; stepMinutes: number; minimumLeadMinutes: number; maximumDaysAhead: number };
 type Rule = RuleInput & { id: string; office: { name: string }; service: { title: string }; employee: { fullName: string }; room: { name: string } };
 type Resources = { offices: { id: string; name: string }[]; services: { id: string; title: string }[]; employees: { id: string; fullName: string }[]; rooms: { id: string; name: string; officeId: string }[] };
+type Readiness = { enabled: boolean; totalRules: number; activeRules: number; eligibleRules: number; rulesWithShifts: number };
 const defaults = { isActive: false, durationMinutes: 30, stepMinutes: 15, minimumLeadMinutes: 30, maximumDaysAhead: 14 };
 export function AssistantBookingSettingsPage() {
   const { message } = App.useApp(), cache = useQueryClient(), { data: auth } = useCurrentEmployee();
@@ -18,15 +19,19 @@ export function AssistantBookingSettingsPage() {
   const officeId = Form.useWatch('officeId', form);
   const rules = useQuery({ queryKey: ['assistant-booking-rules'], queryFn: () => apiRequest<Rule[]>('/v1/assistant-booking/rules'), enabled: canRead });
   const resources = useQuery({ queryKey: ['assistant-booking-resources'], queryFn: () => apiRequest<Resources>('/v1/assistant-booking/resources'), enabled: canRead });
+  const readiness = useQuery({ queryKey: ['assistant-booking-readiness'], queryFn: () => apiRequest<Readiness>('/v1/assistant-booking/readiness'), enabled: canRead });
   const save = useMutation({ mutationFn: (input: RuleInput) => apiRequest<Rule>(`/v1/assistant-booking/rules${editing ? `/${editing}` : ''}`, { method: editing ? 'PUT' : 'POST', body: input }), onSuccess: () => {
-    void cache.invalidateQueries({ queryKey: ['assistant-booking-rules'] }); setEditing(undefined); form.resetFields(); message.success('Правило записи сохранено');
+    void cache.invalidateQueries({ queryKey: ['assistant-booking-rules'] }); void cache.invalidateQueries({ queryKey: ['assistant-booking-readiness'] }); setEditing(undefined); form.resetFields(); message.success('Правило записи сохранено');
   }, onError: e => message.error(e.message) });
-  const disable = useMutation({ mutationFn: (id: string) => apiRequest(`/v1/assistant-booking/rules/${id}/disable`, { method: 'POST' }), onSuccess: () => { void cache.invalidateQueries({ queryKey: ['assistant-booking-rules'] }); message.success('Самостоятельная запись по правилу отключена'); }, onError: e => message.error(e.message) });
+  const disable = useMutation({ mutationFn: (id: string) => apiRequest(`/v1/assistant-booking/rules/${id}/disable`, { method: 'POST' }), onSuccess: () => { void cache.invalidateQueries({ queryKey: ['assistant-booking-rules'] }); void cache.invalidateQueries({ queryKey: ['assistant-booking-readiness'] }); message.success('Самостоятельная запись по правилу отключена'); }, onError: e => message.error(e.message) });
   if (!canRead) return <Alert type="warning" message="Нет доступа к настройкам записи" />;
   return <div className="page">
     <PageHeader title="Запись из чата" description="Разрешённые услуги, врачи и кабинеты для самостоятельной записи владельцев." />
     <Alert showIcon type="info" message="Время проверяется по расписанию CRM" description="Ассистент учитывает смены врача, часы и перерывы филиала, занятые кабинеты. Новое правило выключено, пока вы его не включите." />
-    {rules.isError || resources.isError ? <Alert type="error" message={rules.error?.message || resources.error?.message} /> : null}
+    {readiness.data ? <Alert showIcon type={readiness.data.enabled && readiness.data.rulesWithShifts ? 'success' : 'warning'}
+      message={!readiness.data.enabled ? 'Самостоятельная запись выключена' : !readiness.data.eligibleRules ? 'Для самостоятельной записи нужно включить правило' : !readiness.data.rulesWithShifts ? 'У выбранных врачей нет будущих смен' : `Доступны ${readiness.data.eligibleRules} правил записи`}
+      description={!readiness.data.enabled ? 'Заявки принимает администратор.' : !readiness.data.eligibleRules ? 'Выберите услугу, врача, кабинет и длительность приёма ниже. Пока правила не включены, заявки принимает администратор.' : !readiness.data.rulesWithShifts ? 'Добавьте смены врачей в расписании CRM. Пока смен нет, заявки принимает администратор.' : 'Свободное время будет предложено в пределах смен и с учётом уже созданных записей.'} /> : null}
+    {rules.isError || resources.isError || readiness.isError ? <Alert type="error" message={rules.error?.message || resources.error?.message || readiness.error?.message} /> : null}
     <Card title={editing ? 'Изменить правило' : 'Новое правило'}>
       <Form form={form} layout="vertical" initialValues={defaults} disabled={!canManage || save.isPending} onFinish={values => save.mutate(values)}>
         <Form.Item name="officeId" label="Филиал" rules={[{ required: true }]}><Select aria-label="Филиал правила записи" showSearch optionFilterProp="label" options={resources.data?.offices.map(x => ({ value: x.id, label: x.name }))} onChange={() => form.setFieldValue('roomId', undefined)} /></Form.Item>

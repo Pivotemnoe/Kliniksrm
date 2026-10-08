@@ -25,7 +25,7 @@ export class ClinicChatBookingService {
     const row = await this.identity(token, portalToken);
     const input = { ...(dto.serviceId ? { serviceId: dto.serviceId } : {}), ...(dto.serviceQuery ? { serviceQuery: dto.serviceQuery.trim() } : {}),
       ...(dto.preferredTimeText ? { preferredTimeText: dto.preferredTimeText.trim() } : {}), ...(dto.date ? { date: dto.date } : {}),
-      ...(dto.draftRevision ? { draftRevision: dto.draftRevision } : {}), ...(dto.from ? { from: dto.from } : {}), days: dto.days ?? 2 };
+      ...(dto.draftRevision ? { draftRevision: dto.draftRevision } : {}), ...(dto.from ? { from: dto.from } : {}), ...(dto.recentVisitAnswer !== undefined ? { recentVisitAnswer: dto.recentVisitAnswer } : {}), days: dto.days ?? 2 };
     return this.prisma.$transaction(async tx => {
       await tx.$queryRaw`SELECT "id" FROM "ClinicConversation" WHERE "id" = ${row.id} FOR UPDATE`;
       const previous = await tx.clinicBookingOperation.findUnique({ where: { conversationId_clientKey: { conversationId: row.id, clientKey: dto.clientKey } } });
