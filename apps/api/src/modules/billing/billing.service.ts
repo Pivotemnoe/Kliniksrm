@@ -6,6 +6,7 @@ import { AuditService } from '../audit/audit.service';
 import { FinanceService } from '../finance/finance.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { toStockQuantity } from '../stock/stock-units';
+import { getLinkedConsumables } from '../stock/linked-consumables';
 import { resolveServiceUnitPrice, servicePricingSelect } from '../stock/service-pricing';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { AddBillItemDto } from './dto/add-bill-item.dto';
@@ -944,10 +945,11 @@ export class BillingService {
     }
 
     const productItems = await tx.billItem.findMany({
-      where: { billId: bill.id, productId: { not: null } },
+      where: { billId: bill.id, OR: [{ productId: { not: null } }, { serviceId: { not: null } }] },
       select: {
         id: true,
         productId: true,
+        serviceId: true,
         title: true,
         quantity: true,
         stockQuantity: true,
@@ -963,6 +965,7 @@ export class BillingService {
       if (item.hospitalRecord) continue;
       const line = calculateBillItemLine({
         productId: item.productId ?? undefined,
+        serviceId: item.serviceId ?? undefined,
         title: item.title,
         quantity: decimalToNumber(item.quantity),
         stockQuantity: item.stockQuantity === null ? decimalToNumber(item.quantity) : decimalToNumber(item.stockQuantity),
@@ -970,12 +973,22 @@ export class BillingService {
         discount: decimalToNumber(item.discount),
       });
       await this.syncBillProductWriteOff(tx, bill, item.id, line, warehouseScope);
+      if (bill.visitId) {
+        const linked = await getLinkedConsumables(tx, line);
+        const previous = await tx.stockMovement.findMany({ where: { billItemId: item.id, productId: { not: line.productId ?? '' } }, distinct: ['productId'], select: { productId: true } });
+        for (const old of previous) {
+          if (!linked.some((material) => material.productId === old.productId)) await this.restoreBillProduct(tx, item.id, old.productId, 'расходный материал', await this.getBillItemDeductedQuantity(tx, item.id, old.productId));
+        }
+        for (const material of linked) {
+          await this.syncBillProductWriteOff(tx, bill, item.id, calculateBillItemLine({ productId: material.productId, title: material.title, quantity: material.quantity.toNumber(), stockQuantity: material.quantity.toNumber(), unitPrice: 0 }), warehouseScope);
+        }
+      }
     }
   }
 
   private async restoreBillProductItems(tx: Prisma.TransactionClient, bill: BillStockContext) {
     const productItems = await tx.billItem.findMany({
-      where: { billId: bill.id, productId: { not: null } },
+      where: { billId: bill.id, OR: [{ productId: { not: null } }, { serviceId: { not: null } }] },
       select: { id: true, productId: true, title: true, hospitalRecord: { select: { id: true } } },
     });
 

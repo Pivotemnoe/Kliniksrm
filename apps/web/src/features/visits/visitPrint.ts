@@ -79,7 +79,7 @@ function openPrintWindow({
   const logoUrl = printLogoUrl(organization?.logoUrl);
   const clinicName = organization?.displayName?.trim() || appConfig.brandName;
   const clinicDescription = organization?.orgType?.trim() || 'Ветеринарная клиника';
-  const clinicDetails = formatOrganizationDetails(organization);
+  const clinicDetails = formatOrganizationDetails(organization, visit);
   const renderedSections = sections
     .filter((section) => section.body !== undefined && section.body !== null && String(section.body).trim() !== '')
     .map(
@@ -158,16 +158,20 @@ function openPrintWindow({
   printWindow.document.close();
 }
 
-function formatOrganizationDetails(organization?: OrganizationPrintProfile | null) {
+function formatOrganizationDetails(organization: OrganizationPrintProfile | null | undefined, visit: Visit) {
   if (!organization) {
     return '';
   }
 
   const legalIdentity = organization.legalName?.trim() || organization.orgType?.trim() || null;
   const inn = organization.inn?.trim() ? `ИНН ${organization.inn.trim()}` : null;
-  const address = (organization.postalAddress || organization.legalAddress)?.trim() || null;
+  const officeId = visit.queueEntry?.officeId || visit.appointment?.officeId;
+  const office = organization.offices?.find((item) => item.id === officeId)
+    ?? (!officeId ? organization.offices?.[0] : undefined);
+  const address = (office?.address || organization.postalAddress || organization.legalAddress)?.trim() || null;
+  const phone = office?.phone?.trim() ? `Телефон: ${office.phone.trim()}` : null;
 
-  return [legalIdentity, inn, address].filter(Boolean).join(' · ');
+  return [legalIdentity, inn, address, phone].filter(Boolean).join(' · ');
 }
 
 function formatDiagnoses(visit: Visit) {

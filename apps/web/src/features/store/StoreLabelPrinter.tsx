@@ -14,6 +14,7 @@ export function toStorePrintableItem(product: StoreProduct): PrintableCatalogIte
     title: product.title,
     categoryTitle: product.categoryTitle,
     sku: product.sku,
+    unitText: product.unit || 'шт',
     barcode: product.barcode,
     priceText: formatMoney(product.retailPrice),
     vatRate: product.vatRate === null ? null : String(product.vatRate),

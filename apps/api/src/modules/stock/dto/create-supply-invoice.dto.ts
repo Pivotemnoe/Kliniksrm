@@ -45,6 +45,12 @@ export class CreateSupplyInvoiceItemDto {
   @Min(0)
   purchasePrice!: number;
 
+  @ApiPropertyOptional({ description: 'Полная сумма позиции до скидки. Цена единицы рассчитывается из суммы и количества.' })
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  lineAmount?: number;
+
   @ApiPropertyOptional({ description: 'Цена продажи, которая будет установлена в карточке товара после приёмки.' })
   @IsOptional()
   @IsNumber()

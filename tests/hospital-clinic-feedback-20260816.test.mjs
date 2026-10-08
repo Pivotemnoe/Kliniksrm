@@ -143,7 +143,8 @@ test('суточный тариф хранится по боксу, а связ�
   assert.match(migration, /ADD COLUMN "dailyRate"/);
   assert.match(scheduling, /select: \{ id: true, officeId: true, dailyRate: true, dailyServices: true \}/);
   assert.match(hospital, /writeOffLinkedHospitalProducts/);
-  assert.match(hospital, /serviceLinkedProduct\.findMany/);
+  assert.match(hospital, /getLinkedConsumables\(tx, line\)/);
+  assert.match(await read('apps/api/src/modules/stock/linked-consumables.ts'), /serviceLinkedProduct\.findMany/);
   assert.match(stockPage, /Связанные расходные материалы/);
   assert.doesNotMatch(migration, /^\s*(?:DROP\b|DELETE\s+FROM\b|TRUNCATE\b|UPDATE\s+)/im);
 });

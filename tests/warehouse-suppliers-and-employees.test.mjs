@@ -27,7 +27,7 @@ test('manual supply invoice supports supplier directory, compact lines and recei
   assert.match(supplierModal, /Название поставщика/);
   assert.doesNotMatch(page, /normalizedProductSearch\.length >= 3/);
   assert.match(page, /listProducts\(\{ search: normalizedProductSearch \|\| undefined/);
-  assert.match(page, /Цена по накладной/);
+  assert.match(page, /Сумма позиции по накладной/);
   assert.match(page, /Цена продажи/);
   assert.match(page, /Единица по накладной/);
   assert.match(page, /Поступит на склад/);
@@ -44,7 +44,7 @@ test('manual supply invoice supports supplier directory, compact lines and recei
   assert.match(updateDto, /retailPrice\?: number/);
   assert.match(updateDto, /conversionFactor\?: number/);
   assert.match(service, /data: \{ retailPrice: item\.retailPrice \}/);
-  assert.match(service, /stockUnitCost: decimal\(item\.purchasePrice\)\.dividedBy\(conversionFactor\)/);
+  assert.match(service, /stockUnitCost: netAmount\.dividedBy\(stockQuantity\)/);
   assert.match(service, /retailPricesUpdated/);
 });
 

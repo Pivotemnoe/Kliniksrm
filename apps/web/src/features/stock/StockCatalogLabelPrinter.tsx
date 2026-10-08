@@ -15,6 +15,7 @@ export function toClinicProductPrintItem(product: Product): PrintableCatalogItem
     title: product.title,
     categoryTitle: product.category?.title,
     sku: product.sku,
+    unitText: product.billingUnit || product.writeOffUnit || product.stockUnit || 'шт',
     barcode: product.barcode || product.gtin,
     priceText: formatMoney(product.retailPrice),
     vatRate: product.vatRate === null ? null : String(product.vatRate),

@@ -45,6 +45,7 @@ import { SupplyInvoiceImporter } from './SupplyInvoiceImporter';
 import { SupplierModal } from './SupplierModal';
 import { StockCatalogLabelPrinter, toClinicProductPrintItem, toClinicServicePrintItem, type StockPrintLine } from './StockCatalogLabelPrinter';
 import { useProductCatalogPicker } from './useCatalogPicker';
+import { LabelPreview, printCatalogLabels } from '../../shared/ui/CatalogLabelPrinter';
 
 export function StockPage() {
   const location = useLocation();
@@ -367,7 +368,8 @@ export function StockPage() {
               columns={[
                 { title: 'Товар', key: 'product', render: (_, item) => item.product?.title ?? '—' },
                 { title: 'Количество', key: 'quantity', render: (_, item) => formatSupplyInvoiceQuantity(item) },
-                { title: 'Цена по накладной', dataIndex: 'purchasePrice', key: 'purchasePrice', render: formatMoney },
+                { title: 'Цена по накладной за единицу', dataIndex: 'purchasePrice', key: 'purchasePrice', render: formatPurchasePrice },
+                { title: 'Сумма позиции', key: 'lineAmount', render: (_, item) => formatMoney(Number(item.lineAmount ?? Number(item.receiptQuantity ?? item.quantity) * Number(item.purchasePrice)) - Number(item.discountAmount ?? 0)) },
                 { title: 'Цена продажи', key: 'retailPrice', render: (_, item) => formatMoney(item.product?.retailPrice ?? 0) },
                 { title: 'Серия', dataIndex: 'series', key: 'series', render: (value) => value || '—' },
               ]}
@@ -667,7 +669,7 @@ function BatchesTable({
       { title: 'Товар', key: 'product', render: (_, record) => record.product?.title ?? '—' },
       { title: 'Поставщик', key: 'supplier', render: (_, record) => record.supplier?.title ?? '—' },
       { title: 'Остаток', key: 'rest', render: (_, record) => `${record.rest} ${record.product?.stockUnit ?? ''}` },
-      { title: 'Приходная цена', dataIndex: 'purchasePrice', key: 'purchasePrice', render: formatMoney },
+      { title: 'Приходная цена', dataIndex: 'purchasePrice', key: 'purchasePrice', render: formatPurchasePrice },
       { title: 'Годен до', dataIndex: 'expiresAt', key: 'expiresAt', render: formatDate },
       { title: 'Серия', dataIndex: 'series', key: 'series', render: (value: string | null) => value || '—' },
       {
@@ -855,6 +857,8 @@ const productSchema = z
     linkedProducts: z.array(z.object({
       productId: z.string().min(1, 'Выберите товар'),
       quantity: z.number().min(0.001, 'Укажите количество'),
+      minDoseMl: z.number().min(0).optional(),
+      maxDoseMl: z.number().min(0.001).optional(),
     })),
   })
   .superRefine((value, context) => {
@@ -925,7 +929,7 @@ function ProductModal({
       minStock: product?.minStock === null || product?.minStock === undefined ? 0 : Number(product.minStock),
       defaultExpiresAt: product?.defaultExpiresAt?.slice(0, 10) ?? '',
       description: product?.description ?? '',
-      linkedProducts: product?.linkedProducts?.map((item) => ({ productId: item.productId, quantity: Number(item.quantity) })) ?? [],
+      linkedProducts: product?.linkedProducts?.map((item) => ({ productId: item.productId, quantity: Number(item.quantity), minDoseMl: item.minDoseMl == null ? undefined : Number(item.minDoseMl), maxDoseMl: item.maxDoseMl == null ? undefined : Number(item.maxDoseMl) })) ?? [],
     });
   }, [open, product, reset]);
   const mutation = useMutation({
@@ -1089,6 +1093,8 @@ function ProductModal({
           remove={linkedProductFields.remove}
           products={linkedProductPicker.items.filter((item) => item.id !== product?.id)}
           onSearch={linkedProductPicker.onSearch}
+          allowDoseRanges={writeOffUnit === 'мл'}
+          setValue={setValue}
         />
       </Form>
     </Modal>
@@ -1269,6 +1275,8 @@ function LinkedProductsFields({
   remove,
   products,
   onSearch,
+  allowDoseRanges = false,
+  setValue,
 }: {
   control: any;
   fields: Array<{ id: string }>;
@@ -1276,13 +1284,17 @@ function LinkedProductsFields({
   remove: (index: number) => void;
   products: Product[];
   onSearch: (value: string) => void;
+  allowDoseRanges?: boolean;
+  setValue?: (name: any, value: any, options?: any) => void;
 }) {
+  const rows = useWatch({ control, name: 'linkedProducts' }) ?? [];
   return (
     <div className="linked-products-editor">
       <Typography.Title level={5}>Связанные расходные материалы</Typography.Title>
       <Typography.Paragraph type="secondary">
         Эти товары будут автоматически списаны со склада при выполнении услуги или использовании основного товара. В счёт отдельной строкой они не добавляются.
       </Typography.Paragraph>
+      {allowDoseRanges ? <Typography.Paragraph type="secondary">Для шприцев включите выбор по объёму: нижняя граница не включается, верхняя включается. Списывается 1 шт. за выполнение.</Typography.Paragraph> : null}
       <Space direction="vertical" size={8} style={{ width: '100%' }}>
         {fields.map((field, index) => (
           <Space key={field.id} align="start" wrap style={{ width: '100%' }}>
@@ -1323,12 +1335,24 @@ function LinkedProductsFields({
                     min={0.001}
                     step={0.1}
                     precision={3}
+                    disabled={rows[index]?.minDoseMl !== undefined}
                     placeholder="Количество"
                     style={{ width: '100%' }}
                   />
                 </Form.Item>
               )}
             />
+            {allowDoseRanges ? <Space wrap>
+              <Checkbox checked={rows[index]?.minDoseMl !== undefined} onChange={(event) => {
+                setValue?.(`linkedProducts.${index}.minDoseMl`, event.target.checked ? 0 : undefined, { shouldDirty: true });
+                setValue?.(`linkedProducts.${index}.maxDoseMl`, event.target.checked ? 1 : undefined, { shouldDirty: true });
+                if (event.target.checked) setValue?.(`linkedProducts.${index}.quantity`, 1, { shouldDirty: true });
+              }}>По объёму препарата</Checkbox>
+              {rows[index]?.minDoseMl !== undefined ? <>
+                <FormNumber control={control} name={`linkedProducts.${index}.minDoseMl`} label="Больше, мл" step={0.1} required />
+                <FormNumber control={control} name={`linkedProducts.${index}.maxDoseMl`} label="До включительно, мл" step={0.1} required />
+              </> : null}
+            </Space> : null}
             <Button danger icon={<DeleteOutlined />} aria-label="Удалить связанный товар" onClick={() => remove(index)} />
           </Space>
         ))}
@@ -1345,7 +1369,7 @@ const supplyLineSchema = z.object({
   quantity: z.number().min(0.001, 'Введите количество'),
   receiptUnit: z.string().trim().min(1, 'Укажите единицу по накладной'),
   conversionFactor: z.number().min(0.001, 'Укажите пересчёт в складскую единицу'),
-  purchasePrice: z.number().min(0.01, 'Введите цену по накладной'),
+  lineAmount: z.number().min(0.01, 'Введите сумму позиции'),
   retailPrice: z.number().min(0.01, 'Введите цену продажи'),
   discountAmount: z.number().min(0).optional(),
   expiresAt: z.string().optional(),
@@ -1375,6 +1399,7 @@ function SupplyInvoiceModal({ open, invoice, resources, onClose }: { open: boole
   const [supplierOpen, setSupplierOpen] = useState(false);
   const [productSearch, setProductSearch] = useState('');
   const [knownProducts, setKnownProducts] = useState<Record<string, Product>>({});
+  const automaticAmounts = useRef<Record<number, { unitCost: number; amount: number }>>({});
   const deferredProductSearch = useDeferredValue(productSearch);
   const normalizedProductSearch = deferredProductSearch.trim();
   const productsQuery = useQuery({
@@ -1395,6 +1420,7 @@ function SupplyInvoiceModal({ open, invoice, resources, onClose }: { open: boole
   useEffect(() => {
     if (!open) return;
     reset(getSupplyFormValues(invoice, defaultWarehouseId));
+    automaticAmounts.current = {};
     setProductSearch('');
     setKnownProducts(Object.fromEntries(
       (invoice?.items ?? []).flatMap((item) => item.product ? [[item.product.id, item.product] as const] : []),
@@ -1409,11 +1435,23 @@ function SupplyInvoiceModal({ open, invoice, resources, onClose }: { open: boole
     }));
   }, [productsQuery.data]);
 
+  useEffect(() => {
+    watchedItems.forEach((item, index) => {
+      const automatic = automaticAmounts.current[index];
+      if (!automatic) return;
+      if (Number(item.lineAmount) !== automatic.amount) { delete automaticAmounts.current[index]; return; }
+      const amount = Math.round(automatic.unitCost * Number(item.quantity) * Number(item.conversionFactor) * 100) / 100;
+      if (amount !== automatic.amount) {
+        automatic.amount = amount;
+        setValue(`items.${index}.lineAmount`, amount, { shouldDirty: true });
+      }
+    });
+  }, [watchedItems, setValue]);
+
   const productOptions = useMemo(
-    () => Object.values(knownProducts)
-      .sort((left, right) => left.title.localeCompare(right.title, 'ru'))
+    () => (productsQuery.data?.items ?? [])
       .map((product) => ({ value: product.id, label: formatProductOption(product) })),
-    [knownProducts],
+    [productsQuery.data],
   );
 
   const mutation = useMutation({
@@ -1424,6 +1462,7 @@ function SupplyInvoiceModal({ open, invoice, resources, onClose }: { open: boole
         suppliedAt: new Date(values.suppliedAt).toISOString(),
         items: values.items.map((item) => ({
           ...item,
+          purchasePrice: item.lineAmount / item.quantity,
           expiresAt: item.expiresAt ? new Date(item.expiresAt).toISOString() : undefined,
         })),
       };
@@ -1469,10 +1508,16 @@ function SupplyInvoiceModal({ open, invoice, resources, onClose }: { open: boole
             const stockUnit = selectedProduct?.stockUnit?.trim() || receiptUnit || 'ед.';
             const conversionFactor = Number(watchedLine?.conversionFactor ?? 1);
             const stockQuantity = Number(watchedLine?.quantity ?? 0) * conversionFactor;
+            const selectedOption = selectedProduct ? { value: selectedProduct.id, label: formatProductOption(selectedProduct) } : undefined;
             return <div key={field.id} className="supply-line-card">
               <Space align="start" className="full-width" style={{ justifyContent: 'space-between' }}>
                 <Typography.Text strong>Позиция {index + 1}</Typography.Text>
-                <Button danger type="text" icon={<DeleteOutlined />} disabled={fields.length === 1 || existingLine} onClick={() => remove(index)}>
+                <Button danger type="text" icon={<DeleteOutlined />} disabled={fields.length === 1 || existingLine} onClick={() => {
+                  automaticAmounts.current = Object.fromEntries(Object.entries(automaticAmounts.current)
+                    .filter(([key]) => Number(key) !== index)
+                    .map(([key, value]) => [Number(key) > index ? Number(key) - 1 : Number(key), value]));
+                  remove(index);
+                }}>
                   {existingLine ? 'Проведена' : 'Убрать'}
                 </Button>
               </Space>
@@ -1494,8 +1539,14 @@ function SupplyInvoiceModal({ open, invoice, resources, onClose }: { open: boole
                         setValue(`items.${index}.retailPrice`, Number(product?.retailPrice ?? 0), { shouldDirty: true, shouldValidate: false });
                         setValue(`items.${index}.receiptUnit`, product?.stockUnit?.trim() || 'шт', { shouldDirty: true, shouldValidate: false });
                         setValue(`items.${index}.conversionFactor`, 1, { shouldDirty: true, shouldValidate: false });
+                        const lastBatch = product?.batches?.find((batch) => Number(batch.purchasePrice) > 0);
+                        const unitCost = Number(lastBatch?.purchasePrice ?? 0);
+                        const amount = Math.round(unitCost * Number(watchedLine?.quantity ?? 1) * 100) / 100;
+                        automaticAmounts.current[index] = { unitCost, amount };
+                        setValue(`items.${index}.lineAmount`, amount, { shouldDirty: true });
+                        setProductSearch('');
                       }}
-                      options={productOptions}
+                      options={!productSearch && selectedOption && !productOptions.some((item) => item.value === selectedOption.value) ? [selectedOption, ...productOptions] : productOptions}
                       placeholder="Введите название, SKU или штрих-код"
                     />
                   </Form.Item>
@@ -1549,7 +1600,7 @@ function SupplyInvoiceModal({ open, invoice, resources, onClose }: { open: boole
                 </Form.Item>
               </div>
               <div className="supply-line-values-grid">
-                <FormNumber control={control} name={`items.${index}.purchasePrice`} label={`Цена за 1 ${receiptUnit || 'ед.'} по накладной`} step={1} required />
+                <FormNumber control={control} name={`items.${index}.lineAmount`} label="Сумма позиции по накладной, ₽" step={1} precision={2} required />
                 <FormNumber
                   control={control}
                   name={`items.${index}.retailPrice`}
@@ -1567,12 +1618,13 @@ function SupplyInvoiceModal({ open, invoice, resources, onClose }: { open: boole
                 <FormText control={control} name={`items.${index}.shelfNumber`} label="Полка" />
               </div>
               <Typography.Text type="secondary" className="supply-price-note">
+                Закупочная цена за 1 {stockUnit}: {stockQuantity > 0 ? formatPurchasePrice(Math.max(0, Number(watchedLine?.lineAmount ?? 0) - Number(watchedLine?.discountAmount ?? 0)) / stockQuantity) : '—'}.{' '}
                 Цена продажи после проведения станет новой ценой выбранного товара во всей CRM.
               </Typography.Text>
             </div>;
           })}
           <Button icon={<PlusOutlined />} onClick={() => append(emptySupplyLine(defaultWarehouseId))}>Добавить позицию</Button>
-          <Typography.Text strong>Итого: {formatMoney(watchedItems.reduce((total, item) => total + Number(item?.quantity ?? 0) * Number(item?.purchasePrice ?? 0) - Number(item?.discountAmount ?? 0), 0))}</Typography.Text>
+          <Typography.Text strong>Итого: {formatMoney(watchedItems.reduce((total, item) => total + Number(item?.lineAmount ?? 0) - Number(item?.discountAmount ?? 0), 0))}</Typography.Text>
         </Space>
       </Form>
     </Modal>
@@ -1582,7 +1634,11 @@ function SupplyInvoiceModal({ open, invoice, resources, onClose }: { open: boole
 }
 
 function emptySupplyLine(warehouseId: string): SupplyFormValues['items'][number] {
-  return { productId: '', warehouseId, quantity: 1, receiptUnit: '', conversionFactor: 1, purchasePrice: 0, retailPrice: 0, discountAmount: 0, expiresAt: '', series: '', rack: '', rackNumber: '', shelfNumber: '' };
+  return { productId: '', warehouseId, quantity: 1, receiptUnit: '', conversionFactor: 1, lineAmount: 0, retailPrice: 0, discountAmount: 0, expiresAt: '', series: '', rack: '', rackNumber: '', shelfNumber: '' };
+}
+
+function formatPurchasePrice(value: string | number) {
+  return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 2, maximumFractionDigits: 6 }).format(Number(value));
 }
 
 function getSupplyFormValues(invoice: SupplyInvoice | null | undefined, warehouseId: string): SupplyFormValues {
@@ -1600,7 +1656,7 @@ function getSupplyFormValues(invoice: SupplyInvoice | null | undefined, warehous
       quantity: Number(item.receiptQuantity ?? item.quantity),
       receiptUnit: item.receiptUnit || item.product?.stockUnit || 'шт',
       conversionFactor: Number(item.conversionFactor ?? 1),
-      purchasePrice: Number(item.purchasePrice),
+      lineAmount: Number(item.lineAmount ?? Number(item.receiptQuantity ?? item.quantity) * Number(item.purchasePrice)),
       retailPrice: Number(item.product?.retailPrice ?? 0),
       discountAmount: Number(item.discountAmount),
       expiresAt: item.expiresAt?.slice(0, 10) ?? '',
@@ -1683,6 +1739,7 @@ function FormNumber({
   name,
   label,
   step = 1,
+  precision,
   help,
   required = false,
   disabled = false,
@@ -1691,6 +1748,7 @@ function FormNumber({
   name: string;
   label: string;
   step?: number;
+  precision?: number;
   help?: string;
   required?: boolean;
   disabled?: boolean;
@@ -1705,6 +1763,7 @@ function FormNumber({
             className="full-width"
             min={0}
             step={step}
+            precision={precision}
             disabled={disabled}
             value={field.value}
             onBlur={field.onBlur}
@@ -1756,7 +1815,7 @@ function formatProductUnits(product: Product) {
 }
 
 type PriceTagSettings = {
-  paper: 'LABEL_58_40' | 'A4';
+  paper: 'LABEL_58_30' | 'LABEL_58_40' | 'A4';
   copies: number;
   showClinic: boolean;
   showLegalName: boolean;
@@ -1769,18 +1828,18 @@ type PriceTagOrganization = StockResources['organization'];
 
 function PriceTagEditor({ product, organization, onClose }: { product: Product | null; organization: PriceTagOrganization; onClose: () => void }) {
   const [settings, setSettings] = useState<PriceTagSettings>({
-    paper: 'LABEL_58_40',
+    paper: 'LABEL_58_30',
     copies: 1,
     showClinic: true,
     showLegalName: true,
-    showCategory: true,
-    showBarcode: true,
-    showVat: true,
+    showCategory: false,
+    showBarcode: false,
+    showVat: false,
   });
 
   useEffect(() => {
     if (product) {
-      setSettings({ paper: 'LABEL_58_40', copies: 1, showClinic: true, showLegalName: true, showCategory: true, showBarcode: true, showVat: true });
+      setSettings({ paper: 'LABEL_58_30', copies: 1, showClinic: true, showLegalName: true, showCategory: false, showBarcode: false, showVat: false });
     }
   }, [product]);
 
@@ -1814,6 +1873,7 @@ function PriceTagEditor({ product, organization, onClose }: { product: Product |
             value={settings.paper}
             onChange={(event) => setSettings((current) => ({ ...current, paper: event.target.value }))}
             options={[
+              { value: 'LABEL_58_30', label: 'Ценник 58 × 30 мм' },
               { value: 'LABEL_58_40', label: 'Этикетка 58 × 40 мм' },
               { value: 'A4', label: 'Лист A4 (сетка)' },
             ]}
@@ -1846,71 +1906,18 @@ function PriceTagEditor({ product, organization, onClose }: { product: Product |
         </Checkbox>
       </Space>
       <div style={{ background: '#eef2f7', padding: 24, display: 'flex', justifyContent: 'center' }}>
-        <div style={{ width: 260, minHeight: 180, background: '#fff', border: '1px solid #cbd5e1', padding: 14, display: 'grid', alignContent: 'start', gap: 5 }}>
-          {settings.showClinic && organization?.displayName ? <strong style={{ fontSize: 13 }}>{organization.displayName}</strong> : null}
-          {settings.showLegalName && organization?.legalName ? <small style={{ color: '#475569' }}>{organization.legalName}</small> : null}
-          <strong>{product.title}</strong>
-          <span style={{ fontSize: 26, fontWeight: 800 }}>{formatMoney(product.retailPrice)}</span>
-          {settings.showCategory && product.category?.title ? <Typography.Text type="secondary">{product.category.title}</Typography.Text> : null}
-          {settings.showVat ? <small>{product.vatRate !== null && product.vatRate !== undefined ? `НДС ${product.vatRate}%` : 'Без НДС'}</small> : null}
-          {settings.showBarcode && barcode ? <BarcodeGraphic value={barcode} /> : null}
-        </div>
+        <LabelPreview item={toClinicProductPrintItem(product)} organization={organization ?? null} settings={{ ...settings, showOrganization: settings.showClinic }} />
       </div>
     </Modal>
   );
 }
 
 function printProductPriceTags(product: Product, organization: PriceTagOrganization, settings: PriceTagSettings) {
-  const printWindow = window.open('', '_blank', 'width=720,height=520');
-
-  if (!printWindow) {
-    return;
-  }
-
-  const barcode = product.barcode || product.gtin;
-  const barcodeSvg = settings.showBarcode && barcode ? renderBarcodeSvg(barcode) : '';
-  const metaRows = [
-    product.sku ? `Артикул: ${product.sku}` : null,
-    settings.showCategory && product.category?.title ? `Категория: ${product.category.title}` : null,
-    settings.showVat ? (product.vatRate !== null && product.vatRate !== undefined ? `НДС: ${product.vatRate}%` : 'Без НДС') : null,
-  ].filter(Boolean);
-  const label = `<div class="label">
-    ${settings.showClinic && organization?.displayName ? `<div class="clinic">${escapeHtml(organization.displayName)}</div>` : ''}
-    ${settings.showLegalName && organization?.legalName ? `<div class="legal">${escapeHtml(organization.legalName)}</div>` : ''}
-    <div class="title">${escapeHtml(product.title)}</div>
-    <div class="price">${escapeHtml(formatMoney(product.retailPrice))}</div>
-    <div class="meta">${metaRows.map((row) => `<div>${escapeHtml(String(row))}</div>`).join('')}</div>
-    ${barcodeSvg ? `<div class="barcode">${barcodeSvg}</div>` : ''}
-  </div>`;
-  const labels = Array.from({ length: settings.copies }, () => label).join('');
-  const pageCss = settings.paper === 'A4'
-    ? '@page { size: A4 portrait; margin: 12mm; } .sheet { display: grid; grid-template-columns: repeat(3, 58mm); gap: 5mm; align-content: start; } .label { break-inside: avoid; border: 1px dashed #9ca3af; }'
-    : '@page { size: 58mm 40mm; margin: 0; } .sheet { display: block; } .label { break-after: page; } .label:last-child { break-after: auto; }';
-
-  printWindow.document.write(`<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8" />
-  <title>Ценник ${escapeHtml(product.title)}</title>
-  <style>
-    ${pageCss}
-    body { margin: 0; color: #111827; font: 12px/1.35 Arial, sans-serif; }
-    .label { box-sizing: border-box; width: 58mm; height: 40mm; padding: 2.5mm 3mm; display: grid; gap: 0.7mm; align-content: start; overflow: hidden; }
-    .clinic { font-size: 9px; font-weight: 700; }
-    .legal { color: #4b5563; font-size: 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .title { font-size: 11px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .price { font-size: 18px; font-weight: 800; }
-    .meta { color: #4b5563; font-size: 7px; display: flex; gap: 2mm; }
-    .barcode { border-top: 1px solid #d1d5db; padding-top: 0.5mm; line-height: 0; }
-    .barcode svg { width: 100%; height: 11mm; }
-  </style>
-</head>
-<body>
-  <div class="sheet">${labels}</div>
-  <script>window.onload = () => window.print();</script>
-</body>
-</html>`);
-  printWindow.document.close();
+  return printCatalogLabels(
+    Array.from({ length: settings.copies }, () => toClinicProductPrintItem(product)),
+    organization ?? null,
+    { ...settings, showOrganization: settings.showClinic },
+  );
 }
 
 function BarcodeGraphic({ value }: { value: string }) {

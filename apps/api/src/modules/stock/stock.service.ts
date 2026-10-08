@@ -286,7 +286,7 @@ export class StockService {
     const barcodes = normalizeBarcodes([...(barcode ? [barcode] : []), ...(dto.barcodes ?? [])]);
     if (!barcode && barcodes.length) barcode = barcodes[0];
     await this.ensureBarcodesAvailable(barcodes);
-    await this.ensureLinkedProductsAvailable(dto.linkedProducts);
+    await this.ensureLinkedProductsAvailable(dto.linkedProducts, undefined, dto.writeOffUnit ?? dto.stockUnit);
 
     const product = await this.prisma.product.create({
       data: {
@@ -309,7 +309,7 @@ export class StockService {
           ? { create: barcodes.map((value) => barcodeCreate(value, value === barcode, dto.gtin)) }
           : undefined,
         linkedProducts: dto.linkedProducts?.length
-          ? { create: dto.linkedProducts.map((item) => ({ productId: item.productId, quantity: item.quantity })) }
+          ? { create: dto.linkedProducts.map((item) => ({ productId: item.productId, quantity: item.quantity, minDoseMl: item.minDoseMl, maxDoseMl: item.maxDoseMl })) }
           : undefined,
       },
       include: productInclude,
@@ -370,7 +370,7 @@ export class StockService {
       : undefined;
     if (!barcode && barcodes?.length) barcode = barcodes[0];
     if (barcodes) await this.ensureBarcodesAvailable(barcodes, productId);
-    await this.ensureLinkedProductsAvailable(dto.linkedProducts, productId);
+    await this.ensureLinkedProductsAvailable(dto.linkedProducts, productId, dto.writeOffUnit ?? dto.stockUnit ?? existing.writeOffUnit ?? existing.stockUnit ?? undefined);
 
     const product = await this.prisma.product.update({
       where: { id: productId },
@@ -401,7 +401,7 @@ export class StockService {
         ...(dto.linkedProducts !== undefined ? {
           linkedProducts: {
             deleteMany: {},
-            create: dto.linkedProducts.map((item) => ({ productId: item.productId, quantity: item.quantity })),
+            create: dto.linkedProducts.map((item) => ({ productId: item.productId, quantity: item.quantity, minDoseMl: item.minDoseMl, maxDoseMl: item.maxDoseMl })),
           },
         } : {}),
       },
@@ -612,10 +612,20 @@ export class StockService {
   }
 
   private async ensureLinkedProductsAvailable(
-    linkedProducts: Array<{ productId: string; quantity: number }> | undefined,
+    linkedProducts: Array<{ productId: string; quantity: number; minDoseMl?: number; maxDoseMl?: number }> | undefined,
     sourceProductId?: string,
+    writeOffUnit?: string,
   ) {
     if (linkedProducts === undefined) return;
+    const ranges = linkedProducts.filter((item) => item.minDoseMl != null || item.maxDoseMl != null).sort((a, b) => (a.minDoseMl ?? 0) - (b.minDoseMl ?? 0));
+    if (ranges.length && writeOffUnit?.trim().toLocaleLowerCase('ru') !== 'мл') {
+      throw new BadRequestException('Диапазоны шприцев доступны для препаратов со списанием в мл');
+    }
+    for (let i = 0; i < ranges.length; i++) {
+      const item = ranges[i];
+      if (item.minDoseMl == null || item.maxDoseMl == null || item.minDoseMl < 0 || item.maxDoseMl <= item.minDoseMl || item.quantity !== 1) throw new BadRequestException('Укажите правильный диапазон объёма и один шприц на выполнение');
+      if (i > 0 && item.minDoseMl < ranges[i - 1].maxDoseMl!) throw new BadRequestException('Диапазоны выбора шприца не должны пересекаться');
+    }
     const ids = linkedProducts.map((item) => item.productId);
     if (new Set(ids).size !== ids.length) {
       throw new BadRequestException('Один связанный товар нельзя добавить дважды');
@@ -750,9 +760,9 @@ export class StockService {
       for (const item of dto.items) {
         const prepared = prepareSupplyLine(item, effectiveStockUnits.get(item.productId)!);
         const warehouseId = item.warehouseId ?? defaultWarehouseId;
-        const purchasePrice = decimal(item.purchasePrice);
+        const purchasePrice = prepared.receiptUnitCost;
         const discountAmount = decimal(item.discountAmount ?? 0);
-        totalAmount = totalAmount.plus(prepared.receiptQuantity.mul(purchasePrice).minus(discountAmount));
+        totalAmount = totalAmount.plus(prepared.lineAmount.minus(discountAmount));
 
         if (item.retailPrice !== undefined) {
           await tx.product.update({
@@ -771,6 +781,7 @@ export class StockService {
             receiptUnit: prepared.receiptUnit,
             conversionFactor: prepared.conversionFactor,
             purchasePrice,
+            lineAmount: prepared.lineAmount,
             discountAmount,
             expiresAt: item.expiresAt ? new Date(item.expiresAt) : undefined,
             series: clean(item.series),
@@ -951,7 +962,8 @@ export class StockService {
               receiptQuantity: prepared.receiptQuantity,
               receiptUnit: prepared.receiptUnit,
               conversionFactor: prepared.conversionFactor,
-              purchasePrice: nextItem.purchasePrice,
+              purchasePrice: prepared.receiptUnitCost,
+              lineAmount: prepared.lineAmount,
               discountAmount: nextItem.discountAmount ?? 0,
               expiresAt: nextItem.expiresAt ? new Date(nextItem.expiresAt) : null,
               series: clean(nextItem.series) ?? null,
@@ -985,6 +997,7 @@ export class StockService {
             where: { id: currentItem.id },
             data: {
               discountAmount: nextItem.discountAmount ?? 0,
+              lineAmount: prepared.lineAmount,
               expiresAt: nextItem.expiresAt ? new Date(nextItem.expiresAt) : null,
               series: clean(nextItem.series) ?? null,
             },
@@ -993,7 +1006,7 @@ export class StockService {
       }
 
       const totalAmount = dto.items.reduce(
-        (total, item) => total.plus(decimal(item.quantity).times(item.purchasePrice).minus(item.discountAmount ?? 0)),
+        (total, item) => total.plus(supplyLineAmount(item).minus(item.discountAmount ?? 0)),
         decimal(0),
       );
       return tx.supplyInvoice.update({
@@ -1041,7 +1054,8 @@ export class StockService {
         receiptQuantity: prepared.receiptQuantity,
         receiptUnit: prepared.receiptUnit,
         conversionFactor: prepared.conversionFactor,
-        purchasePrice: item.purchasePrice,
+        purchasePrice: prepared.receiptUnitCost,
+        lineAmount: prepared.lineAmount,
         discountAmount: item.discountAmount ?? 0,
         expiresAt: item.expiresAt ? new Date(item.expiresAt) : undefined,
         series: clean(item.series),
@@ -1536,7 +1550,7 @@ function supplyLineChanged(
     || !current.receiptQuantity.equals(prepared.receiptQuantity)
     || current.receiptUnit !== prepared.receiptUnit
     || !current.conversionFactor.equals(prepared.conversionFactor)
-    || !current.purchasePrice.equals(next.purchasePrice)
+    || !current.purchasePrice.equals(prepared.receiptUnitCost.toDecimalPlaces(6))
     || !current.discountAmount.equals(next.discountAmount ?? 0)
     || dateKey(current.expiresAt) !== dateKey(next.expiresAt ? new Date(next.expiresAt) : null)
     || (current.series ?? '') !== (clean(next.series) ?? '')
@@ -1556,6 +1570,8 @@ type SupplyLineUnitInput = {
   productId: string;
   quantity: number;
   purchasePrice: number;
+  lineAmount?: number;
+  discountAmount?: number;
   receiptUnit?: string;
   conversionFactor?: number;
 };
@@ -1566,6 +1582,8 @@ type PreparedSupplyLine = {
   conversionFactor: Prisma.Decimal;
   stockQuantity: Prisma.Decimal;
   stockUnitCost: Prisma.Decimal;
+  receiptUnitCost: Prisma.Decimal;
+  lineAmount: Prisma.Decimal;
 };
 
 function prepareSupplyProductUnits(items: SupplyLineUnitInput[], products: SupplyProductUnit[]) {
@@ -1602,7 +1620,11 @@ async function initializeMissingProductUnits(
   }
 }
 
-function prepareSupplyLine(item: SupplyLineUnitInput, stockUnit: string): PreparedSupplyLine {
+export function supplyLineAmount(item: { quantity: number; purchasePrice: number; lineAmount?: number }) {
+  return item.lineAmount === undefined ? decimal(item.quantity).mul(item.purchasePrice) : decimal(item.lineAmount);
+}
+
+export function prepareSupplyLine(item: SupplyLineUnitInput, stockUnit: string): PreparedSupplyLine {
   const receiptUnit = clean(item.receiptUnit) ?? stockUnit;
   const conversionFactor = decimal(item.conversionFactor ?? 1);
   if (conversionFactor.lessThanOrEqualTo(0)) {
@@ -1613,12 +1635,17 @@ function prepareSupplyLine(item: SupplyLineUnitInput, stockUnit: string): Prepar
   }
   const receiptQuantity = decimal(item.quantity);
   const stockQuantity = receiptQuantity.times(conversionFactor);
+  const lineAmount = supplyLineAmount(item);
+  const netAmount = lineAmount.minus(item.discountAmount ?? 0);
+  if (receiptQuantity.lte(0) || netAmount.lt(0)) throw new BadRequestException('Проверьте количество, сумму и скидку позиции');
   return {
     receiptQuantity,
     receiptUnit,
     conversionFactor,
     stockQuantity,
-    stockUnitCost: decimal(item.purchasePrice).dividedBy(conversionFactor),
+    stockUnitCost: netAmount.dividedBy(stockQuantity),
+    receiptUnitCost: lineAmount.dividedBy(receiptQuantity),
+    lineAmount,
   };
 }
 

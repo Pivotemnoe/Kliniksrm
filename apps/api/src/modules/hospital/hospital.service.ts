@@ -28,6 +28,7 @@ import { UpdateHospitalStayDto } from './dto/update-hospital-stay.dto';
 import { UpdateHospitalRecordDto } from './dto/update-hospital-record.dto';
 import { findUnsafeLateDispositionFields, isPlannedDispositionTransition } from './hospital-record-policy';
 import { toStockQuantity } from '../stock/stock-units';
+import { getLinkedConsumables } from '../stock/linked-consumables';
 import { resolveServiceUnitPrice, servicePricingSelect } from '../stock/service-pricing';
 import { assertPrimaryVisitDiagnosesReady } from '../visits/visit-diagnosis-rules';
 
@@ -1504,35 +1505,7 @@ export class HospitalService {
     line: HospitalCatalogLine,
     warehouseScope: WarehouseScope,
   ) {
-    const linkedProducts = line.serviceId
-      ? await tx.serviceLinkedProduct.findMany({
-          where: { serviceId: line.serviceId },
-          select: { quantity: true, product: { select: { id: true, title: true } } },
-        })
-      : line.productId
-        ? await tx.productLinkedProduct.findMany({
-            where: { sourceProductId: line.productId },
-            select: { quantity: true, product: { select: { id: true, title: true } } },
-          })
-        : [];
-
-    for (const linked of linkedProducts) {
-      const stockQuantity = decimal(linked.quantity).mul(line.quantity);
-      await this.writeOffHospitalProduct(
-        tx,
-        visitId,
-        null,
-        hospitalRecordId,
-        calculateCatalogLine({
-          productId: linked.product.id,
-          title: linked.product.title,
-          quantity: stockQuantity,
-          stockQuantity,
-          unitPrice: 0,
-        }),
-        warehouseScope,
-      );
-    }
+    await this.syncLinkedHospitalProducts(tx, visitId, hospitalRecordId, line, warehouseScope);
   }
 
   private async syncLinkedHospitalProducts(
@@ -1542,28 +1515,23 @@ export class HospitalService {
     line: HospitalCatalogLine,
     warehouseScope: WarehouseScope,
   ) {
-    const linkedProducts = line.serviceId
-      ? await tx.serviceLinkedProduct.findMany({
-          where: { serviceId: line.serviceId },
-          select: { quantity: true, product: { select: { id: true, title: true } } },
-        })
-      : line.productId
-        ? await tx.productLinkedProduct.findMany({
-            where: { sourceProductId: line.productId },
-            select: { quantity: true, product: { select: { id: true, title: true } } },
-          })
-        : [];
-
+    const linkedProducts = await getLinkedConsumables(tx, line);
+    const previous = await tx.stockMovement.findMany({ where: { hospitalRecordId, productId: { not: line.productId ?? '' }, type: { in: [StockMovementType.VISIT_USAGE, StockMovementType.CORRECTION] } }, distinct: ['productId'], select: { productId: true } });
+    for (const item of previous) {
+      if (!linkedProducts.some((link) => link.productId === item.productId)) {
+        await this.restoreHospitalProduct(tx, visitId, null, hospitalRecordId, item.productId, 'расходный материал', await this.getHospitalProductDeductedQuantity(tx, null, hospitalRecordId, item.productId));
+      }
+    }
     for (const linked of linkedProducts) {
-      const stockQuantity = decimal(linked.quantity).mul(line.quantity);
+      const stockQuantity = linked.quantity;
       await this.syncHospitalProductWriteOff(
         tx,
         visitId,
         null,
         hospitalRecordId,
         calculateCatalogLine({
-          productId: linked.product.id,
-          title: linked.product.title,
+          productId: linked.productId,
+          title: linked.title,
           quantity: stockQuantity,
           stockQuantity,
           unitPrice: 0,

@@ -71,6 +71,7 @@ export type VisitHospitalStay = {
 
 export type VisitAppointment = {
   id: string;
+  officeId?: string | null;
   startsAt: string;
   endsAt: string | null;
   status: string;
@@ -79,6 +80,7 @@ export type VisitAppointment = {
 
 export type VisitQueueEntry = {
   id: string;
+  officeId?: string | null;
   status: string;
   urgency: string;
   comment: string | null;

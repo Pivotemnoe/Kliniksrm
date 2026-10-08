@@ -13,6 +13,7 @@ export type PrintableCatalogItem = {
   title: string;
   categoryTitle?: string | null;
   sku?: string | null;
+  unitText?: string | null;
   barcode?: string | null;
   priceText: string;
   vatRate?: string | number | null;
@@ -22,8 +23,8 @@ export type CatalogPrintLine = { item: PrintableCatalogItem; copies: number };
 
 export type LabelOrganization = { displayName: string; legalName: string | null } | null;
 
-type PrintSettings = {
-  paper: 'LABEL_58_40' | 'A4';
+export type PrintSettings = {
+  paper: 'LABEL_58_30' | 'LABEL_58_40' | 'A4';
   showOrganization: boolean;
   showLegalName: boolean;
   showCategory: boolean;
@@ -51,12 +52,12 @@ export function CatalogLabelPrinter({
   const deferredSearch = useDeferredValue(search.trim());
   const [selectedItem, setSelectedItem] = useState<PrintableCatalogItem>();
   const [settings, setSettings] = useState<PrintSettings>({
-    paper: 'LABEL_58_40',
+    paper: 'LABEL_58_30',
     showOrganization: true,
     showLegalName: true,
-    showCategory: true,
-    showBarcode: true,
-    showVat: true,
+    showCategory: false,
+    showBarcode: false,
+    showVat: false,
   });
   const itemsQuery = useQuery({
     queryKey: ['catalog-label-printer', queryKey, deferredSearch],
@@ -133,6 +134,7 @@ export function CatalogLabelPrinter({
       <div className="form-grid two-columns">
         <Form.Item label="Бумага">
           <Radio.Group value={settings.paper} onChange={(event) => setSettings((current) => ({ ...current, paper: event.target.value }))} options={[
+            { value: 'LABEL_58_30', label: 'Ценник 58 × 30 мм' },
             { value: 'LABEL_58_40', label: 'Этикетка 58 × 40 мм' },
             { value: 'A4', label: 'Лист A4 (сетка)' },
           ]} />
@@ -160,43 +162,53 @@ export function CatalogLabelPrinter({
   );
 }
 
-function LabelPreview({ item, organization, settings }: { item: PrintableCatalogItem; organization: LabelOrganization; settings: PrintSettings }) {
+export function LabelPreview({ item, organization, settings }: { item: PrintableCatalogItem; organization: LabelOrganization; settings: PrintSettings }) {
   return (
-    <div style={{ width: 260, minHeight: 180, background: '#fff', border: '1px solid #cbd5e1', padding: 14, display: 'grid', alignContent: 'start', gap: 5 }}>
-      {settings.showOrganization && organization?.displayName ? <strong style={{ fontSize: 13 }}>{organization.displayName}</strong> : null}
-      {settings.showLegalName && organization?.legalName ? <small style={{ color: '#475569' }}>{organization.legalName}</small> : null}
-      <strong>{item.title}</strong>
-      <span style={{ fontSize: 26, fontWeight: 800 }}>{item.priceText}</span>
-      {settings.showCategory && item.categoryTitle ? <Typography.Text type="secondary">{item.categoryTitle}</Typography.Text> : null}
-      {settings.showVat ? <small>{item.vatRate !== null && item.vatRate !== undefined ? `НДС ${item.vatRate}%` : 'Без НДС'}</small> : null}
+    <div style={{ width: 260, minHeight: settings.paper === 'LABEL_58_40' ? 180 : 135, background: '#fff', border: '1px solid #111', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 3 }}>
+      {(settings.showOrganization || settings.showLegalName) ? <div style={{ borderBottom: '1px solid #111', fontSize: 10, lineHeight: 1.2, paddingBottom: 3 }}>
+        {settings.showOrganization && organization?.displayName ? <strong>{organization.displayName}</strong> : null}
+        {settings.showLegalName && organization?.legalName ? <div>{organization.legalName}</div> : null}
+      </div> : null}
+      <strong style={{ fontSize: 13, lineHeight: 1.2 }}>{item.title}</strong>
+      <div style={{ display: 'flex', alignItems: 'end', justifyContent: 'space-between', gap: 5, marginTop: 'auto' }}>
+        <div style={{ fontSize: 9 }}>
+          {item.sku ? <div>Код: {item.sku}</div> : null}
+          {item.unitText ? <div>Ед.: {item.unitText}</div> : null}
+          {settings.showCategory && item.categoryTitle ? <div>{item.categoryTitle}</div> : null}
+          {settings.showVat ? <div>{item.vatRate != null ? `НДС ${item.vatRate}%` : 'Без НДС'}</div> : null}
+        </div>
+        <strong style={{ fontSize: 22, whiteSpace: 'nowrap' }}>{item.priceText}</strong>
+      </div>
       {settings.showBarcode && item.barcode ? <BarcodeGraphic value={item.barcode} /> : null}
     </div>
   );
 }
 
-function printCatalogLabels(items: PrintableCatalogItem[], organization: LabelOrganization, settings: PrintSettings) {
+export function printCatalogLabels(items: PrintableCatalogItem[], organization: LabelOrganization, settings: PrintSettings) {
   const printWindow = window.open('', '_blank', 'width=900,height=680');
   if (!printWindow) return false;
   const labels = items.map((item) => {
     const barcodeSvg = settings.showBarcode && item.barcode ? renderBarcodeSvg(item.barcode) : '';
-    const metaRows = [item.sku ? `Артикул: ${item.sku}` : null, settings.showCategory && item.categoryTitle ? `Категория: ${item.categoryTitle}` : null, settings.showVat ? (item.vatRate !== null && item.vatRate !== undefined ? `НДС: ${item.vatRate}%` : 'Без НДС') : null].filter(Boolean);
+    const metaRows = [item.sku ? `Код: ${item.sku}` : null, item.unitText ? `Ед.: ${item.unitText}` : null, settings.showCategory && item.categoryTitle ? item.categoryTitle : null, settings.showVat ? (item.vatRate !== null && item.vatRate !== undefined ? `НДС: ${item.vatRate}%` : 'Без НДС') : null].filter(Boolean);
     return `<div class="label">
-      ${settings.showOrganization && organization?.displayName ? `<div class="organization">${escapeHtml(organization.displayName)}</div>` : ''}
-      ${settings.showLegalName && organization?.legalName ? `<div class="legal">${escapeHtml(organization.legalName)}</div>` : ''}
-      <div class="title">${escapeHtml(item.title)}</div><div class="price">${escapeHtml(item.priceText)}</div>
-      <div class="meta">${metaRows.map((row) => `<div>${escapeHtml(String(row))}</div>`).join('')}</div>
+      <div class="label-header">${settings.showOrganization && organization?.displayName ? `<div class="organization">${escapeHtml(organization.displayName)}</div>` : ''}${settings.showLegalName && organization?.legalName ? `<div class="legal">${escapeHtml(organization.legalName)}</div>` : ''}</div>
+      <div class="title">${escapeHtml(item.title)}</div>
+      <div class="label-footer"><div class="meta">${metaRows.map((row) => `<div>${escapeHtml(String(row))}</div>`).join('')}</div><div class="price">${escapeHtml(item.priceText)}</div></div>
       ${barcodeSvg ? `<div class="barcode">${barcodeSvg}</div>` : ''}
     </div>`;
   }).join('');
+  const height = settings.paper === 'LABEL_58_40' ? 40 : 30;
   const pageCss = settings.paper === 'A4'
     ? '@page { size: A4 portrait; margin: 12mm; } .sheet { display: grid; grid-template-columns: repeat(3, 58mm); gap: 5mm; align-content: start; } .label { break-inside: avoid; border: 1px dashed #9ca3af; }'
-    : '@page { size: 58mm 40mm; margin: 0; } .sheet { display: block; } .label { break-after: page; } .label:last-child { break-after: auto; }';
+    : `@page { size: 58mm ${height}mm; margin: 0; } .sheet { display: block; } .label { break-after: page; } .label:last-child { break-after: auto; }`;
   printWindow.document.write(`<!doctype html><html lang="ru"><head><meta charset="utf-8" /><title>Ценники и этикетки</title><style>
     ${pageCss} body { margin: 0; color: #111827; font: 12px/1.35 Arial, sans-serif; }
-    .label { box-sizing: border-box; width: 58mm; height: 40mm; padding: 2.5mm 3mm; display: grid; gap: 0.7mm; align-content: start; overflow: hidden; }
-    .organization { font-size: 9px; font-weight: 700; } .legal { color: #4b5563; font-size: 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .title { font-size: 11px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .price { font-size: 18px; font-weight: 800; }
-    .meta { color: #4b5563; font-size: 7px; display: flex; gap: 2mm; } .barcode { border-top: 1px solid #d1d5db; padding-top: 0.5mm; line-height: 0; } .barcode svg { width: 100%; height: 11mm; }
+    .label { box-sizing: border-box; width: 58mm; height: ${height}mm; padding: 1.5mm 2mm; display: flex; flex-direction: column; gap: 0.7mm; border: .25mm solid #111; overflow: hidden; }
+    .label-header { border-bottom: .2mm solid #111; padding-bottom: .5mm; line-height: 1.1; } .label-header:empty { display: none; }
+    .organization { font-size: 8px; font-weight: 700; } .legal { font-size: 7px; }
+    .title { font-size: 11px; line-height: 1.15; font-weight: 700; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .label-footer { display: flex; align-items: end; justify-content: space-between; gap: 1mm; margin-top: auto; } .price { font-size: 18px; line-height: 1; font-weight: 800; white-space: nowrap; }
+    .meta { font-size: 7px; line-height: 1.2; min-width: 0; } .barcode { padding-top: .5mm; line-height: 0; } .barcode svg { width: 100%; height: 6mm; }
   </style></head><body><div class="sheet">${labels}</div><script>window.onload = () => window.print();</script></body></html>`);
   printWindow.document.close();
   return true;
@@ -208,7 +220,7 @@ function BarcodeGraphic({ value }: { value: string }) {
     if (!ref.current) return;
     JsBarcode(ref.current, value, { format: getBarcodeFormat(value), width: 1.35, height: 38, margin: 0, displayValue: true, fontSize: 11, background: '#fff', lineColor: '#111827' });
   }, [value]);
-  return <svg ref={ref} role="img" aria-label={`Штрих-код ${value}`} style={{ width: '100%', height: 56 }} />;
+  return <svg ref={ref} role="img" aria-label={`Штрих-код ${value}`} style={{ width: '100%', height: 28 }} />;
 }
 
 function renderBarcodeSvg(value: string) {

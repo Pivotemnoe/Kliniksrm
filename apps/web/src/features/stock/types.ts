@@ -82,6 +82,8 @@ export type LinkedProduct = {
   id: string;
   productId: string;
   quantity: DecimalValue;
+  minDoseMl?: DecimalValue | null;
+  maxDoseMl?: DecimalValue | null;
   product: Product;
 };
 
@@ -125,6 +127,7 @@ export type SupplyInvoice = {
 };
 
 export type SupplyInvoiceItem = {
+  lineAmount?: DecimalValue | null;
   id: string;
   productId: string;
   warehouseId: string;
@@ -190,7 +193,7 @@ export type ProductMutationInput = {
   defaultExpiresAt?: string | null;
   generateBarcode?: boolean;
   description?: string;
-  linkedProducts?: Array<{ productId: string; quantity: number }>;
+  linkedProducts?: Array<{ productId: string; quantity: number; minDoseMl?: number; maxDoseMl?: number }>;
 };
 
 export type ServiceMutationInput = {
@@ -219,6 +222,7 @@ export type SupplyInvoiceMutationInput = {
     receiptUnit?: string;
     conversionFactor?: number;
     purchasePrice: number;
+    lineAmount?: number;
     retailPrice?: number;
     discountAmount?: number;
     expiresAt?: string;
