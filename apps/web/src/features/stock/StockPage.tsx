@@ -6,8 +6,8 @@ import { InputNumber } from '../../shared/ui/DecimalInputNumber';
 import { ColumnsType } from 'antd/es/table';
 import dayjs, { Dayjs } from 'dayjs';
 import JsBarcode from 'jsbarcode';
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { Controller, useFieldArray, useForm, useWatch } from 'react-hook-form';
+import { memo, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { Controller, useFieldArray, useForm, useWatch, type Control, type UseFormSetValue } from 'react-hook-form';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
@@ -1418,16 +1418,6 @@ function SupplyInvoiceModal({ open, invoice, resources, onClose }: { open: boole
   const queryClient = useQueryClient();
   const { message } = App.useApp();
   const [supplierOpen, setSupplierOpen] = useState(false);
-  const [productSearch, setProductSearch] = useState('');
-  const [knownProducts, setKnownProducts] = useState<Record<string, Product>>({});
-  const automaticAmounts = useRef<Record<number, { unitCost: number; amount: number }>>({});
-  const deferredProductSearch = useDeferredValue(productSearch);
-  const normalizedProductSearch = deferredProductSearch.trim();
-  const productsQuery = useQuery({
-    queryKey: ['stock', 'products', 'supply-select', normalizedProductSearch],
-    queryFn: () => listProducts({ search: normalizedProductSearch || undefined, limit: 50, offset: 0 }),
-    enabled: open,
-  });
   const defaultWarehouseId = resources?.warehouses[0]?.id ?? '';
   const { control, handleSubmit, reset, setValue } = useForm<SupplyFormValues>({
     resolver: zodResolver(supplySchema),
@@ -1436,44 +1426,11 @@ function SupplyInvoiceModal({ open, invoice, resources, onClose }: { open: boole
     reValidateMode: 'onChange',
   });
   const { fields, append, remove } = useFieldArray({ control, name: 'items' });
-  const watchedItems = useWatch({ control, name: 'items' }) ?? [];
 
   useEffect(() => {
     if (!open) return;
     reset(getSupplyFormValues(invoice, defaultWarehouseId));
-    automaticAmounts.current = {};
-    setProductSearch('');
-    setKnownProducts(Object.fromEntries(
-      (invoice?.items ?? []).flatMap((item) => item.product ? [[item.product.id, item.product] as const] : []),
-    ));
   }, [defaultWarehouseId, invoice, open, reset]);
-
-  useEffect(() => {
-    if (!productsQuery.data?.items.length) return;
-    setKnownProducts((current) => ({
-      ...current,
-      ...Object.fromEntries(productsQuery.data.items.map((product) => [product.id, product])),
-    }));
-  }, [productsQuery.data]);
-
-  useEffect(() => {
-    watchedItems.forEach((item, index) => {
-      const automatic = automaticAmounts.current[index];
-      if (!automatic) return;
-      if (Number(item.lineAmount) !== automatic.amount) { delete automaticAmounts.current[index]; return; }
-      const amount = Math.round(automatic.unitCost * Number(item.quantity) * Number(item.conversionFactor) * 100) / 100;
-      if (amount !== automatic.amount) {
-        automatic.amount = amount;
-        setValue(`items.${index}.lineAmount`, amount, { shouldDirty: true });
-      }
-    });
-  }, [watchedItems, setValue]);
-
-  const productOptions = useMemo(
-    () => (productsQuery.data?.items ?? [])
-      .map((product) => ({ value: product.id, label: formatProductOption(product) })),
-    [productsQuery.data],
-  );
 
   const mutation = useMutation({
     mutationFn: (values: SupplyFormValues) => {
@@ -1521,137 +1478,199 @@ function SupplyInvoiceModal({ open, invoice, resources, onClose }: { open: boole
         </div>
         <Typography.Title level={5}>Позиции накладной</Typography.Title>
         <Space direction="vertical" size={8} className="full-width">
-          {fields.map((field, index) => {
-            const existingLine = Boolean(watchedItems[index]?.id);
-            const watchedLine = watchedItems[index];
-            const selectedProduct = knownProducts[watchedLine?.productId ?? ''];
-            const receiptUnit = watchedLine?.receiptUnit?.trim() || selectedProduct?.stockUnit?.trim() || '';
-            const stockUnit = selectedProduct?.stockUnit?.trim() || receiptUnit || 'ед.';
-            const conversionFactor = Number(watchedLine?.conversionFactor ?? 1);
-            const stockQuantity = Number(watchedLine?.quantity ?? 0) * conversionFactor;
-            const selectedOption = selectedProduct ? { value: selectedProduct.id, label: formatProductOption(selectedProduct) } : undefined;
-            return <div key={field.id} className="supply-line-card">
-              <Space align="start" className="full-width" style={{ justifyContent: 'space-between' }}>
-                <Typography.Text strong>Позиция {index + 1}</Typography.Text>
-                <Button danger type="text" icon={<DeleteOutlined />} disabled={fields.length === 1 || existingLine} onClick={() => {
-                  automaticAmounts.current = Object.fromEntries(Object.entries(automaticAmounts.current)
-                    .filter(([key]) => Number(key) !== index)
-                    .map(([key, value]) => [Number(key) > index ? Number(key) - 1 : Number(key), value]));
-                  remove(index);
-                }}>
-                  {existingLine ? 'Проведена' : 'Убрать'}
-                </Button>
-              </Space>
-              <div className="supply-line-primary-grid">
-                <Controller control={control} name={`items.${index}.productId`} render={({ field: productField, fieldState }) => (
-                  <Form.Item label="Товар" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
-                    <Select
-                      {...productField}
-                      allowClear
-                      showSearch
-                      filterOption={false}
-                      loading={productsQuery.isFetching}
-                      onSearch={setProductSearch}
-                      notFoundContent={productsQuery.isFetching ? 'Идёт поиск…' : 'Товар не найден во всём каталоге'}
-                      onChange={(value) => {
-                        productField.onChange(value);
-                        const product = value ? knownProducts[value] ?? productsQuery.data?.items.find((item) => item.id === value) : undefined;
-                        setValue(`items.${index}.expiresAt`, product?.defaultExpiresAt?.slice(0, 10) ?? '');
-                        setValue(`items.${index}.retailPrice`, Number(product?.retailPrice ?? 0), { shouldDirty: true, shouldValidate: false });
-                        setValue(`items.${index}.receiptUnit`, product?.stockUnit?.trim() || 'шт', { shouldDirty: true, shouldValidate: false });
-                        setValue(`items.${index}.conversionFactor`, 1, { shouldDirty: true, shouldValidate: false });
-                        const lastBatch = product?.batches?.find((batch) => Number(batch.purchasePrice) > 0);
-                        const unitCost = Number(lastBatch?.purchasePrice ?? 0);
-                        const amount = Math.round(unitCost * Number(watchedLine?.quantity ?? 1) * 100) / 100;
-                        automaticAmounts.current[index] = { unitCost, amount };
-                        setValue(`items.${index}.lineAmount`, amount, { shouldDirty: true });
-                        setProductSearch('');
-                      }}
-                      options={!productSearch && selectedOption && !productOptions.some((item) => item.value === selectedOption.value) ? [selectedOption, ...productOptions] : productOptions}
-                      placeholder="Введите название, SKU или штрих-код"
-                    />
-                  </Form.Item>
-                )} />
-                <Controller control={control} name={`items.${index}.warehouseId`} render={({ field: warehouseField, fieldState }) => (
-                  <Form.Item label="Склад" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
-                    <Select {...warehouseField} options={resources?.warehouses.map((warehouse) => ({ value: warehouse.id, label: warehouse.name })) ?? []} />
-                  </Form.Item>
-                )} />
-              </div>
-              <div className="supply-line-values-grid">
-                <FormNumber control={control} name={`items.${index}.quantity`} label={`Количество, ${receiptUnit || 'ед.'}`} step={1} required />
-                <Controller
-                  control={control}
-                  name={`items.${index}.receiptUnit`}
-                  render={({ field: unitField, fieldState }) => (
-                    <Form.Item label="Единица по накладной" required validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
-                      <AutoComplete
-                        {...unitField}
-                        options={receiptUnitOptions}
-                        placeholder="шт, флакон, л..."
-                        filterOption={(input, option) => String(option?.value ?? '').toLowerCase().includes(input.toLowerCase())}
-                        onChange={(value) => {
-                          unitField.onChange(value);
-                          setValue(
-                            `items.${index}.conversionFactor`,
-                            suggestConversionFactor(value, selectedProduct?.stockUnit),
-                            { shouldDirty: true, shouldValidate: false },
-                          );
-                        }}
-                      />
-                    </Form.Item>
-                  )}
-                />
-                <FormNumber
-                  control={control}
-                  name={`items.${index}.conversionFactor`}
-                  label={`В 1 ${receiptUnit || 'ед.'}, ${stockUnit}`}
-                  step={1}
-                  required
-                  disabled={Boolean(receiptUnit) && receiptUnit === stockUnit}
-                />
-                <Form.Item
-                  label="Поступит на склад"
-                  validateStatus={selectedProduct && !selectedProduct.stockUnit ? 'warning' : undefined}
-                  help={selectedProduct && !selectedProduct.stockUnit
-                    ? `В карточке нет единицы — после приёмки будет установлено «${stockUnit}».`
-                    : undefined}
-                >
-                  <Input value={`${formatQuantity(stockQuantity)} ${stockUnit}`} disabled />
-                </Form.Item>
-              </div>
-              <div className="supply-line-values-grid">
-                <FormNumber control={control} name={`items.${index}.lineAmount`} label="Сумма позиции по накладной, ₽" step={1} precision={2} required />
-                <FormNumber
-                  control={control}
-                  name={`items.${index}.retailPrice`}
-                  label={`Цена продажи за 1 ${selectedProduct?.billingUnit || selectedProduct?.writeOffUnit || stockUnit}`}
-                  step={1}
-                  required
-                />
-                <FormNumber control={control} name={`items.${index}.discountAmount`} label="Скидка по позиции" />
-                <FormText control={control} name={`items.${index}.expiresAt`} label="Годен до" type="date" />
-              </div>
-              <div className="supply-line-values-grid supply-line-meta-grid">
-                <FormText control={control} name={`items.${index}.series`} label="Серия" />
-                <FormText control={control} name={`items.${index}.rack`} label="Стеллаж" />
-                <FormText control={control} name={`items.${index}.rackNumber`} label="Номер стеллажа" />
-                <FormText control={control} name={`items.${index}.shelfNumber`} label="Полка" />
-              </div>
-              <Typography.Text type="secondary" className="supply-price-note">
-                Закупочная цена за 1 {stockUnit}: {stockQuantity > 0 ? formatPurchasePrice(Math.max(0, Number(watchedLine?.lineAmount ?? 0) - Number(watchedLine?.discountAmount ?? 0)) / stockQuantity) : '—'}.{' '}
-                Цена продажи после проведения станет новой ценой выбранного товара во всей CRM.
-              </Typography.Text>
-            </div>;
-          })}
+          {fields.map((field, index) => <SupplyInvoiceLine
+            key={field.id}
+            control={control}
+            setValue={setValue}
+            index={index}
+            initialProduct={invoice?.items[index]?.product}
+            resources={resources}
+            canRemove={fields.length > 1}
+            remove={remove}
+          />)}
           <Button icon={<PlusOutlined />} onClick={() => append(emptySupplyLine(defaultWarehouseId))}>Добавить позицию</Button>
-          <Typography.Text strong>Итого: {formatMoney(watchedItems.reduce((total, item) => total + Number(item?.lineAmount ?? 0) - Number(item?.discountAmount ?? 0), 0))}</Typography.Text>
+          <SupplyInvoiceTotal control={control} />
         </Space>
       </Form>
     </Modal>
     <SupplierModal open={supplierOpen} onClose={() => setSupplierOpen(false)} onSaved={(supplier) => setValue('supplierId', supplier.id, { shouldValidate: true })} />
     </>
   );
+}
+
+// Only the edited line subscribes to its values. Watching the entire array in the
+// modal used to rebuild every Ant Design control on each keystroke.
+const SupplyInvoiceLine = memo(function SupplyInvoiceLine({ control, setValue, index, initialProduct, resources, canRemove, remove }: {
+  control: Control<SupplyFormValues>;
+  setValue: UseFormSetValue<SupplyFormValues>;
+  index: number;
+  initialProduct?: Product;
+  resources?: StockResources;
+  canRemove: boolean;
+  remove: (index: number) => void;
+}) {
+  const watchedLine = useWatch({
+    control,
+    name: [`items.${index}.id`, `items.${index}.quantity`, `items.${index}.receiptUnit`, `items.${index}.conversionFactor`, `items.${index}.lineAmount`, `items.${index}.discountAmount`] as const,
+    exact: true,
+    compute: ([id, quantity, receiptUnit, conversionFactor, lineAmount, discountAmount]) => ({ id, quantity, receiptUnit, conversionFactor, lineAmount, discountAmount }),
+  });
+  const existingLine = Boolean(watchedLine?.id);
+  const [selectedProduct, setSelectedProduct] = useState(initialProduct);
+  const [productSearch, setProductSearch] = useState('');
+  const [normalizedProductSearch, setNormalizedProductSearch] = useState('');
+  const [productSelectOpen, setProductSelectOpen] = useState(false);
+  const automaticAmount = useRef<{ unitCost: number; amount: number } | null>(null);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setNormalizedProductSearch(productSearch.trim()), 250);
+    return () => window.clearTimeout(timer);
+  }, [productSearch]);
+  const productsQuery = useQuery({
+    queryKey: ['stock', 'products', 'supply-select', normalizedProductSearch],
+    queryFn: ({ signal }) => listProducts({ search: normalizedProductSearch || undefined, limit: 50, offset: 0 }, signal),
+    enabled: productSelectOpen,
+    subscribed: productSelectOpen,
+    staleTime: 60_000,
+  });
+  const productOptions = useMemo(
+    () => (productsQuery.data?.items ?? []).map((product) => ({ value: product.id, label: formatProductOption(product) })),
+    [productsQuery.data],
+  );
+  const searchPending = productSearch.trim() !== normalizedProductSearch;
+  useEffect(() => {
+    const automatic = automaticAmount.current;
+    if (!automatic) return;
+    if (Number(watchedLine?.lineAmount) !== automatic.amount) { automaticAmount.current = null; return; }
+    const amount = Math.round(automatic.unitCost * Number(watchedLine?.quantity) * Number(watchedLine?.conversionFactor) * 100) / 100;
+    if (amount !== automatic.amount) {
+      automatic.amount = amount;
+      setValue(`items.${index}.lineAmount`, amount, { shouldDirty: true });
+    }
+  }, [watchedLine?.quantity, watchedLine?.conversionFactor, watchedLine?.lineAmount, index, setValue]);
+  const receiptUnit = watchedLine?.receiptUnit?.trim() || selectedProduct?.stockUnit?.trim() || '';
+  const stockUnit = selectedProduct?.stockUnit?.trim() || receiptUnit || 'ед.';
+  const conversionFactor = Number(watchedLine?.conversionFactor ?? 1);
+  const stockQuantity = Number(watchedLine?.quantity ?? 0) * conversionFactor;
+  const selectedOption = selectedProduct ? { value: selectedProduct.id, label: formatProductOption(selectedProduct) } : undefined;
+  return <div className="supply-line-card">
+    <Space align="start" className="full-width" style={{ justifyContent: 'space-between' }}>
+      <Typography.Text strong>Позиция {index + 1}</Typography.Text>
+      <Button danger type="text" icon={<DeleteOutlined />} disabled={!canRemove || existingLine} onClick={() => remove(index)}>
+        {existingLine ? 'Проведена' : 'Убрать'}
+      </Button>
+    </Space>
+    <div className="supply-line-primary-grid">
+      <Controller control={control} name={`items.${index}.productId`} render={({ field: productField, fieldState }) => (
+        <Form.Item label="Товар" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+          <Select
+            {...productField}
+            allowClear
+            showSearch
+            filterOption={false}
+            loading={productsQuery.isFetching || searchPending}
+            onSearch={setProductSearch}
+            onOpenChange={(isOpen) => {
+              setProductSelectOpen(isOpen);
+              if (!isOpen) { setProductSearch(''); setNormalizedProductSearch(''); }
+            }}
+            notFoundContent={productsQuery.isFetching || searchPending ? 'Идёт поиск…' : 'Товар не найден во всём каталоге'}
+            onChange={(value) => {
+              productField.onChange(value);
+              const product = value ? productsQuery.data?.items.find((item) => item.id === value) ?? (selectedProduct?.id === value ? selectedProduct : undefined) : undefined;
+              setSelectedProduct(product);
+              setValue(`items.${index}.expiresAt`, product?.defaultExpiresAt?.slice(0, 10) ?? '');
+              setValue(`items.${index}.retailPrice`, Number(product?.retailPrice ?? 0), { shouldDirty: true, shouldValidate: false });
+              setValue(`items.${index}.receiptUnit`, product?.stockUnit?.trim() || 'шт', { shouldDirty: true, shouldValidate: false });
+              setValue(`items.${index}.conversionFactor`, 1, { shouldDirty: true, shouldValidate: false });
+              const lastBatch = product?.batches?.find((batch) => Number(batch.purchasePrice) > 0);
+              const unitCost = Number(lastBatch?.purchasePrice ?? 0);
+              const amount = Math.round(unitCost * Number(watchedLine?.quantity ?? 1) * 100) / 100;
+              automaticAmount.current = { unitCost, amount };
+              setValue(`items.${index}.lineAmount`, amount, { shouldDirty: true });
+              setProductSearch('');
+              setNormalizedProductSearch('');
+            }}
+            options={searchPending ? [] : !productSearch && selectedOption && !productOptions.some((item) => item.value === selectedOption.value) ? [selectedOption, ...productOptions] : productOptions}
+            placeholder="Введите название, SKU или штрих-код"
+          />
+        </Form.Item>
+      )} />
+      <Controller control={control} name={`items.${index}.warehouseId`} render={({ field: warehouseField, fieldState }) => (
+        <Form.Item label="Склад" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+          <Select {...warehouseField} options={resources?.warehouses.map((warehouse) => ({ value: warehouse.id, label: warehouse.name })) ?? []} />
+        </Form.Item>
+      )} />
+    </div>
+    <div className="supply-line-values-grid">
+      <FormNumber control={control} name={`items.${index}.quantity`} label={`Количество, ${receiptUnit || 'ед.'}`} step={1} required />
+      <Controller
+        control={control}
+        name={`items.${index}.receiptUnit`}
+        render={({ field: unitField, fieldState }) => (
+          <Form.Item label="Единица по накладной" required validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+            <AutoComplete
+              {...unitField}
+              options={receiptUnitOptions}
+              placeholder="шт, флакон, л..."
+              filterOption={(input, option) => String(option?.value ?? '').toLowerCase().includes(input.toLowerCase())}
+              onChange={(value) => {
+                unitField.onChange(value);
+                setValue(
+                  `items.${index}.conversionFactor`,
+                  suggestConversionFactor(value, selectedProduct?.stockUnit),
+                  { shouldDirty: true, shouldValidate: false },
+                );
+              }}
+            />
+          </Form.Item>
+        )}
+      />
+      <FormNumber
+        control={control}
+        name={`items.${index}.conversionFactor`}
+        label={`В 1 ${receiptUnit || 'ед.'}, ${stockUnit}`}
+        step={1}
+        required
+        disabled={Boolean(receiptUnit) && receiptUnit === stockUnit}
+      />
+      <Form.Item
+        label="Поступит на склад"
+        validateStatus={selectedProduct && !selectedProduct.stockUnit ? 'warning' : undefined}
+        help={selectedProduct && !selectedProduct.stockUnit
+          ? `В карточке нет единицы — после приёмки будет установлено «${stockUnit}».`
+          : undefined}
+      >
+        <Input value={`${formatQuantity(stockQuantity)} ${stockUnit}`} disabled />
+      </Form.Item>
+    </div>
+    <div className="supply-line-values-grid">
+      <FormNumber control={control} name={`items.${index}.lineAmount`} label="Сумма позиции по накладной, ₽" step={1} precision={2} required />
+      <FormNumber
+        control={control}
+        name={`items.${index}.retailPrice`}
+        label={`Цена продажи за 1 ${selectedProduct?.billingUnit || selectedProduct?.writeOffUnit || stockUnit}`}
+        step={1}
+        required
+      />
+      <FormNumber control={control} name={`items.${index}.discountAmount`} label="Скидка по позиции" />
+      <FormText control={control} name={`items.${index}.expiresAt`} label="Годен до" type="date" />
+    </div>
+    <div className="supply-line-values-grid supply-line-meta-grid">
+      <FormText control={control} name={`items.${index}.series`} label="Серия" />
+      <FormText control={control} name={`items.${index}.rack`} label="Стеллаж" />
+      <FormText control={control} name={`items.${index}.rackNumber`} label="Номер стеллажа" />
+      <FormText control={control} name={`items.${index}.shelfNumber`} label="Полка" />
+    </div>
+    <Typography.Text type="secondary" className="supply-price-note">
+      Закупочная цена за 1 {stockUnit}: {stockQuantity > 0 ? formatPurchasePrice(Math.max(0, Number(watchedLine?.lineAmount ?? 0) - Number(watchedLine?.discountAmount ?? 0)) / stockQuantity) : '—'}.{' '}
+      Цена продажи после проведения станет новой ценой выбранного товара во всей CRM.
+    </Typography.Text>
+  </div>;
+});
+
+function SupplyInvoiceTotal({ control }: { control: Control<SupplyFormValues> }) {
+  const total = useWatch({ control, name: 'items', compute: (items) => (items ?? []).reduce((sum, item) => sum + Number(item?.lineAmount ?? 0) - Number(item?.discountAmount ?? 0), 0) });
+  return <Typography.Text strong>Итого: {formatMoney(total)}</Typography.Text>;
 }
 
 function emptySupplyLine(warehouseId: string): SupplyFormValues['items'][number] {

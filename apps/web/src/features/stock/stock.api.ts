@@ -50,8 +50,8 @@ export function updateSyringeRule(input: SyringeRuleInput) {
   return apiRequest<ConsumableRule>('/v1/stock/consumable-rules/syringe', { method: 'PATCH', body: input });
 }
 
-export function listProducts(query: StockListQuery) {
-  return apiRequest<PaginatedResponse<Product>>(`/v1/stock/products${buildQuery(query)}`);
+export function listProducts(query: StockListQuery, signal?: AbortSignal) {
+  return apiRequest<PaginatedResponse<Product>>(`/v1/stock/products${buildQuery(query)}`, { signal });
 }
 
 export function listStockAlerts(query: StockListQuery) {
