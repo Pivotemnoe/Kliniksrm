@@ -77,7 +77,7 @@ export function buildPreventionSnapshot(input: { month: string; timezone: string
     ['CAT', 'Б) Кошки', ['FELINE_COMPLEX', 'CHLAMYDIOSIS', 'RABIES', 'DERMATOPHYTOSIS']],
     ['FERRET', 'В) Хорьки', ['RABIES']],
   ];
-  const summary = definitions.map(([species, title, codes]) => ({ species, title, rows: codes.flatMap(code => (species === 'FERRET' ? ['REVACCINATION'] : ['PRIMARY', 'REVACCINATION']).map(stage => ({
+  const summary = definitions.map(([species, title, codes]) => ({ species, title, rows: codes.flatMap(code => (species === 'FERRET' && !rows.some(row => row.species === 'FERRET' && row.stages[code] === 'PRIMARY') ? ['REVACCINATION'] : ['PRIMARY', 'REVACCINATION']).map(stage => ({
     code, stage, title: `${stage === 'PRIMARY' ? 'Вакцинация' : 'Ревакцинация'} против ${diseaseTitles[code]}`,
     count: rows.some(row => (!row.species || row.species === species) && (!row.diseases.length || (code === 'CHLAMYDIOSIS' && row.variantNeedsReview))) ? null
       : new Set(rows.filter(row => row.species === species && row.diseases.includes(code) && row.stages[code] === stage).map(row => row.animalId)).size,

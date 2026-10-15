@@ -52,3 +52,5 @@ test('source Word package preserves logo, relationships, styles and section; XML
   assert.ok(xml.includes('Владелец &lt;QA&gt;')); assert.ok(xml.includes('Адрес &amp; QA')); assert.ok(xml.includes('А К Т'));
   assert.ok(!xml.includes('25.01.2026')); assert.ok(xml.includes('01.09.2026')); assert.ok(xml.includes('30.09.2026')); assert.ok(xml.includes('<w:cantSplit/>'));
 });
+
+test('a ferret without history remains primary and is not omitted by the source form revaccination-only row', () => { const r = build([row('ferret', 'ferret', 'Рабикс', undefined, 'FERRET')]); assert.equal(count(r, 'FERRET', 'RABIES'), 1); assert.equal(count(r, 'FERRET', 'RABIES', 'REVACCINATION'), 0); });
