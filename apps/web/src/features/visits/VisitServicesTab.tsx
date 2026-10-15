@@ -3,7 +3,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Button, Checkbox, Drawer, Form, Input, List, Modal, Popconfirm, Select, Space, Statistic, Table, Tag, Typography } from 'antd';
 import { ColumnsType } from 'antd/es/table';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
@@ -52,11 +52,14 @@ export function VisitServicesTab({ visit, canManage, locked }: VisitServicesTabP
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [copyOpen, setCopyOpen] = useState(false);
   const [selectedPreviousItemIds, setSelectedPreviousItemIds] = useState<string[]>([]);
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 15000); return () => window.clearInterval(timer); }, []);
+  const nightEditing = Boolean(visit.nightServicesEditableUntil && now < Date.parse(visit.nightServicesEditableUntil));
   const billFinanciallyLocked = Boolean(
-    visit.bill && (visit.bill.status === 'CANCELLED' || toMoneyNumber(visit.bill.paidAmount) > 0),
+    visit.bill && (visit.bill.status === 'CANCELLED' || (toMoneyNumber(visit.bill.paidAmount) > 0 && !nightEditing)),
   );
   const visitCancelled = visit.status === 'CANCELLED';
-  const disabled = locked || !canManage || billFinanciallyLocked || visitCancelled;
+  const disabled = (locked && !nightEditing) || !canManage || billFinanciallyLocked || visitCancelled;
   const items = visit.bill?.items ?? [];
   const previousServicesQuery = useQuery({
     queryKey: ['visits', visit.id, 'services', 'previous'],
@@ -170,7 +173,9 @@ export function VisitServicesTab({ visit, canManage, locked }: VisitServicesTabP
 
   return (
     <Space direction="vertical" size={16} className="full-width">
-      {locked ? <Alert type="info" showIcon message="Редактирование закрыто: отменённый приём нельзя менять, завершённый доступен директору или в течение 60 минут после завершения." /> : null}
+      {locked && !nightEditing ? <Alert type="info" showIcon message="Редактирование закрыто: отменённый приём нельзя менять, завершённый доступен директору или в течение 60 минут после завершения." /> : null}
+      {nightEditing ? <Alert type="info" showIcon message="Ночная смена: товары и услуги своего завершённого приёма можно дополнять и исправлять до 09:00, в том числе после оплаты." description="История платежей сохраняется. Разница после исправления учитывается как доплата или сумма к возврату; возврат денег оформляется отдельно." /> : null}
+      {visit.bill && toMoneyNumber(visit.bill.paidAmount) > toMoneyNumber(visit.bill.totalAmount) ? <Alert type="warning" showIcon message={`К возврату после исправления: ${formatMoney(toMoneyNumber(visit.bill.paidAmount) - toMoneyNumber(visit.bill.totalAmount))}`} /> : null}
       {visitCancelled ? (
         <Alert type="warning" showIcon message="Финансовые позиции отменённого приёма защищены. Директор должен сначала нажать «Вернуть в работу» и указать причину." />
       ) : null}

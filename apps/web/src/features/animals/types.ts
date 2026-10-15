@@ -1,3 +1,4 @@
+import type { VaccinationReportDetails } from "../reports/prevention.types";
 export type AnimalSex = 'MALE' | 'FEMALE' | 'UNKNOWN';
 export type AnimalArchiveReason = 'DECEASED' | 'ERRONEOUS' | 'OTHER';
 
@@ -95,6 +96,7 @@ export type AnimalWeightRecord = {
 };
 
 export type Vaccination = {
+  reportDetails?: VaccinationReportDetails | null;
   id: string;
   animalId: string;
   visitId: string | null;
@@ -137,6 +139,7 @@ export type WeightMutationInput = {
 };
 
 export type VaccinationMutationInput = {
+  reportDetails?: VaccinationReportDetails;
   title: string;
   visitId?: string;
   productId?: string;

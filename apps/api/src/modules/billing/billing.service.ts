@@ -933,6 +933,16 @@ export class BillingService {
     }
   }
 
+  async reconcileNightVisitStock(tx: Prisma.TransactionClient, billId: string, warehouseScope: WarehouseScope) {
+    const bill = await tx.bill.findUniqueOrThrow({ where: { id: billId }, select: billStockContextSelect });
+    if (!bill.visitId || bill.status === PaymentStatus.CANCELLED) throw new BadRequestException('Ночное исправление доступно только для действующего счёта приёма');
+    await this.ensureBillProductItemsWrittenOff(tx, bill, warehouseScope);
+  }
+
+  async restoreNightVisitItemStock(tx: Prisma.TransactionClient, billItemId: string) {
+    await this.restoreCurrentBillItemWriteOff(tx, billItemId);
+  }
+
   private async ensureBillProductItemsWrittenOff(
     tx: Prisma.TransactionClient,
     bill: BillStockContext,

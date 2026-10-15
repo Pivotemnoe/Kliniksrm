@@ -1,7 +1,11 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsDateString, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsBoolean, IsDateString, IsOptional, IsString, MaxLength, MinLength, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+import { VaccinationReportDetailsDto } from '../../reports/dto/vaccination-report-details.dto';
 
 export class UpdateVaccinationDto {
+  @IsOptional() @ValidateNested() @Type(() => VaccinationReportDetailsDto)
+  reportDetails?: VaccinationReportDetailsDto;
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

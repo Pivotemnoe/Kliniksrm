@@ -44,6 +44,7 @@ export type VisitListItem = {
 };
 
 export type Visit = Omit<VisitListItem, 'owner' | 'animal' | 'bill'> & {
+  nightServicesEditableUntil?: string | null;
   owner: Owner;
   animal: Animal & {
     weights?: AnimalWeightRecord[];

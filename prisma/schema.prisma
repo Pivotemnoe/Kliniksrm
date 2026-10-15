@@ -544,6 +544,8 @@ model Organization {
   directorBriefingEnabled  Boolean                  @default(true)
   directorBriefingTime     String                   @default("08:00")
   directorBriefingTimezone String                   @default("Europe/Moscow")
+  preventionReportSettings Json?
+  preventionReports        MonthlyPreventionReport[]
   offices                  ClinicOffice[]
   directorBriefings        DirectorBriefing[]
   businessDailyCloses      BusinessDailyClose[]
@@ -572,6 +574,24 @@ model DirectorBriefing {
 
   @@unique([organizationId, businessDate])
   @@index([createdAt])
+}
+
+model MonthlyPreventionReport {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  month          String       @db.VarChar(7)
+  revision       Int          @default(1)
+  status         String
+  trigger        String
+  snapshot       Json
+  document       Bytes
+  sha256         String       @db.VarChar(64)
+  createdById    String?
+  createdAt      DateTime     @default(now())
+
+  @@unique([organizationId, month, revision])
+  @@index([organizationId, month])
 }
 
 model RemoteAccessPolicy {
@@ -1008,6 +1028,7 @@ model Vaccination {
   serviceBillItemId    String?   @unique
   serviceBillItem      BillItem? @relation("VaccinationServiceBillItem", fields: [serviceBillItemId], references: [id], onDelete: SetNull)
   title                String
+  reportDetails        Json?
   status               String?
   vaccinatedAt         DateTime?
   expiresAt            DateTime?

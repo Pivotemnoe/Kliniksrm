@@ -1,3 +1,4 @@
+import { MonthlyPreventionReportPanel } from './MonthlyPreventionReportPanel';
 import {
   DownloadOutlined,
   FilePdfOutlined,
@@ -52,6 +53,8 @@ export function ReportsPage() {
           </Space>
         }
       />
+
+      <MonthlyPreventionReportPanel />
 
       <Card className="report-filter-card">
         <div className="report-filter-row">

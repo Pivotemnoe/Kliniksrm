@@ -49,8 +49,8 @@ export class VisitsController {
   @Get(':visitId')
   @RequirePermissions('visits.read')
   @ApiOkResponse({ description: 'Clinical visit card.' })
-  getVisit(@Param('visitId') visitId: string) {
-    return this.visitsService.getVisit(visitId);
+  getVisit(@Param('visitId') visitId: string, @CurrentEmployee() actor: AuthEmployee) {
+    return this.visitsService.getVisit(visitId, actor);
   }
 
   @Patch(':visitId')

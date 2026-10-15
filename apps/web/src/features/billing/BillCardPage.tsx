@@ -148,6 +148,7 @@ export function BillCardPage() {
               Оплачено {bill ? formatMoney(bill.paidAmount) : '—'}
               {debt > 0 ? `, долг ${formatMoney(debt)}` : ''}
             </Typography.Text>
+            {bill && toMoneyNumber(bill.paidAmount) > toMoneyNumber(bill.totalAmount) ? <Tag color="orange">К возврату {formatMoney(toMoneyNumber(bill.paidAmount) - toMoneyNumber(bill.totalAmount))}</Tag> : null}
             {isOverdue ? <Tag color="red">Просрочен</Tag> : null}
             {canPay ? (
               <Button

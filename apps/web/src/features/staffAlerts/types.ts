@@ -5,6 +5,7 @@ export type StaffAlertKind =
   | 'FAILED_DELIVERY'
   | 'ONLINE_REQUEST'
   | 'UNPAID_BILL'
+  | 'BILL_OVERPAYMENT' | 'PREVENTION_REPORT'
   | 'LOW_STOCK'
   | 'NEWS'
   | 'DIRECTOR_BRIEFING';

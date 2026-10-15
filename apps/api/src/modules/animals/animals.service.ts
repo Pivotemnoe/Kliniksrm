@@ -426,6 +426,7 @@ export class AnimalsService {
         data: {
           animalId,
           title: dto.title,
+          reportDetails: dto.reportDetails ? { ...dto.reportDetails } : undefined,
           status: emptyToNull(dto.status),
           vaccinatedAt: dateOrNull(dto.vaccinatedAt),
           expiresAt: dateOrNull(dto.expiresAt),
@@ -564,6 +565,7 @@ export class AnimalsService {
           billItemId: productBillItem.id,
           serviceBillItemId: serviceBillItem?.id,
           title: product.title,
+          reportDetails: dto.reportDetails ? { ...dto.reportDetails } : undefined,
           status: emptyToNull(dto.status),
           vaccinatedAt: dateOrNull(dto.vaccinatedAt) ?? new Date(),
           expiresAt: dateOrNull(dto.expiresAt),
@@ -626,6 +628,7 @@ export class AnimalsService {
         where: { id: vaccinationId },
         data: {
           ...(dto.title !== undefined ? { title: dto.title } : {}),
+          ...(dto.reportDetails !== undefined ? { reportDetails: { ...dto.reportDetails } } : {}),
           ...(dto.status !== undefined ? { status: emptyToNull(dto.status) } : {}),
           ...(dto.vaccinatedAt !== undefined ? { vaccinatedAt: dateOrNull(dto.vaccinatedAt) } : {}),
           ...(dto.expiresAt !== undefined ? { expiresAt: dateOrNull(dto.expiresAt) } : {}),

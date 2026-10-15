@@ -13,6 +13,8 @@ import {
 } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
 import { rankSearchResults, withRussianSearchVariants } from '../../common/search-ranking';
+import { BillingService } from '../billing/billing.service';
+import { nightVisitBillingDeadline } from './night-visit-billing';
 import { AuditService } from '../audit/audit.service';
 import { AuthEmployee } from '../auth/auth.types';
 import { FinanceService } from '../finance/finance.service';
@@ -54,6 +56,7 @@ export class VisitsService {
     private readonly financeService: FinanceService,
     private readonly medicalPhrasesService: MedicalPhrasesService,
     private readonly ownerGatewaySnapshotSyncService: OwnerGatewaySnapshotSyncService,
+    private readonly billingService: BillingService,
   ) {}
 
   async listVisits(query: ListVisitsQueryDto) {
@@ -264,7 +267,7 @@ export class VisitsService {
     return this.getVisit(result.visit.id);
   }
 
-  async getVisit(visitId: string) {
+  async getVisit(visitId: string, actor?: AuthEmployee) {
     const visit = await this.prisma.visit.findUnique({
       where: { id: visitId },
       include: visitInclude,
@@ -274,7 +277,8 @@ export class VisitsService {
       throw new NotFoundException('Visit not found');
     }
 
-    return visit;
+    const nightServicesEditableUntil = actor ? await this.getNightBillingDeadline(this.prisma, visit, actor) : null;
+    return { ...visit, nightServicesEditableUntil: nightServicesEditableUntil?.toISOString() ?? null };
   }
 
   async updateVisit(visitId: string, dto: UpdateVisitDto, actor: AuthEmployee) {
@@ -592,9 +596,9 @@ export class VisitsService {
 
     const billItem = await this.prisma.$transaction(async (tx) => {
       const visit = await this.getVisitForBilling(tx, visitId);
-      ensureVisitEditable(visit, actor);
+      const night = await this.beginNightBillingAmendment(tx, visit, actor);
       ensureVisitOperational(visit);
-      const bill = await this.getOrCreateVisitBill(tx, visit);
+      const bill = await this.getOrCreateVisitBill(tx, visit, Boolean(night));
       const createdBillItem = await tx.billItem.create({
         data: {
           billId: bill.id,
@@ -610,6 +614,7 @@ export class VisitsService {
       });
 
       await this.recalculateVisitTotals(tx, visitId);
+      await this.finishNightBillingAmendment(tx, visitId, actor, night);
 
       return createdBillItem;
     });
@@ -629,9 +634,9 @@ export class VisitsService {
     const serviceLines = await Promise.all(dto.items.map((item) => this.resolveServiceLine(item)));
     const billItems = await this.prisma.$transaction(async (tx) => {
       const visit = await this.getVisitForBilling(tx, visitId);
-      ensureVisitEditable(visit, actor);
+      const night = await this.beginNightBillingAmendment(tx, visit, actor);
       ensureVisitOperational(visit);
-      const bill = await this.getOrCreateVisitBill(tx, visit);
+      const bill = await this.getOrCreateVisitBill(tx, visit, Boolean(night));
       const created = [];
       for (const serviceLine of serviceLines) {
         created.push(await tx.billItem.create({
@@ -649,6 +654,7 @@ export class VisitsService {
         }));
       }
       await this.recalculateVisitTotals(tx, visitId);
+      await this.finishNightBillingAmendment(tx, visitId, actor, night);
       return created;
     });
 
@@ -682,7 +688,7 @@ export class VisitsService {
     const selectedIds = uniqueIds(dto.itemIds);
     const result = await this.prisma.$transaction(async (tx) => {
       const visit = await this.getVisitForBilling(tx, visitId);
-      ensureVisitEditable(visit, actor);
+      const night = await this.beginNightBillingAmendment(tx, visit, actor);
       ensureVisitOperational(visit);
 
       const current = await tx.visit.findUniqueOrThrow({
@@ -700,7 +706,7 @@ export class VisitsService {
       const blocked = selected.find((item) => !isPreviousVisitItemCopyable(item!));
       if (blocked) throw new BadRequestException(`Позиция «${blocked.title}» больше недоступна в каталоге`);
 
-      const bill = await this.getOrCreateVisitBill(tx, visit);
+      const bill = await this.getOrCreateVisitBill(tx, visit, Boolean(night));
       const created = [];
       for (const item of selected) {
         created.push(await tx.billItem.create({
@@ -718,6 +724,7 @@ export class VisitsService {
         }));
       }
       await this.recalculateVisitTotals(tx, visitId);
+      await this.finishNightBillingAmendment(tx, visitId, actor, night);
       return { sourceVisitId: previous.id, items: created, count: created.length };
     });
 
@@ -734,11 +741,11 @@ export class VisitsService {
   async updateService(visitId: string, billItemId: string, dto: UpdateVisitServiceDto, actor: AuthEmployee) {
     const billItem = await this.prisma.$transaction(async (tx) => {
       const visit = await this.getVisitForBilling(tx, visitId);
-      ensureVisitEditable(visit, actor);
+      const night = await this.beginNightBillingAmendment(tx, visit, actor);
       ensureVisitOperational(visit);
       const existingBillItem = await this.getVisitBillItem(tx, visitId, billItemId);
-      ensureVisitBillItemEditable(existingBillItem.bill);
-      await this.restoreCurrentVisitProductWriteOff(tx, visitId, existingBillItem);
+      ensureVisitBillItemEditable(existingBillItem.bill, Boolean(night));
+      if (!night || !decimal(existingBillItem.bill.paidAmount).greaterThan(0)) await this.restoreCurrentVisitProductWriteOff(tx, visitId, existingBillItem);
       const serviceUnitPrice = existingBillItem.serviceId && dto.unitPrice !== undefined
         ? resolveServiceUnitPrice(
             await tx.service.findUniqueOrThrow({ where: { id: existingBillItem.serviceId }, select: servicePricingSelect }),
@@ -770,6 +777,7 @@ export class VisitsService {
       });
 
       await this.recalculateVisitTotals(tx, visitId);
+      await this.finishNightBillingAmendment(tx, visitId, actor, night);
 
       return updatedBillItem;
     });
@@ -788,13 +796,15 @@ export class VisitsService {
   async deleteService(visitId: string, billItemId: string, actor: AuthEmployee) {
     await this.prisma.$transaction(async (tx) => {
       const visit = await this.getVisitForBilling(tx, visitId);
-      ensureVisitEditable(visit, actor);
+      const night = await this.beginNightBillingAmendment(tx, visit, actor);
       ensureVisitOperational(visit);
       const billItem = await this.getVisitBillItem(tx, visitId, billItemId);
-      ensureVisitBillItemEditable(billItem.bill);
-      await this.restoreCurrentVisitProductWriteOff(tx, visitId, billItem);
+      ensureVisitBillItemEditable(billItem.bill, Boolean(night));
+      if (night && decimal(billItem.bill.paidAmount).greaterThan(0)) await this.billingService.restoreNightVisitItemStock(tx, billItem.id);
+      else await this.restoreCurrentVisitProductWriteOff(tx, visitId, billItem);
       await tx.billItem.delete({ where: { id: billItemId } });
       await this.recalculateVisitTotals(tx, visitId);
+      await this.finishNightBillingAmendment(tx, visitId, actor, night);
     });
 
     await this.auditService.log({
@@ -1264,10 +1274,40 @@ export class VisitsService {
     }
   }
 
+  private async getNightBillingDeadline(client: Prisma.TransactionClient | PrismaService, visit: { id: string; status: string; employeeId: string | null; completedAt: Date | null }, actor: AuthEmployee) {
+    if (visit.status !== VisitStatus.COMPLETED || visit.employeeId !== actor.id || !actor.roles.includes('doctor')) return null;
+    const branch = await client.visit.findUnique({ where: { id: visit.id }, select: {
+      queueEntry: { select: { office: { select: { timezone: true } } } },
+      appointment: { select: { office: { select: { timezone: true } } } },
+    } });
+    const timezone = branch?.queueEntry?.office?.timezone ?? branch?.appointment?.office?.timezone
+      ?? (await client.clinicOffice.findFirst({ orderBy: { createdAt: 'asc' }, select: { timezone: true } }))?.timezone ?? 'Europe/Moscow';
+    return nightVisitBillingDeadline(visit, actor, new Date(), timezone);
+  }
+
+  private async beginNightBillingAmendment(tx: Prisma.TransactionClient, visit: { id: string; status: VisitStatus; employeeId: string | null; completedAt: Date | null }, actor: AuthEmployee) {
+    const until = await this.getNightBillingDeadline(tx, visit, actor);
+    if (!until) { ensureVisitEditable(visit, actor); return null; }
+    const before = await tx.bill.findUnique({ where: { visitId: visit.id }, include: { items: true } });
+    return { until, before };
+  }
+
+  private async finishNightBillingAmendment(tx: Prisma.TransactionClient, visitId: string, actor: AuthEmployee, night: Awaited<ReturnType<VisitsService['beginNightBillingAmendment']>>) {
+    if (!night) return;
+    const after = await tx.bill.findUniqueOrThrow({ where: { visitId }, include: { items: true } });
+    if (decimal(after.paidAmount).greaterThan(0)) {
+      const accesses = await tx.employeeWarehouseAccess.findMany({ where: { employeeId: actor.id }, select: { warehouseId: true } });
+      await this.billingService.reconcileNightVisitStock(tx, after.id, accesses.length ? accesses.map(item => item.warehouseId) : null);
+    }
+    await this.auditService.log({ actorId: actor.id, action: 'visit_service.night_amendment', entityType: 'Visit', entityId: visitId,
+      metadata: JSON.parse(JSON.stringify({ before: night.before, after, editableUntil: night.until, balance: after.totalAmount.minus(after.paidAmount).toString() })) }, tx);
+  }
+
   private async getVisitForBilling(tx: Prisma.TransactionClient, visitId: string) {
+    await tx.$queryRaw`SELECT "id" FROM "Bill" WHERE "visitId" = ${visitId} FOR UPDATE`;
     const visit = await tx.visit.findUnique({
       where: { id: visitId },
-      select: { id: true, ownerId: true, animalId: true, animal: { select: { species: true } }, status: true, completedAt: true },
+      select: { id: true, ownerId: true, animalId: true, employeeId: true, animal: { select: { species: true } }, status: true, completedAt: true },
     });
 
     if (!visit) {
@@ -1330,7 +1370,7 @@ export class VisitsService {
     });
   }
 
-  private async getOrCreateVisitBill(tx: Prisma.TransactionClient, visit: VisitBillingData) {
+  private async getOrCreateVisitBill(tx: Prisma.TransactionClient, visit: VisitBillingData, nightAmendment = false) {
     await tx.$queryRaw`SELECT "id" FROM "Bill" WHERE "visitId" = ${visit.id} FOR UPDATE`;
     const existingBill = await tx.bill.findFirst({
       where: { visitId: visit.id },
@@ -1338,7 +1378,7 @@ export class VisitsService {
     });
 
     if (existingBill) {
-      ensureVisitBillItemEditable(existingBill);
+      ensureVisitBillItemEditable(existingBill, nightAmendment);
       return existingBill;
     }
 
@@ -1994,11 +2034,11 @@ function ensureVisitOperational(visit: { status: VisitStatus }) {
   }
 }
 
-function ensureVisitBillItemEditable(bill: { status: PaymentStatus; paidAmount: Prisma.Decimal }) {
+function ensureVisitBillItemEditable(bill: { status: PaymentStatus; paidAmount: Prisma.Decimal }, nightAmendment = false) {
   if (bill.status === PaymentStatus.CANCELLED) {
     throw new BadRequestException('Отменённый счёт нельзя менять. Сначала откройте счёт повторно');
   }
-  if (decimal(bill.paidAmount).greaterThan(0)) {
+  if (!nightAmendment && decimal(bill.paidAmount).greaterThan(0)) {
     throw new BadRequestException('Оплаченные позиции нельзя менять до оформления возврата');
   }
 }
@@ -2017,7 +2057,7 @@ function clean(value?: string | null) {
 }
 
 function resolvePaymentStatus(totalAmount: Prisma.Decimal, paidAmount: Prisma.Decimal) {
-  if (paidAmount.greaterThanOrEqualTo(totalAmount) && totalAmount.greaterThan(0)) {
+  if (paidAmount.greaterThan(0) && paidAmount.greaterThanOrEqualTo(totalAmount)) {
     return PaymentStatus.PAID;
   }
 

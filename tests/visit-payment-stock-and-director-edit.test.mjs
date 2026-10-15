@@ -83,7 +83,7 @@ test('директор может аудируемо исправлять кли
   assert.match(restore, /reopenCancelledVisitBill/);
   assert.match(restore, /action: 'visit\.restore'/);
   assert.match(restore, /reason/);
-  assert.match(visitBill, /FOR UPDATE[\s\S]*ensureVisitBillItemEditable\(existingBill\)/);
+  assert.match(visitBill, /FOR UPDATE[\s\S]*ensureVisitBillItemEditable\(existingBill, nightAmendment\)/);
   assert.match(visitPage, /employee\?\.roles\.includes\('director'\)[\s\S]*return false/);
   assert.match(visitPage, /Вернуть в работу/);
   assert.match(visitPage, /Клиническая карта доступна директору для аудируемого исправления/);

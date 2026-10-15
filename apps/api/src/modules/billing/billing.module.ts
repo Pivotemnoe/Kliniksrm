@@ -9,5 +9,6 @@ import { BillingService } from './billing.service';
   imports: [AuditModule, SchedulingModule, FinanceModule],
   controllers: [BillingController],
   providers: [BillingService],
+  exports: [BillingService],
 })
 export class BillingModule {}

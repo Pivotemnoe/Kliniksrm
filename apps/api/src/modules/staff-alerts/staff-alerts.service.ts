@@ -21,7 +21,7 @@ type StaffAlertSeverity = 'info' | 'warning' | 'error';
 
 type StaffAlertCandidate = {
   key: string;
-  kind: 'UNFINISHED_VISIT' | 'TODAY_VACCINATION' | 'OVERDUE_VACCINATION' | 'FAILED_DELIVERY' | 'ONLINE_REQUEST' | 'UNPAID_BILL' | 'LOW_STOCK' | 'NEWS' | 'DIRECTOR_BRIEFING';
+  kind: 'UNFINISHED_VISIT' | 'TODAY_VACCINATION' | 'OVERDUE_VACCINATION' | 'FAILED_DELIVERY' | 'ONLINE_REQUEST' | 'UNPAID_BILL' | 'BILL_OVERPAYMENT' | 'PREVENTION_REPORT' | 'LOW_STOCK' | 'NEWS' | 'DIRECTOR_BRIEFING';
   title: string;
   description: string;
   href: string;
@@ -135,7 +135,7 @@ export class StaffAlertsService {
       : [];
     const warehouseIds = warehouseAccesses.map((access) => access.warehouseId);
 
-    const [visits, failedDeliveries, onlineRequests, unpaidBills, stockProducts, unreadNews, vaccinationCandidates, directorBriefings] = await Promise.all([
+    const [visits, failedDeliveries, onlineRequests, unpaidBills, stockProducts, unreadNews, vaccinationCandidates, directorBriefings, overpaidBills, preventionReports] = await Promise.all([
       this.prisma.visit.findMany({
         where: { ...buildOverdueVisitWhere(now), animal: { archivedAt: null } },
         orderBy: { startedAt: 'asc' },
@@ -230,6 +230,13 @@ export class StaffAlertsService {
             select: { id: true, title: true, summary: true, createdAt: true },
           }))
         : Promise.resolve([]),
+      showBills ? this.loadOptionalCandidates('overpaid bills', () => this.prisma.bill.findMany({
+        where: { status: { not: PaymentStatus.CANCELLED }, paidAmount: { gt: this.prisma.bill.fields.totalAmount } },
+        select: { id: true, totalAmount: true, paidAmount: true, updatedAt: true }, orderBy: { updatedAt: 'desc' }, take: 40,
+      })) : Promise.resolve([]),
+      (can('settings.read') || can('settings.manage')) ? this.loadOptionalCandidates('prevention reports', () => this.prisma.monthlyPreventionReport.findMany({
+        orderBy: [{ month: 'desc' }, { revision: 'desc' }], take: 1, select: { id: true, month: true, revision: true, status: true, createdAt: true },
+      })) : Promise.resolve([]),
     ]);
 
     const items: StaffAlertCandidate[] = visits.map((visit) => {
@@ -354,6 +361,20 @@ export class StaffAlertsService {
         occurredAt: unreadNews[0].publishedAt,
       }));
     }
+
+    for (const bill of overpaidBills) items.push({
+      key: `bill-overpayment:${bill.id}`, kind: 'BILL_OVERPAYMENT', title: 'Переплата по исправленному счёту',
+      description: `К возврату: ${bill.paidAmount.minus(bill.totalAmount).toFixed(2)} ₽. Платежи сохранены; оформите возврат отдельно.`,
+      href: `/bills/${bill.id}`, count: 1, severity: 'warning', occurredAt: bill.updatedAt,
+      version: hashVersion([bill.id, bill.totalAmount.toString(), bill.paidAmount.toString()]),
+    });
+
+    for (const report of preventionReports) items.push({
+      key: `prevention-report:${report.id}`, kind: 'PREVENTION_REPORT', title: `Месячный профилактический отчёт за ${report.month}`,
+      description: report.status === 'READY' ? 'Пакет подготовлен. Проверьте и скачайте Word в разделе «Отчёты».' : 'Пакет сформирован, но часть данных требует проверки. Откройте раздел «Отчёты».',
+      href: '/reports', count: 1, severity: report.status === 'READY' ? 'info' : 'warning', occurredAt: report.createdAt,
+      version: hashVersion([report.id, report.revision, report.status]),
+    });
 
     const directorBriefing = directorBriefings[0];
     if (directorBriefing) {

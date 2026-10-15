@@ -1,0 +1,67 @@
+import 'reflect-metadata';
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { createHash } from 'node:crypto';
+import { PrismaClient } from '@prisma/client';
+import { PreventionReportsService } from '../apps/api/dist/modules/reports/prevention-reports.service.js';
+import { preventionSettings } from '../apps/api/dist/modules/reports/prevention-report-data.js';
+import { AuditService } from '../apps/api/dist/modules/audit/audit.service.js';
+const url = process.env.NIGHT_REPORTS_TEST_DATABASE_URL;
+test('monthly prevention snapshot, scheduling, concurrent retries and immutable revisions use isolated database', { skip: !url }, async t => {
+  const parsed = new URL(url); assert.ok(parsed.hostname === '127.0.0.1' && parsed.port === '15488' && /^\/night_reports_qa_\d+$/.test(parsed.pathname));
+  const db = new PrismaClient({ datasources: { db: { url } } }); t.after(() => db.$disconnect());
+  const service = new PreventionReportsService(db, new AuditService(db));
+  const org = await db.organization.findFirst({ orderBy: { createdAt: 'asc' } }) ?? await db.organization.create({ data: { displayName: 'Отчёты QA' } });
+  const settings = preventionSettings(null); await db.organization.update({ where: { id: org.id }, data: { preventionReportSettings: settings } });
+  const employee = await db.employee.create({ data: { fullName: 'Автор отчёта QA' } });
+  const owner = await db.owner.create({ data: { fullName: 'Вымышленный владелец отчёта QA', address: 'Учебный адрес QA' } });
+  const animal = await db.animal.create({ data: { ownerId: owner.id, nickname: 'Пациент отчёта QA', species: 'Собака' } });
+  const visit = await db.visit.create({ data: { ownerId: owner.id, animalId: animal.id, employeeId: employee.id, visitType: 'PRIMARY', status: 'COMPLETED', startedAt: new Date('2021-09-15T10:00:00Z'), diagnoses: { create: { title: 'Бабезиоз', diagnosisType: 'Клинический' } } } });
+  const make = (vaccinatedAt, extra = {}) => db.vaccination.create({ data: { animalId: animal.id, title: 'Рабикс', vaccinatedAt: new Date(vaccinatedAt), vaccineSeries: 'QA-2021', reportDetails: { doseText: 'Тестовая доза', administrationRoute: 'QA', usedDoses: 1, consumedDoses: 1, syringesAndNeedles: 'QA' }, ...extra } });
+  const existing = await db.monthlyPreventionReport.findMany({ where: { organizationId: org.id, month: { in: ['2021-09', '2021-11'] } } });
+  assert.equal(existing.length, 0, 'Use fresh disposable QA database for this integration test');
+  await make('2021-08-20T12:00:00Z');
+  const first = await make('2021-08-31T21:00:00Z');
+  await make('2021-09-30T20:59:59Z');
+  await make('2021-09-30T21:00:00Z');
+  await make('2021-09-10T12:00:00Z', { cancelledAt: new Date() });
+  const cancelled = await db.visit.create({ data: { ownerId: owner.id, animalId: animal.id, employeeId: employee.id, status: 'CANCELLED' } });
+  await make('2021-09-12T12:00:00Z', { visitId: cancelled.id });
+  await t.test('does not schedule early and includes only performed, non-cancelled records inside clinic month', async () => {
+    await service.tick(new Date('2021-10-01T05:59:00Z'));
+    assert.equal(await db.monthlyPreventionReport.count({ where: { month: '2021-09' } }), 0);
+    await service.tick(new Date('2021-10-01T06:00:00Z'));
+    const report = (await service.list()).find(r => r.month === '2021-09'); assert.ok(report);
+    const detail = await service.get(report.id);
+    assert.equal(detail.snapshot.rows.length, 2); assert.equal(detail.snapshot.rows[0].id, first.id);
+    assert.equal(detail.snapshot.rows[0].stages.RABIES, 'REVACCINATION');
+    assert.equal(detail.snapshot.illness.conditions.find(c => c.title === 'Бабезиоз').count, 1);
+  });
+  await t.test('retry and concurrent generation reuse version; explicit regeneration retains prior snapshot and bytes', async () => {
+    const concurrent = await Promise.all(Array.from({ length: 4 }, () => service.generate('2021-09', employee.id, false, new Date('2021-10-10T10:00:00Z'))));
+    assert.equal(new Set(concurrent.map(r => r.id)).size, 1);
+    const original = await service.document(concurrent[0].id, employee.id);
+    assert.equal(createHash('sha256').update(original.document).digest('hex'), concurrent[0].sha256);
+    await db.vaccination.update({ where: { id: first.id }, data: { reportDetails: { stage: 'PRIMARY', diseases: ['RABIES'] } } });
+    const revised = await service.generate('2021-09', employee.id, true, new Date('2021-10-10T10:00:00Z'));
+    assert.equal(revised.revision, 2); assert.equal(revised.snapshot.rows[0].stages.RABIES, 'PRIMARY');
+    assert.equal((await service.get(concurrent[0].id)).snapshot.rows[0].stages.RABIES, 'REVACCINATION');
+    assert.deepEqual((await service.document(concurrent[0].id, employee.id)).document, original.document);
+    assert.equal(await db.monthlyPreventionReport.count({ where: { month: '2021-09' } }), 2);
+  });
+  await t.test('restart catches up previous month once, disabled scheduling does nothing', async () => {
+    await service.saveSettings({ ...settings, enabled: false }, employee.id);
+    await service.tick(new Date('2021-12-15T10:00:00Z'));
+    assert.equal(await db.monthlyPreventionReport.count({ where: { month: '2021-11' } }), 0);
+    await service.saveSettings(settings, employee.id);
+    await service.tick(new Date('2021-12-15T10:00:00Z')); await service.tick(new Date('2021-12-15T10:01:00Z'));
+    assert.equal(await db.monthlyPreventionReport.count({ where: { month: '2021-11' } }), 1);
+  });
+  await t.test('unfinished month, invalid timezone, ambiguous aliases and foreign ids are rejected', async () => {
+    await assert.rejects(service.generate('2021-10', employee.id, false, new Date('2021-10-15T00:00:00Z')), /завершившийся/);
+    await assert.rejects(service.saveSettings({ ...settings, timezone: 'Wrong/Timezone' }, employee.id), /часовой/);
+    await assert.rejects(service.saveSettings({ ...settings, profiles: [{ ...settings.profiles[0], aliases: ['Рабикс'] }, settings.profiles[1]] }, employee.id), /двум/);
+    await assert.rejects(service.get('00000000-0000-4000-8000-000000000000'), /не найден/);
+    assert.ok(await db.auditLog.count({ where: { action: 'prevention_report.generate' } }) >= 3);
+  });
+});

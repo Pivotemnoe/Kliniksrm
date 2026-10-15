@@ -10,10 +10,19 @@ import { listRoles } from '../employees/employees.api';
 import { getSchedulingResources } from '../scheduling/scheduling.api';
 import { formatServicePrice, getServiceDefaultPrice, getServicePriceHelp } from '../stock/service-pricing';
 import { useVisitProductCatalogPicker, useVisitServiceCatalogPicker } from '../stock/useCatalogPicker';
+import { preventionDiseaseOptions, reportStageOptions } from '../reports/prevention.types';
 import { Vaccination, VaccinationMutationInput } from './types';
 
 const vaccinationSchema = z
   .object({
+    reportStage: z.enum(['AUTO', 'PRIMARY', 'REVACCINATION']),
+    reportDiseases: z.array(z.string()),
+    reportDose: z.string().trim().max(100),
+    reportNeedles: z.string().trim().max(200),
+    reportRoute: z.string().trim().max(100),
+    reportManufacturer: z.string().trim().max(250),
+    reportUsed: optionalDose(),
+    reportConsumed: optionalDose(),
     title: z.string().trim().min(2, 'Введите название').max(200),
     productId: nullableString(),
     quantity: numberText(0.001, 1000000),
@@ -135,6 +144,13 @@ export function VaccinationFormDrawer({
     const shouldCreateTask = Boolean(values.expiresAt && values.createRevaccinationTask);
 
     onSubmit({
+      reportDetails: {
+        ...(values.reportStage === 'AUTO' ? {} : { stage: values.reportStage }),
+        diseases: values.reportDiseases,
+        syringesAndNeedles: values.reportNeedles, doseText: values.reportDose, administrationRoute: values.reportRoute, manufacturer: values.reportManufacturer,
+        ...(values.reportUsed === undefined ? {} : { usedDoses: values.reportUsed }),
+        ...(values.reportConsumed === undefined ? {} : { consumedDoses: values.reportConsumed }),
+      },
       title: values.title,
       ...(integratedBilling && visitId && values.productId ? {
         visitId,
@@ -281,6 +297,12 @@ export function VaccinationFormDrawer({
             )}
           />
         )}
+        <Alert type="info" showIcon message="Данные для месячного отчёта" description="Укажите фактически введённую дозу и способ введения. Первичная прививка или ревакцинация определится по истории, если не выбрать вручную." />
+        <Controller control={control} name="reportStage" render={({ field }) => <Form.Item label="Этап вакцинации"><Select {...field} options={reportStageOptions} /></Form.Item>} />
+        <Controller control={control} name="reportDiseases" render={({ field }) => <Form.Item label="Инфекции в составе вакцины" extra="Оставьте пустым для определения по названию вакцины из настроек отчёта"><Select {...field} mode="multiple" options={preventionDiseaseOptions} /></Form.Item>} />
+        <div className="form-grid two-columns">
+          {([['reportDose', 'Фактически введённая доза'], ['reportRoute', 'Способ введения'], ['reportNeedles', 'Фактически использованные шприцы и иглы'], ['reportManufacturer', 'Производитель'], ['reportUsed', 'Использовано доз'], ['reportConsumed', 'Израсходовано доз']] as const).map(([name, label]) => <Controller key={name} control={control} name={name} render={({ field, fieldState }) => <Form.Item label={label} validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}><Input {...field} value={field.value ?? ''} /></Form.Item>} />)}
+        </div>
         <div className="form-grid two-columns">
           <Controller
             control={control}
@@ -458,6 +480,14 @@ function getDefaultValues(vaccination?: Vaccination | null, visitId?: string): V
   const integratedBilling = Boolean(visitId && !vaccination);
 
   return {
+    reportStage: vaccination?.reportDetails?.stage ?? 'AUTO',
+    reportDiseases: vaccination?.reportDetails?.diseases ?? [],
+    reportDose: vaccination?.reportDetails?.doseText ?? '',
+    reportNeedles: vaccination?.reportDetails?.syringesAndNeedles ?? '',
+    reportRoute: vaccination?.reportDetails?.administrationRoute ?? '',
+    reportManufacturer: vaccination?.reportDetails?.manufacturer ?? '',
+    reportUsed: vaccination?.reportDetails?.usedDoses?.toString() ?? '',
+    reportConsumed: vaccination?.reportDetails?.consumedDoses?.toString() ?? '',
     title: vaccination?.title ?? '',
     productId: vaccination?.productId ?? '',
     quantity: '1',
@@ -527,3 +557,5 @@ function nullableDateString() {
     .refine((value) => !value || !Number.isNaN(new Date(value).getTime()), 'Укажите корректную дату')
     .transform((value) => (value === '' ? null : value));
 }
+
+function optionalDose() { return z.string().trim().transform(value => value ? Number(value.replace(',', '.')) : undefined).refine(value => value === undefined || Number.isFinite(value) && value >= 0.001 && value <= 100000, 'Введите число от 0,001 до 100000'); }
