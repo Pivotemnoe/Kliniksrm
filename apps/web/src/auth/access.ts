@@ -48,6 +48,7 @@ const routeAccessRules: RouteAccessRule[] = [
   { path: '/online-requests', anyOf: ['appointments.read'] },
   { path: '/messages', anyOf: ['notifications.read'] },
   { path: '/reports', anyOf: ['settings.read', 'settings.manage'] },
+  { path: '/vaccination-reports', anyOf: ['reports.prevention.read', 'reports.prevention.generate', 'settings.read', 'settings.manage'] },
   { path: '/payroll', anyOf: ['payroll.read', 'payroll.manage', 'payroll.approve'] },
   { path: '/daily-finance', anyOf: ['daily_finance.read', 'daily_finance.manage', 'daily_finance.submit', 'business.approve'] },
   { path: '/business', anyOf: ['business.read'] },
@@ -73,6 +74,7 @@ const routeAccessRules: RouteAccessRule[] = [
 const fallbackRouteCandidates = [
   '/dashboard',
   '/reports',
+  '/vaccination-reports',
   '/payroll',
   '/daily-finance',
   '/business',

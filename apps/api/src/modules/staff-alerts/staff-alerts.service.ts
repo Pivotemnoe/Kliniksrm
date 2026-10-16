@@ -234,7 +234,7 @@ export class StaffAlertsService {
         where: { status: { not: PaymentStatus.CANCELLED }, paidAmount: { gt: this.prisma.bill.fields.totalAmount } },
         select: { id: true, totalAmount: true, paidAmount: true, updatedAt: true }, orderBy: { updatedAt: 'desc' }, take: 40,
       })) : Promise.resolve([]),
-      (can('settings.read') || can('settings.manage')) ? this.loadOptionalCandidates('prevention reports', () => this.prisma.monthlyPreventionReport.findMany({
+      (can('reports.prevention.read') || can('reports.prevention.generate') || can('settings.read') || can('settings.manage')) ? this.loadOptionalCandidates('prevention reports', () => this.prisma.monthlyPreventionReport.findMany({
         orderBy: [{ month: 'desc' }, { revision: 'desc' }], take: 1, select: { id: true, month: true, revision: true, status: true, createdAt: true },
       })) : Promise.resolve([]),
     ]);
@@ -371,8 +371,8 @@ export class StaffAlertsService {
 
     for (const report of preventionReports) items.push({
       key: `prevention-report:${report.id}`, kind: 'PREVENTION_REPORT', title: `Месячный профилактический отчёт за ${report.month}`,
-      description: report.status === 'READY' ? 'Пакет подготовлен. Проверьте и скачайте Word в разделе «Отчёты».' : 'Пакет сформирован, но часть данных требует проверки. Откройте раздел «Отчёты».',
-      href: '/reports', count: 1, severity: report.status === 'READY' ? 'info' : 'warning', occurredAt: report.createdAt,
+      description: report.status === 'READY' ? 'Пакет подготовлен. Проверьте и скачайте Word в разделе «Отчёты по вакцинации».' : 'Пакет сформирован, но часть данных требует проверки. Откройте раздел «Отчёты по вакцинации».',
+      href: '/vaccination-reports', count: 1, severity: report.status === 'READY' ? 'info' : 'warning', occurredAt: report.createdAt,
       version: hashVersion([report.id, report.revision, report.status]),
     });
 

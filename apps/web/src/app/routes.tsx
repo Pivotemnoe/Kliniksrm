@@ -56,6 +56,7 @@ const QueueCardPage = lazyPage(() => import('../features/queue/QueueCardPage'), 
 const QueuePage = lazyPage(() => import('../features/queue/QueuePage'), 'QueuePage');
 const QueueTvPage = lazyPage(() => import('../features/queue/QueueTvPage'), 'QueueTvPage');
 const ReportsPage = lazyPage(() => import('../features/reports/ReportsPage'), 'ReportsPage');
+const VaccinationReportsPage = lazyPage(() => import('../features/reports/VaccinationReportsPage'), 'VaccinationReportsPage');
 const RemoteAccessEnrollmentPage = lazyPage(
   () => import('../features/remoteAccess/RemoteAccessEnrollmentPage'),
   'RemoteAccessEnrollmentPage',
@@ -119,6 +120,7 @@ export const routes: RouteObject[] = [
           { index: true, element: <DefaultRouteRedirect /> },
           { path: '/dashboard', element: <DashboardPage /> },
           { path: '/reports', element: <ReportsPage /> },
+          { path: '/vaccination-reports', element: <VaccinationReportsPage /> },
           { path: '/payroll', element: <PayrollPage /> },
           { path: '/daily-finance', element: <DailyFinancePage /> },
           { path: '/business', element: <BusinessPage /> },

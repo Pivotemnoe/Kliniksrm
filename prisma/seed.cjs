@@ -55,6 +55,8 @@ const permissions = [
   ['documents.manage', 'Документы и шаблоны'],
   ['settings.read', 'Просмотр настроек клиники'],
   ['settings.manage', 'Настройки клиники'],
+  ['reports.prevention.read', 'Просмотр отчётов по вакцинации'],
+  ['reports.prevention.generate', 'Формирование отчётов по вакцинации'],
   ['employees.read', 'Просмотр сотрудников'],
   ['employees.manage', 'Сотрудники и доступы'],
   ['roles.manage', 'Назначение ролей и прав'],
@@ -108,6 +110,8 @@ const roles = [
       'daily_finance.read',
       'daily_finance.manage',
       'daily_finance.submit',
+      'reports.prevention.read',
+      'reports.prevention.generate',
     ],
   ],
   [

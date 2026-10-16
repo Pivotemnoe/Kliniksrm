@@ -14,6 +14,7 @@ import { preventionDiseaseOptions, PreventionProfile, PreventionReport, Preventi
 export function MonthlyPreventionReportPanel() {
   const client = useQueryClient(); const { data: auth } = useCurrentEmployee();
   const canManage = hasPermission(auth?.employee, 'settings.manage'); const canCorrect = hasPermission(auth?.employee, 'animals.manage');
+  const canGenerate = canManage || hasPermission(auth?.employee, 'reports.prevention.generate');
   const [month, setMonth] = useState(() => { const d = new Date(); return new Date(Date.UTC(d.getFullYear(), d.getMonth() - 1, 1)).toISOString().slice(0, 7); });
   const [selectedId, setSelectedId] = useState<string>(); const [editingSettings, setEditingSettings] = useState(false); const [editingRow, setEditingRow] = useState<PreventionReportRow>();
   const [downloadError, setDownloadError] = useState<unknown>();
@@ -27,8 +28,8 @@ export function MonthlyPreventionReportPanel() {
     <Space direction="vertical" style={{ width: '100%' }} size="middle">
       <Typography.Paragraph style={{ margin: 0 }}>Сводка профилактики и заболеваний, реестр привитых животных и акты по препаратам. Автоматически — 1-го числа в {settings.data?.time ?? '09:00'} ({settings.data?.timezone ?? 'Europe/Moscow'}) за предыдущий месяц. {settings.data?.enabled === false ? 'Автоматическое формирование отключено.' : 'После простоя сервера пропущенный отчёт за прошлый месяц сформируется при запуске.'}</Typography.Paragraph>
       <Space wrap><Input aria-label="Месяц профилактического отчёта" type="month" value={month} onChange={e => setMonth(e.target.value)} />
-        {canManage && <Button type="primary" loading={generate.isPending} disabled={!month} onClick={() => generate.mutate(false)}>Сформировать пакет</Button>}
-        {canManage && <Button disabled={!list.data?.some(r => r.month === month)} loading={generate.isPending} onClick={() => Modal.confirm({ title: 'Сформировать новую версию?', content: 'Предыдущая версия сохранится. В новую войдут уточнённые данные CRM.', okText: 'Сформировать', cancelText: 'Отмена', onOk: () => generate.mutateAsync(true) })}>Обновить пакет за месяц</Button>}
+        {canGenerate && <Button type="primary" loading={generate.isPending} disabled={!month} onClick={() => generate.mutate(false)}>Сформировать пакет</Button>}
+        {canGenerate && <Button disabled={!list.data?.some(r => r.month === month)} loading={generate.isPending} onClick={() => Modal.confirm({ title: 'Сформировать новую версию?', content: 'Предыдущая версия сохранится. В новую войдут уточнённые данные CRM.', okText: 'Сформировать', cancelText: 'Отмена', onOk: () => generate.mutateAsync(true) })}>Обновить пакет за месяц</Button>}
         <Button onClick={() => void list.refetch()}>Обновить список</Button></Space>
       {[settings.error, list.error, selected.error, generate.error, downloadError].filter(Boolean).map((error, i) => <Alert key={i} type="error" showIcon message={getErrorMessage(error)} />)}
       <ProgressiveTable rowKey="id" size="small" loading={list.isLoading} dataSource={list.data ?? []} chunkSize={6} locale={{ emptyText: 'Сформированных пакетов пока нет' }} columns={[

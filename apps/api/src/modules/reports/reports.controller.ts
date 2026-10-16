@@ -15,19 +15,19 @@ import { ReportsService } from './reports.service';
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService, private readonly prevention: PreventionReportsService) {}
 
-  @Get('prevention/settings') @RequireAnyPermissions('settings.read', 'settings.manage')
+  @Get('prevention/settings') @RequireAnyPermissions('reports.prevention.read', 'reports.prevention.generate', 'settings.read', 'settings.manage')
   getPreventionSettings() { return this.prevention.getSettings(); }
 
   @Put('prevention/settings') @RequirePermissions('settings.manage')
   savePreventionSettings(@Body() input: PreventionSettingsDto, @CurrentEmployee() actor: AuthEmployee) { return this.prevention.saveSettings(input, actor.id); }
 
-  @Get('prevention') @RequireAnyPermissions('settings.read', 'settings.manage')
+  @Get('prevention') @RequireAnyPermissions('reports.prevention.read', 'reports.prevention.generate', 'settings.read', 'settings.manage')
   listPreventionReports() { return this.prevention.list(); }
 
-  @Post('prevention/generate') @RequirePermissions('settings.manage')
+  @Post('prevention/generate') @RequireAnyPermissions('reports.prevention.generate', 'settings.manage')
   generatePreventionReport(@Body() input: GeneratePreventionReportDto, @CurrentEmployee() actor: AuthEmployee) { return this.prevention.generate(input.month, actor.id, input.regenerate); }
 
-  @Get('prevention/:id/docx') @RequireAnyPermissions('settings.read', 'settings.manage')
+  @Get('prevention/:id/docx') @RequireAnyPermissions('reports.prevention.read', 'reports.prevention.generate', 'settings.read', 'settings.manage')
   async downloadPreventionReport(@Param('id') id: string, @CurrentEmployee() actor: AuthEmployee, @Res() response: Response) {
     const report = await this.prevention.document(id, actor.id);
     response.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
@@ -36,7 +36,7 @@ export class ReportsController {
     response.send(Buffer.from(report.document));
   }
 
-  @Get('prevention/:id') @Header('Cache-Control', 'private, no-store') @RequireAnyPermissions('settings.read', 'settings.manage')
+  @Get('prevention/:id') @Header('Cache-Control', 'private, no-store') @RequireAnyPermissions('reports.prevention.read', 'reports.prevention.generate', 'settings.read', 'settings.manage')
   getPreventionReport(@Param('id') id: string) { return this.prevention.get(id); }
 
   @Get('summary')
