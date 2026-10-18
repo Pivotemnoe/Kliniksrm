@@ -35,5 +35,8 @@ LABEL org.opencontainers.image.source=$TEMICHEVVET_IMAGE_SOURCE
 
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
+COPY --from=build /app/apps/web/dist/assets /opt/temichevvet-web-assets
+COPY apps/web/retain-assets.sh /docker-entrypoint.d/40-retain-assets.sh
+RUN chmod +x /docker-entrypoint.d/40-retain-assets.sh
 
 EXPOSE 80

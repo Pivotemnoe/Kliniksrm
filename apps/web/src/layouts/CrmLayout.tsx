@@ -9,7 +9,7 @@ import {
   WalletOutlined,
 } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Avatar, Badge, Button, Drawer, Dropdown, Layout, Menu, Space, Tooltip, Typography } from 'antd';
+import { Alert, Avatar, Badge, Button, Drawer, Dropdown, Layout, Menu, Space, Tooltip, Typography } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { appConfig, isDemoAuthMode } from '../app/config';
@@ -18,6 +18,7 @@ import { useCurrentEmployee, useLogoutMutation } from '../auth/useAuth';
 import { RouteLoadBoundary } from '../app/RouteLoadBoundary';
 import { listInternalMessageConversations } from '../features/internalMessages/internalMessages.api';
 import { StaffAlertsPopover } from '../features/staffAlerts/StaffAlertsPopover';
+import { flushQueuedReplies, readQueuedReplies, subscribeQueuedReplies } from '../features/onlineRequests/conversationOutbox';
 import { getEmployeeDefaultRoute } from '../shared/routes/defaultRoutes';
 import { GlobalSearch } from './GlobalSearch';
 import { IncomingRequestAlert } from './IncomingRequestAlert';
@@ -42,6 +43,7 @@ export function CrmLayout() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
+  const [pendingReplies, setPendingReplies] = useState(0);
   const { data } = useCurrentEmployee();
   const logoutMutation = useLogoutMutation();
   const employee = data?.employee;
@@ -55,6 +57,24 @@ export function CrmLayout() {
   const employeeInitial = employee?.fullName?.trim().slice(0, 1);
   const canOpenSeparateLocalLogin = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
   const canReadOnlineRequests = Boolean(employee && (employee.roles.includes('administrator') || employee.roles.includes('director')) && hasPermission(employee, 'appointments.read'));
+  useEffect(() => {
+    if (!canReadOnlineRequests || !employee?.id) { setPendingReplies(0); return undefined; }
+    const employeeId = employee.id;
+    let mounted = true;
+    const updateCount = () => setPendingReplies(readQueuedReplies(employeeId).length);
+    updateCount();
+    const flush = () => void flushQueuedReplies(employeeId, () => {
+      if (!mounted) return;
+      void queryClient.invalidateQueries({ queryKey: ['online-request-conversation'] });
+      void queryClient.invalidateQueries({ queryKey: ['online-request-conversation-jobs'] });
+    });
+    flush();
+    const timer = window.setInterval(flush, 15_000);
+    window.addEventListener('focus', flush);
+    window.addEventListener('online', flush);
+    const unsubscribe = subscribeQueuedReplies(() => { updateCount(); flush(); });
+    return () => { mounted = false; window.clearInterval(timer); window.removeEventListener('focus', flush); window.removeEventListener('online', flush); unsubscribe(); };
+  }, [canReadOnlineRequests, employee?.id, queryClient]);
   const canReadBusiness = hasPermission(employee, 'business.read');
   const canReadFinanceSettings = hasPermission(employee, 'settings.read');
   const internalMessagesQuery = useQuery({
@@ -212,6 +232,10 @@ export function CrmLayout() {
           </Space>
         </Header>
         <Content className="crm-content">
+          {pendingReplies > 0 ? <Alert type="warning" showIcon className="form-alert"
+            message={`Ответы клиентам ожидают отправки: ${pendingReplies}`}
+            description="CRM повторит отправку при восстановлении связи. Не закрывайте эту вкладку, пока ответы не исчезнут из очереди."
+            action={<Button size="small" onClick={() => navigate('/online-requests')}>Открыть заявки</Button>} /> : null}
           <IncomingRequestAlert enabled={Boolean(employee &&
             (employee.roles.includes('administrator') || employee.roles.includes('director')) &&
             hasPermission(employee, 'appointments.manage') &&
@@ -223,7 +247,7 @@ export function CrmLayout() {
               ? employee?.roles.includes('director') ? 'director' : 'read-only'
               : null}
           />
-          <RouteLoadBoundary resetKey={location.pathname}>
+          <RouteLoadBoundary resetKey={location.pathname + location.search}>
             <Outlet />
           </RouteLoadBoundary>
         </Content>

@@ -92,6 +92,8 @@ services:
       - api
     ports:
       - "${WEB_BIND_ADDR:-127.0.0.1}:${WEB_PORT:-3000}:80"
+    volumes:
+      - web_assets:/usr/share/nginx/html/assets
 
   postgres:
     image: postgres:16-alpine
@@ -177,3 +179,5 @@ volumes:
   postgres_data:
   redis_data:
   minio_data:
+  web_assets:
+    name: clinic-crm-web-assets

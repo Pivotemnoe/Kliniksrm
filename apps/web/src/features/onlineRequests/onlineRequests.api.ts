@@ -25,6 +25,14 @@ export function updateOnlineRequest(requestId: string, input: UpdateOnlineReques
   return apiRequest<OnlineAppointmentRequest>(`/v1/online-requests/${requestId}`, { method: 'PATCH', body: input });
 }
 
+export function deleteOnlineRequest(requestId: string) {
+  return apiRequest<OnlineAppointmentRequest>(`/v1/online-requests/${encodeURIComponent(requestId)}`, { method: 'DELETE' });
+}
+
+export function restoreOnlineRequest(requestId: string) {
+  return apiRequest<OnlineAppointmentRequest>(`/v1/online-requests/${encodeURIComponent(requestId)}/restore`, { method: 'POST' });
+}
+
 export function acceptOnlineRequest(requestId: string, input: AcceptOnlineRequestInput) {
   return apiRequest<OnlineAppointmentRequest>(`/v1/online-requests/${requestId}/accept`, { method: 'POST', body: input });
 }

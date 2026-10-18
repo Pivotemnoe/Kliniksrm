@@ -151,10 +151,10 @@ export class DashboardService {
         where: { paidAt: { gte: start, lte: end }, amount: { lt: 0 } },
         _sum: { amount: true },
       }),
-      this.prisma.onlineAppointmentRequest.count({ where: { status: OnlineRequestStatus.NEW } }),
-      this.prisma.onlineAppointmentRequest.count({ where: { status: OnlineRequestStatus.IN_REVIEW } }),
+      this.prisma.onlineAppointmentRequest.count({ where: { status: OnlineRequestStatus.NEW, deletedAt: null } }),
+      this.prisma.onlineAppointmentRequest.count({ where: { status: OnlineRequestStatus.IN_REVIEW, deletedAt: null } }),
       this.prisma.onlineAppointmentRequest.findMany({
-        where: { status: { in: [OnlineRequestStatus.NEW, OnlineRequestStatus.IN_REVIEW] } },
+        where: { status: { in: [OnlineRequestStatus.NEW, OnlineRequestStatus.IN_REVIEW] }, deletedAt: null },
         orderBy: { createdAt: 'asc' },
         take: 6,
         select: onlineRequestSelect,

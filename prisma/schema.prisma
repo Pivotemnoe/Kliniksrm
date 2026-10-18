@@ -1150,10 +1150,13 @@ model OnlineAppointmentRequest {
   animal            Animal?             @relation(fields: [animalId], references: [id], onDelete: SetNull)
   appointmentId     String?             @unique
   appointment       Appointment?        @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  deletedAt         DateTime?
+  deletedById       String?
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
 
   @@index([status, createdAt])
+  @@index([deletedAt, createdAt])
   @@index([assignedEmployeeId, status])
   @@index([conversationId, createdAt])
   @@unique([conversationId, assistantBookingSequence])

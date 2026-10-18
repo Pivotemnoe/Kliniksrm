@@ -40,8 +40,10 @@ export class ClinicConversationSyncService implements OnApplicationBootstrap, On
       // Also arbitrates first import from multiple CRM API workers.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(20261008, 3)`;
       const latest = await tx.onlineAppointmentRequest.findFirst({ where: { conversationId: item.id }, orderBy: { createdAt: 'desc' } });
+      // Deleted requests stay hidden; a genuinely new inbound message opens a fresh card.
+      if (latest?.deletedAt && latest.conversationVersion >= item.sequence) return latest;
       const newBooking = latest && ['ACCEPTED', 'CANCELLED', 'ARCHIVED'].includes(latest.status) && Number(item.bookingSequence || 0) > Math.max(latest.conversationVersion, latest.assistantBookingSequence || 0);
-      const existing = newBooking ? null : latest;
+      const existing = newBooking || latest?.deletedAt ? null : latest;
       if (existing && existing.conversationVersion >= item.sequence) return existing;
       const owner = item.ownerId ? await tx.owner.findUnique({ where: { id: item.ownerId }, select: { id: true, fullName: true, phone: true } }) : null;
       const inbound = item.messages.filter(x => x.author === 'OWNER');
@@ -58,7 +60,7 @@ export class ClinicConversationSyncService implements OnApplicationBootstrap, On
       };
       const row = existing
         ? await tx.onlineAppointmentRequest.update({ where: { id: existing.id }, data })
-        : await tx.onlineAppointmentRequest.create({ data: { ownerName: owner?.fullName || item.contactName || 'Посетитель чата', phone: owner?.phone || item.phone || 'чат', animalNickname: item.animalNickname || 'Не указан', source: item.source, externalRequestId: `assistant:${item.id}:${item.bookingSequence || 0}`, conversationId: item.id, ...data } });
+        : await tx.onlineAppointmentRequest.create({ data: { ownerName: owner?.fullName || item.contactName || 'Посетитель чата', phone: owner?.phone || item.phone || 'чат', animalNickname: item.animalNickname || 'Не указан', source: item.source, externalRequestId: latest?.deletedAt ? `assistant:${item.id}:${item.bookingSequence || 0}:${item.sequence}` : `assistant:${item.id}:${item.bookingSequence || 0}`, conversationId: item.id, ...data } });
       await tx.auditLog.create({ data: { action: 'clinic_conversation.sync', entityType: 'OnlineAppointmentRequest', entityId: row.id, metadata: { version: item.sequence } } });
       return row;
     });
@@ -68,6 +70,7 @@ export class ClinicConversationSyncService implements OnApplicationBootstrap, On
     return this.prisma.$transaction(async tx => {
       await lockOnlineRequest(tx, requestId);
       const request = await tx.onlineAppointmentRequest.findUniqueOrThrow({ where: { id: requestId } });
+      if (request.deletedAt) throw new ConflictException('Заявка удалена');
       if (!request.conversationId) throw new BadRequestException('У заявки нет переписки');
       if (request.assignedEmployeeId !== actorId) throw new ConflictException('Сначала возьмите обращение в работу');
       if (input.action === 'REPLY' && !input.text?.trim()) throw new BadRequestException('Введите ответ');
@@ -107,6 +110,7 @@ export class ClinicConversationSyncService implements OnApplicationBootstrap, On
     return this.prisma.$transaction(async tx => {
       await lockOnlineRequest(tx, requestId);
       const request = await tx.onlineAppointmentRequest.findUniqueOrThrow({ where: { id: requestId } });
+      if (request.deletedAt) throw new ConflictException('Заявка удалена');
       if (request.assignedEmployeeId !== actorId) throw new ConflictException('Сначала возьмите обращение в работу');
       const job = await tx.backgroundJob.findUniqueOrThrow({ where: { id: jobId } });
       const payload = job.payload as Prisma.JsonObject;

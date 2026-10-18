@@ -159,7 +159,7 @@ export class StaffAlertsService {
         : Promise.resolve([]),
       showOnlineRequests
         ? this.loadOptionalCandidates('online requests', () => this.prisma.onlineAppointmentRequest.findMany({
-            where: { status: OnlineRequestStatus.NEW },
+            where: { status: OnlineRequestStatus.NEW, deletedAt: null },
             orderBy: { createdAt: 'desc' },
             take: 200,
             select: { id: true, createdAt: true },

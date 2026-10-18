@@ -1,5 +1,6 @@
 import { Alert, Button, Spin } from 'antd';
 import { Component, Suspense, type ErrorInfo, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 
 type RouteLoadBoundaryProps = {
   children: ReactNode;
@@ -38,11 +39,12 @@ export class RouteLoadBoundary extends Component<RouteLoadBoundaryProps, RouteLo
             type="warning"
             showIcon
             message="Не удалось загрузить раздел"
-            description="Проверьте подключение к сети и повторите загрузку. Сохранённые данные не изменены."
+            description="Раздел не открылся. При временном обрыве связи или после обновления CRM повторите загрузку; сохранённые данные не изменены."
             action={
-              <Button size="small" onClick={() => window.location.reload()}>
-                Повторить загрузку
-              </Button>
+              <>
+                {this.props.resetKey?.startsWith('/online-requests') ? <Link to="/online-requests">К списку заявок</Link> : null}
+                <Button size="small" onClick={() => window.location.reload()}>Повторить загрузку</Button>
+              </>
             }
           />
         </div>

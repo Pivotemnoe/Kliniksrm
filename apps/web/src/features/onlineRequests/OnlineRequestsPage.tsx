@@ -4,6 +4,7 @@ import {
   CheckCircleOutlined,
   CloseOutlined,
   CopyOutlined,
+  DeleteOutlined,
   DownOutlined,
   EditOutlined,
   InboxOutlined,
@@ -11,6 +12,7 @@ import {
   MessageOutlined,
   PhoneOutlined,
   UserOutlined,
+  UndoOutlined,
 } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -41,6 +43,8 @@ import {
   cancelOnlineRequest,
   listOnlineRequests,
   updateOnlineRequest,
+  deleteOnlineRequest,
+  restoreOnlineRequest,
 } from './onlineRequests.api';
 import {
   AcceptOnlineRequestInput,
@@ -56,7 +60,8 @@ const statusOptions = Object.entries(onlineRequestStatusLabels).map(([value, lab
 
 const requestSchema = z.object({
   ownerName: z.string().trim().min(2, 'Укажите имя владельца').max(200),
-  phone: z.string().trim().min(5, 'Укажите телефон').max(32),
+  // A chat can reach the clinic before the visitor shares a phone number.
+  phone: z.string().trim().max(32),
   email: z.string().trim().email('Некорректный email').or(z.literal('')).optional(),
   animalNickname: z.string().trim().min(1, 'Укажите кличку').max(160),
   animalSpecies: z.string().trim().max(120).optional(),
@@ -105,13 +110,14 @@ export function OnlineRequestsPage() {
   const canDirectorTakeover = canManage && Boolean(auth?.employee.roles.includes('director'));
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<OnlineRequestStatus | undefined>();
+  const [showDeleted, setShowDeleted] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<OnlineAppointmentRequest | null>(null);
   const [drawerIntent, setDrawerIntent] = useState<RequestDrawerIntent>('confirm');
   const publicRequestUrl = useMemo(() => getPublicOnlineRequestUrl(), []);
 
   const requestsQuery = useInfiniteListQuery({
-    queryKey: ['online-requests', { search, status }],
-    queryFn: ({ limit, offset }) => listOnlineRequests({ search, status, limit, offset }),
+    queryKey: ['online-requests', { search, status, showDeleted }],
+    queryFn: ({ limit, offset }) => listOnlineRequests({ search, status, deleted: showDeleted ? 'true' : 'false', limit, offset }),
   });
   const claimMutation = useMutation({
     mutationFn: claimOnlineRequest,
@@ -147,6 +153,23 @@ export function OnlineRequestsPage() {
       closeRequest();
     },
     onError: (error) => message.error(getErrorMessage(error)),
+  });
+  const deleteMutation = useMutation({
+    mutationFn: deleteOnlineRequest,
+    onSuccess: async () => {
+      closeRequest();
+      await Promise.all(['online-requests', 'online-request-attention', 'staff-alerts', 'dashboard'].map(key => queryClient.invalidateQueries({ queryKey: [key] })));
+      message.success('Заявка удалена из рабочего списка. Её можно восстановить.');
+    },
+    onError: error => message.error(getErrorMessage(error)),
+  });
+  const restoreMutation = useMutation({
+    mutationFn: restoreOnlineRequest,
+    onSuccess: async () => {
+      await Promise.all(['online-requests', 'online-request-attention', 'staff-alerts', 'dashboard'].map(key => queryClient.invalidateQueries({ queryKey: [key] })));
+      message.success('Заявка восстановлена');
+    },
+    onError: error => message.error(getErrorMessage(error)),
   });
   const quickAcceptMutation = useMutation({
     mutationFn: ({ request, input }: { request: OnlineAppointmentRequest; input: AcceptOnlineRequestInput }) =>
@@ -199,7 +222,7 @@ export function OnlineRequestsPage() {
         render: (_, request) => (
           <Space direction="vertical" size={0}>
             <Typography.Text strong>{request.ownerName}</Typography.Text>
-            <Typography.Text type="secondary">{request.phone}</Typography.Text>
+            <Typography.Text type="secondary">{hasContactPhone(request.phone) ? request.phone : 'Телефон не указан'}</Typography.Text>
           </Space>
         ),
       },
@@ -236,6 +259,9 @@ export function OnlineRequestsPage() {
         width: 430,
         fixed: 'right',
         render: (_, request) => {
+          if (request.deletedAt) return canManage && (!request.assignedEmployeeId || request.assignedEmployeeId === auth?.employee.id || canDirectorTakeover) ? (
+            <Button size="small" icon={<UndoOutlined />} loading={restoreMutation.isPending} onClick={() => restoreMutation.mutate(request.id)}>Восстановить</Button>
+          ) : null;
           const assignedElsewhere = Boolean(request.assignedEmployeeId && request.assignedEmployeeId !== auth?.employee.id && request.assignedEmployee?.status !== 'BLOCKED');
           const locked = isRequestLocked(request) || assignedElsewhere;
           const quickAcceptInput = getQuickAcceptInput(request);
@@ -278,17 +304,22 @@ export function OnlineRequestsPage() {
                 </Button>
               ) : null}
               {canManage && (activeStatuses.includes(request.status) || request.conversationNeedsAttention) && request.assignedEmployeeId === auth?.employee.id ? <Button size="small" loading={releaseMutation.isPending} onClick={() => releaseMutation.mutate(request.id)}>Вернуть в очередь</Button> : null}
-              <Dropdown menu={{ items: contactItems }} trigger={['click']}>
+              {canManage && !request.appointmentId && (!assignedElsewhere || canDirectorTakeover) ? (
+                <Popconfirm title="Удалить заявку?" description="Она исчезнет из рабочего списка, но останется доступной для восстановления. Связанные данные клиента не удаляются." okText="Удалить" cancelText="Отмена" okButtonProps={{ danger: true }} onConfirm={() => deleteMutation.mutate(request.id)}>
+                  <Button size="small" danger icon={<DeleteOutlined />} loading={deleteMutation.isPending}>Удалить</Button>
+                </Popconfirm>
+              ) : null}
+              {contactItems.length ? <Dropdown menu={{ items: contactItems }} trigger={['click']}>
                 <Button size="small" icon={<PhoneOutlined />}>
                   Связаться <DownOutlined />
                 </Button>
-              </Dropdown>
+              </Dropdown> : null}
             </Space>
           );
         },
       },
     ],
-    [canManage, canDirectorTakeover, message, navigate, quickAcceptMutation, claimMutation, takeoverMutation, releaseMutation, auth?.employee.id],
+    [canManage, canDirectorTakeover, message, navigate, quickAcceptMutation, claimMutation, takeoverMutation, releaseMutation, deleteMutation, restoreMutation, auth?.employee.id],
   );
 
   return (
@@ -352,6 +383,9 @@ export function OnlineRequestsPage() {
             <Button icon={<CalendarOutlined />} onClick={() => setStatus(activeStatuses[0])}>
               Новые
             </Button>
+            <Button icon={showDeleted ? <InboxOutlined /> : <DeleteOutlined />} onClick={() => { setShowDeleted(value => !value); setStatus(undefined); }}>
+              {showDeleted ? 'Рабочие заявки' : 'Удалённые'}
+            </Button>
           </Space>
         </div>
         <div className="list-panel-body">
@@ -363,7 +397,7 @@ export function OnlineRequestsPage() {
             className="dense-table"
             columns={columns}
             scroll={{ x: 1580 }}
-            onRow={(request) => ({ onDoubleClick: () => openRequest(request, 'edit') })}
+            onRow={(request) => ({ onDoubleClick: () => { if (!request.deletedAt) openRequest(request, 'edit'); } })}
           />
         </div>
       </div>
@@ -461,10 +495,24 @@ function RequestDrawer({
   }, [acceptForm, request, updateForm]);
 
   function submitUpdate(values: RequestFormValues) {
-    updateMutation.mutate({
-      ...values,
-      preferredAt: values.preferredAt ? fromDatetimeLocal(values.preferredAt) : null,
-    });
+    const original = getRequestDefaults(request);
+    const changes: UpdateOnlineRequestInput = {};
+    for (const field of ['ownerName', 'email', 'animalNickname', 'animalSpecies', 'animalBreed', 'comment', 'internalComment'] as const) {
+      if (values[field] !== original[field]) changes[field] = values[field];
+    }
+    if (values.preferredAt !== original.preferredAt) changes.preferredAt = values.preferredAt ? fromDatetimeLocal(values.preferredAt) : null;
+    if (values.phone !== original.phone) {
+      if (!hasContactPhone(values.phone)) {
+        updateForm.setError('phone', { message: 'Для изменения укажите действующий номер телефона' });
+        return;
+      }
+      changes.phone = values.phone;
+    }
+    if (!Object.keys(changes).length) {
+      message.info('Изменений нет');
+      return;
+    }
+    updateMutation.mutate(changes);
   }
 
   function submitAccept(values: AcceptFormValues) {
@@ -687,7 +735,7 @@ function RequestFields({ control, disabled = false }: { control: ReturnType<type
           control={control}
           name="phone"
           render={({ field, fieldState }) => (
-            <Form.Item label="Телефон" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message}>
+            <Form.Item label="Телефон" validateStatus={fieldState.error ? 'error' : undefined} help={fieldState.error?.message ?? (!field.value ? 'Посетитель пока не оставил номер' : undefined)}>
               <RussianPhoneInput {...field} disabled={disabled} />
             </Form.Item>
           )}
@@ -763,7 +811,7 @@ function RequestFields({ control, disabled = false }: { control: ReturnType<type
 function getRequestDefaults(request: OnlineAppointmentRequest | null): RequestFormValues {
   return {
     ownerName: request?.ownerName ?? '',
-    phone: request?.phone ?? '',
+    phone: request && hasContactPhone(request.phone) ? request.phone : '',
     email: request?.email ?? '',
     animalNickname: request?.animalNickname ?? '',
     animalSpecies: request?.animalSpecies ?? '',
@@ -842,13 +890,12 @@ function getContactItems(
   navigate: ReturnType<typeof useNavigate>,
   message: ReturnType<typeof App.useApp>['message'],
 ): NonNullable<MenuProps['items']> {
-  const items: NonNullable<MenuProps['items']> = [
-    {
+  const items: NonNullable<MenuProps['items']> = [];
+  if (hasContactPhone(request.phone)) items.push({
       key: 'call',
       icon: <PhoneOutlined />,
       label: <a href={`tel:${request.phone}`}>Позвонить: {request.phone}</a>,
-    },
-    {
+    }, {
       key: 'copy-phone',
       icon: <CopyOutlined />,
       label: 'Скопировать телефон',
@@ -860,8 +907,7 @@ function getContactItems(
           message.warning('Не удалось скопировать телефон автоматически');
         }
       },
-    },
-  ];
+    });
 
   if (request.ownerId) {
     items.push({
@@ -873,4 +919,9 @@ function getContactItems(
   }
 
   return items;
+}
+
+function hasContactPhone(value: string | null | undefined) {
+  const digits = value?.replace(/\D/g, '') ?? '';
+  return digits.length >= 10 && digits.length <= 15;
 }

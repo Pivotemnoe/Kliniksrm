@@ -21,9 +21,8 @@ export function ProtectedRoute() {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
-  if (error) {
-    return <Navigate to="/login" replace state={{ from: location }} />;
-  }
+  // A temporary LAN outage must not discard an already authenticated, loaded
+  // staff screen. A real 401 still clears the auth cache in apiRequest.
 
   if (data.employee.mustChangePassword && location.pathname !== '/profile') {
     return <Navigate to="/profile" replace state={{ temporaryPassword: true }} />;

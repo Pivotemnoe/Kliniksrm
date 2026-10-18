@@ -1,6 +1,7 @@
 import { lazy, type ComponentType } from 'react';
 import { Navigate, RouteObject } from 'react-router-dom';
 import { CrmLayout } from '../layouts/CrmLayout';
+import { OnlineRequestsPage } from '../features/onlineRequests/OnlineRequestsPage';
 import { DefaultRouteRedirect } from './DefaultRouteRedirect';
 import { ProtectedRoute } from './ProtectedRoute';
 
@@ -45,7 +46,6 @@ const OrganizationSettingsPage = lazyPage(
   'OrganizationSettingsPage',
 );
 const ClinicAssistantPreviewPage = lazyPage(() => import('../features/clinicAssistant/ClinicAssistantPreviewPage'), 'ClinicAssistantPreviewPage');
-const OnlineRequestsPage = lazyPage(() => import('../features/onlineRequests/OnlineRequestsPage'), 'OnlineRequestsPage');
 const PublicOnlineRequestPage = lazyPage(
   () => import('../features/onlineRequests/PublicOnlineRequestPage'),
   'PublicOnlineRequestPage',

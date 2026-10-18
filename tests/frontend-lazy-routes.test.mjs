@@ -12,8 +12,8 @@ test('экраны CRM загружаются по маршрутам, а не �
   const routes = await read('apps/web/src/app/routes.tsx');
   const lazyImports = routes.match(/\(\) => import\(/g) ?? [];
 
-  assert.ok(lazyImports.length >= 45, `ожидалось не менее 45 ленивых экранов, найдено ${lazyImports.length}`);
-  assert.doesNotMatch(routes, /^import \{ .*Page \} from '\.\.\/(?:features|pages)\//m);
+  assert.ok(lazyImports.length >= 44, `ожидалось не менее 44 ленивых экранов, найдено ${lazyImports.length}`);
+  assert.match(routes, /import \{ OnlineRequestsPage \} from '\.\.\/features\/onlineRequests\/OnlineRequestsPage';/);
   assert.match(routes, /import\('\.\.\/features\/hospital\/HospitalCardPage'\)/);
   assert.match(routes, /import\('\.\.\/features\/visits\/VisitCardPage'\)/);
   assert.match(routes, /import\('\.\.\/features\/stock\/StockPage'\)/);
@@ -28,7 +28,7 @@ test('при медленной или оборванной сети польз�
   ]);
 
   assert.match(app, /<RouteLoadBoundary fullScreen>/);
-  assert.match(layout, /<RouteLoadBoundary resetKey=\{location\.pathname\}>/);
+  assert.match(layout, /<RouteLoadBoundary resetKey=\{location\.pathname \+ location\.search\}>/);
   assert.match(boundary, /Загружаем раздел…/);
   assert.match(boundary, /Повторить загрузку/);
   assert.match(boundary, /window\.location\.reload\(\)/);

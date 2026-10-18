@@ -1,7 +1,7 @@
 import { ConversationCommandDto } from './dto/conversation-command.dto';
 import { ClinicConversationSyncService } from './clinic-conversation-sync.service';
 import { OnlineRequestAttentionService } from './online-request-attention.service';
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { AuthEmployee } from '../auth/auth.types';
 import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
@@ -110,6 +110,20 @@ export class OnlineRequestsController {
   @ApiOkResponse({ description: 'Online appointment request updated.' })
   updateRequest(@Param('requestId') requestId: string, @Body() dto: UpdateOnlineRequestDto, @CurrentEmployee() actor: AuthEmployee) {
     return this.onlineRequestsService.updateRequest(requestId, dto, actor.id);
+  }
+
+  @Delete(':requestId')
+  @RequirePermissions('appointments.manage')
+  @ApiOkResponse({ description: 'Request moved to the recoverable trash; linked appointments are never removed.' })
+  deleteRequest(@Param('requestId') requestId: string, @CurrentEmployee() actor: AuthEmployee) {
+    return this.onlineRequestsService.deleteRequest(requestId, actor.id, actor.roles.includes('director'));
+  }
+
+  @Post(':requestId/restore')
+  @RequirePermissions('appointments.manage')
+  @ApiOkResponse({ description: 'Request restored from the recoverable trash.' })
+  restoreRequest(@Param('requestId') requestId: string, @CurrentEmployee() actor: AuthEmployee) {
+    return this.onlineRequestsService.restoreRequest(requestId, actor.id, actor.roles.includes('director'));
   }
 
   @Post(':requestId/accept')

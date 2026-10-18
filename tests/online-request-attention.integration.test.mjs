@@ -87,6 +87,31 @@ test('request attention persists and arbitrates two administrators in PostgreSQL
     await assert.rejects(attention.snooze(item.id, second.id), /обработана/);
     await assert.rejects(attention.claim('missing-request', second.id), /не найдена/);
   });
+  await t.test('site request can be edited without a contact phone, deleted and restored without data loss', async () => {
+    const auditedRequests = new OnlineRequestsService(db, { log: (entry, tx) => (tx ?? db).auditLog.create({ data: entry }) }, {}, {});
+    const ownerName = `Тестовый посетитель ${Date.now()}`;
+    const item = await db.onlineAppointmentRequest.create({ data: {
+      ownerName, phone: 'чат', animalNickname: 'Не указан', source: 'SITE_CHAT',
+      assignedEmployeeId: second.id, status: 'IN_REVIEW', conversationNeedsAttention: true,
+    } });
+    createdIds.push(item.id);
+    const edited = await auditedRequests.updateRequest(item.id, { internalComment: 'Проверено без телефона' }, second.id);
+    assert.equal(edited.phone, 'чат');
+    assert.equal(edited.internalComment, 'Проверено без телефона');
+    const removed = await auditedRequests.deleteRequest(item.id, second.id, false);
+    assert.ok(removed.deletedAt);
+    assert.equal(removed.conversationNeedsAttention, false);
+    assert.ok(!(await auditedRequests.listRequests({ search: ownerName })).items.some(row => row.id === item.id));
+    assert.ok((await auditedRequests.listRequests({ deleted: 'true', search: ownerName })).items.some(row => row.id === item.id));
+    assert.ok(!(await attention.list(second.id)).items.some(row => row.id === item.id));
+    await assert.rejects(auditedRequests.getRequest(item.id), /не найдена/);
+    await assert.rejects(auditedRequests.updateRequest(item.id, { internalComment: 'Нельзя изменить' }, second.id), /удалена/);
+    const restored = await auditedRequests.restoreRequest(item.id, second.id, false);
+    assert.equal(restored.deletedAt, null);
+    assert.equal(restored.internalComment, 'Проверено без телефона');
+    assert.ok((await auditedRequests.listRequests({ search: ownerName })).items.some(row => row.id === item.id));
+    assert.equal(await db.auditLog.count({ where: { entityId: item.id, action: { in: ['online_request.delete', 'online_request.restore'] } } }), 2);
+  });
   await t.test('backlog over thirty preserves total and reveals later requests after earlier ones are processed', async () => {
     const items = [];
     for (let i = 0; i < 35; i++) items.push(await make());

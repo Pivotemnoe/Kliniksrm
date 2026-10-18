@@ -28,6 +28,7 @@ export class OnlineRequestsService {
     const { limit, offset } = parsePagination(query);
     const search = query.search?.trim();
     const where: Prisma.OnlineAppointmentRequestWhereInput = {
+      deletedAt: query.deleted === 'true' ? { not: null } : null,
       ...(query.status ? { status: query.status } : {}),
       ...(query.dateFrom || query.dateTo
         ? {
@@ -105,7 +106,7 @@ export class OnlineRequestsService {
       include: onlineRequestInclude,
     });
 
-    if (!request) {
+    if (!request || request.deletedAt) {
       throw new NotFoundException('Онлайн-заявка не найдена');
     }
 
@@ -119,6 +120,7 @@ export class OnlineRequestsService {
     const request = await this.prisma.$transaction(async (tx) => {
       await lockOnlineRequest(tx, requestId);
       const current = await tx.onlineAppointmentRequest.findUniqueOrThrow({ where: { id: requestId } });
+      assertNotDeleted(current.deletedAt);
       assertAssignee(current.assignedEmployeeId, actorId);
       if (current.status !== 'NEW' && current.status !== 'IN_REVIEW' && dto.status && dto.status !== current.status) {
         throw new ConflictException('Обработанную заявку нельзя вернуть в работу');
@@ -165,6 +167,7 @@ export class OnlineRequestsService {
     return this.prisma.$transaction(async tx => {
     await lockOnlineRequest(tx, requestId);
     const request = await tx.onlineAppointmentRequest.findUniqueOrThrow({ where: { id: requestId }, include: onlineRequestInclude });
+    assertNotDeleted(request.deletedAt);
     assertAssignee(request.assignedEmployeeId, actorId);
     if (request.appointmentId) {
       return request;
@@ -235,6 +238,7 @@ export class OnlineRequestsService {
     const request = await this.prisma.$transaction(async (tx) => {
       await lockOnlineRequest(tx, requestId);
       const current = await tx.onlineAppointmentRequest.findUniqueOrThrow({ where: { id: requestId } });
+      assertNotDeleted(current.deletedAt);
       assertAssignee(current.assignedEmployeeId, actorId);
       return tx.onlineAppointmentRequest.update({ where: { id: requestId }, data: { status, conversationNeedsAttention: false }, include: onlineRequestInclude });
     });
@@ -248,6 +252,37 @@ export class OnlineRequestsService {
     });
 
     return request;
+  }
+
+  async deleteRequest(requestId: string, actorId: string, director: boolean) {
+    return this.prisma.$transaction(async tx => {
+      await lockOnlineRequest(tx, requestId);
+      const current = await tx.onlineAppointmentRequest.findUniqueOrThrow({ where: { id: requestId } });
+      if (current.deletedAt) return current;
+      if (!director) assertAssignee(current.assignedEmployeeId, actorId);
+      if (current.appointmentId) throw new ConflictException('Заявка связана с записью в расписании. Её можно архивировать, но нельзя удалить отдельно от записи.');
+      const updated = await tx.onlineAppointmentRequest.update({
+        where: { id: requestId },
+        data: { deletedAt: new Date(), deletedById: actorId, conversationNeedsAttention: false },
+      });
+      await tx.onlineRequestSnooze.deleteMany({ where: { requestId } });
+      await this.auditService.log({ actorId, action: 'online_request.delete', entityType: 'OnlineAppointmentRequest', entityId: requestId,
+        metadata: { status: current.status, source: current.source } }, tx);
+      return updated;
+    });
+  }
+
+  async restoreRequest(requestId: string, actorId: string, director: boolean) {
+    return this.prisma.$transaction(async tx => {
+      await lockOnlineRequest(tx, requestId);
+      const current = await tx.onlineAppointmentRequest.findUniqueOrThrow({ where: { id: requestId } });
+      if (!current.deletedAt) return current;
+      if (!director) assertAssignee(current.assignedEmployeeId, actorId);
+      const updated = await tx.onlineAppointmentRequest.update({ where: { id: requestId }, data: { deletedAt: null, deletedById: null } });
+      await this.auditService.log({ actorId, action: 'online_request.restore', entityType: 'OnlineAppointmentRequest', entityId: requestId,
+        metadata: { status: current.status, source: current.source } }, tx);
+      return updated;
+    });
   }
 
   private async validateLinks(ownerId?: string, animalId?: string) {
@@ -292,4 +327,8 @@ function emptyToNull(value: string | null | undefined) {
 
 function assertAssignee(assignedEmployeeId: string | null, actorId: string) {
   if (assignedEmployeeId && assignedEmployeeId !== actorId) throw new ConflictException('Заявку уже обрабатывает другой сотрудник');
+}
+
+function assertNotDeleted(deletedAt: Date | null) {
+  if (deletedAt) throw new NotFoundException('Заявка удалена. При необходимости восстановите её из удалённых заявок.');
 }

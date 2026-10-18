@@ -26,6 +26,8 @@ export type OnlineAppointmentRequest = {
   ownerId: string | null;
   animalId: string | null;
   appointmentId: string | null;
+  deletedAt?: string | null;
+  deletedById?: string | null;
   owner?: Pick<Owner, 'id' | 'fullName' | 'phone'> | null;
   animal?: Pick<Animal, 'id' | 'nickname' | 'species' | 'breed'> | null;
   appointment?: Pick<Appointment, 'id' | 'startsAt' | 'endsAt' | 'status'> & {
@@ -43,6 +45,7 @@ export type ListOnlineRequestsQuery = {
   dateTo?: string;
   limit?: number;
   offset?: number;
+  deleted?: 'true' | 'false';
 };
 
 export type CreateOnlineRequestInput = {

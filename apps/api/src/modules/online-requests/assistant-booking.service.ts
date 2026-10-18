@@ -184,7 +184,7 @@ export class AssistantBookingService {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(20261008, 3)`;
       const latest = await tx.onlineAppointmentRequest.findFirst({ where: { conversationId: input.conversationId }, orderBy: { createdAt: 'desc' } });
       let request;
-      if (latest && ['NEW', 'IN_REVIEW'].includes(latest.status)) {
+      if (latest && !latest.deletedAt && ['NEW', 'IN_REVIEW'].includes(latest.status)) {
         await lockOnlineRequest(tx, latest.id);
         request = await tx.onlineAppointmentRequest.findUniqueOrThrow({ where: { id: latest.id } });
         if (request.assignedEmployeeId || request.status !== 'NEW') throw new ConflictException('Заявку уже обрабатывает администратор. Продолжите переписку с ним');
