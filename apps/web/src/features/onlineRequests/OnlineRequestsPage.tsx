@@ -277,7 +277,7 @@ export function OnlineRequestsPage() {
                   Ответить
                 </Button>
               ) : null}
-              {canManage && (activeStatuses.includes(request.status) || request.conversationId) && request.assignedEmployeeId === auth?.employee.id ? <Button size="small" loading={releaseMutation.isPending} onClick={() => releaseMutation.mutate(request.id)}>Вернуть в очередь</Button> : null}
+              {canManage && (activeStatuses.includes(request.status) || request.conversationNeedsAttention) && request.assignedEmployeeId === auth?.employee.id ? <Button size="small" loading={releaseMutation.isPending} onClick={() => releaseMutation.mutate(request.id)}>Вернуть в очередь</Button> : null}
               <Dropdown menu={{ items: contactItems }} trigger={['click']}>
                 <Button size="small" icon={<PhoneOutlined />}>
                   Связаться <DownOutlined />
