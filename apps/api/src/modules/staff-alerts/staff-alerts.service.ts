@@ -120,8 +120,8 @@ export class StaffAlertsService {
     const now = new Date();
     const can = (permission: string) => actor.permissions.includes('*') || actor.permissions.includes(permission);
     const showFailedDeliveries = can('notifications.manage');
-    const showOnlineRequests = can('appointments.manage');
-    const clinicalOnly = actor.roles.includes('doctor') && !actor.roles.includes('director');
+    const showOnlineRequests = (actor.roles.includes('administrator') || actor.roles.includes('director')) && can('appointments.manage');
+    const clinicalOnly = actor.roles.includes('doctor') && !actor.roles.includes('director') && !actor.roles.includes('administrator');
     const showBills = !clinicalOnly && (can('billing.manage') || can('payments.manage'));
     const showStock = !clinicalOnly && can('stock.manage');
     const showNews = can('news.read');

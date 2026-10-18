@@ -54,7 +54,7 @@ export function CrmLayout() {
   const employeePosition = employee?.position || primaryRoleLabel;
   const employeeInitial = employee?.fullName?.trim().slice(0, 1);
   const canOpenSeparateLocalLogin = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
-  const canReadOnlineRequests = hasPermission(employee, 'appointments.read');
+  const canReadOnlineRequests = Boolean(employee && (employee.roles.includes('administrator') || employee.roles.includes('director')) && hasPermission(employee, 'appointments.read'));
   const canReadBusiness = hasPermission(employee, 'business.read');
   const canReadFinanceSettings = hasPermission(employee, 'settings.read');
   const internalMessagesQuery = useQuery({
@@ -217,7 +217,7 @@ export function CrmLayout() {
             hasPermission(employee, 'appointments.manage') &&
             (data?.accessType !== 'REMOTE' || employee.roles.includes('director')))} />
           <GlobalOperationalAlerts
-            clinicalOnly={Boolean(employee?.roles.includes('doctor') && !employee?.roles.includes('director'))}
+            clinicalOnly={Boolean(employee?.roles.includes('doctor') && !employee?.roles.includes('director') && !employee?.roles.includes('administrator'))}
             internalMessages={internalMessagesQuery.data}
             remoteAccessMode={data?.accessType === 'REMOTE'
               ? employee?.roles.includes('director') ? 'director' : 'read-only'

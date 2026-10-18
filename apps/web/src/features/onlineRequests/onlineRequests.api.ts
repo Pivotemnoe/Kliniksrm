@@ -38,7 +38,7 @@ export function archiveOnlineRequest(requestId: string) {
 }
 
 export function listOnlineRequestAttention() {
-  return apiRequest<{ items: OnlineAppointmentRequest[]; total: number; checkedAt: string; escalationMinutes: number }>('/v1/online-requests/attention');
+  return apiRequest<{ items: OnlineAppointmentRequest[]; total: number; checkedAt: string; escalationMinutes: number | null }>('/v1/online-requests/attention');
 }
 
 export function claimOnlineRequest(requestId: string) {

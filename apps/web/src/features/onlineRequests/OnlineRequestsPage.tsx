@@ -89,9 +89,13 @@ export function OnlineRequestsPage() {
   const openedFromLink = useRef<string | null>(null);
   useEffect(() => {
     if (!highlightedRequestId) openedFromLink.current = null;
-    if (highlightedRequest.data && openedFromLink.current !== highlightedRequestId) {
-      openedFromLink.current = highlightedRequestId;
-      setSelectedRequest(highlightedRequest.data); setDrawerIntent('edit');
+    if (highlightedRequestId && highlightedRequest.data) {
+      setSelectedRequest(current => current?.id === highlightedRequestId && current.updatedAt === highlightedRequest.data!.updatedAt
+        ? current : highlightedRequest.data!);
+      if (openedFromLink.current !== highlightedRequestId) {
+        openedFromLink.current = highlightedRequestId;
+        setDrawerIntent('edit');
+      }
     }
   }, [highlightedRequestId, highlightedRequest.data]);
   const { message } = App.useApp();

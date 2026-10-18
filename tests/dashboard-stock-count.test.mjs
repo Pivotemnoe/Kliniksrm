@@ -13,9 +13,16 @@ test('dashboard counts all 321 low-stock products and 27 expiring batches while 
  assert.equal(result.stock.lowStockProducts, 321); assert.equal(result.stock.lowStockItems.length, 6);
  assert.equal(result.stock.expiringBatches, 27); assert.equal(result.stock.expiringItems.length, 6);
 });
-test('doctor with broad permissions still never queries billing or stock for operational alerts', async () => {
- const repo = new Proxy({}, {get: (_,key) => ['bill','product','employeeWarehouseAccess'].includes(key)
+test('doctor with broad permissions never queries billing, stock or site requests for operational alerts', async () => {
+ const repo = new Proxy({}, {get: (_,key) => ['bill','product','employeeWarehouseAccess','onlineAppointmentRequest'].includes(key)
   ? {findMany: async () => { throw Error(`Doctor queried ${key}`); }} : emptyModel });
  const result = await new StaffAlertsService(repo, {}).list({id:'doctor',roles:['doctor'],permissions:['*']});
  assert.equal(result.items.some(x=>['UNPAID_BILL','LOW_STOCK'].includes(x.kind)),false);
+});
+test('doctor dashboard never returns site-request details even with appointment permissions', async () => {
+ const repo = new Proxy({}, { get: (_, key) => key === 'onlineAppointmentRequest'
+  ? { count: async () => 2, findMany: async () => [{ id: 'private-request', ownerName: 'Private', phone: '+79990000000' }] }
+  : emptyModel });
+ const result = await new DashboardService(repo, {}).getToday({ date: '2026-10-18' }, { id: 'doctor', roles: ['doctor'], permissions: ['*', 'appointments.read'] });
+ assert.deepEqual(result.onlineRequests, { newRequests: 0, inReview: 0, items: [] });
 });

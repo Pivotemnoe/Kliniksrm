@@ -3,7 +3,6 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
 const activeStatuses = ['NEW', 'IN_REVIEW'] as const;
-export const REQUEST_ESCALATION_MS = 5 * 60_000;
 
 @Injectable()
 export class OnlineRequestAttentionService {
@@ -11,15 +10,13 @@ export class OnlineRequestAttentionService {
 
   async list(employeeId: string) {
     const now = new Date();
-    const escalationAt = new Date(now.getTime() - REQUEST_ESCALATION_MS);
     const where: Prisma.OnlineAppointmentRequestWhereInput = {
       OR: [{ status: { in: [...activeStatuses] } }, { conversationNeedsAttention: true }],
       AND: [
         { OR: [
-          { conversationNeedsAttention: true },
           { assignedEmployeeId: null },
           { assignedEmployee: { status: 'BLOCKED' } },
-          { claimedAt: { lte: escalationAt } },
+          { assignedEmployeeId: employeeId, conversationNeedsAttention: true },
         ] },
         { snoozes: { none: { employeeId, until: { gt: now } } } },
       ],
@@ -31,7 +28,7 @@ export class OnlineRequestAttentionService {
       }),
       this.prisma.onlineAppointmentRequest.count({ where }),
     ]);
-    return { items, total, checkedAt: now, escalationMinutes: 5 };
+    return { items, total, checkedAt: now, escalationMinutes: null };
   }
 
   async claim(requestId: string, employeeId: string) {
@@ -81,10 +78,10 @@ export class OnlineRequestAttentionService {
     return this.prisma.$transaction(async tx => {
       await lockOnlineRequest(tx, requestId);
       const current = await tx.onlineAppointmentRequest.findUniqueOrThrow({ where: { id: requestId } });
-      if (!current.conversationId) assertRequestActive(current.status);
+      if (!current.conversationNeedsAttention) assertRequestActive(current.status);
       if (current.assignedEmployeeId !== employeeId) throw new ConflictException('Вернуть в очередь может ответственный сотрудник');
       const updated = await tx.onlineAppointmentRequest.update({ where: { id: requestId }, data: {
-        ...(current.conversationId ? { conversationNeedsAttention: true } : { status: 'NEW' as const }), assignedEmployeeId: null, claimedAt: null,
+        status: 'NEW' as const, assignedEmployeeId: null, claimedAt: null,
       } });
       await tx.onlineRequestSnooze.deleteMany({ where: { requestId } });
       await tx.auditLog.create({ data: { actorId: employeeId, action: 'online_request.release', entityType: 'OnlineAppointmentRequest', entityId: requestId } });

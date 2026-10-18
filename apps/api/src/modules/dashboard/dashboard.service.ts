@@ -295,7 +295,7 @@ export class DashboardService {
         lowStockItems: lowStockProducts.slice(0, 6),
         expiringItems: expiringBatches.slice(0, 6),
       } : { lowStockProducts: 0, expiringBatches: 0, lowStockItems: [], expiringItems: [] },
-      onlineRequests: canRead('appointments.read') ? {
+      onlineRequests: (actor.roles.includes('administrator') || actor.roles.includes('director')) && canRead('appointments.read') ? {
         newRequests: onlineNew,
         inReview: onlineInReview,
         items: onlineItems,

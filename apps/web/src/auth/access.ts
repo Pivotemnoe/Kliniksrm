@@ -45,7 +45,7 @@ const routeAccessRules: RouteAccessRule[] = [
       'stock.manage',
     ],
   },
-  { path: '/online-requests', anyOf: ['appointments.read'] },
+  { path: '/online-requests', anyOf: ['appointments.read'], roles: ['administrator', 'director'] },
   { path: '/messages', anyOf: ['notifications.read'] },
   { path: '/reports', anyOf: ['settings.read', 'settings.manage'] },
   { path: '/vaccination-reports', anyOf: ['reports.prevention.read', 'reports.prevention.generate', 'settings.read', 'settings.manage'] },

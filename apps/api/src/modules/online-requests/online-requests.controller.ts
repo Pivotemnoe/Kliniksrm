@@ -6,7 +6,7 @@ import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { AuthEmployee } from '../auth/auth.types';
 import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
 import { Public } from '../auth/decorators/public.decorator';
-import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { RequirePermissions, RequireRoles } from '../auth/decorators/require-permissions.decorator';
 import { AcceptOnlineRequestDto } from './dto/accept-online-request.dto';
 import { CreateOnlineRequestDto } from './dto/create-online-request.dto';
 import { ListOnlineRequestsQueryDto } from './dto/list-online-requests-query.dto';
@@ -16,6 +16,7 @@ import { OwnerGatewayBookingSyncService } from './owner-gateway-booking-sync.ser
 
 @ApiTags('online-requests')
 @Controller('v1/online-requests')
+@RequireRoles('administrator', 'director')
 export class OnlineRequestsController {
   constructor(
     private readonly onlineRequestsService: OnlineRequestsService,
@@ -40,6 +41,7 @@ export class OnlineRequestsController {
 
   @Post()
   @Public()
+  @RequireRoles()
   @ApiCreatedResponse({ description: 'Public online appointment request created.' })
   createRequest(@Body() dto: CreateOnlineRequestDto) {
     return this.onlineRequestsService.createRequest(dto);

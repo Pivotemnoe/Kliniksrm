@@ -11,7 +11,7 @@ export function ConversationPanel({ requestId }: { requestId: string }) {
   const request = useQuery({ queryKey: ['online-request-conversation', requestId], queryFn: () => getOnlineRequest(requestId), refetchInterval: 10_000 });
   const jobs = useQuery({ queryKey: ['online-request-conversation-jobs', requestId], queryFn: () => getConversationJobs(requestId), refetchInterval: 10_000 });
   const [text, setText] = useState(''); const key = useRef(crypto.randomUUID());
-  const refresh = async () => { await Promise.all(['online-request-conversation', 'online-request-conversation-jobs', 'online-request-attention', 'online-requests'].map(q => cache.invalidateQueries({ queryKey: [q] }))); };
+  const refresh = async () => { await Promise.all(['online-request-conversation', 'online-request-conversation-jobs', 'online-request-card', 'online-request-attention', 'online-requests'].map(q => cache.invalidateQueries({ queryKey: [q] }))); };
   const claim = useMutation({ mutationFn: () => claimOnlineRequest(requestId), onSuccess: refresh, onError: e => message.error(getErrorMessage(e)) });
   const retry = useMutation({ mutationFn: (jobId: string) => retryConversationJob(requestId, jobId), onSuccess: refresh, onError: e => message.error(getErrorMessage(e)) });
   const send = useMutation({ mutationFn: (action: 'REPLY' | 'RESUME' | 'RESOLVE') => sendConversationCommand(requestId, { clientKey: key.current, action, ...(action === 'REPLY' ? { text } : {}) }),

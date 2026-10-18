@@ -51,11 +51,15 @@ test('request attention persists and arbitrates two administrators in PostgreSQL
     await requests.setRequestStatus(item.id, 'ARCHIVED', saved.assignedEmployeeId);
     await assert.rejects(attention.claim(item.id, first.id), /обработана/);
   });
-  await t.test('unresolved claim reappears after five minutes; blocked assignee can be replaced', async () => {
+  await t.test('claimed request does not create repeat alerts; blocked assignee can be replaced', async () => {
     const item = await make();
     await attention.claim(item.id, first.id);
     await db.onlineAppointmentRequest.update({ where: { id: item.id }, data: { claimedAt: new Date(Date.now() - 6 * 60_000) } });
-    assert.ok((await attention.list(second.id)).items.some(x => x.id === item.id));
+    assert.ok(!(await attention.list(second.id)).items.some(x => x.id === item.id));
+    assert.ok(!(await attention.list(first.id)).items.some(x => x.id === item.id));
+    await db.onlineAppointmentRequest.update({ where: { id: item.id }, data: { conversationNeedsAttention: true } });
+    assert.ok((await attention.list(first.id)).items.some(x => x.id === item.id));
+    assert.ok(!(await attention.list(second.id)).items.some(x => x.id === item.id));
     await assert.rejects(attention.claim(item.id, second.id), /уже обрабатывает/);
     await db.employee.update({ where: { id: first.id }, data: { status: 'BLOCKED' } });
     assert.equal((await attention.claim(item.id, second.id)).assignedEmployeeId, second.id);

@@ -39,6 +39,9 @@ export function GlobalOperationalAlerts({
   });
   const onDismiss = canDismiss ? (item: StaffAlertItem) => { setDismissReason(''); setDismissing(item); } : undefined;
   const [vaccinationsOpen, setVaccinationsOpen] = useState(false);
+  const [alertsErrorDismissed, setAlertsErrorDismissed] = useState(() => {
+    try { return sessionStorage.getItem('crm-staff-alert-error-dismissed') === '1'; } catch { return false; }
+  });
   const alertsQuery = useQuery({
     queryKey: ['staff-alerts'],
     queryFn: listStaffAlerts,
@@ -72,8 +75,7 @@ export function GlobalOperationalAlerts({
     navigate(item.href);
   }
 
-  const alertsUnavailable = alertsQuery.isError && !alertsQuery.data;
-
+  const alertsUnavailable = alertsQuery.isError && !alertsQuery.data && !alertsErrorDismissed;
   if (!alertsUnavailable && !remoteAccessMode && !latestUnreadConversation && !overdueVisits.length && !vaccinationAlerts.length && !otherUnreadAlerts.length) return null;
 
   return (
@@ -85,13 +87,11 @@ export function GlobalOperationalAlerts({
             <strong>Не удалось проверить незавершённые приёмы и вакцинации</strong>
             <span>Связь с сервером оповещений прервана</span>
           </span>
-          <button
-            type="button"
-            className="dashboard-overdue-banner-action"
-            onClick={() => void alertsQuery.refetch()}
-          >
-            Проверить снова
-          </button>
+          <button type="button" className="dashboard-overdue-banner-action" onClick={() => void alertsQuery.refetch()}>Проверить снова</button>
+          <button type="button" className="dashboard-overdue-banner-action" onClick={() => {
+            setAlertsErrorDismissed(true);
+            try { sessionStorage.setItem('crm-staff-alert-error-dismissed', '1'); } catch {}
+          }}>Скрыть</button>
         </div>
       ) : null}
       {remoteAccessMode && !clinicalOnly ? (

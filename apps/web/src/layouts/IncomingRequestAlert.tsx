@@ -13,8 +13,8 @@ export function IncomingRequestAlert({ enabled }: { enabled: boolean }) {
   const queryClient = useQueryClient();
   const { message } = App.useApp();
   const attention = useQuery({
-    queryKey: ['online-request-attention'], queryFn: listOnlineRequestAttention, enabled,
-    refetchInterval: 10_000, refetchIntervalInBackground: true, staleTime: 0,
+    queryKey: ['online-request-attention'], queryFn: listOnlineRequestAttention, enabled: enabled && location.pathname !== '/online-requests',
+    refetchInterval: 30_000, refetchIntervalInBackground: false, staleTime: 10_000,
   });
   const refresh = async () => {
     await Promise.all(['online-request-attention', 'online-requests', 'staff-alerts', 'dashboard'].map(key =>
@@ -30,15 +30,9 @@ export function IncomingRequestAlert({ enabled }: { enabled: boolean }) {
   });
   const snooze = useMutation({ mutationFn: snoozeOnlineRequest, onSuccess: refresh,
     onError: (error) => message.error(getErrorMessage(error)) });
-  if (!enabled) return null;
-  const openId = location.pathname === '/online-requests' ? new URLSearchParams(location.search).get('request') : null;
-  const item = attention.data?.items.find(row => row.id !== openId);
-  if (!item) return attention.isError ? (
-    <div className="incoming-request-alert" role="status">
-      <Typography.Text strong>Не удалось проверить новые заявки</Typography.Text>
-      <Button onClick={() => void attention.refetch()}>Проверить снова</Button>
-    </div>
-  ) : null;
+  if (!enabled || location.pathname === '/online-requests' || attention.isError) return null;
+  const item = attention.data?.items[0];
+  if (!item) return null;
   const source = item.source === 'OWNER_GATEWAY' ? 'Личный кабинет' : item.source === 'MAX' ? 'MAX' : 'Сайт';
   const overdue = Boolean(item.assignedEmployeeId);
   const canClaim = !item.assignedEmployeeId || item.assignedEmployee?.status === 'BLOCKED' || (item.conversationNeedsAttention && item.assignedEmployeeId === auth?.employee.id);
@@ -55,7 +49,6 @@ export function IncomingRequestAlert({ enabled }: { enabled: boolean }) {
       {item.preferredAt ? <Typography.Text>Желаемое время: {formatDateTime(item.preferredAt)}</Typography.Text> : null}
       {item.comment ? <p className="incoming-request-comment">{item.comment}</p> : null}
       {item.assignedEmployee ? <Typography.Text>В работе: {item.assignedEmployee.fullName}</Typography.Text> : null}
-      {attention.isError ? <Typography.Text type="danger">Связь прервана. Показана последняя полученная заявка.</Typography.Text> : null}
       <Space wrap>
         {canClaim ? <Button type="primary" loading={claim.isPending} disabled={snooze.isPending || attention.isError} onClick={() => claim.mutate(item.id)}>Взять в работу</Button> : null}
         <Button onClick={() => navigate(`/online-requests?request=${encodeURIComponent(item.id)}`)}>Открыть заявку</Button>
