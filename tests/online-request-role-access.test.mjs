@@ -22,7 +22,8 @@ test('site requests API admits only administrator and director, while public cre
       continue;
     }
     assert.throws(() => guard.canActivate(context(['doctor'])), /директору/);
-    assert.equal(guard.canActivate(context(['administrator'])), true);
+    if (method === 'takeover') assert.throws(() => guard.canActivate(context(['administrator'])), /директору/);
+    else assert.equal(guard.canActivate(context(['administrator'])), true);
     assert.equal(guard.canActivate(context(['director'])), true);
   }
 });

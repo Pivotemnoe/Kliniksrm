@@ -45,6 +45,10 @@ export function claimOnlineRequest(requestId: string) {
   return apiRequest<OnlineAppointmentRequest>(`/v1/online-requests/${encodeURIComponent(requestId)}/claim`, { method: 'POST' });
 }
 
+export function takeoverOnlineRequest(requestId: string) {
+  return apiRequest<OnlineAppointmentRequest>(`/v1/online-requests/${encodeURIComponent(requestId)}/takeover`, { method: 'POST' });
+}
+
 export function snoozeOnlineRequest(requestId: string) {
   return apiRequest<{ requestId: string; until: string }>(`/v1/online-requests/${encodeURIComponent(requestId)}/snooze`, { method: 'POST' });
 }

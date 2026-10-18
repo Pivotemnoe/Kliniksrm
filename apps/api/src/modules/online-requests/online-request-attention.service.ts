@@ -56,6 +56,27 @@ export class OnlineRequestAttentionService {
     });
   }
 
+  async takeover(requestId: string, directorId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      await lockOnlineRequest(tx, requestId);
+      const request = await tx.onlineAppointmentRequest.findUniqueOrThrow({ where: { id: requestId } });
+      assertRequestActive(request.status);
+      if (!request.assignedEmployeeId) throw new ConflictException('Заявка свободна — возьмите её в работу');
+      if (request.assignedEmployeeId === directorId) return request;
+      const updated = await tx.onlineAppointmentRequest.update({
+        where: { id: requestId },
+        data: { status: 'IN_REVIEW', assignedEmployeeId: directorId, claimedAt: new Date(), conversationNeedsAttention: false },
+        include: { assignedEmployee: { select: { id: true, fullName: true, status: true } } },
+      });
+      await tx.onlineRequestSnooze.deleteMany({ where: { requestId } });
+      await tx.auditLog.create({ data: {
+        actorId: directorId, action: 'online_request.takeover', entityType: 'OnlineAppointmentRequest', entityId: requestId,
+        metadata: { previousAssignee: request.assignedEmployeeId },
+      } });
+      return updated;
+    });
+  }
+
   async snooze(requestId: string, employeeId: string) {
     return this.prisma.$transaction(async (tx) => {
       await lockOnlineRequest(tx, requestId);

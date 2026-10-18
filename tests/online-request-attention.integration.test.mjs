@@ -65,6 +65,19 @@ test('request attention persists and arbitrates two administrators in PostgreSQL
     assert.equal((await attention.claim(item.id, second.id)).assignedEmployeeId, second.id);
     await requests.setRequestStatus(item.id, 'CANCELLED', second.id);
   });
+  await t.test('director takeover transfers an active request with an audit record', async () => {
+    const item = await make();
+    await attention.claim(item.id, first.id);
+    const taken = await attention.takeover(item.id, second.id);
+    assert.equal(taken.assignedEmployeeId, second.id);
+    assert.equal(taken.status, 'IN_REVIEW');
+    const audit = await db.auditLog.findFirst({ where: { entityId: item.id, action: 'online_request.takeover' } });
+    assert.equal(audit?.actorId, second.id);
+    assert.equal(audit?.metadata?.previousAssignee, first.id);
+    await assert.rejects(requests.setRequestStatus(item.id, 'ARCHIVED', first.id), /другой сотрудник/);
+    await requests.setRequestStatus(item.id, 'ARCHIVED', second.id);
+    await assert.rejects(attention.takeover(item.id, first.id), /обработана/);
+  });
   await t.test('marking read does not hide a request; closing it does', async () => {
     const item = await make();
     await db.staffAlertRead.create({ data: { employeeId: second.id, alertKey: 'online-requests', version: 'read' } });

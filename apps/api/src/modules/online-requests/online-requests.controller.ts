@@ -59,6 +59,13 @@ export class OnlineRequestsController {
     return this.attentionService.claim(requestId, actor.id);
   }
 
+  @Post(':requestId/takeover')
+  @RequireRoles('director')
+  @RequirePermissions('appointments.manage')
+  takeover(@Param('requestId') requestId: string, @CurrentEmployee() actor: AuthEmployee) {
+    return this.attentionService.takeover(requestId, actor.id);
+  }
+
   @Post(':requestId/snooze')
   @RequirePermissions('appointments.manage')
   snooze(@Param('requestId') requestId: string, @CurrentEmployee() actor: AuthEmployee) {

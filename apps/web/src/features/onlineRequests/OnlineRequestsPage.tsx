@@ -33,6 +33,7 @@ import { getSchedulingResources } from '../scheduling/scheduling.api';
 import { listOwnerAnimals, listOwners } from '../owners/owners.api';
 import {
   claimOnlineRequest,
+  takeoverOnlineRequest,
   releaseOnlineRequest,
   getOnlineRequest,
   acceptOnlineRequest,
@@ -101,6 +102,7 @@ export function OnlineRequestsPage() {
   const { message } = App.useApp();
   const { data: auth } = useCurrentEmployee();
   const canManage = hasPermission(auth?.employee, 'appointments.manage');
+  const canDirectorTakeover = canManage && Boolean(auth?.employee.roles.includes('director'));
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<OnlineRequestStatus | undefined>();
   const [selectedRequest, setSelectedRequest] = useState<OnlineAppointmentRequest | null>(null);
@@ -117,6 +119,16 @@ export function OnlineRequestsPage() {
       await Promise.all(['online-requests', 'online-request-attention', 'online-request-card'].map(key => queryClient.invalidateQueries({ queryKey: [key] })));
     },
     onError: (error) => message.error(getErrorMessage(error)),
+  });
+  const takeoverMutation = useMutation({
+    mutationFn: takeoverOnlineRequest,
+    onSuccess: async (updated) => {
+      setSelectedRequest(current => current?.id === updated.id ? { ...current, ...updated } : current);
+      await Promise.all(['online-requests', 'online-request-attention', 'online-request-card', 'online-request-conversation', 'staff-alerts', 'dashboard'].map(key =>
+        queryClient.invalidateQueries({ queryKey: [key] })));
+      message.success('Заявка передана вам');
+    },
+    onError: error => message.error(getErrorMessage(error)),
   });
   const releaseMutation = useMutation({
     mutationFn: releaseOnlineRequest,
@@ -233,6 +245,11 @@ export function OnlineRequestsPage() {
           return (
             <Space wrap size={[6, 6]}>
               {canManage && !locked && (!request.assignedEmployeeId || request.assignedEmployee?.status === 'BLOCKED') ? <Button size="small" loading={claimMutation.isPending} onClick={() => claimMutation.mutate(request.id)}>Взять в работу</Button> : null}
+              {canDirectorTakeover && assignedElsewhere && activeStatuses.includes(request.status) ? (
+                <Popconfirm title="Передать заявку себе?" description={`Сейчас в работе: ${request.assignedEmployee?.fullName ?? 'другой сотрудник'}`} okText="Передать" cancelText="Отмена" onConfirm={() => takeoverMutation.mutate(request.id)}>
+                  <Button size="small" loading={takeoverMutation.isPending}>Передать себе</Button>
+                </Popconfirm>
+              ) : null}
               {canManage && !locked && !isOwnerAppointmentChange(request) && !request.appointmentId ? (
                 quickAcceptInput ? (
                   <Popconfirm
@@ -271,7 +288,7 @@ export function OnlineRequestsPage() {
         },
       },
     ],
-    [canManage, message, navigate, quickAcceptMutation, claimMutation, releaseMutation, auth?.employee.id],
+    [canManage, canDirectorTakeover, message, navigate, quickAcceptMutation, claimMutation, takeoverMutation, releaseMutation, auth?.employee.id],
   );
 
   return (
@@ -354,6 +371,9 @@ export function OnlineRequestsPage() {
         request={selectedRequest}
         intent={drawerIntent}
         canManage={canManage && (!selectedRequest?.assignedEmployeeId || selectedRequest.assignedEmployeeId === auth?.employee.id)}
+        canTakeover={canDirectorTakeover && Boolean(selectedRequest?.assignedEmployeeId && selectedRequest.assignedEmployeeId !== auth?.employee.id && activeStatuses.includes(selectedRequest.status))}
+        takeoverLoading={takeoverMutation.isPending}
+        onTakeover={() => { if (selectedRequest) takeoverMutation.mutate(selectedRequest.id); }}
         actionLoading={actionMutation.isPending}
         onClose={closeRequest}
         onAction={(request, action) => actionMutation.mutate({ request, action })}
@@ -366,6 +386,9 @@ function RequestDrawer({
   request,
   intent,
   canManage,
+  canTakeover,
+  takeoverLoading,
+  onTakeover,
   actionLoading,
   onClose,
   onAction,
@@ -373,6 +396,9 @@ function RequestDrawer({
   request: OnlineAppointmentRequest | null;
   intent: RequestDrawerIntent;
   canManage: boolean;
+  canTakeover: boolean;
+  takeoverLoading: boolean;
+  onTakeover: () => void;
   actionLoading: boolean;
   onClose: () => void;
   onAction: (request: OnlineAppointmentRequest, action: 'cancel' | 'archive') => void;
@@ -467,6 +493,12 @@ function RequestDrawer({
     >
       {request ? (
         <div className={`online-request-drawer-sections online-request-drawer-${intent}`}>
+          {canTakeover ? (
+            <Alert type="info" showIcon message={`Заявка сейчас у ${request.assignedEmployee?.fullName ?? 'другого сотрудника'}`}
+              description={<Popconfirm title="Передать заявку себе?" description="Ответственный сотрудник изменится; действие сохранится в журнале." okText="Передать" cancelText="Отмена" onConfirm={onTakeover}>
+                <Button loading={takeoverLoading}>Передать себе и обработать</Button>
+              </Popconfirm>} />
+          ) : null}
           {request.conversationId ? <ConversationPanel requestId={request.id} /> : null}
           <div className="online-request-edit-section">
             <Alert
