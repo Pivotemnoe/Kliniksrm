@@ -24,8 +24,8 @@ export class FakeCurrentMax {
   async sendPortalButton() { throw new Error('Unexpected live invitation transport'); }
 }
 export async function groomingFixture({ fixed = false, preview = false, device = false } = {}) {
-  const crmName = device ? 'grooming_crm_device_qa' : preview ? 'grooming_crm_preview' : 'grooming_crm_integration_qa';
-  const portalName = device ? 'grooming_portal_device_qa' : preview ? 'grooming_portal_preview' : 'grooming_portal_integration_qa';
+  const crmName = device ? 'grooming_crm_device_qa' : preview ? 'grooming_crm_integration_preview' : 'grooming_crm_integration_qa';
+  const portalName = device ? 'grooming_portal_device_qa' : preview ? 'grooming_portal_integration_preview' : 'grooming_portal_integration_qa';
   const activeCrmUrl = crmUrl.replace('grooming_crm_integration_qa', crmName);
   const activePortalUrl = portalUrl.replace('grooming_portal_integration_qa', portalName);
   assertGroomingDatabase(activeCrmUrl, crmName); assertGroomingDatabase(activePortalUrl, portalName);
