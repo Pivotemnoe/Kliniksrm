@@ -1,13 +1,13 @@
 import { CreditCardOutlined, DeleteOutlined, DownOutlined, EditOutlined, EyeOutlined, PaperClipOutlined, PlusOutlined, PrinterOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, AutoComplete, Button, Checkbox, DatePicker, Descriptions, Drawer, Dropdown, Form, Input, Modal, Radio, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
+import { Alert, App, AutoComplete, Button, Checkbox, DatePicker, Descriptions, Drawer, Dropdown, Form, Input, Modal, Pagination, Radio, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
 import { InputNumber } from '../../shared/ui/DecimalInputNumber';
 import { ColumnsType } from 'antd/es/table';
 import dayjs, { Dayjs } from 'dayjs';
 import JsBarcode from 'jsbarcode';
 import { memo, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { Controller, useFieldArray, useForm, useWatch, type Control, type UseFormSetValue } from 'react-hook-form';
+import { Controller, useFieldArray, useForm, useWatch, type Control, type FieldArrayWithId, type UseFormSetValue } from 'react-hook-form';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { getErrorMessage } from '../../api/errors';
@@ -323,15 +323,14 @@ export function StockPage() {
           </Descriptions>
         ) : null}
       </Drawer>
-      <SupplyInvoiceModal
-        open={supplyOpen}
+      {supplyOpen ? <SupplyInvoiceModal
         invoice={editingInvoice}
         resources={resourcesQuery.data}
         onClose={() => {
           setSupplyOpen(false);
           setEditingInvoice(null);
         }}
-      />
+      /> : null}
       <Drawer
         title={selectedInvoice ? `Накладная ${selectedInvoice.number || 'без номера'}` : 'Накладная'}
         open={Boolean(selectedInvoice)}
@@ -1416,23 +1415,70 @@ const receiptUnitOptions = [
   'бутылка', 'канистра', 'пакет', 'рулон', 'мл', 'л', 'г', 'кг', 'таблетка', 'капсула',
 ].map((unit) => ({ value: unit, label: unit }));
 
-function SupplyInvoiceModal({ open, invoice, resources, onClose }: { open: boolean; invoice?: SupplyInvoice | null; resources?: StockResources; onClose: () => void }) {
+const SUPPLY_INVOICE_PAGE_SIZE = 10;
+
+type SupplyInvoiceLineState = {
+  product?: Product;
+  automaticAmount: { current: { unitCost: number; amount: number } | null };
+};
+
+function SupplyInvoiceModal({ invoice, resources, onClose }: { invoice?: SupplyInvoice | null; resources?: StockResources; onClose: () => void }) {
   const queryClient = useQueryClient();
   const { message } = App.useApp();
   const [supplierOpen, setSupplierOpen] = useState(false);
+  const [page, setPage] = useState(1);
+  const [appendedIndex, setAppendedIndex] = useState<number | undefined>();
+  const [errorFocusRequest, setErrorFocusRequest] = useState(0);
+  const formContainer = useRef<HTMLDivElement>(null);
+  const lineStates = useRef(new Map<string, SupplyInvoiceLineState>());
   const defaultWarehouseId = resources?.warehouses[0]?.id ?? '';
-  const { control, handleSubmit, reset, setValue } = useForm<SupplyFormValues>({
+  const [initialValues] = useState(() => getSupplyFormValues(invoice, defaultWarehouseId));
+  const { control, handleSubmit, getValues, setValue } = useForm<SupplyFormValues>({
     resolver: zodResolver(supplySchema),
-    defaultValues: getSupplyFormValues(invoice, defaultWarehouseId),
+    defaultValues: initialValues,
+    shouldUnregister: false,
+    shouldFocusError: false,
     mode: 'onSubmit',
     reValidateMode: 'onChange',
   });
   const { fields, append, remove } = useFieldArray({ control, name: 'items' });
+  const currentPage = Math.min(page, Math.max(1, Math.ceil(fields.length / SUPPLY_INVOICE_PAGE_SIZE)));
+  const firstVisibleIndex = (currentPage - 1) * SUPPLY_INVOICE_PAGE_SIZE;
+
+  function getLineState(fieldId: string, index: number) {
+    let state = lineStates.current.get(fieldId);
+    if (!state) {
+      state = { product: invoice?.items[index]?.product, automaticAmount: { current: null } };
+      lineStates.current.set(fieldId, state);
+    }
+    return state;
+  }
+
+  // Resources may finish loading after a new form opens. Fill only missing
+  // warehouses instead of resetting the invoice and discarding entered values.
+  useEffect(() => {
+    if (invoice || !defaultWarehouseId) return;
+    getValues('items').forEach((item, index) => {
+      if (!item.warehouseId) setValue(`items.${index}.warehouseId`, defaultWarehouseId);
+    });
+  }, [defaultWarehouseId, invoice, getValues, setValue]);
 
   useEffect(() => {
-    if (!open) return;
-    reset(getSupplyFormValues(invoice, defaultWarehouseId));
-  }, [defaultWarehouseId, invoice, open, reset]);
+    if (!errorFocusRequest) return;
+    const container = formContainer.current;
+    if (!container) return;
+    const focusFirstError = () => {
+      const input = container.querySelector<HTMLElement>('.ant-form-item-has-error input:not([disabled]), .ant-form-item-has-error textarea');
+      if (!input) return false;
+      input.focus();
+      input.scrollIntoView({ block: 'center' });
+      return true;
+    };
+    if (focusFirstError()) return;
+    const observer = new MutationObserver(() => { if (focusFirstError()) observer.disconnect(); });
+    observer.observe(container, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, [errorFocusRequest]);
 
   const mutation = useMutation({
     mutationFn: (values: SupplyFormValues) => {
@@ -1451,16 +1497,35 @@ function SupplyInvoiceModal({ open, invoice, resources, onClose }: { open: boole
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['stock'] });
       message.success(invoice ? 'Накладная исправлена, изменения остатка записаны в историю' : 'Приёмка проведена');
-      reset();
       onClose();
     },
     onError: (error) => message.error(getErrorMessage(error)),
   });
 
+  const submitInvoice = handleSubmit((values) => mutation.mutate(values), (errors) => {
+    const invalidIndex = Object.keys(errors.items ?? {}).find((key) => /^\d+$/.test(key));
+    if (invalidIndex !== undefined) setPage(Math.floor(Number(invalidIndex) / SUPPLY_INVOICE_PAGE_SIZE) + 1);
+    setErrorFocusRequest((request) => request + 1);
+  });
+
   return (
     <>
-    <Modal title={invoice ? `Исправление накладной ${invoice.number || 'без номера'}` : 'Новая поставка товара'} open={open} onCancel={onClose} onOk={handleSubmit((values) => mutation.mutate(values))} okText={invoice ? 'Сохранить исправления' : 'Провести приёмку'} confirmLoading={mutation.isPending} destroyOnHidden width={1120}>
-      <Form layout="vertical" className="supply-form-compact">
+    <Modal
+      title={invoice ? `Исправление накладной ${invoice.number || 'без номера'}` : 'Новая поставка товара'}
+      open
+      onCancel={() => { if (!mutation.isPending) onClose(); }}
+      onOk={submitInvoice}
+      okText={invoice ? 'Сохранить исправления' : 'Провести приёмку'}
+      confirmLoading={mutation.isPending}
+      cancelButtonProps={{ disabled: mutation.isPending }}
+      closable={!mutation.isPending}
+      maskClosable={!mutation.isPending}
+      keyboard={!mutation.isPending}
+      destroyOnHidden
+      width={1120}
+    >
+      <div ref={formContainer}>
+      <Form layout="vertical" className="supply-form-compact" disabled={mutation.isPending}>
         {invoice ? <Alert type="info" showIcon message="Исправление сохраняет историю движений" description="Уже использованное количество не уменьшается. Проведённые строки не удаляются: для возврата используйте складской документ «Возврат поставщику»." className="form-alert" /> : null}
         <div className="form-grid two-columns">
           <Controller
@@ -1479,34 +1544,86 @@ function SupplyInvoiceModal({ open, invoice, resources, onClose }: { open: boole
           <FormText control={control} name="suppliedAt" label="Дата поставки" type="date" />
         </div>
         <Typography.Title level={5}>Позиции накладной</Typography.Title>
-        <Space direction="vertical" size={8} className="full-width">
-          {fields.map((field, index) => <SupplyInvoiceLine
-            key={field.id}
+        {fields.length > SUPPLY_INVOICE_PAGE_SIZE ? <div className="supply-invoice-pagination">
+          <Pagination current={currentPage} pageSize={SUPPLY_INVOICE_PAGE_SIZE} total={fields.length} disabled={mutation.isPending} onChange={(nextPage) => { setAppendedIndex(undefined); setPage(nextPage); }} showSizeChanger={false} showQuickJumper showTotal={(total, range) => `Позиции ${range[0]}–${range[1]} из ${total}`} />
+          <Typography.Text type="secondary">Итого и сохранение учитывают все {fields.length} позиций.</Typography.Text>
+        </div> : null}
+        <div className="supply-invoice-lines">
+          <SupplyInvoicePage
+            key={currentPage}
+            fields={fields.slice(firstVisibleIndex, firstVisibleIndex + SUPPLY_INVOICE_PAGE_SIZE)}
+            firstIndex={firstVisibleIndex}
             control={control}
             setValue={setValue}
-            index={index}
-            initialProduct={invoice?.items[index]?.product}
+            getLineState={getLineState}
             resources={resources}
             canRemove={fields.length > 1}
             remove={remove}
-          />)}
-          <Button icon={<PlusOutlined />} onClick={() => append(emptySupplyLine(defaultWarehouseId))}>Добавить позицию</Button>
+            eagerIndex={appendedIndex}
+            paused={mutation.isPending}
+          />
+          <Button icon={<PlusOutlined />} onClick={() => {
+            append(emptySupplyLine(defaultWarehouseId));
+            setAppendedIndex(fields.length);
+            setPage(Math.floor(fields.length / SUPPLY_INVOICE_PAGE_SIZE) + 1);
+          }}>Добавить позицию</Button>
           <SupplyInvoiceTotal control={control} />
-        </Space>
+        </div>
       </Form>
+      </div>
     </Modal>
     <SupplierModal open={supplierOpen} onClose={() => setSupplierOpen(false)} onSaved={(supplier) => setValue('supplierId', supplier.id, { shouldValidate: true })} />
     </>
   );
 }
 
+function SupplyInvoicePage({ fields, firstIndex, control, setValue, getLineState, resources, canRemove, remove, eagerIndex, paused }: {
+  fields: FieldArrayWithId<SupplyFormValues, 'items'>[];
+  firstIndex: number;
+  control: Control<SupplyFormValues>;
+  setValue: UseFormSetValue<SupplyFormValues>;
+  getLineState: (fieldId: string, index: number) => SupplyInvoiceLineState;
+  resources?: StockResources;
+  canRemove: boolean;
+  remove: (index: number) => void;
+  eagerIndex?: number;
+  paused: boolean;
+}) {
+  const [renderedCount, setRenderedCount] = useState(1);
+  const eagerCount = eagerIndex !== undefined && eagerIndex >= firstIndex && eagerIndex < firstIndex + fields.length ? eagerIndex - firstIndex + 1 : 0;
+  const visibleCount = Math.max(renderedCount, eagerCount);
+  // Mount one row per idle turn so opening/changing a page can paint and accept
+  // input between rows. All values already exist in the parent form.
+  useEffect(() => {
+    if (paused || visibleCount >= fields.length) return;
+    const next = () => setRenderedCount(visibleCount + 1);
+    if (typeof window.requestIdleCallback === 'function') {
+      const idle = window.requestIdleCallback(next, { timeout: 100 });
+      return () => window.cancelIdleCallback(idle);
+    }
+    const timer = window.setTimeout(next, 16);
+    return () => window.clearTimeout(timer);
+  }, [visibleCount, fields.length, paused]);
+
+  return <>{fields.map((field, offset) => offset < visibleCount ? <SupplyInvoiceLine
+    key={field.id}
+    index={firstIndex + offset}
+    control={control}
+    setValue={setValue}
+    state={getLineState(field.id, firstIndex + offset)}
+    resources={resources}
+    canRemove={canRemove}
+    remove={remove}
+  /> : <div key={field.id} className="supply-line-placeholder" aria-busy="true" aria-label={`Позиция ${firstIndex + offset + 1}: загрузка`} />)}</>;
+}
+
 // Only the edited line subscribes to its values. Watching the entire array in the
 // modal used to rebuild every Ant Design control on each keystroke.
-const SupplyInvoiceLine = memo(function SupplyInvoiceLine({ control, setValue, index, initialProduct, resources, canRemove, remove }: {
+const SupplyInvoiceLine = memo(function SupplyInvoiceLine({ control, setValue, index, state, resources, canRemove, remove }: {
   control: Control<SupplyFormValues>;
   setValue: UseFormSetValue<SupplyFormValues>;
   index: number;
-  initialProduct?: Product;
+  state: SupplyInvoiceLineState;
   resources?: StockResources;
   canRemove: boolean;
   remove: (index: number) => void;
@@ -1518,15 +1635,16 @@ const SupplyInvoiceLine = memo(function SupplyInvoiceLine({ control, setValue, i
     compute: ([id, quantity, receiptUnit, conversionFactor, lineAmount, discountAmount]) => ({ id, quantity, receiptUnit, conversionFactor, lineAmount, discountAmount }),
   });
   const existingLine = Boolean(watchedLine?.id);
-  const [selectedProduct, setSelectedProduct] = useState(initialProduct);
+  const [selectedProduct, setSelectedProduct] = useState(state.product);
   const [productSearch, setProductSearch] = useState('');
   const [normalizedProductSearch, setNormalizedProductSearch] = useState('');
   const [productSelectOpen, setProductSelectOpen] = useState(false);
-  const automaticAmount = useRef<{ unitCost: number; amount: number } | null>(null);
+  const automaticAmount = state.automaticAmount;
   useEffect(() => {
+    if (!productSelectOpen) return;
     const timer = window.setTimeout(() => setNormalizedProductSearch(productSearch.trim()), 250);
     return () => window.clearTimeout(timer);
-  }, [productSearch]);
+  }, [productSearch, productSelectOpen]);
   const productsQuery = useQuery({
     queryKey: ['stock', 'products', 'supply-select', normalizedProductSearch],
     queryFn: ({ signal }) => listProducts({ search: normalizedProductSearch || undefined, limit: 50, offset: 0 }, signal),
@@ -1579,6 +1697,7 @@ const SupplyInvoiceLine = memo(function SupplyInvoiceLine({ control, setValue, i
             onChange={(value) => {
               productField.onChange(value);
               const product = value ? productsQuery.data?.items.find((item) => item.id === value) ?? (selectedProduct?.id === value ? selectedProduct : undefined) : undefined;
+              state.product = product;
               setSelectedProduct(product);
               setValue(`items.${index}.expiresAt`, product?.defaultExpiresAt?.slice(0, 10) ?? '');
               setValue(`items.${index}.retailPrice`, Number(product?.retailPrice ?? 0), { shouldDirty: true, shouldValidate: false });
@@ -1604,7 +1723,7 @@ const SupplyInvoiceLine = memo(function SupplyInvoiceLine({ control, setValue, i
       )} />
     </div>
     <div className="supply-line-values-grid">
-      <FormNumber control={control} name={`items.${index}.quantity`} label={`Количество, ${receiptUnit || 'ед.'}`} step={1} required />
+      <FormNumber control={control} name={`items.${index}.quantity`} label={`Количество, ${receiptUnit || 'ед.'}`} step={1} emptyValue={null} required />
       <Controller
         control={control}
         name={`items.${index}.receiptUnit`}
@@ -1632,6 +1751,7 @@ const SupplyInvoiceLine = memo(function SupplyInvoiceLine({ control, setValue, i
         name={`items.${index}.conversionFactor`}
         label={`В 1 ${receiptUnit || 'ед.'}, ${stockUnit}`}
         step={1}
+        emptyValue={null}
         required
         disabled={Boolean(receiptUnit) && receiptUnit === stockUnit}
       />
@@ -1646,15 +1766,16 @@ const SupplyInvoiceLine = memo(function SupplyInvoiceLine({ control, setValue, i
       </Form.Item>
     </div>
     <div className="supply-line-values-grid">
-      <FormNumber control={control} name={`items.${index}.lineAmount`} label="Сумма позиции по накладной, ₽" step={1} precision={2} required />
+      <FormNumber control={control} name={`items.${index}.lineAmount`} label="Сумма позиции по накладной, ₽" step={1} precision={2} emptyValue={null} required />
       <FormNumber
         control={control}
         name={`items.${index}.retailPrice`}
         label={`Цена продажи за 1 ${selectedProduct?.billingUnit || selectedProduct?.writeOffUnit || stockUnit}`}
         step={1}
+        emptyValue={null}
         required
       />
-      <FormNumber control={control} name={`items.${index}.discountAmount`} label="Скидка по позиции" />
+      <FormNumber control={control} name={`items.${index}.discountAmount`} label="Скидка по позиции" emptyValue={0} />
       <FormText control={control} name={`items.${index}.expiresAt`} label="Годен до" type="date" />
     </div>
     <div className="supply-line-values-grid supply-line-meta-grid">
@@ -1785,6 +1906,7 @@ function FormNumber({
   help,
   required = false,
   disabled = false,
+  emptyValue,
 }: {
   control: any;
   name: string;
@@ -1794,6 +1916,7 @@ function FormNumber({
   help?: string;
   required?: boolean;
   disabled?: boolean;
+  emptyValue?: number | null;
 }) {
   return (
     <Controller
@@ -1810,7 +1933,7 @@ function FormNumber({
             value={field.value}
             onBlur={field.onBlur}
             onFocus={(event) => event.currentTarget.select()}
-            onChange={(value) => field.onChange(value ?? undefined)}
+            onChange={(value) => field.onChange(value ?? emptyValue)}
           />
         </Form.Item>
       )}
