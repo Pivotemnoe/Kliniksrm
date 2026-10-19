@@ -5,6 +5,7 @@ export const defaultRouteOptions = [
   { value: '/dashboard', label: 'Сводка' },
   { value: '/news', label: 'Новости' },
   { value: '/schedule', label: 'Расписание' },
+  { value: '/grooming/calendar', label: 'Груминг — расписание' },
   { value: '/queue', label: 'Очередь' },
   { value: '/tasks', label: 'Задачи' },
   { value: '/owners', label: 'Владельцы' },

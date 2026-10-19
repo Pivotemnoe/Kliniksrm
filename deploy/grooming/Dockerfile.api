@@ -5,7 +5,11 @@ LABEL org.opencontainers.image.revision=$TEMICHEVVET_GIT_COMMIT
 LABEL org.temichevvet.base.revision="efd0f54fdc0656e1445ad292e98b820e673b02d0"
 ENV TEMICHEVVET_GIT_COMMIT=$TEMICHEVVET_GIT_COMMIT
 COPY prisma /app/prisma
-RUN /app/node_modules/.bin/prisma generate --schema /app/prisma/schema.prisma
+COPY engines/schema-engine-linux-musl-openssl-3.0.x /app/node_modules/@prisma/engines/schema-engine-linux-musl-openssl-3.0.x
+RUN mkdir -p /tmp/grooming-engine \
+ && cp /app/node_modules/.prisma/client/libquery_engine-linux-musl-openssl-3.0.x.so.node /tmp/grooming-engine/libquery_engine-linux-musl-openssl-3.0.x.so.node \
+ && chmod 755 /app/node_modules/@prisma/engines/schema-engine-linux-musl-openssl-3.0.x \
+ && PRISMA_SCHEMA_ENGINE_BINARY=/app/node_modules/@prisma/engines/schema-engine-linux-musl-openssl-3.0.x PRISMA_QUERY_ENGINE_LIBRARY=/tmp/grooming-engine/libquery_engine-linux-musl-openssl-3.0.x.so.node /app/node_modules/.bin/prisma generate --schema /app/prisma/schema.prisma
 COPY apps/api/dist/modules/grooming /app/apps/api/dist/modules/grooming
 COPY apps/api/dist/modules/clinic-modules /app/apps/api/dist/modules/clinic-modules
 COPY apps/api/dist/app.module.js /app/apps/api/dist/app.module.js

@@ -33,6 +33,7 @@ const roleLabels: Record<string, string> = {
   assistant: 'Ассистент',
   cashier: 'Кассир',
   stock: 'Склад',
+  groomer: 'Грумер',
 };
 
 export function ProfilePage() {

@@ -5,7 +5,11 @@ LABEL org.opencontainers.image.revision=$TEMICHEVVET_GIT_COMMIT
 LABEL org.temichevvet.base.image="sha256:2bad6374d52318648bf786e7614bb75c5abcd91c42789ed67e920ef05e3373d5"
 ENV TEMICHEVVET_GIT_COMMIT=$TEMICHEVVET_GIT_COMMIT
 COPY apps/owner-gateway/prisma /app/apps/owner-gateway/prisma
-RUN /app/node_modules/.bin/prisma generate --schema /app/apps/owner-gateway/prisma/schema.prisma \
+COPY engines/schema-engine-linux-musl-openssl-3.0.x /app/node_modules/@prisma/engines/schema-engine-linux-musl-openssl-3.0.x
+RUN mkdir -p /tmp/grooming-engine \
+ && cp /app/apps/owner-gateway/dist/generated/client/libquery_engine-linux-musl-openssl-3.0.x.so.node /tmp/grooming-engine/libquery_engine-linux-musl-openssl-3.0.x.so.node \
+ && chmod 755 /app/node_modules/@prisma/engines/schema-engine-linux-musl-openssl-3.0.x \
+ && PRISMA_SCHEMA_ENGINE_BINARY=/app/node_modules/@prisma/engines/schema-engine-linux-musl-openssl-3.0.x PRISMA_QUERY_ENGINE_LIBRARY=/tmp/grooming-engine/libquery_engine-linux-musl-openssl-3.0.x.so.node /app/node_modules/.bin/prisma generate --schema /app/apps/owner-gateway/prisma/schema.prisma \
  && cp -R /app/apps/owner-gateway/src/generated/client/. /app/apps/owner-gateway/dist/generated/client/
 COPY apps/owner-gateway/dist/grooming /app/apps/owner-gateway/dist/grooming
 COPY apps/owner-gateway/dist/app.module.js apps/owner-gateway/dist/max-bot.client.js apps/owner-gateway/dist/max-webhook.service.js apps/owner-gateway/dist/owner-notification.service.js apps/owner-gateway/dist/portal-page.controller.js apps/owner-gateway/dist/portal.service.js /app/apps/owner-gateway/dist/

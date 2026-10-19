@@ -94,8 +94,8 @@ const fallbackRouteCandidates = [
   '/stock',
   '/store',
   '/news',
-  '/staff-messages',
   '/grooming',
+  '/staff-messages',
   '/profile',
 ];
 

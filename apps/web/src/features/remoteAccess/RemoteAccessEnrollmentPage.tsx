@@ -8,13 +8,13 @@ import { enrollRemoteAccessDevice } from './remoteAccess.api';
 
 type EnrollmentForm = { code: string; deviceName?: string };
 
-export function RemoteAccessEnrollmentPage({ grooming = false }: { grooming?: boolean } = {}) {
+export function RemoteAccessEnrollmentPage({ grooming = false, loginPath = '/login' }: { grooming?: boolean; loginPath?: string } = {}) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const initialCode = useMemo(() => searchParams.get('code') ?? '', [searchParams]);
   const mutation = useMutation({
     mutationFn: enrollRemoteAccessDevice,
-    onSuccess: () => navigate('/login?remote=paired', { replace: true }),
+    onSuccess: () => navigate(`${loginPath}?remote=paired`, { replace: true }),
   });
 
   return (
@@ -26,7 +26,7 @@ export function RemoteAccessEnrollmentPage({ grooming = false }: { grooming?: bo
           {mutation.isError ? <Alert type="error" showIcon message={getErrorMessage(mutation.error)} /> : null}
           <Form<EnrollmentForm> layout="vertical" initialValues={{ code: initialCode }} onFinish={(values) => mutation.mutate(values)}>
             <Form.Item name="code" label="Код подключения" rules={[{ required: true, min: 20, message: 'Откройте полную ссылку или вставьте код' }]}><Input.Password autoComplete="one-time-code" /></Form.Item>
-            <Form.Item name="deviceName" label="Название устройства"><Input prefix={<LaptopOutlined />} placeholder="Например, телефон директора" maxLength={120} /></Form.Item>
+            <Form.Item name="deviceName" label="Название устройства"><Input prefix={<LaptopOutlined />} placeholder={grooming ? 'Например, телефон грумера' : 'Например, телефон директора'} maxLength={120} /></Form.Item>
             <Button type="primary" htmlType="submit" block loading={mutation.isPending}>Привязать устройство</Button>
           </Form>
           <Typography.Text type="secondary">Если ссылка истекла, директор должен создать новую внутри локальной CRM.</Typography.Text>
