@@ -58,6 +58,7 @@ export type Product = {
   defaultExpiresAt: string | null;
   description: string | null;
   autoSyringe?: boolean;
+  consumableRules?: Array<{ rule: { id: string; title: string; code: string; inputKind: string } }>;
   linkedProducts?: LinkedProduct[];
   stockRest?: DecimalValue;
   batches?: StockBatch[];
@@ -76,6 +77,7 @@ export type ServiceItem = {
   maximumPrice: DecimalValue | null;
   vatRate: DecimalValue | null;
   description: string | null;
+  consumableRules?: Array<{ rule: { id: string; title: string; code: string; inputKind: string } }>;
   linkedProducts?: LinkedProduct[];
 };
 

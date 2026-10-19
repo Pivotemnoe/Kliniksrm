@@ -1515,7 +1515,7 @@ export class HospitalService {
     line: HospitalCatalogLine,
     warehouseScope: WarehouseScope,
   ) {
-    const linkedProducts = await getLinkedConsumables(tx, line);
+    const linkedProducts = await getLinkedConsumables(tx, line, { hospitalRecordId });
     const previous = await tx.stockMovement.findMany({ where: { hospitalRecordId, productId: { not: line.productId ?? '' }, type: { in: [StockMovementType.VISIT_USAGE, StockMovementType.CORRECTION] } }, distinct: ['productId'], select: { productId: true } });
     for (const item of previous) {
       if (!linkedProducts.some((link) => link.productId === item.productId)) {
@@ -1537,6 +1537,7 @@ export class HospitalService {
           unitPrice: 0,
         }),
         warehouseScope,
+        linked.stockQuantity,
       );
     }
   }
@@ -1548,6 +1549,7 @@ export class HospitalService {
     hospitalRecordId: string,
     line: HospitalCatalogLine,
     warehouseScope: WarehouseScope,
+    frozenStockQuantity?: Prisma.Decimal,
   ) {
     if (!line.productId) return;
     const product = await tx.product.findUniqueOrThrow({
@@ -1555,7 +1557,7 @@ export class HospitalService {
       select: { stockUnit: true, writeOffUnit: true, packageQuantity: true },
     });
     const deducted = await this.getHospitalProductDeductedQuantity(tx, billItemId, hospitalRecordId, line.productId);
-    const delta = toStockQuantity(product, line.stockQuantity ?? line.quantity).minus(deducted);
+    const delta = (frozenStockQuantity ?? toStockQuantity(product, line.stockQuantity ?? line.quantity)).minus(deducted);
 
     if (delta.greaterThan(0)) {
       await this.writeOffHospitalProduct(tx, visitId, billItemId, hospitalRecordId, { ...line, stockQuantity: delta }, warehouseScope, true);

@@ -1,0 +1,134 @@
+import 'reflect-metadata';
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { PrismaClient, Prisma } from '@prisma/client';
+import { ConsumableBindingsService } from '../apps/api/dist/modules/stock/consumable-bindings.service.js';
+import { StockService } from '../apps/api/dist/modules/stock/stock.service.js';
+import { BillingService } from '../apps/api/dist/modules/billing/billing.service.js';
+import { HospitalService } from '../apps/api/dist/modules/hospital/hospital.service.js';
+import { SchedulingService } from '../apps/api/dist/modules/scheduling/scheduling.service.js';
+import { AuditService } from '../apps/api/dist/modules/audit/audit.service.js';
+import { getLinkedConsumables } from '../apps/api/dist/modules/stock/linked-consumables.js';
+const url = process.env.CONSUMABLE_BINDINGS_TEST_DATABASE_URL;
+test('general consumable bindings, shared definitions and immutable execution norms in disposable PostgreSQL', { skip: !url }, async t => {
+  const parsed = new URL(url); assert.ok(parsed.hostname === '127.0.0.1' && parsed.port === '15488' && /^\/consumable_bindings_qa_\d+$/.test(parsed.pathname));
+  const db = new PrismaClient({ datasources: { db: { url } } }); t.after(() => db.$disconnect());
+  const audit = new AuditService(db), stock = new StockService(db, audit), settings = new ConsumableBindingsService(db, audit);
+  const schedule = new SchedulingService(db, audit), finance = { getDefaultBillDueAt: async () => null };
+  const billing = new BillingService(db, audit, schedule, finance), hospital = new HospitalService(db, audit, schedule, finance);
+  const org = await db.organization.create({ data: { displayName: 'Нормы расхода QA' } });
+  const office = await db.clinicOffice.create({ data: { organizationId: org.id, name: 'Филиал QA' } });
+  const warehouse = await db.warehouse.create({ data: { officeId: office.id, name: 'Склад QA' } });
+  const actor = await db.employee.create({ data: { fullName: 'Вымышленный сотрудник QA' } });
+  const owner = await db.owner.create({ data: { fullName: 'Вымышленный владелец QA' } });
+  const animal = await db.animal.create({ data: { ownerId: owner.id, nickname: 'Пациент QA' } });
+  const disk = await stock.createProduct({ title: 'Диск анализатора QA', stockUnit: 'шт', writeOffUnit: 'шт' }, actor.id);
+  const reagent = await stock.createProduct({ title: 'Набор реагентов на 50 тестов QA', stockUnit: 'упак.', writeOffUnit: 'тест', packageQuantity: 50 }, actor.id);
+  const mainProduct = await stock.createProduct({ title: 'Основной товар QA', stockUnit: 'шт', writeOffUnit: 'шт' }, actor.id);
+  const diskBatch = await db.stockBatch.create({ data: { productId: disk.id, warehouseId: warehouse.id, quantity: 1000, rest: 1000 } });
+  const reagentBatch = await db.stockBatch.create({ data: { productId: reagent.id, warehouseId: warehouse.id, quantity: 100, rest: 100 } });
+  const services = await Promise.all(['Исследование A QA','Исследование B QA','Исследование C QA'].map(title => stock.createService({ title, price: 500 }, actor.id)));
+  const rest = async id => Number((await db.stockBatch.findUniqueOrThrow({ where: { id } })).rest);
+  const apply = async input => { const preview = await settings.preview(input); return settings.apply({ ...input, previewToken: preview.previewToken }, actor.id); };
+  const makeBill = async (service, quantity = 1) => {
+    const visit = await db.visit.create({ data: { ownerId: owner.id, animalId: animal.id, employeeId: actor.id, status: 'IN_PROGRESS', visitType: 'FOLLOW_UP' } });
+    return db.bill.create({ data: { ownerId: owner.id, animalId: animal.id, visitId: visit.id, source: 'VISIT', totalAmount: quantity * 500, items: { create: { serviceId: service.id, title: service.title, quantity, unitPrice: 500, totalAmount: quantity * 500 } } }, include: { items: true } });
+  };
+  const execute = bill => db.$transaction(tx => billing.ensureBillProductItemsWrittenOff(tx, bill, null));
+  const batch = { targetKind: 'SERVICE', targetIds: services.slice(0,2).map(s => s.id), mode: 'MERGE', items: [{ productId: disk.id, quantity: 1 }, { productId: reagent.id, quantity: 1 }] };
+  let first, second, group, groupBill;
+  await t.test('preview is read-only; bulk apply is atomic and neither edits stock nor prices', async () => {
+    const preview = await settings.preview(batch); assert.equal(preview.changes.length, 2); assert.equal(await db.serviceLinkedProduct.count(), 0);
+    await settings.apply({ ...batch, previewToken: preview.previewToken }, actor.id);
+    assert.equal(await db.serviceLinkedProduct.count(), 4); assert.equal(await rest(diskBatch.id), 1000); assert.equal(await rest(reagentBatch.id), 100);
+    assert.equal(Number((await db.service.findUnique({ where: { id: services[0].id } })).price), 500);
+    await assert.rejects(settings.apply({ ...batch, previewToken: preview.previewToken }, actor.id), /изменились/);
+  });
+  await t.test('one service quantity consumes matching disks and individual tests, not whole packages; resave is idempotent', async () => {
+    first = await makeBill(services[0], 2); await execute(first);
+    assert.equal(await rest(diskBatch.id), 998); assert.equal(await rest(reagentBatch.id), 99.96);
+    assert.equal(await db.consumableUsageSnapshot.count({ where: { billItemId: first.items[0].id } }), 1);
+    const count = await db.stockMovement.count(); await execute(first); assert.equal(await db.stockMovement.count(), count);
+    assert.equal(Number((await db.bill.findUnique({ where: { id: first.id } })).totalAmount), 1000);
+  });
+  await t.test('changing package conversion preserves stock quantities of already executed reagent use', async () => {
+    const count = await db.stockMovement.count();
+    await stock.updateProduct(reagent.id, { packageQuantity: 100 }, actor.id);
+    await execute(first); assert.equal(await db.stockMovement.count(), count); assert.equal(await rest(reagentBatch.id), 99.96);
+    const current = await db.$transaction(tx => getLinkedConsumables(tx, { serviceId: services[0].id, quantity: new Prisma.Decimal(1) }));
+    assert.equal(current.find(item => item.productId === reagent.id).stockQuantity.toString(), '0.01');
+    await stock.updateProduct(reagent.id, { packageQuantity: 50 }, actor.id);
+  });
+  await t.test('changing current norms applies to new executions; previous quantity corrections use captured norms and cancellation restores once', async () => {
+    await apply({ ...batch, targetIds: [services[0].id], mode: 'REPLACE', items: [{ productId: disk.id, quantity: 3 }, { productId: reagent.id, quantity: 2 }] });
+    const count = await db.stockMovement.count(); await execute(first); assert.equal(await db.stockMovement.count(), count);
+    second = await makeBill(services[0], 2); await execute(second);
+    assert.equal(await rest(diskBatch.id), 992); assert.equal(await rest(reagentBatch.id), 99.88);
+    await db.billItem.update({ where: { id: first.items[0].id }, data: { quantity: 3 } }); await execute(first);
+    assert.equal(await rest(diskBatch.id), 991); assert.equal(await rest(reagentBatch.id), 99.86);
+    await db.$transaction(tx => billing.restoreBillProductItems(tx, first)); await db.$transaction(tx => billing.restoreBillProductItems(tx, first));
+    assert.equal(await rest(diskBatch.id), 994); assert.equal(await rest(reagentBatch.id), 99.92);
+  });
+  await t.test('already executed legacy rows are frozen before settings change, without creating new stock movements', async () => {
+    const legacy = await makeBill(services[0]); await execute(legacy);
+    await db.consumableUsageSnapshot.deleteMany({ where: { billItemId: legacy.items[0].id } });
+    const count = await db.stockMovement.count();
+    await apply({ ...batch, targetIds: [services[0].id], mode: 'REPLACE', items: [{ productId: disk.id, quantity: 7 }] });
+    assert.equal(await db.stockMovement.count(), count); assert.ok(await db.consumableUsageSnapshot.findUnique({ where: { billItemId: legacy.items[0].id } }));
+    await execute(legacy); assert.equal(await db.stockMovement.count(), count);
+  });
+  await t.test('shared set replaces the same direct SKU, keeps unrelated material, and works for services and non-ml products', async () => {
+    group = await settings.saveSet(null, { title: 'Набор дисков QA', serviceIds: [services[1].id, services[2].id], productIds: [mainProduct.id], items: [{ productId: disk.id, quantity: 2 }] }, actor.id);
+    assert.equal(await db.serviceLinkedProduct.count({ where: { serviceId: services[1].id, productId: disk.id } }), 0);
+    assert.equal(await db.serviceLinkedProduct.count({ where: { serviceId: services[1].id, productId: reagent.id } }), 1);
+    const resolve = source => db.$transaction(tx => getLinkedConsumables(tx, { ...source, quantity: new Prisma.Decimal(3) }));
+    assert.equal((await resolve({ productId: mainProduct.id }))[0].quantity.toString(), '6');
+    groupBill = await makeBill(services[1]); await execute(groupBill);
+    const count = await db.stockMovement.count();
+    group = await settings.saveSet(group.id, { title: group.title, expectedUpdatedAt: group.updatedAt.toISOString(), serviceIds: [services[1].id, services[2].id], productIds: [mainProduct.id], items: [{ productId: disk.id, quantity: 4 }] }, actor.id);
+    await execute(groupBill); assert.equal(await db.stockMovement.count(), count);
+    assert.equal((await resolve({ serviceId: services[2].id }))[0].quantity.toString(), '12');
+    assert.equal((await resolve({ productId: mainProduct.id }))[0].quantity.toString(), '12');
+  });
+  await t.test('overlaps, self links, invalid products and stale edits fail atomically; ordinary card editing respects shared sets', async () => {
+    await assert.rejects(stock.updateService(services[1].id, { linkedProducts: [{ productId: disk.id, quantity: 1 }] }, actor.id), /общим набором/);
+    await assert.rejects(settings.saveSet(null, { title: 'Пересечение QA', serviceIds: [services[2].id], productIds: [], items: [{ productId: disk.id, quantity: 1 }] }, actor.id), /пересечение/);
+    await assert.rejects(settings.saveSet(group.id, { title: group.title, expectedUpdatedAt: '2000-01-01T00:00:00.000Z', serviceIds: [], productIds: [], items: [{ productId: disk.id, quantity: 1 }] }, actor.id), /другим сотрудником/);
+    await assert.rejects(settings.preview({ targetKind: 'PRODUCT', targetIds: [disk.id], mode: 'REPLACE', items: [{ productId: disk.id, quantity: 1 }] }), /самому себе/);
+    const invalid = await db.product.create({ data: { title: 'Без пересчёта QA', stockUnit: 'упак.', writeOffUnit: 'тест' } });
+    await assert.rejects(settings.preview({ ...batch, items: [{ productId: invalid.id, quantity: 1 }] }), /единицы/);
+    await assert.rejects(settings.preview({ ...batch, items: [{ productId: reagent.id, quantity: 0.001 }] }), /единицу|складской/);
+    const before = await db.serviceLinkedProduct.count();
+    await assert.rejects(apply({ ...batch, targetIds: [services[0].id, '00000000-0000-4000-8000-000000000000'] }), /удалена/);
+    assert.equal(await db.serviceLinkedProduct.count(), before);
+  });
+  await t.test('hospital actual execution captures norms, payment does not double deduction and cancelled plans consume nothing', async () => {
+    const visit = await db.visit.create({ data: { ownerId: owner.id, animalId: animal.id, employeeId: actor.id, status: 'IN_PROGRESS', visitType: 'FOLLOW_UP' } });
+    const box = await db.hospitalBox.create({ data: { officeId: office.id, name: 'Бокс QA' } });
+    const stay = await hospital.admitExisting(visit.id, { hospitalBoxId: box.id, dailyServicePrice: 0 }, actor.id);
+    const before = await rest(diskBatch.id);
+    const record = await hospital.createRecord(stay.id, { recordType: 'PROCEDURE', title: services[2].title, serviceId: services[2].id, quantity: 1 }, actor.id);
+    assert.equal(await rest(diskBatch.id), before - 4);
+    group = await settings.saveSet(group.id, { title: group.title, expectedUpdatedAt: group.updatedAt.toISOString(), serviceIds: [services[1].id, services[2].id], productIds: [mainProduct.id], items: [{ productId: disk.id, quantity: 5 }] }, actor.id);
+    await hospital.updateRecord(stay.id, record.id, { quantity: 2 }, actor.id); assert.equal(await rest(diskBatch.id), before - 8);
+    const count = await db.stockMovement.count(); await hospital.updateRecord(stay.id, record.id, { quantity: 2 }, actor.id); assert.equal(await db.stockMovement.count(), count);
+    const plan = await hospital.createRecord(stay.id, { recordType: 'PROCEDURE', recordStatus: 'PLANNED', title: 'Невыполненное назначение QA' }, actor.id);
+    await hospital.cancelRecords(stay.id, plan.id, { scope: 'ONE' }, actor.id); assert.equal(await rest(diskBatch.id), before - 8);
+    await hospital.discharge(stay.id, actor.id);
+    const linked = await db.hospitalRecord.findUnique({ where: { id: record.id }, include: { billItem: { include: { bill: true } } } });
+    await execute(linked.billItem.bill); assert.equal(await rest(diskBatch.id), before - 8);
+  });
+  await t.test('insufficient stock rolls back snapshot and all partial deductions', async () => {
+    const bill = await makeBill(services[0], 10000), before = await rest(diskBatch.id);
+    await assert.rejects(execute(bill)); assert.equal(await rest(diskBatch.id), before);
+    assert.equal(await db.stockMovement.count({ where: { billItemId: bill.items[0].id } }), 0);
+    assert.equal(await db.consumableUsageSnapshot.count({ where: { billItemId: bill.items[0].id } }), 0);
+  });
+  await t.test('archiving shared set detaches future targets while existing snapshots and old bills remain intact', async () => {
+    const count = await db.stockMovement.count(); await settings.archiveSet(group.id, group.updatedAt.toISOString(), actor.id);
+    assert.equal((await settings.listSets()).some(s => s.id === group.id), false);
+    await execute(groupBill); assert.equal(await db.stockMovement.count(), count);
+    const future = await db.$transaction(tx => getLinkedConsumables(tx, { serviceId: services[2].id, quantity: new Prisma.Decimal(1) })); assert.deepEqual(future, []);
+    assert.ok(await db.auditLog.count({ where: { action: 'stock.consumable-bindings.apply' } }) >= 3);
+  });
+});

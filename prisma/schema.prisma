@@ -1318,6 +1318,7 @@ model HospitalRecord {
   parentRecord         HospitalRecord?        @relation("HospitalRecordAmendments", fields: [parentRecordId], references: [id], onDelete: Restrict)
   amendments           HospitalRecord[]       @relation("HospitalRecordAmendments")
   stockMovements       StockMovement[]
+  consumableSnapshot   ConsumableUsageSnapshot?
   amendmentReason      String?
   createdAt            DateTime               @default(now())
   updatedAt            DateTime               @updatedAt
@@ -1688,6 +1689,7 @@ model Service {
   billItems              BillItem[]
   plannedHospitalRecords HospitalRecord[]     @relation("HospitalPlannedService")
   linkedProducts         ServiceLinkedProduct[]
+  consumableRules        ServiceConsumableRule[]
   saleItems              SaleItem[]
   laboratoryTests        LaboratoryTest[]
   laboratoryProfiles     LaboratoryProfile[]
@@ -1760,6 +1762,7 @@ model ConsumableRule {
   isActive  Boolean @default(true)
   options   ConsumableRuleOption[]
   products  ProductConsumableRule[]
+  services  ServiceConsumableRule[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -2096,6 +2099,7 @@ model BillItem {
   vaccination         Vaccination? @relation("VaccinationProductBillItem")
   vaccinationService  Vaccination? @relation("VaccinationServiceBillItem")
   stockMovements       StockMovement[]
+  consumableSnapshot   ConsumableUsageSnapshot?
   createdAt            DateTime              @default(now())
 
   @@index([billId])
@@ -2782,4 +2786,23 @@ model AddressCatalogEntry {
   searchVector  Unsupported("tsvector")? @default(dbgenerated())
 
   @@index([priority, level], map: "AddressCatalogEntry_priority_idx")
+}
+
+model ServiceConsumableRule {
+  serviceId String
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  ruleId String
+  rule ConsumableRule @relation(fields: [ruleId], references: [id], onDelete: Restrict)
+  @@id([serviceId, ruleId])
+  @@index([ruleId])
+}
+
+model ConsumableUsageSnapshot {
+  id String @id @default(uuid())
+  billItemId String? @unique
+  billItem BillItem? @relation(fields: [billItemId], references: [id], onDelete: Cascade)
+  hospitalRecordId String? @unique
+  hospitalRecord HospitalRecord? @relation(fields: [hospitalRecordId], references: [id], onDelete: Cascade)
+  recipe Json
+  createdAt DateTime @default(now())
 }

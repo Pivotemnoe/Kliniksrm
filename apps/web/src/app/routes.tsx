@@ -151,6 +151,7 @@ export const routes: RouteObject[] = [
           { path: '/stock/services', element: <StockPage /> },
           { path: '/stock/labels', element: <StockPage /> },
           { path: '/stock/syringes', element: <StockPage /> },
+          { path: '/stock/consumables', element: <StockPage /> },
           { path: '/stock/supplies', element: <StockPage /> },
           { path: '/stock/invoices', element: <StockPage /> },
           { path: '/stock/operations', element: <StockOperationsPage /> },

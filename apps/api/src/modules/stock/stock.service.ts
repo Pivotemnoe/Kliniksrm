@@ -15,7 +15,7 @@ import { UpsertServiceDto } from './dto/upsert-service.dto';
 import { UpsertSupplierDto } from './dto/upsert-supplier.dto';
 import { unitsNeedConversion } from './stock-units';
 import { UpdateSyringeRuleDto } from './dto/update-syringe-rule.dto';
-import { SYRINGE_BANDS, SYRINGE_RULE_CODE } from './linked-consumables';
+import { SYRINGE_BANDS, assertNoSharedConsumableOverlap, freezeConsumableUsage, freezeDependentConsumableUsage, SYRINGE_RULE_CODE } from './linked-consumables';
 
 type WarehouseScope = string[] | null;
 
@@ -39,13 +39,15 @@ export class StockService {
         throw new BadRequestException('Выберите четыре действующих товара-шприца, которые хранятся и списываются в штуках');
       }
       const options = SYRINGE_BANDS.map((band) => ({ productId: dto[band.field], minValue: band.minValue, maxValue: band.maxValue, quantity: 1 }));
+      const sources = await tx.productConsumableRule.findMany({ where: { rule: { code: SYRINGE_RULE_CODE } }, select: { productId: true } });
+      for (const source of sources) await freezeConsumableUsage(tx, source);
       return tx.consumableRule.upsert({
         where: { code: SYRINGE_RULE_CODE },
         create: { code: SYRINGE_RULE_CODE, title: 'Шприц', inputKind: 'DOSE_ML', options: { create: options } },
         update: { isActive: true, options: { deleteMany: {}, create: options } },
         include: { options: { orderBy: { minValue: 'asc' }, include: { product: { select: { id: true, title: true, isActive: true, stockUnit: true, writeOffUnit: true } } } } },
       });
-    });
+    }, { timeout: 30000 });
     await this.auditService.log({ actorId, action: 'stock.consumable-rule.update', entityType: 'ConsumableRule', entityId: rule.id, metadata: { code: rule.code, products: ids } });
     return rule;
   }
@@ -54,7 +56,7 @@ export class StockService {
     if (!autoSyringe) return { ruleId: undefined, links, replacedLinks: [] as typeof links };
     if (writeOffUnit?.trim().toLocaleLowerCase('ru') !== 'мл') throw new BadRequestException('Списание шприца по объёму доступно для препаратов со списанием в мл');
     const rule = await this.prisma.consumableRule.findUnique({ where: { code: SYRINGE_RULE_CODE }, include: { options: { include: { product: { select: { isActive: true, stockUnit: true, writeOffUnit: true } } } } } });
-    if (!rule?.isActive || rule.options.length !== 4 || rule.options.some((option) => !option.product.isActive || option.product.stockUnit?.trim().toLocaleLowerCase('ru') !== 'шт' || (option.product.writeOffUnit ?? option.product.stockUnit)?.trim().toLocaleLowerCase('ru') !== 'шт')) throw new BadRequestException('Сначала выберите шприцы 1, 2, 5 и 10 мл в разделе «Склад → Шприцы»');
+    if (!rule?.isActive || rule.options.length !== 4 || rule.options.some((option) => !option.product.isActive || option.product.stockUnit?.trim().toLocaleLowerCase('ru') !== 'шт' || (option.product.writeOffUnit ?? option.product.stockUnit)?.trim().toLocaleLowerCase('ru') !== 'шт')) throw new BadRequestException('Сначала выберите шприцы 1, 2, 5 и 10 мл в разделе «Склад → Привязки расходников → Шприцы по объёму»');
     const ids = new Set(rule.options.map((option) => option.productId));
     const replacedLinks = links.filter((link) => link.minDoseMl != null || link.maxDoseMl != null || ids.has(link.productId));
     return { ruleId: rule.id, links: links.filter((link) => !replacedLinks.includes(link)), replacedLinks };
@@ -398,7 +400,7 @@ export class StockService {
     const writeOffUnit = dto.writeOffUnit !== undefined ? clean(dto.writeOffUnit) : existing.writeOffUnit ?? undefined;
     const packageQuantity = dto.packageQuantity !== undefined ? dto.packageQuantity : decimalToOptionalNumber(existing.packageQuantity);
     this.ensureUnitConfiguration(stockUnit, writeOffUnit, packageQuantity);
-    if ((stockUnit !== existing.stockUnit || writeOffUnit !== existing.writeOffUnit) && (stockUnit?.trim().toLocaleLowerCase('ru') !== 'шт' || (writeOffUnit ?? stockUnit)?.trim().toLocaleLowerCase('ru') !== 'шт') && await this.prisma.consumableRuleOption.count({ where: { productId, rule: { isActive: true } } })) {
+    if ((stockUnit !== existing.stockUnit || writeOffUnit !== existing.writeOffUnit) && (stockUnit?.trim().toLocaleLowerCase('ru') !== 'шт' || (writeOffUnit ?? stockUnit)?.trim().toLocaleLowerCase('ru') !== 'шт') && await this.prisma.consumableRuleOption.count({ where: { productId, rule: { isActive: true, inputKind: 'DOSE_ML' } } })) {
       throw new BadRequestException('Этот товар выбран в общем правиле расходников и должен храниться и списываться в штуках. Сначала замените его в настройке склада');
     }
     let barcode = await this.resolveBarcode(dto.barcode, dto.generateBarcode, existing.barcode ?? undefined, dto.barcode !== undefined, productId);
@@ -416,42 +418,47 @@ export class StockService {
     const consumables = await this.prepareProductConsumables(autoSyringe, writeOffUnit ?? stockUnit, dto.linkedProducts ?? previousLinks);
     await this.ensureLinkedProductsAvailable(consumables.links, productId, writeOffUnit ?? stockUnit);
 
-    const product = await this.prisma.product.update({
-      where: { id: productId },
-      data: {
-        ...(dto.title !== undefined ? { title: dto.title.trim() } : {}),
-        ...(categoryId !== undefined ? { categoryId } : {}),
-        ...(dto.sku !== undefined ? { sku: clean(dto.sku) } : {}),
-        ...(dto.gtin !== undefined ? { gtin: clean(dto.gtin) } : {}),
-        ...(dto.barcode !== undefined || dto.generateBarcode ? { barcode } : {}),
-        ...(dto.vatRate !== undefined ? { vatRate: dto.vatRate } : {}),
-        ...(dto.retailPrice !== undefined ? { retailPrice: dto.retailPrice } : {}),
-        ...(dto.stockUnit !== undefined ? { stockUnit: clean(dto.stockUnit) } : {}),
-        ...(dto.writeOffUnit !== undefined ? { writeOffUnit: clean(dto.writeOffUnit) } : {}),
-        ...(dto.billingUnit !== undefined ? { billingUnit: clean(dto.billingUnit) } : {}),
-        ...(dto.packageQuantity !== undefined ? { packageQuantity: dto.packageQuantity } : {}),
-        ...(dto.minStock !== undefined ? { minStock: dto.minStock } : {}),
-        ...(dto.shelfLifeDays !== undefined ? { shelfLifeDays: dto.shelfLifeDays } : {}),
-        ...(dto.defaultExpiresAt !== undefined ? { defaultExpiresAt: dto.defaultExpiresAt ? new Date(dto.defaultExpiresAt) : null } : {}),
-        ...(dto.description !== undefined ? { description: clean(dto.description) } : {}),
-        ...(barcodes
-          ? {
-              barcodes: {
-                deleteMany: {},
-                create: barcodes.map((value) => barcodeCreate(value, value === barcode, dto.gtin)),
-              },
-            }
-          : {}),
-        ...(dto.autoSyringe !== undefined ? { consumableRules: { deleteMany: { ruleId: existing.consumableRules?.find((link) => link.rule.code === SYRINGE_RULE_CODE)?.ruleId ?? consumables.ruleId ?? '' }, ...(consumables.ruleId ? { create: { ruleId: consumables.ruleId } } : {}) } } : {}),
-        ...(dto.linkedProducts !== undefined || consumables.replacedLinks.length ? {
-          linkedProducts: {
-            deleteMany: {},
-            create: consumables.links,
-          },
-        } : {}),
-      },
-      include: productInclude,
-    });
+    const product = await this.prisma.$transaction(async tx => {
+      if (dto.linkedProducts !== undefined || dto.autoSyringe !== undefined) await freezeConsumableUsage(tx, { productId });
+      if (dto.linkedProducts !== undefined) await assertNoSharedConsumableOverlap(tx, { productId }, consumables.links);
+      if (dto.stockUnit !== undefined || dto.writeOffUnit !== undefined || dto.packageQuantity !== undefined) await freezeDependentConsumableUsage(tx, productId);
+      return tx.product.update({
+        where: { id: productId },
+        data: {
+          ...(dto.title !== undefined ? { title: dto.title.trim() } : {}),
+          ...(categoryId !== undefined ? { categoryId } : {}),
+          ...(dto.sku !== undefined ? { sku: clean(dto.sku) } : {}),
+          ...(dto.gtin !== undefined ? { gtin: clean(dto.gtin) } : {}),
+          ...(dto.barcode !== undefined || dto.generateBarcode ? { barcode } : {}),
+          ...(dto.vatRate !== undefined ? { vatRate: dto.vatRate } : {}),
+          ...(dto.retailPrice !== undefined ? { retailPrice: dto.retailPrice } : {}),
+          ...(dto.stockUnit !== undefined ? { stockUnit: clean(dto.stockUnit) } : {}),
+          ...(dto.writeOffUnit !== undefined ? { writeOffUnit: clean(dto.writeOffUnit) } : {}),
+          ...(dto.billingUnit !== undefined ? { billingUnit: clean(dto.billingUnit) } : {}),
+          ...(dto.packageQuantity !== undefined ? { packageQuantity: dto.packageQuantity } : {}),
+          ...(dto.minStock !== undefined ? { minStock: dto.minStock } : {}),
+          ...(dto.shelfLifeDays !== undefined ? { shelfLifeDays: dto.shelfLifeDays } : {}),
+          ...(dto.defaultExpiresAt !== undefined ? { defaultExpiresAt: dto.defaultExpiresAt ? new Date(dto.defaultExpiresAt) : null } : {}),
+          ...(dto.description !== undefined ? { description: clean(dto.description) } : {}),
+          ...(barcodes
+            ? {
+                barcodes: {
+                  deleteMany: {},
+                  create: barcodes.map((value) => barcodeCreate(value, value === barcode, dto.gtin)),
+                },
+              }
+            : {}),
+          ...(dto.autoSyringe !== undefined ? { consumableRules: { deleteMany: { ruleId: existing.consumableRules?.find((link) => link.rule.code === SYRINGE_RULE_CODE)?.ruleId ?? consumables.ruleId ?? '' }, ...(consumables.ruleId ? { create: { ruleId: consumables.ruleId } } : {}) } } : {}),
+          ...(dto.linkedProducts !== undefined || consumables.replacedLinks.length ? {
+            linkedProducts: {
+              deleteMany: {},
+              create: consumables.links,
+            },
+          } : {}),
+        },
+        include: productInclude,
+      });
+    }, { timeout: 30000 });
 
     await this.auditService.log({
       actorId,
@@ -601,24 +608,28 @@ export class StockService {
     const pricing = resolveServiceCatalogPricing(dto, existing);
     await this.ensureLinkedProductsAvailable(dto.linkedProducts);
 
-    const service = await this.prisma.service.update({
-      where: { id: serviceId },
-      data: {
-        ...(dto.title !== undefined ? { title: dto.title.trim() } : {}),
-        ...(dto.publicOnWebsite !== undefined ? { publicOnWebsite: dto.publicOnWebsite } : {}),
-        ...(categoryId !== undefined ? { categoryId } : {}),
-        ...pricing,
-        ...(dto.vatRate !== undefined ? { vatRate: dto.vatRate } : {}),
-        ...(dto.description !== undefined ? { description: clean(dto.description) } : {}),
-        ...(dto.linkedProducts !== undefined ? {
-          linkedProducts: {
-            deleteMany: {},
-            create: dto.linkedProducts.map((item) => ({ productId: item.productId, quantity: item.quantity })),
-          },
-        } : {}),
-      },
-      include: serviceInclude,
-    });
+    const service = await this.prisma.$transaction(async tx => {
+      if (dto.linkedProducts !== undefined) await freezeConsumableUsage(tx, { serviceId });
+      if (dto.linkedProducts !== undefined) await assertNoSharedConsumableOverlap(tx, { serviceId }, dto.linkedProducts);
+      return tx.service.update({
+        where: { id: serviceId },
+        data: {
+          ...(dto.title !== undefined ? { title: dto.title.trim() } : {}),
+          ...(dto.publicOnWebsite !== undefined ? { publicOnWebsite: dto.publicOnWebsite } : {}),
+          ...(categoryId !== undefined ? { categoryId } : {}),
+          ...pricing,
+          ...(dto.vatRate !== undefined ? { vatRate: dto.vatRate } : {}),
+          ...(dto.description !== undefined ? { description: clean(dto.description) } : {}),
+          ...(dto.linkedProducts !== undefined ? {
+            linkedProducts: {
+              deleteMany: {},
+              create: dto.linkedProducts.map((item) => ({ productId: item.productId, quantity: item.quantity })),
+            },
+          } : {}),
+        },
+        include: serviceInclude,
+      });
+    }, { timeout: 30000 });
 
     await this.auditService.log({
       actorId,
@@ -1317,7 +1328,7 @@ export class StockService {
         stockUnit: true,
         writeOffUnit: true,
         packageQuantity: true,
-        consumableRules: { include: { rule: { select: { code: true } } } },
+        consumableRules: { include: { rule: { select: { id: true, code: true, title: true, inputKind: true } } } },
         linkedProducts: true,
         barcodes: { select: { value: true } },
       },
@@ -1407,7 +1418,7 @@ export class StockService {
 
 const productInclude = {
   category: true,
-  consumableRules: { include: { rule: { select: { code: true } } } },
+  consumableRules: { include: { rule: { select: { id: true, code: true, title: true, inputKind: true } } } },
   linkedProducts: { include: { product: { select: { id: true, title: true, stockUnit: true, writeOffUnit: true } } }, orderBy: { createdAt: 'asc' } },
   barcodes: { orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }] },
   batches: {
@@ -1424,7 +1435,7 @@ function getProductInclude(batchWhere?: Prisma.StockBatchWhereInput) {
 
   return {
     category: true,
-    consumableRules: { include: { rule: { select: { code: true } } } },
+    consumableRules: { include: { rule: { select: { id: true, code: true, title: true, inputKind: true } } } },
     linkedProducts: { include: { product: { select: { id: true, title: true, stockUnit: true, writeOffUnit: true } } }, orderBy: { createdAt: 'asc' } },
     barcodes: { orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }] },
     batches: {
@@ -1439,6 +1450,7 @@ function getProductInclude(batchWhere?: Prisma.StockBatchWhereInput) {
 }
 
 const serviceInclude = {
+  consumableRules: { include: { rule: { select: { id: true, code: true, title: true, inputKind: true } } } },
   category: true,
   linkedProducts: { include: { product: { select: { id: true, title: true, stockUnit: true, writeOffUnit: true } } }, orderBy: { createdAt: 'asc' } },
 } satisfies Prisma.ServiceInclude;
