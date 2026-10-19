@@ -1,9 +1,9 @@
 # Preserve the accepted clinical runtime; add only the independent module.
 FROM ghcr.io/pivotemnoe/kliniksrm-api:efd0f54fdc0656e1445ad292e98b820e673b02d0
-ARG TEMICHEVVET_GIT_COMMIT
-LABEL org.opencontainers.image.revision=$TEMICHEVVET_GIT_COMMIT
+ARG GROOMING_SOURCE_REVISION
+LABEL org.opencontainers.image.revision=$GROOMING_SOURCE_REVISION
 LABEL org.temichevvet.base.revision="efd0f54fdc0656e1445ad292e98b820e673b02d0"
-ENV TEMICHEVVET_GIT_COMMIT=$TEMICHEVVET_GIT_COMMIT
+ENV TEMICHEVVET_GIT_COMMIT=$GROOMING_SOURCE_REVISION
 COPY prisma /app/prisma
 COPY engines/schema-engine-linux-musl-openssl-3.0.x /app/node_modules/@prisma/engines/schema-engine-linux-musl-openssl-3.0.x
 RUN mkdir -p /tmp/grooming-engine \

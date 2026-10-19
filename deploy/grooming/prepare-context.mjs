@@ -5,7 +5,7 @@ import { resolve, join } from 'node:path';
 const root=resolve(import.meta.dirname,'../..');
 const revision=execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim();
 const destination=resolve(root,'.artifacts/grooming-integration/compact-context');
-// Prisma 6.9.0, official uncompressed engine checksum from binaries.prisma.sh.
+// Prisma 6.19.3, official uncompressed engine checksum from binaries.prisma.sh.
 // The engine is a private release input, not committed into the application source.
 const engine='schema-engine-linux-musl-openssl-3.0.x';
 const engineBytes=await readFile(resolve(root,'.artifacts/grooming-integration/engines',engine));
@@ -19,6 +19,6 @@ await validateWeb(join(destination,'apps/web/dist'));
 const release={releaseId:'grooming-integration-20261019-r1',revision,clinicalBaseRevision:'efd0f54fdc0656e1445ad292e98b820e673b02d0',acceptedStockRevision:'86962b5018701f2fef3482fae7b3edda9039b9a8',component:'staff-web-with-grooming'};
 await writeFile(join(destination,'apps/web/dist/release.json'),JSON.stringify(release));
 for(const component of ['api','gateway','web'])await copyFile(join(root,`deploy/grooming/Dockerfile.${component}`),join(destination,`Dockerfile.${component}`));
-for(const file of ['backup-database.ps1','release-clinic.ps1','initialize-module.cjs','provision-groomer-device.cjs','release-gateway.py'])await copyFile(join(root,'deploy/grooming',file),join(destination,file));
+for(const file of ['build-clinic.ps1','backup-database.ps1','release-clinic.ps1','initialize-module.cjs','provision-groomer-device.cjs','release-gateway.py'])await copyFile(join(root,'deploy/grooming',file),join(destination,file));
 await writeFile(join(destination,'source.json'),JSON.stringify(release,null,2));
 console.log(JSON.stringify({destination,revision,paths:paths.length,productionWebValuesChecked:true}));

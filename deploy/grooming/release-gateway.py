@@ -85,7 +85,7 @@ if args.mode == 'inspect':
 elif args.mode == 'build':
     if inspect(GATEWAY)['Image'] != PREVIOUS_ID: raise RuntimeError('Gateway base changed')
     source=json.loads((STAGE/'source.json').read_text())
-    run(['docker','build','--platform','linux/amd64','--network','none','--pull=false','--build-arg','TEMICHEVVET_GIT_COMMIT='+source['revision'],'-f',str(STAGE/'Dockerfile.gateway'),'-t',CANDIDATE,str(STAGE)])
+    run(['docker','build','--platform','linux/amd64','--network','none','--pull=false','--build-arg','GROOMING_SOURCE_REVISION='+source['revision'],'-f',str(STAGE/'Dockerfile.gateway'),'-t',CANDIDATE,str(STAGE)])
     image=inspect(CANDIDATE)
     if image['Architecture'] != 'amd64' or image['Config']['Labels']['org.opencontainers.image.revision'] != source['revision']: raise RuntimeError('Gateway image identity differs')
     save(STAGE/'gateway-build.json',dict(reference=CANDIDATE,id=image['Id'],revision=source['revision'],runtimePreservation=runtime_preservation(CANDIDATE)))

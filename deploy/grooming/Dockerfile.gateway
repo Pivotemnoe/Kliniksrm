@@ -1,9 +1,9 @@
 # Preserve contact-gate-staff and the deployed owner redesign verbatim.
 FROM temichevvet-owner-gateway:crm-redesign-20261019-r1
-ARG TEMICHEVVET_GIT_COMMIT
-LABEL org.opencontainers.image.revision=$TEMICHEVVET_GIT_COMMIT
+ARG GROOMING_SOURCE_REVISION
+LABEL org.opencontainers.image.revision=$GROOMING_SOURCE_REVISION
 LABEL org.temichevvet.base.image="sha256:2bad6374d52318648bf786e7614bb75c5abcd91c42789ed67e920ef05e3373d5"
-ENV TEMICHEVVET_GIT_COMMIT=$TEMICHEVVET_GIT_COMMIT
+ENV TEMICHEVVET_GIT_COMMIT=$GROOMING_SOURCE_REVISION
 COPY apps/owner-gateway/prisma /app/apps/owner-gateway/prisma
 COPY engines/schema-engine-linux-musl-openssl-3.0.x /app/node_modules/@prisma/engines/schema-engine-linux-musl-openssl-3.0.x
 RUN mkdir -p /tmp/grooming-engine \
