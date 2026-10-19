@@ -47,7 +47,7 @@ import { SupplierModal } from './SupplierModal';
 import { StockCatalogLabelPrinter, toClinicProductPrintItem, toClinicServicePrintItem, type StockPrintLine } from './StockCatalogLabelPrinter';
 import { useProductCatalogPicker } from './useCatalogPicker';
 import { LabelPreview, printCatalogLabels } from '../../shared/ui/CatalogLabelPrinter';
-import { SyringeRuleSettings } from './SyringeRuleSettings';
+import { ConsumableBindingsPanel } from './ConsumableBindingsPanel';
 
 export function StockPage() {
   const location = useLocation();
@@ -127,10 +127,10 @@ export function StockPage() {
   return (
     <div className="page stock-page">
       <PageHeader
-        title="Склад"
-        description="Товары, услуги, остатки и приёмка на склад."
+        title={activeTab === 'consumables' ? 'Привязки расходников' : 'Склад'}
+        description={activeTab === 'consumables' ? 'Автоматический расход для услуг, исследований и товаров.' : 'Товары, услуги, остатки и приёмка на склад.'}
         extra={
-          canManage && !['labels', 'syringes'].includes(activeTab) ? (
+          canManage && !['labels', 'consumables'].includes(activeTab) ? (
             <Space wrap>
               <Button icon={<PlusOutlined />} onClick={() => setProductOpen(true)}>
                 Добавить товар
@@ -146,7 +146,7 @@ export function StockPage() {
           ) : null
         }
       />
-      {!['labels', 'syringes'].includes(activeTab) && catalogQualityQuery.data && catalogQualityQuery.data.qualityPercent < 100 ? (
+      {!['labels', 'consumables'].includes(activeTab) && catalogQualityQuery.data && catalogQualityQuery.data.qualityPercent < 100 ? (
         <Alert
           type={catalogQualityQuery.data.qualityPercent >= 80 ? 'warning' : 'error'}
           showIcon
@@ -162,7 +162,7 @@ export function StockPage() {
             setActiveTab(key);
             navigate(stockTabPaths[key] ?? '/stock');
           }}
-          tabBarExtraContent={!['labels', 'syringes'].includes(activeTab) ? (
+          tabBarExtraContent={!['labels', 'consumables'].includes(activeTab) ? (
             <Space wrap>
               <Input
                 allowClear
@@ -236,7 +236,7 @@ export function StockPage() {
                 setSupplyOpen(true);
               }} />,
             },
-            { key: 'syringes', label: 'Шприцы', children: <SyringeRuleSettings canManage={canManage} /> },
+            { key: 'consumables', label: 'Привязки расходников', children: <ConsumableBindingsPanel canManage={canManage} initialTab={location.pathname.startsWith('/stock/syringes') ? 'syringes' : undefined} /> },
           ]}
         />
       </div>
@@ -405,7 +405,7 @@ export function StockPage() {
 }
 
 const stockTabPaths: Record<string, string> = {
-  syringes: '/stock/syringes',
+  consumables: '/stock/consumables',
   products: '/stock/goods',
   services: '/stock/services',
   labels: '/stock/labels',
@@ -414,7 +414,7 @@ const stockTabPaths: Record<string, string> = {
 };
 
 function getStockTabFromPath(pathname: string) {
-  if (pathname.startsWith('/stock/syringes')) return 'syringes';
+  if (pathname.startsWith('/stock/syringes') || pathname.startsWith('/stock/consumables')) return 'consumables';
   if (pathname.startsWith('/stock/labels')) {
     return 'labels';
   }
@@ -1101,6 +1101,7 @@ function ProductModal({
         />
         <FormText control={control} name="description" label="Дополнительная информация" textarea />
         {writeOffUnit?.trim().toLocaleLowerCase('ru') === 'мл' ? <Controller control={control} name="autoSyringe" render={({ field }) => <Form.Item><Checkbox checked={field.value} onChange={(event) => field.onChange(event.target.checked)}>Списывать шприц</Checkbox></Form.Item>} /> : null}
+        {product?.consumableRules?.some(link => link.rule.inputKind === 'FIXED') && <Alert type="info" message={`Общие наборы: ${product.consumableRules.filter(link => link.rule.inputKind === 'FIXED').map(link => link.rule.title).join(', ')}`} description="Их состав редактируется в разделе «Привязки расходников». Ниже — дополнительные прямые расходники." />}
         <LinkedProductsFields
           control={control}
           fields={linkedProductFields.fields}
@@ -1272,6 +1273,7 @@ function ServiceModal({
           <Alert type="info" showIcon message="При добавлении услуги сотрудник выберет фактическую цену только внутри указанного диапазона." />
         ) : null}
         <FormText control={control} name="description" label="Описание" textarea />
+        {service?.consumableRules?.some(link => link.rule.inputKind === 'FIXED') && <Alert type="info" message={`Общие наборы: ${service.consumableRules.filter(link => link.rule.inputKind === 'FIXED').map(link => link.rule.title).join(', ')}`} description="Их состав редактируется в разделе «Привязки расходников». Ниже — дополнительные прямые расходники." />}
         <LinkedProductsFields
           control={control}
           fields={linkedProductFields.fields}

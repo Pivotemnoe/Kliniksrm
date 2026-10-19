@@ -1,4 +1,5 @@
 import {
+  PaperClipOutlined,
   ApartmentOutlined,
   AuditOutlined,
   BarChartOutlined,
@@ -87,6 +88,7 @@ export const menuItems: MenuProps['items'] = [
     children: [
       { key: '/stock/goods', icon: <TagsOutlined />, label: 'Товары' },
       { key: '/stock/services', icon: <SolutionOutlined />, label: 'Услуги' },
+      { key: '/stock/consumables', icon: <PaperClipOutlined />, label: 'Привязки расходников' },
       { key: '/stock/labels', icon: <PrinterOutlined />, label: 'Ценники и этикетки' },
       { key: '/stock/supplies', icon: <DatabaseOutlined />, label: 'Учёт' },
       { key: '/stock/operations', icon: <SwapOutlined />, label: 'Операции' },

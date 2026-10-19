@@ -914,6 +914,7 @@ export class BillingService {
     billItemId: string,
     line: BillItemLine,
     warehouseScope: WarehouseScope,
+    frozenStockQuantity?: Prisma.Decimal,
   ) {
     if (!line.productId) {
       return;
@@ -924,7 +925,7 @@ export class BillingService {
       select: { stockUnit: true, writeOffUnit: true, packageQuantity: true },
     });
     const deductedQuantity = await this.getBillItemDeductedQuantity(tx, billItemId, line.productId);
-    const delta = toStockQuantity(product, line.stockQuantity ?? line.quantity).minus(deductedQuantity);
+    const delta = (frozenStockQuantity ?? toStockQuantity(product, line.stockQuantity ?? line.quantity)).minus(deductedQuantity);
 
     if (delta.greaterThan(0)) {
       await this.writeOffBillProduct(tx, bill, billItemId, { ...line, stockQuantity: delta }, warehouseScope, true);
@@ -984,13 +985,13 @@ export class BillingService {
       });
       await this.syncBillProductWriteOff(tx, bill, item.id, line, warehouseScope);
       if (bill.visitId) {
-        const linked = await getLinkedConsumables(tx, line);
+        const linked = await getLinkedConsumables(tx, line, { billItemId: item.id });
         const previous = await tx.stockMovement.findMany({ where: { billItemId: item.id, productId: { not: line.productId ?? '' } }, distinct: ['productId'], select: { productId: true } });
         for (const old of previous) {
           if (!linked.some((material) => material.productId === old.productId)) await this.restoreBillProduct(tx, item.id, old.productId, 'расходный материал', await this.getBillItemDeductedQuantity(tx, item.id, old.productId));
         }
         for (const material of linked) {
-          await this.syncBillProductWriteOff(tx, bill, item.id, calculateBillItemLine({ productId: material.productId, title: material.title, quantity: material.quantity.toNumber(), stockQuantity: material.quantity.toNumber(), unitPrice: 0 }), warehouseScope);
+          await this.syncBillProductWriteOff(tx, bill, item.id, calculateBillItemLine({ productId: material.productId, title: material.title, quantity: material.quantity.toNumber(), stockQuantity: material.quantity.toNumber(), unitPrice: 0 }), warehouseScope, material.stockQuantity);
         }
       }
     }

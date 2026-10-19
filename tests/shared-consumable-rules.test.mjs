@@ -55,7 +55,7 @@ test('multiple future rules synchronize a shared consumable total once', async (
 });
 
 test('service material links are unchanged and do not inherit product syringe rules', async () => {
-  const tx = { serviceLinkedProduct: { findMany: async () => [{ product: { id: 'gauze', title: 'Марля' }, quantity: 2 }] } };
+  const tx = { serviceConsumableRule: { findMany: async () => [] }, serviceLinkedProduct: { findMany: async () => [{ product: { id: 'gauze', title: 'Марля' }, quantity: 2 }] } };
   const result = await getLinkedConsumables(tx, { serviceId: 'service', quantity: new Prisma.Decimal(3) });
   assert.equal(result[0].quantity.toString(), '6');
 });
@@ -71,7 +71,7 @@ test('Nest DTO whitelist retains the checkbox and rejects non-UUID setting produ
 test('stock setting persists only the four approved bands and rejects duplicate/packaged products', async () => {
   const ids = Object.fromEntries(SYRINGE_BANDS.map((band, i) => [band.field, `id${i}`]));
   let data;
-  const tx = { product: { findMany: async () => Object.values(ids).map((id) => ({ id, stockUnit: 'шт', writeOffUnit: 'шт' })) }, consumableRule: { upsert: async (input) => { data = input; return { id: 'rule', code: 'SYRINGE' }; } } };
+  const tx = { productConsumableRule: { findMany: async () => [] }, product: { findMany: async () => Object.values(ids).map((id) => ({ id, stockUnit: 'шт', writeOffUnit: 'шт' })) }, consumableRule: { upsert: async (input) => { data = input; return { id: 'rule', code: 'SYRINGE' }; } } };
   const service = new StockService({ $transaction: async (fn) => fn(tx) }, { log: async () => {} });
   await service.updateSyringeRule(ids, 'actor');
   assert.deepEqual(data.create.options.create.map((item) => [item.minValue, item.maxValue, item.quantity]), [[0, 1, 1], [1, 2, 1], [2, 5, 1], [5, 10, 1]]);

@@ -65,6 +65,7 @@ test('one syringe is selected by actual dose, including exact range boundaries',
 test('selection uses write-off ml rather than billed injection count; fixed service links stay compatible', async () => {
   const tx = {
     productLinkedProduct: { findMany: async () => ranges },
+    serviceConsumableRule: { findMany: async () => [] },
     serviceLinkedProduct: { findMany: async () => [{ product: { id: 'gloves', title: 'Перчатки' }, quantity: 2 }] },
     product: { findUniqueOrThrow: async () => ({ writeOffUnit: 'мл' }) },
   };
