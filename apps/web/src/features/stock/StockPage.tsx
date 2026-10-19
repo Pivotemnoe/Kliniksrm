@@ -1675,7 +1675,7 @@ const SupplyInvoiceLine = memo(function SupplyInvoiceLine({ control, setValue, i
   return <div className="supply-line-card">
     <Space align="start" className="full-width" style={{ justifyContent: 'space-between' }}>
       <Typography.Text strong>Позиция {index + 1}</Typography.Text>
-      <Button danger type="text" icon={<DeleteOutlined />} disabled={!canRemove || existingLine} onClick={() => remove(index)}>
+      <Button danger type="text" icon={<DeleteOutlined />} disabled={!canRemove || existingLine || undefined} onClick={() => remove(index)}>
         {existingLine ? 'Проведена' : 'Убрать'}
       </Button>
     </Space>
@@ -1753,7 +1753,7 @@ const SupplyInvoiceLine = memo(function SupplyInvoiceLine({ control, setValue, i
         step={1}
         emptyValue={null}
         required
-        disabled={Boolean(receiptUnit) && receiptUnit === stockUnit}
+        disabled={(Boolean(receiptUnit) && receiptUnit === stockUnit) || undefined}
       />
       <Form.Item
         label="Поступит на склад"
@@ -1905,7 +1905,7 @@ function FormNumber({
   precision,
   help,
   required = false,
-  disabled = false,
+  disabled,
   emptyValue,
 }: {
   control: any;
