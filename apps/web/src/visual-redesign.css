@@ -1,0 +1,830 @@
+/*
+ * Local CRM visual refresh.  This file changes presentation only: the
+ * existing controls, menus, permissions, routes, and handlers stay in place.
+ * Keep it after styles.css so the legacy screens share one visual language.
+ */
+.crm-shell {
+  --crm-ink: #10294d;
+  --crm-muted: #586e8a;
+  --crm-line: #dbe7f5;
+  --crm-surface: #ffffff;
+  --crm-canvas: #f4f8fd;
+  --crm-blue: #0768df;
+  --crm-blue-soft: #eaf4ff;
+  color: var(--crm-ink);
+  background: var(--crm-canvas);
+}
+
+.crm-shell :focus-visible {
+  outline: 2px solid #0768df;
+  outline-offset: 2px;
+}
+
+/* Navigation stays role-driven; only its visual treatment changes. */
+.crm-shell .crm-sider {
+  border-right: 0;
+  background: linear-gradient(180deg, #0d305a 0%, #0b2548 56%, #091d39 100%) !important;
+  box-shadow: 7px 0 24px rgb(12 41 82 / 8%);
+}
+
+.crm-shell .brand {
+  height: 82px;
+}
+
+.crm-shell .brand-logo {
+  width: 48px;
+  height: 48px;
+  padding: 3px;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 5px 16px rgb(1 16 42 / 24%);
+}
+
+.crm-shell .crm-sider .ant-menu-item,
+.crm-shell .crm-sider .ant-menu-submenu-title {
+  height: 46px;
+  margin-block: 4px !important;
+  border-radius: 12px;
+  line-height: 46px;
+  color: #d3e5f8 !important;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.crm-shell .crm-sider .ant-menu-item:hover,
+.crm-shell .crm-sider .ant-menu-submenu-title:hover {
+  background: rgb(255 255 255 / 13%) !important;
+  color: #ffffff !important;
+}
+
+.crm-shell .crm-sider .ant-menu-item-selected,
+.crm-shell .crm-sider .ant-menu-submenu-selected > .ant-menu-submenu-title {
+  background: linear-gradient(135deg, #167fff, #075fdb) !important;
+  color: #ffffff !important;
+  box-shadow: 0 5px 15px rgb(1 31 80 / 24%);
+}
+
+.crm-shell .crm-sider .ant-menu-item-selected:hover {
+  background: #075fdb !important;
+}
+
+.crm-shell .crm-sider .ant-menu-item .anticon,
+.crm-shell .crm-sider .ant-menu-submenu-title .anticon {
+  font-size: 20px;
+}
+
+/* A calm app header, while retaining every currently available action. */
+.crm-shell .crm-header {
+  height: 72px;
+  flex-basis: 72px;
+  gap: 18px;
+  padding-inline: 24px;
+  border-bottom: 1px solid var(--crm-line);
+  border-radius: 0 0 16px 16px;
+  background: #ffffff;
+  box-shadow: 0 4px 18px rgb(24 65 113 / 5%);
+}
+
+.crm-shell .crm-header-wordmark {
+  flex: 0 0 auto;
+  color: #182b43;
+  font-size: 22px;
+  font-weight: 780;
+  letter-spacing: -0.055em;
+  white-space: nowrap;
+}
+
+.crm-shell .crm-header-wordmark span {
+  color: #0868df;
+}
+
+.crm-shell .global-search {
+  min-height: 40px;
+  border-color: #cbdcf1;
+  border-radius: 11px;
+  background: #fcfdff;
+}
+
+.crm-shell .global-search-results {
+  border-color: var(--crm-line);
+  border-radius: 15px;
+  box-shadow: 0 18px 44px rgb(18 49 91 / 16%);
+}
+
+.crm-shell .global-search-row,
+.crm-shell .global-search-all {
+  border-radius: 9px;
+}
+
+.crm-shell .global-search-row:hover,
+.crm-shell .global-search-all:hover {
+  background: var(--crm-blue-soft);
+}
+
+.crm-shell .header-actions {
+  gap: 5px !important;
+}
+
+.crm-shell .header-action .ant-btn {
+  min-width: 38px;
+  min-height: 38px;
+  border-radius: 10px;
+  color: var(--crm-ink);
+}
+
+.crm-shell .header-action .ant-btn:hover {
+  background: var(--crm-blue-soft);
+  color: var(--crm-blue);
+}
+
+.crm-shell .employee-menu-button {
+  height: 52px;
+  padding: 5px 9px 5px 13px;
+  border: 1px solid transparent;
+  border-radius: 13px;
+}
+
+.crm-shell .employee-menu-button:hover {
+  border-color: var(--crm-line);
+  background: #f6faff;
+}
+
+.crm-shell .employee-menu-button .ant-avatar {
+  background: #dceafb;
+  color: #1456a4;
+}
+
+.crm-shell .employee-position {
+  color: var(--crm-muted);
+}
+
+.crm-shell .crm-content,
+.crm-shell .global-operational-alerts {
+  background: var(--crm-canvas);
+}
+
+.crm-shell .page {
+  padding: 28px 30px 40px;
+}
+
+.crm-shell .page-header {
+  margin-bottom: 22px;
+}
+
+.crm-shell .page-header h2 {
+  color: #0a1e3a;
+  font-size: clamp(26px, 2.2vw, 34px);
+  font-weight: 760;
+  letter-spacing: -0.035em;
+  line-height: 1.18;
+}
+
+.crm-shell .page-header .ant-typography-secondary {
+  color: var(--crm-muted);
+}
+
+/* Shared cards, work areas, and settings tiles. */
+.crm-shell .list-panel,
+.crm-shell .public-link-panel,
+.crm-shell .ant-card,
+.crm-shell .metric-tile,
+.crm-shell .dashboard-action-tile,
+.crm-shell .laboratory-work-tile,
+.crm-shell .clinic-conversation-panel,
+.crm-shell .clinic-chat-pilot {
+  border-color: var(--crm-line);
+  border-radius: 16px;
+  background: var(--crm-surface);
+  box-shadow: 0 6px 22px rgb(25 69 122 / 4%);
+}
+
+.crm-shell .list-panel-header {
+  min-height: 58px;
+  padding: 16px 20px;
+  border-bottom-color: #e9f0f8;
+}
+
+.crm-shell .list-panel-body {
+  padding: 18px 20px 20px;
+}
+
+.crm-shell .list-panel-header h4.ant-typography,
+.crm-shell .ant-card-head-title {
+  color: var(--crm-ink);
+  font-weight: 700;
+}
+
+.crm-shell .settings-overview-card,
+.crm-shell .dashboard-action-tile,
+.crm-shell .laboratory-work-tile {
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.crm-shell .settings-overview-card:hover,
+.crm-shell .dashboard-action-tile:hover,
+.crm-shell .laboratory-work-tile:hover {
+  transform: translateY(-2px);
+  border-color: #a9cdf7;
+  box-shadow: 0 12px 30px rgb(25 69 122 / 10%);
+}
+
+.crm-shell .dashboard-action-tile,
+.crm-shell .laboratory-work-tile {
+  border-left-width: 3px;
+}
+
+.crm-shell .dashboard-action-icon,
+.crm-shell .settings-overview-icon {
+  border-color: #d3e5f8;
+  border-radius: 12px;
+  background: #f2f8ff;
+}
+
+.crm-shell .dashboard-action-copy span,
+.crm-shell .laboratory-work-tile span {
+  color: var(--crm-muted);
+  font-size: 12px;
+  letter-spacing: 0.045em;
+}
+
+.crm-shell .dashboard-action-copy strong,
+.crm-shell .laboratory-work-tile strong {
+  color: #10294d;
+}
+
+/* Preserve table density, horizontal scrolling, sorting and row actions. */
+.crm-shell .dense-table .ant-table-thead > tr > th,
+.crm-shell .ant-table-wrapper .ant-table-thead > tr > th {
+  border-bottom-color: #dbe7f5;
+  color: #4b6485;
+  background: #f1f7fe;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.025em;
+}
+
+.crm-shell .dense-table .ant-table-tbody > tr > td,
+.crm-shell .ant-table-wrapper .ant-table-tbody > tr > td {
+  border-bottom-color: #e8eff8;
+  color: var(--crm-ink);
+}
+
+.crm-shell .ant-table-wrapper .ant-table-tbody > tr:hover > td {
+  background: #f4f9ff !important;
+}
+
+.crm-shell .table-top-scroll {
+  border-color: #d6e4f5;
+  border-radius: 10px;
+  background: #eaf2fb;
+}
+
+.crm-shell .table-top-scroll::-webkit-scrollbar-track {
+  background: #eaf2fb;
+}
+
+.crm-shell .table-top-scroll::-webkit-scrollbar-thumb {
+  border-color: #eaf2fb;
+  background: #7899bb;
+}
+
+.crm-shell .ant-pagination .ant-pagination-item,
+.crm-shell .ant-pagination .ant-pagination-prev .ant-pagination-item-link,
+.crm-shell .ant-pagination .ant-pagination-next .ant-pagination-item-link {
+  border-radius: 9px;
+}
+
+/* Buttons, filters and forms retain their types, sizes, validation and events. */
+.crm-shell .ant-btn {
+  border-radius: 10px;
+  font-weight: 580;
+}
+
+.crm-shell .ant-btn-primary:not(:disabled):not(.ant-btn-dangerous) {
+  border-color: #0868df;
+  background: linear-gradient(135deg, #0b70e6, #075fd4);
+  box-shadow: 0 4px 12px rgb(9 99 218 / 14%);
+}
+
+.crm-shell .ant-btn-primary:not(:disabled):not(.ant-btn-dangerous):hover {
+  border-color: #075fcf;
+  background: #075fcf;
+}
+
+/* Long existing row actions remain fully readable in fixed columns. */
+.crm-shell .dense-table .ant-table-cell-fix-right .ant-space-vertical,
+.crm-shell .dense-table .ant-table-cell-fix-right .ant-space-item {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.crm-shell .dense-table .ant-table-cell-fix-right .ant-btn:not(.ant-dropdown-trigger) {
+  max-width: 100%;
+  height: auto;
+  min-height: 24px;
+  white-space: normal;
+}
+
+.crm-shell .dense-table .ant-table-cell-fix-right .ant-btn:not(.ant-dropdown-trigger) > span:not(.ant-btn-icon) {
+  min-width: 0;
+  overflow-wrap: normal;
+  white-space: normal;
+}
+
+.crm-shell .ant-input,
+.crm-shell .ant-input-affix-wrapper,
+.crm-shell .ant-input-number,
+.crm-shell .ant-picker,
+.crm-shell .ant-select-selector,
+.crm-shell .ant-segmented,
+.crm-shell .ant-upload-wrapper .ant-upload-select {
+  border-radius: 10px !important;
+}
+
+.crm-shell .ant-input,
+.crm-shell .ant-input-affix-wrapper,
+.crm-shell .ant-input-number,
+.crm-shell .ant-picker,
+.crm-shell .ant-select-selector {
+  border-color: #cfdeee;
+}
+
+.crm-shell .ant-form-item-label > label,
+.crm-shell .ant-descriptions-item-label {
+  color: #526b89;
+  font-weight: 600;
+}
+
+.crm-shell .ant-tabs .ant-tabs-tab {
+  border-radius: 9px 9px 0 0;
+}
+
+.crm-shell .ant-tabs .ant-tabs-tab-active {
+  color: #075fcf;
+}
+
+.crm-shell .ant-segmented {
+  padding: 4px;
+  background: #eaf2fc;
+}
+
+.crm-shell .ant-segmented-item-selected {
+  border-radius: 8px;
+  box-shadow: 0 3px 9px rgb(35 77 125 / 11%);
+}
+
+.crm-shell .status-tabs.ant-segmented {
+  padding: 0;
+  background: transparent;
+}
+
+.crm-shell .status-tabs .ant-segmented-group {
+  gap: 8px;
+}
+
+.crm-shell .status-tabs .ant-segmented-item {
+  min-height: 39px;
+  border: 1px solid #d4e4f5;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #1b3557;
+}
+
+.crm-shell .status-tabs .ant-segmented-item-label {
+  min-height: 37px;
+  padding: 6px 12px;
+  line-height: 25px;
+}
+
+.crm-shell .status-tabs .ant-segmented-item-selected {
+  border-color: #0868df;
+  background: #0868df !important;
+  color: #ffffff !important;
+  box-shadow: 0 5px 14px rgb(8 104 223 / 18%);
+}
+
+.crm-shell .status-tabs .ant-segmented-thumb {
+  display: none;
+}
+
+.crm-shell .ant-tag {
+  border-radius: 999px;
+  padding-inline: 8px;
+}
+
+.crm-shell .ant-alert {
+  border-radius: 12px;
+}
+
+.crm-shell .compact-operational-alerts .dashboard-overdue-banner {
+  min-height: 36px;
+  padding: 7px 12px;
+  border-left-width: 3px;
+  border-radius: 999px;
+}
+
+.crm-shell .global-operational-alerts {
+  padding-top: 12px;
+}
+
+.crm-shell .incoming-request-alert {
+  position: static;
+  width: auto;
+  max-height: none;
+  margin: 16px 24px 0;
+  display: flex;
+  flex-flow: row wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 16px 20px;
+  border: 1px solid #a9d1ff;
+  border-radius: 18px;
+  box-shadow: 0 5px 18px rgb(14 53 105 / 8%);
+}
+
+.crm-shell .incoming-request-alert > div:first-child {
+  display: flex;
+  flex: 1 1 100%;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.crm-shell .incoming-request-alert > .ant-space {
+  flex: 1 1 100%;
+}
+
+@media (max-width: 600px) {
+  .crm-shell .incoming-request-alert {
+    margin: 12px 16px 0;
+    padding: 14px;
+  }
+}
+
+.crm-shell .context-section {
+  border-radius: 12px;
+}
+
+.crm-shell .context-section-header {
+  flex-wrap: wrap;
+}
+
+.crm-shell .context-section-header > .ant-btn,
+.crm-shell .context-section-header > .ant-space {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.crm-shell .context-section-header > .ant-space {
+  flex-wrap: wrap;
+}
+
+.crm-shell .context-section-header > .ant-btn {
+  height: auto;
+  min-height: 24px;
+  white-space: normal;
+  text-align: left;
+}
+
+.crm-shell button.table-link:not(.ant-btn) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  border: 0;
+  background: transparent;
+  color: var(--crm-blue);
+  font: inherit;
+  cursor: pointer;
+}
+
+.crm-shell button.table-link:not(.ant-btn):disabled {
+  color: var(--crm-muted);
+  cursor: default;
+}
+
+.crm-shell .clinic-chat-message {
+  border-radius: 12px;
+}
+
+.crm-shell .hospital-summary-grid,
+.crm-shell .help-contents,
+.crm-shell .help-screen-map {
+  border-radius: 14px;
+}
+
+/* Calendar and clinical workbench use the same surfaces as list pages. */
+.crm-shell .schedule-app-panel,
+.crm-shell .shift-week-panel {
+  border-color: var(--crm-line);
+  border-radius: 16px;
+  box-shadow: 0 6px 22px rgb(25 69 122 / 4%);
+}
+
+.crm-shell .schedule-app-toolbar {
+  padding: 17px 20px;
+  border-bottom-color: #e9f0f8;
+  background: #ffffff;
+}
+
+.crm-shell .schedule-week-grid,
+.crm-shell .shift-week-grid {
+  gap: 11px;
+  padding: 16px;
+}
+
+.crm-shell .schedule-day-card,
+.crm-shell .shift-day-card {
+  border-color: #dce8f5;
+  border-radius: 13px;
+  background: #f6f9fe;
+}
+
+.crm-shell .schedule-day-card.is-active,
+.crm-shell .shift-day-card.is-active {
+  border-color: #80b8f4;
+  background: #eef7ff;
+  box-shadow: inset 0 0 0 1px #d0e7ff;
+}
+
+.crm-shell .schedule-day-head:hover,
+.crm-shell .shift-day-head:hover {
+  background: #edf6ff;
+}
+
+.crm-shell .schedule-appointment-pill,
+.crm-shell .schedule-shift-pill,
+.crm-shell .shift-chip {
+  border-color: #d7e6f5;
+  border-radius: 10px;
+  box-shadow: 0 2px 7px rgb(25 69 122 / 4%);
+}
+
+.crm-shell .schedule-appointment-pill:hover,
+.crm-shell .schedule-shift-pill:hover,
+.crm-shell .shift-chip:hover {
+  border-color: #8ebeed;
+  background: #f4f9ff;
+}
+
+.crm-shell .schedule-appointment-time,
+.crm-shell .schedule-shift-time,
+.crm-shell .shift-chip-time {
+  color: #0868df;
+}
+
+.crm-shell .workbench,
+.crm-shell .work-area,
+.crm-shell .visit-work-area {
+  background: var(--crm-canvas);
+}
+
+.crm-shell .context-panel {
+  border-right: 1px solid #e1eaf5;
+  background: #eef5fc;
+}
+
+.crm-shell .context-section {
+  border: 1px solid var(--crm-line);
+  border-radius: 13px;
+  box-shadow: 0 4px 14px rgb(25 69 122 / 4%);
+}
+
+.crm-shell .work-surface {
+  border: 1px solid var(--crm-line);
+  border-radius: 16px;
+  box-shadow: 0 6px 22px rgb(25 69 122 / 4%);
+}
+
+.crm-shell .work-surface .ant-tabs-nav,
+.crm-shell .visit-work-area .ant-tabs-nav {
+  border-radius: 15px 15px 0 0;
+  background: #f1f7fe;
+}
+
+.crm-shell .technical-card-details {
+  border-color: var(--crm-line);
+  border-radius: 13px;
+}
+
+/* The existing responsive layout and all quick actions remain available. */
+@media (max-width: 1000px) {
+  .crm-shell .crm-header-wordmark {
+    display: none;
+  }
+
+  .crm-shell .crm-header {
+    padding-inline: 14px;
+  }
+
+  .crm-shell .page {
+    padding: 20px 18px 30px;
+  }
+}
+
+@media (max-width: 700px) {
+  .crm-shell .crm-header {
+    height: 62px;
+    flex-basis: 62px;
+    border-radius: 0 0 12px 12px;
+  }
+
+  .crm-shell .page {
+    padding: 18px 12px 28px;
+  }
+
+  .crm-shell .page-header h2 {
+    font-size: 25px;
+  }
+
+  .crm-shell .list-panel-header,
+  .crm-shell .list-panel-body {
+    padding-inline: 14px;
+  }
+
+  .crm-shell .mobile-brand-button,
+  .crm-shell .mobile-nav-trigger {
+    border-radius: 10px;
+  }
+
+  .crm-shell .compact-operational-alerts .dashboard-overdue-banner {
+    border-radius: 14px;
+  }
+
+  .crm-shell .status-tabs {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .crm-shell .status-tabs .ant-segmented-group {
+    min-width: max-content;
+  }
+
+  .crm-shell .status-tabs .ant-segmented-item-label {
+    padding-inline: 8px;
+    font-size: 12px;
+  }
+}
+
+/* Ant Design places dialogs and popovers outside .crm-shell. */
+body:has(.crm-shell) .ant-drawer .ant-drawer-content {
+  border-radius: 18px 0 0 18px;
+}
+
+body:has(.crm-shell) .ant-drawer .ant-drawer-header,
+body:has(.crm-shell) .ant-modal .ant-modal-header {
+  border-bottom: 1px solid #e5eef9;
+  background: #ffffff;
+}
+
+body:has(.crm-shell) .ant-drawer .ant-drawer-title,
+body:has(.crm-shell) .ant-modal .ant-modal-title {
+  color: #10294d;
+  font-weight: 700;
+}
+
+body:has(.crm-shell) .ant-drawer .ant-drawer-footer,
+body:has(.crm-shell) .ant-modal .ant-modal-footer {
+  border-top-color: #e5eef9;
+}
+
+body:has(.crm-shell) .ant-modal .ant-modal-content {
+  border-radius: 18px;
+  box-shadow: 0 22px 65px rgb(17 47 88 / 20%);
+}
+
+body:has(.crm-shell) .ant-popover .ant-popover-inner,
+body:has(.crm-shell) .ant-dropdown .ant-dropdown-menu,
+body:has(.crm-shell) .ant-select-dropdown {
+  border: 1px solid #e2ecf8;
+  border-radius: 14px;
+  box-shadow: 0 16px 38px rgb(17 47 88 / 15%);
+}
+
+body:has(.crm-shell) .ant-drawer .ant-btn,
+body:has(.crm-shell) .ant-modal .ant-btn {
+  border-radius: 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crm-shell .settings-overview-card,
+  .crm-shell .dashboard-action-tile,
+  .crm-shell .laboratory-work-tile {
+    transition: none;
+  }
+}
+
+/* Workflow pass: labelled navigation, one notification center and compact focus. */
+.crm-shell .brand { flex: 0 0 72px; height: 72px; width: 100%; gap: 10px; }
+.crm-shell .navigation-brand-copy { display: grid; gap: 2px; color: #fff; text-align: left; }
+.crm-shell .navigation-brand-copy strong { font-size: 20px; letter-spacing: -.7px; }
+.crm-shell .navigation-brand-copy strong span { color: #80bdff; }
+.crm-shell .navigation-brand-copy small { font-size: 10px; color: #b9cde5; }
+.crm-shell .crm-sider .ant-menu-item,
+.crm-shell .crm-sider .ant-menu-submenu-title { height: 40px; line-height: 40px; margin-block: 2px !important; border-radius: 9px; }
+.crm-shell.navigation-expanded .crm-sider .ant-menu-item,
+.crm-shell.navigation-expanded .crm-sider .ant-menu-submenu-title { width: calc(100% - 16px); margin-inline: 8px !important; padding-inline: 12px !important; font-size: 13px; }
+.crm-shell.navigation-expanded .crm-sider .ant-menu-sub .ant-menu-item { font-size: 12px; background: rgb(0 0 0 / 8%); }
+.crm-shell.navigation-expanded .crm-header-wordmark { display: none; }
+.crm-shell .crm-navigation-toggle { flex: 0 0 40px; height: 40px; margin: 6px 12px 12px; color: #c8ddf4 !important; border-radius: 9px; box-shadow: none; }
+.crm-shell .crm-navigation-toggle:hover { background: rgb(255 255 255 / 10%) !important; }
+.crm-shell .crm-navigation-toggle .anticon { font-size: 18px; }
+
+.crm-shell .global-operational-alerts.operational-focus-bar { display: block; margin: 12px 24px 0; padding: 0; }
+.operational-focus-content { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; min-height: 46px; padding: 7px 12px; border: 1px solid #dbe7f5; border-radius: 10px; background: #fff; }
+.operational-focus-label { flex-shrink: 0; color: #586e8a; font-size: 12px; font-weight: 600; }
+.operational-focus-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+.operational-focus-pill { display: inline-flex; align-items: center; gap: 7px; min-height: 30px; padding: 4px 10px; border: 0; border-radius: 7px; color: #315279; background: #edf5ff; font: inherit; font-size: 12px; cursor: pointer; }
+.operational-focus-pill.is-urgent { color: #9c2834; background: #fff0f1; }
+.operational-focus-pill:hover { box-shadow: inset 0 0 0 1px currentColor; }
+.operational-focus-pill strong { min-width: 16px; }
+.operational-remote-mode { flex-shrink: 0; font-size: 11px; margin: 0; }
+.crm-shell .operational-open-center { font-size: 12px; color: #0868df; }
+.operational-new-count { padding: 0 5px; border-radius: 4px; background: #eaf3ff; font-size: 11px; }
+.operational-connection-error { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; padding: 8px 12px; border-radius: 9px; color: #9c2834; background: #fff0f1; font-size: 12px; }
+
+.crm-shell .incoming-request-alert { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 5px 16px; margin: 12px 24px 0; padding: 12px 16px; border-radius: 12px; border-left: 4px solid #0868df; box-shadow: none; }
+.crm-shell .incoming-request-alert > div:first-child { grid-column: 1; flex: initial; gap: 6px; }
+.crm-shell .incoming-request-alert h4.ant-typography { font-size: 14px; line-height: 1.4; margin: 0; }
+.incoming-request-client { grid-column: 1; display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; }
+.incoming-request-details { grid-column: 1; min-width: 0; color: #586e8a; font-size: 12px; }
+.incoming-request-details summary { cursor: pointer; width: fit-content; }
+.incoming-request-details[open] { padding-top: 3px; }
+.incoming-request-details > .ant-typography { display: block; font-size: 12px; }
+.incoming-request-details .incoming-request-comment { margin-block: 6px; color: #253e5e; }
+.crm-shell .incoming-request-alert > .incoming-request-actions { grid-column: 2; grid-row: 1 / 4; flex: initial; align-self: center; }
+
+.crm-alert-center .ant-drawer-body { display: flex; flex-direction: column; overflow: hidden; color: #10294d; }
+.alert-center-toolbar { flex: 0 0 auto; display: grid; gap: 12px; padding: 16px 20px; border-bottom: 1px solid #dbe7f5; background: #fff; }
+.alert-center-summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #586e8a; font-size: 13px; }
+.alert-center-toolbar .ant-segmented { padding: 4px; border-radius: 8px; background: #eef3f9; }
+.alert-center-toolbar .ant-segmented-item-label { min-height: 32px; line-height: 32px; font-size: 12px; }
+.alert-center-toolbar .ant-input-affix-wrapper { border-radius: 8px; }
+.alert-center-body { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; background: #f4f8fd; }
+.alert-center-remote, .alert-center-messages { margin-bottom: 12px; }
+.alert-center-groups.ant-collapse { border: 0; background: transparent; }
+.alert-center-groups .ant-collapse-item { margin-bottom: 10px; overflow: hidden; border: 1px solid #dbe7f5 !important; border-radius: 11px !important; background: #fff; }
+.alert-center-groups .ant-collapse-header { align-items: center !important; padding: 14px !important; }
+.alert-center-groups .ant-collapse-content { border-top: 1px solid #edf1f6; }
+.alert-center-groups .ant-collapse-content-box { padding: 0 !important; }
+.alert-group-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; font-size: 13px; }
+.alert-group-heading strong { flex: 1; min-width: 120px; }
+.alert-group-dot { width: 7px; height: 7px; border-radius: 50%; background: #0868df; }
+.alert-group-dot.is-urgent { background: #c63848; }
+.alert-group-count { min-width: 22px; padding: 2px 6px; border-radius: 5px; color: #425d80; background: #eef3f9; text-align: center; font-size: 12px; }
+.alert-group-new { color: #0868df; font-size: 11px; }
+.crm-alert-center .staff-alert-item { padding: 14px; border-bottom: 1px solid #edf1f6; border-left: 3px solid transparent; }
+.crm-alert-center .staff-alert-item.is-unread { border-left-color: #0868df; }
+.crm-alert-center .staff-alert-item:hover { background: #f3f8ff; }
+.crm-alert-center .staff-alert-item:focus-visible { outline: 2px solid #0868df; outline-offset: -3px; }
+.crm-alert-center .staff-alert-title-row { align-items: start; gap: 6px; }
+.crm-alert-center .staff-alert-title-row .ant-typography { font-size: 13px; }
+.crm-alert-center .staff-alert-copy { gap: 5px; line-height: 1.5; }
+.staff-alert-description { color: #526883; font-size: 12px; }
+.crm-alert-center .staff-alert-time { color: #61758e; font-size: 11px; }
+.staff-alert-action { color: #0868df; font-size: 12px; font-weight: 600; }
+.alert-center-footer { flex: 0 0 auto; padding: 12px 20px; border-top: 1px solid #dbe7f5; color: #586e8a; background: white; font-size: 11px; line-height: 1.5; }
+.crm-alert-center .alert-show-more { min-height: 38px; border-radius: 0; color: #0868df; font-size: 12px; }
+
+.crm-shell .dashboard-app-strip { gap: 10px; }
+.crm-shell .dashboard-action-tile { min-height: 88px; padding: 14px; gap: 12px; }
+.crm-shell .dashboard-action-copy strong { font-size: 24px; }
+.crm-shell .dashboard-action-copy span { font-size: 11px; }
+.crm-shell .dashboard-action-icon { width: 36px; height: 36px; flex-basis: 36px; font-size: 20px; }
+@media (min-width: 1440px) { .crm-shell .dashboard-clinic-summary { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+@media (max-width: 1100px) {
+  .crm-shell .incoming-request-alert { grid-template-columns: minmax(0, 1fr); }
+  .crm-shell .incoming-request-alert > .incoming-request-actions { grid-column: 1; grid-row: auto; margin-top: 4px; }
+}
+@media (max-width: 600px) {
+  .crm-shell .global-operational-alerts.operational-focus-bar { margin: 8px 12px 0; }
+  .operational-focus-content { padding: 7px 8px; gap: 6px; }
+  .operational-focus-label { display: none; }
+  .operational-focus-actions { flex: 1; justify-content: space-between; gap: 4px; }
+  .operational-focus-pill { padding-inline: 7px; font-size: 11px; gap: 5px; }
+  .crm-shell .operational-open-center { font-size: 11px; padding-inline: 4px; }
+  .crm-shell .incoming-request-alert { margin: 10px 12px 0; padding: 10px 12px; gap: 4px; }
+  .incoming-request-client { font-size: 12px; }
+  .incoming-request-client .ant-typography { font-size: 12px; }
+  .incoming-request-actions .ant-btn { padding-inline: 9px; font-size: 12px; }
+  .crm-alert-center-root .ant-drawer-content-wrapper { width: 100vw !important; }
+  .alert-center-toolbar { padding: 12px; gap: 10px; }
+  .alert-center-body { padding: 12px; }
+  .alert-center-footer { padding: 10px 12px; }
+  .alert-center-groups .ant-collapse-header { padding: 12px !important; }
+}
+.crm-shell .brand { height: 64px; flex-basis: 64px; }
+.crm-shell .brand-logo { width: 42px; height: 42px; }
+.crm-shell .crm-sider .ant-menu-item,
+.crm-shell .crm-sider .ant-menu-submenu-title { height: 36px; line-height: 36px; margin-block: 1px !important; }
+.crm-shell .crm-navigation-toggle { height: 32px; flex-basis: 32px; margin-block: 4px 6px; }
+.alert-group-preview { flex: 1 0 100%; min-width: 0; padding-left: 14px; color: #61758e; font-size: 11px; font-weight: 400; }
+@media (min-width: 1180px) {
+  .crm-shell .dashboard-clinic-summary { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .crm-shell .dashboard-clinic-summary .dashboard-action-tile { position: relative; min-height: 104px; padding: 12px; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .crm-shell .dashboard-clinic-summary .dashboard-action-icon { position: absolute; top: 10px; right: 10px; width: 24px; height: 24px; font-size: 16px; }
+  .crm-shell .dashboard-clinic-summary .dashboard-action-copy > span { padding-right: 24px; min-height: 28px; font-size: 10px; }
+  .crm-shell .dashboard-clinic-summary .dashboard-action-copy strong { font-size: 20px; overflow: visible; }
+  .crm-shell .dashboard-clinic-summary .dashboard-action-copy small { white-space: normal; overflow: visible; font-size: 11px; line-height: 1.3; }
+}

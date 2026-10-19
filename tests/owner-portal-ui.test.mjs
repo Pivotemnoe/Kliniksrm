@@ -68,3 +68,53 @@ test('ошибка обновления сохраняет данные и об�
   assert.equal(vm.runInContext('portalResponse', context), null);
   assert.match(context.nodes.get('#app').innerHTML, /Кабинет пока не открыт/);
 });
+
+test('длинные анализы раскрываются отдельно, все значения сохраняются и исследования различимы по названиям', () => {
+  const context = ui();
+  const orders = [{ id: 'long-order', status: 'COMPLETED', items: Array.from({ length: 18 }, (_, index) => ({ title: `Показатель ${index + 1}`, status: 'COMPLETED', resultValue: `RESULT_${index}`, unit: 'ед.' })) }];
+  const before = JSON.stringify(orders);
+  const html = context.renderLaboratory(orders);
+  assert.match(html, /<h3>Показатель 1, Показатель 2 и ещё 16<\/h3>/);
+  assert.match(html, /<details[^>]+data-detail-id="lab-long-order">/);
+  assert.doesNotMatch(html, /<details[^>]+\bopen(?:\s|>)/);
+  assert.match(html, /Показать результаты · 18/);
+  for (let index = 0; index < 18; index++) assert.ok(html.includes(`RESULT_${index} · ед.`));
+  assert.equal(JSON.stringify(orders), before);
+});
+
+test('сначала виден действующий счёт с доплатой; оплаченные, отменённые и возвращённые счета доступны в истории', () => {
+  const context = ui();
+  const bills = [
+    { id: 'cancelled', status: 'CANCELLED', totalAmount: '900', paidAmount: '0', items: [{ title: 'CANCELLED_POSITION' }] },
+    { id: 'paid', status: 'PAID', totalAmount: '2000', paidAmount: '2000', items: [{ title: 'PAID_POSITION' }] },
+    { id: 'due', status: 'PARTIAL', totalAmount: '2400', paidAmount: '400', items: [{ title: 'DUE_POSITION' }] },
+    { id: 'refunded', status: 'REFUNDED', totalAmount: '700', paidAmount: '0', items: [{ title: 'REFUNDED_POSITION' }] },
+  ];
+  const before = JSON.stringify(bills);
+  const html = context.renderBills(bills);
+  const [current, history] = html.split('<details class="history-group"');
+  assert.match(current, /Остаток:[\s\S]*2\s?000/);
+  assert.match(current, /DUE_POSITION/);
+  assert.doesNotMatch(current, /CANCELLED_POSITION|PAID_POSITION|REFUNDED_POSITION/);
+  assert.match(history, /История счетов · 3/);
+  for (const name of ['CANCELLED_POSITION', 'PAID_POSITION', 'REFUNDED_POSITION']) assert.ok(history.includes(name));
+  assert.equal(JSON.stringify(bills), before);
+});
+
+test('старый статус Запланирована остаётся исходным, но запись попадает в историю; ближайшая запись идёт первой', () => {
+  const context = ui();
+  const appointments = [
+    { id: 'past', startsAt: '2000-01-01T10:00:00Z', status: 'PLANNED', animal: { nickname: 'PAST_PET' } },
+    { id: 'later', startsAt: '2099-02-01T10:00:00Z', status: 'PLANNED', animal: { nickname: 'LATER_PET' } },
+    { id: 'first', startsAt: '2099-01-01T10:00:00Z', status: 'PLANNED', animal: { nickname: 'FIRST_PET' } },
+    { id: 'cancelled', startsAt: '2099-01-01T11:00:00Z', status: 'CANCELLED', animal: { nickname: 'CANCELLED_PET' } },
+  ];
+  const before = JSON.stringify(appointments);
+  const html = context.renderAppointments(appointments);
+  const [upcoming, history] = html.split('<details class="history-group"');
+  assert.ok(upcoming.indexOf('FIRST_PET') < upcoming.indexOf('LATER_PET'));
+  assert.doesNotMatch(upcoming, /PAST_PET|CANCELLED_PET/);
+  assert.match(history, /История и другие записи · 2/);
+  assert.match(history, /PAST_PET[\s\S]*Запланирована/);
+  assert.equal(JSON.stringify(appointments), before);
+});

@@ -1,4 +1,5 @@
-import { App, Button, Space, Tag, Typography } from 'antd';
+import { EllipsisOutlined } from '@ant-design/icons';
+import { App, Button, Dropdown, Space, Tag, Typography } from 'antd';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useCurrentEmployee } from '../auth/useAuth';
@@ -43,16 +44,19 @@ export function IncomingRequestAlert({ enabled }: { enabled: boolean }) {
         <Tag color={overdue ? 'orange' : 'blue'}>{source}</Tag>
         {attention.data!.total > 1 ? <Tag>Ожидают внимания: {attention.data!.total}</Tag> : null}
       </div>
-      <Typography.Text strong>{item.ownerName} · {item.animalNickname}</Typography.Text>
-      <Typography.Text>{item.phone}</Typography.Text>
-      <Typography.Text type="secondary">Получена: {formatDateTime(item.createdAt)}</Typography.Text>
-      {item.preferredAt ? <Typography.Text>Желаемое время: {formatDateTime(item.preferredAt)}</Typography.Text> : null}
-      {item.comment ? <p className="incoming-request-comment">{item.comment}</p> : null}
-      {item.assignedEmployee ? <Typography.Text>В работе: {item.assignedEmployee.fullName}</Typography.Text> : null}
-      <Space wrap>
+      <div className="incoming-request-client"><Typography.Text strong>{item.ownerName} · {item.animalNickname}</Typography.Text><Typography.Text>{item.phone}</Typography.Text></div>
+      <details className="incoming-request-details"><summary>Подробности заявки</summary>
+        <Typography.Text type="secondary">Получена: {formatDateTime(item.createdAt)}</Typography.Text>
+        {item.preferredAt ? <Typography.Text>Желаемое время: {formatDateTime(item.preferredAt)}</Typography.Text> : null}
+        {item.comment ? <p className="incoming-request-comment">{item.comment}</p> : null}
+        {item.assignedEmployee ? <Typography.Text>В работе: {item.assignedEmployee.fullName}</Typography.Text> : null}
+      </details>
+      <Space className="incoming-request-actions" size={8}>
         {canClaim ? <Button type="primary" loading={claim.isPending} disabled={snooze.isPending || attention.isError} onClick={() => claim.mutate(item.id)}>Взять в работу</Button> : null}
         <Button onClick={() => navigate(`/online-requests?request=${encodeURIComponent(item.id)}`)}>Открыть заявку</Button>
-        <Button loading={snooze.isPending} disabled={claim.isPending || attention.isError} onClick={() => snooze.mutate(item.id)}>Напомнить через 2 минуты</Button>
+        <Dropdown trigger={['click']} menu={{ items: [{ key: 'snooze', label: 'Напомнить через 2 минуты', onClick: () => snooze.mutate(item.id) }] }}>
+          <Button icon={<EllipsisOutlined />} aria-label="Другие действия заявки" loading={snooze.isPending} disabled={claim.isPending || attention.isError} />
+        </Dropdown>
       </Space>
     </section>
   );

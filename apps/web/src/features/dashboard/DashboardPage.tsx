@@ -137,7 +137,7 @@ export function DashboardPage() {
         }
       />
       {dashboardQuery.isError ? <Alert type="error" showIcon message={getErrorMessage(dashboardQuery.error)} className="form-alert" /> : null}
-      <div className="dashboard-app-strip">
+      <div className="dashboard-app-strip dashboard-clinic-summary">
         <DashboardActionTile
           title="Очередь"
           value={summary?.queue.waiting ?? 0}

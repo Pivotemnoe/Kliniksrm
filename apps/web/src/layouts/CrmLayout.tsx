@@ -3,13 +3,15 @@ import {
   DownOutlined,
   LogoutOutlined,
   MenuOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
   MessageOutlined,
   SwapOutlined,
   UserOutlined,
   WalletOutlined,
 } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Avatar, Badge, Button, Drawer, Dropdown, Layout, Menu, Space, Tooltip, Typography } from 'antd';
+import { Alert, Avatar, Badge, Button, ConfigProvider, Drawer, Dropdown, Layout, Menu, Space, Tooltip, Typography } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { appConfig, isDemoAuthMode } from '../app/config';
@@ -43,6 +45,11 @@ export function CrmLayout() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
+  const [alertsOpen, setAlertsOpen] = useState(false);
+  const [navigationCollapsed, setNavigationCollapsed] = useState(() => {
+    try { const saved = localStorage.getItem('crm-navigation-collapsed'); if (saved !== null) return saved === '1'; } catch {}
+    return window.innerWidth < 1280;
+  });
   const [pendingReplies, setPendingReplies] = useState(0);
   const { data } = useCurrentEmployee();
   const logoutMutation = useLogoutMutation();
@@ -130,15 +137,17 @@ export function CrmLayout() {
   }
 
   return (
-    <Layout className="crm-shell">
-      <Sider width={72} collapsedWidth={72} collapsed className="crm-sider">
+    <ConfigProvider theme={{ token: { colorPrimary: '#0868df', borderRadius: 10, colorBgLayout: '#f4f8fd' } }}>
+    <Layout className={`crm-shell ${navigationCollapsed ? 'navigation-collapsed' : 'navigation-expanded'}`}>
+      <Sider width={224} collapsedWidth={72} collapsed={navigationCollapsed} className="crm-sider">
         <button className="brand" type="button" onClick={() => navigate(getEmployeeDefaultRoute(employee))} aria-label={appConfig.brandName}>
           <img src={appConfig.logoUrl} alt={`${appConfig.brandName} logo`} className="brand-logo" />
+          {!navigationCollapsed ? <span className="navigation-brand-copy"><strong>Temichev<span>VET</span></strong><small>Рабочее пространство</small></span> : null}
         </button>
         <Menu
           theme="light"
           mode="inline"
-          inlineCollapsed
+          inlineCollapsed={navigationCollapsed}
           selectedKeys={[selectedKey]}
           items={accessibleMenuItems}
           onClick={({ key }) => {
@@ -148,9 +157,14 @@ export function CrmLayout() {
             }
           }}
         />
+        <Button type="text" className="crm-navigation-toggle" icon={navigationCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+          aria-label={navigationCollapsed ? 'Развернуть меню разделов' : 'Свернуть меню разделов'} onClick={() => {
+            setNavigationCollapsed(current => { try { localStorage.setItem('crm-navigation-collapsed', current ? '0' : '1'); } catch {} return !current; });
+          }}>{navigationCollapsed ? null : 'Свернуть меню'}</Button>
       </Sider>
       <Layout>
         <Header className="crm-header">
+          <span className="crm-header-wordmark" aria-hidden="true">Temichev<span>VET</span></span>
           <div className="mobile-header-navigation">
             <Button
               type="text"
@@ -199,7 +213,7 @@ export function CrmLayout() {
               </span>
             ) : null}
             <span className="header-action header-action-alerts">
-              <StaffAlertsPopover unreadMessages={internalMessagesQuery.data?.totalUnread ?? 0} />
+              <StaffAlertsPopover unreadMessages={internalMessagesQuery.data?.totalUnread ?? 0} open={alertsOpen} onOpenChange={setAlertsOpen} />
             </span>
             {canReadBusiness || canReadFinanceSettings ? (
               <span className="header-action header-action-finance">
@@ -241,6 +255,7 @@ export function CrmLayout() {
             hasPermission(employee, 'appointments.manage') &&
             (data?.accessType !== 'REMOTE' || employee.roles.includes('director')))} />
           <GlobalOperationalAlerts
+            onOpenAlerts={() => setAlertsOpen(true)}
             clinicalOnly={Boolean(employee?.roles.includes('doctor') && !employee?.roles.includes('director') && !employee?.roles.includes('administrator'))}
             internalMessages={internalMessagesQuery.data}
             remoteAccessMode={data?.accessType === 'REMOTE'
@@ -296,6 +311,7 @@ export function CrmLayout() {
         </div>
       </Drawer>
     </Layout>
+    </ConfigProvider>
   );
 }
 

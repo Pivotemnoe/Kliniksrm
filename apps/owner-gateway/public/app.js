@@ -109,6 +109,8 @@ function portalData(response) {
 }
 
 function renderPortal(response) {
+  const openDetails = new Set(portalResponse?.ownerId === response.ownerId
+    ? [...app.querySelectorAll('details[data-detail-id][open]')].map((detail) => detail.dataset.detailId) : []);
   if (portalResponse && portalResponse.ownerId !== response.ownerId) { selectedAnimalId = ''; bookingDraft = {}; bookingAttempt = null; bookingDirty = false; }
   portalResponse = response;
   const data = portalData(response);
@@ -126,7 +128,7 @@ function renderPortal(response) {
     <nav class="portal-menu" aria-label="Разделы кабинета"><div class="tabs" role="tablist">
       ${[['home', 'Главная'], ['health', 'Здоровье'], ['appointments', 'Записи'], ['documents', 'Документы'], ['bills', 'Счета'], ['notifications', 'Сообщения']].map(([key, label]) => tabButton(key, label, key === activeTab, key === 'notifications' ? unread : 0)).join('')}
     </div></nav>
-    ${section('home', selectedAnimalId ? `Сегодня · ${pets[0]?.nickname || 'Питомец'}` : 'На сегодня', renderHome(data) + renderServicePromo() + '<h3 class="subheading">Карточки питомцев</h3>' + renderAnimals(pets), activeTab !== 'home')}
+    ${section('home', selectedAnimalId ? `Сегодня · ${pets[0]?.nickname || 'Питомец'}` : 'На сегодня', renderServicePromo() + renderHome(data) + '<h3 class="subheading">Карточки питомцев</h3>' + renderAnimals(pets), activeTab !== 'home')}
     ${section('health', 'Здоровье питомца', `<nav class="subnav" aria-label="Данные о здоровье"><a href="#treatment">Назначения</a><a href="#laboratory">Анализы</a><a href="#prevention">Профилактика</a><a href="#visit-history">Приёмы</a></nav>
       ${hospital.length ? '<h3 class="subheading">Сейчас в стационаре</h3>' + renderHospital(hospital) : ''}
       <h3 id="treatment" class="subheading">Назначения и уход</h3><p class="muted">Рекомендации из завершённых приёмов. Дата показывает, когда врач их выдал.</p>${renderTreatment(visits)}
@@ -137,7 +139,7 @@ function renderPortal(response) {
     ${section('documents', 'Документы', `<label class="search-label">Поиск в загруженных документах<input id="document-search" type="search" placeholder="Название или категория" value="${escapeHtml(documentQuery)}"></label>${historyNotice(snapshot.files, snapshot.historyLimits?.files, 'файлов')}<div id="document-results">${renderDocuments(searchDocuments(documents))}</div>`, activeTab !== 'documents')}
     ${section('bills', 'Счета и оплаты', `${!selectedAnimalId ? `<p class="muted">Баланс владельца по данным клиники: <strong>${formatMoney(owner.balance)}</strong></p>` : '<p class="muted">Показаны счета выбранного питомца. Счета без привязки к питомцу доступны при выборе «Все питомцы».</p>'}${historyNotice(snapshot.bills, snapshot.historyLimits?.bills, 'счетов')}${renderBills(bills)}`, activeTab !== 'bills')}
     ${section('notifications', 'Сообщения клиники', '<p class="muted">Общие сообщения владельцу — для всех питомцев.</p>' + historyNotice(notifications, snapshot.historyLimits?.notifications, 'сообщений') + renderNotifications(notifications), activeTab !== 'notifications')}
-    <details class="portal-settings"><summary>Настройки кабинета</summary>
+    <details class="portal-settings" data-detail-id="settings"><summary>Настройки кабинета</summary>
       <h3 class="subheading">Ваши контакты</h3>
       ${[['Телефон', owner.phone], ['Дополнительный телефон', owner.extraPhone], ['Электронная почта', owner.email], ['Адрес', owner.address]].filter(([, value]) => value).map(([label, value]) => `<p><strong>${label}:</strong> ${escapeHtml(value)}</p>`).join('') || '<p>Контакты не указаны</p>'}
       <p class="muted">Это ваши данные в карточке клиники. Если они изменились, сообщите администратору.</p>
@@ -145,11 +147,13 @@ function renderPortal(response) {
       <button id="enable-push" class="button" type="button" hidden>Включить уведомления</button><span id="push-status" class="push-status" role="status" hidden></span></div>
       ${showBrowserTransfer ? '<h3 class="subheading">Вход в браузере</h3><div class="settings-actions"><button id="prepare-browser" class="button browser-only" type="button">Открыть кабинет в браузере</button><button id="copy-browser-link" class="button browser-only" type="button" hidden>Скопировать ссылку</button><span id="browser-hint" class="browser-hint browser-only" hidden>Нажмите значок браузера в MAX или скопируйте ссылку. Переход действует 10 минут.</span></div>' : ''}
     </details>`;
+  app.querySelectorAll('details[data-detail-id]').forEach((detail) => { detail.open = openDetails.has(detail.dataset.detailId); });
   app.querySelectorAll('.tab').forEach((button) => button.addEventListener('click', () => {
     selectTab(button.dataset.tab);
     if (button.dataset.tab === 'notifications') markNotificationsRead(response.ownerId, notifications);
   }));
   app.querySelector('[role="tablist"]').addEventListener('keydown', (event) => {
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
     const buttons = [...app.querySelectorAll('.tab')];
     const current = buttons.indexOf(event.target);
@@ -213,7 +217,7 @@ function renderHome({ pets, appointments, labs, hospital, bills }) {
   const ready = labs.filter((order) => array(order.items).some((item) => item.status === 'COMPLETED'));
   const debt = bills.filter((bill) => !['CANCELLED', 'REFUNDED'].includes(bill.status)).reduce((sum, bill) => sum + Math.max(0, Number(bill.totalAmount) - Number(bill.paidAmount)), 0);
   return `<div class="overview-grid"><article class="next-appointment"><p class="eyebrow">Ближайшая запись</p><h3>${next ? formatDateTime(next.startsAt) : 'Ближайших записей нет'}</h3><p>${next ? joinText([next.animal?.nickname, next.employee?.fullName, next.room?.name]) : 'Выберите удобное время. Клиника подтвердит запись.'}</p><button type="button" class="button" data-open="${next ? 'appointments' : 'booking'}">${next ? 'Посмотреть запись' : 'Оставить заявку'}</button></article>
-    <div class="summary-links"><button type="button" data-open="health"><strong>${ready.length}</strong><span>Исследований с готовыми результатами</span><span aria-hidden="true">→</span></button><button type="button" data-open="bills"><strong>${formatMoney(debt)}</strong><span>Остаток по загруженным счетам</span><span aria-hidden="true">→</span></button></div></div>
+    <div class="summary-links"><button type="button" data-open="laboratory"><strong>${ready.length}</strong><span>Исследований с готовыми результатами</span><span aria-hidden="true">→</span></button><button type="button" data-open="bills"><strong>${formatMoney(debt)}</strong><span>Остаток по загруженным счетам</span><span aria-hidden="true">→</span></button></div></div>
     ${hospital.length ? `<button type="button" class="hospital-summary-link" data-open="health"><strong>В стационаре: ${joinText(hospital.map((stay) => stay.animal?.nickname))}</strong><span>Посмотреть сводку ухода и последние измерения →</span></button>` : ''}
     ${pets.length ? '' : '<p class="booking-note">Питомцев пока нет в кабинете. В заявке можно указать нового питомца; клиника добавит карточку.</p>'}`;
 }
@@ -227,7 +231,12 @@ function renderTreatment(visits) {
 }
 
 function renderLaboratory(orders) {
-  return renderGrid(orders, (order) => `<article class="card laboratory-card"><h3>${escapeHtml(order.animal?.nickname || 'Питомец')} · ${formatDate(order.createdAt)}</h3><span class="badge">${escapeHtml(labStatusLabel(order.status))}</span><dl class="lab-results">${array(order.items).map((item) => `<div><dt>${escapeHtml(item.title)}</dt><dd><strong>${item.status === 'COMPLETED' ? joinText([item.resultValue ?? item.resultText ?? 'Готово', item.unit]) : escapeHtml(labStatusLabel(item.status))}</strong>${item.status === 'COMPLETED' && item.resultValue && item.resultText ? `<p class="multiline">${escapeHtml(item.resultText)}</p>` : ''}${item.referenceRange ? `<span class="muted">Референс: ${escapeHtml(item.referenceRange)}${item.unit ? ` ${escapeHtml(item.unit)}` : ''}</span>` : ''}${item.completedAt ? `<span class="muted">Результат от ${formatDateTime(item.completedAt)}</span>` : ''}</dd></div>`).join('')}</dl><p class="muted">Результаты оценивает лечащий врач с учётом состояния питомца.</p></article>`, 'Исследований пока нет в кабинете. Готовые результаты появятся автоматически.');
+  return renderGrid(orders, (order) => {
+    const items = array(order.items);
+    const titles = items.slice(0, 2).map((item) => item.title).filter(Boolean);
+    const title = titles.length ? titles.join(', ') + (items.length > 2 ? ` и ещё ${items.length - 2}` : '') : 'Лабораторное исследование';
+    return `<article class="card laboratory-card"><div class="card-heading"><div><h3>${escapeHtml(title)}</h3><p>${escapeHtml(order.animal?.nickname || 'Питомец')} · ${formatDate(order.createdAt)}</p></div><span class="badge">${escapeHtml(labStatusLabel(order.status))}</span></div><details class="result-details" data-detail-id="lab-${escapeHtml(order.id)}"><summary>Показать результаты · ${items.length}</summary><dl class="lab-results">${items.map((item) => `<div><dt>${escapeHtml(item.title)}</dt><dd><strong>${item.status === 'COMPLETED' ? joinText([item.resultValue ?? item.resultText ?? 'Готово', item.unit]) : escapeHtml(labStatusLabel(item.status))}</strong>${item.status === 'COMPLETED' && item.resultValue && item.resultText ? `<p class="multiline">${escapeHtml(item.resultText)}</p>` : ''}${item.referenceRange ? `<span class="muted">Референс: ${escapeHtml(item.referenceRange)}${item.unit ? ` ${escapeHtml(item.unit)}` : ''}</span>` : ''}${item.completedAt ? `<span class="muted">Результат от ${formatDateTime(item.completedAt)}</span>` : ''}</dd></div>`).join('')}</dl><p class="muted">Результаты оценивает лечащий врач с учётом состояния питомца.</p></details></article>`;
+  }, 'Исследований пока нет в кабинете. Готовые результаты появятся автоматически.');
 }
 
 function renderPrevention(pets) {
@@ -395,11 +404,13 @@ function showBrowserTransferReady() {
 
 function selectTab(name) {
   const booking = name === 'booking';
-  name = booking ? 'appointments' : name;
+  const laboratory = name === 'laboratory';
+  name = booking ? 'appointments' : laboratory ? 'health' : name;
   activeTab = name;
   app.querySelectorAll('.tab').forEach((button) => { button.setAttribute('aria-selected', String(button.dataset.tab === name)); button.tabIndex = button.dataset.tab === name ? 0 : -1; });
   app.querySelectorAll('.panel').forEach((panel) => { panel.hidden = panel.dataset.panel !== name; });
   if (booking) document.querySelector('#booking-form')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  if (laboratory) document.querySelector('#laboratory')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
 }
 
 function renderAnimals(items) {
@@ -413,8 +424,8 @@ function renderAnimals(items) {
       <p><strong>Клеймо:</strong> ${escapeHtml(animal.mark || '—')}</p>
       <p><strong>Статус карточки:</strong> ${escapeHtml(({ ACTIVE: 'Активна', DECEASED: 'Отмечен как умерший', LOST: 'Отмечен как пропавший' })[animal.status] || animal.status || 'Не указан')}</p>
       <p><strong>Последний вес:</strong> ${array(animal.weights).length ? `${escapeHtml(animal.weights[0].weightKg)} кг · ${formatDate(animal.weights[0].measuredAt)}` : '—'}</p>
-      ${array(animal.weights).length ? `<details><summary>История веса · до 20 замеров</summary>${array(animal.weights).map((item) => `<p>${formatDate(item.measuredAt)} — ${escapeHtml(item.weightKg)} кг</p>`).join('')}</details>` : ''}
-      ${array(animal.vaccinations).length ? `<details><summary>Прививки</summary>${array(animal.vaccinations).map((item) => `<p><strong>${escapeHtml(item.title)}</strong><br>${formatDate(item.vaccinatedAt)} · ${escapeHtml(item.status || 'Статус не указан')}${item.expiresAt ? `<br>Действует до ${formatDate(item.expiresAt)}` : ''}${item.vaccineSeries ? `<br>Серия: ${escapeHtml(item.vaccineSeries)}` : ''}${item.vaccineBatch ? `<br>Партия: ${escapeHtml(item.vaccineBatch)}` : ''}</p>`).join('')}</details>` : '<p><strong>Прививки:</strong> —</p>'}
+      ${array(animal.weights).length ? `<details data-detail-id="weight-${escapeHtml(animal.id)}"><summary>История веса · до 20 замеров</summary>${array(animal.weights).map((item) => `<p>${formatDate(item.measuredAt)} — ${escapeHtml(item.weightKg)} кг</p>`).join('')}</details>` : ''}
+      ${array(animal.vaccinations).length ? `<details data-detail-id="vaccinations-${escapeHtml(animal.id)}"><summary>Прививки</summary>${array(animal.vaccinations).map((item) => `<p><strong>${escapeHtml(item.title)}</strong><br>${formatDate(item.vaccinatedAt)} · ${escapeHtml(item.status || 'Статус не указан')}${item.expiresAt ? `<br>Действует до ${formatDate(item.expiresAt)}` : ''}${item.vaccineSeries ? `<br>Серия: ${escapeHtml(item.vaccineSeries)}` : ''}${item.vaccineBatch ? `<br>Партия: ${escapeHtml(item.vaccineBatch)}` : ''}</p>`).join('')}</details>` : '<p><strong>Прививки:</strong> —</p>'}
     </article>`);
 }
 
@@ -422,18 +433,26 @@ function renderRevisits(items) {
   return renderGrid(items, item => `<article class="card"><h3>Повторный визит: ${escapeHtml(new Intl.DateTimeFormat('ru-RU', { timeZone: item.timezone || 'Europe/Moscow', dateStyle: 'long' }).format(new Date(item.dueAt)))}</h3>${item.animal ? `<p>Питомец: ${escapeHtml(item.animal.nickname)}</p>` : ''}<p>Это напоминание клиники. Время приёма ещё не выбрано.</p><button type="button" class="button" data-open="booking">Выбрать время</button></article>`);
 }
 function renderAppointments(items) {
-  return renderGrid(items, (item) => `
+  const upcoming = items.filter(isUpcomingAppointment).sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
+  const history = items.filter((item) => !isUpcomingAppointment(item));
+  const render = (item) => `
     <article class="card"><h3>${formatDateTime(item.startsAt)}</h3>
       <p><strong>Пациент:</strong> ${escapeHtml(item.animal?.nickname || '—')}</p>
       <p><strong>Статус:</strong> ${escapeHtml(statusLabel(item.status))}</p>
       <p><strong>Врач:</strong> ${escapeHtml(item.employee?.fullName || '—')}</p>
       <p><strong>Кабинет:</strong> ${escapeHtml(item.room?.name || '—')}</p>${item.status === 'PLANNED' && Date.parse(item.startsAt) > Date.now() ? `<div class="form-actions"><button type="button" class="button secondary" data-change-appointment="${escapeHtml(item.id)}" data-request-type="RESCHEDULE">Попросить перенос</button><button type="button" class="button secondary" data-change-appointment="${escapeHtml(item.id)}" data-request-type="CANCEL">Попросить отмену</button></div>` : ''}
-    </article>`);
+    </article>`;
+  return renderGrid(upcoming, render, 'Предстоящих записей пока нет. Оставьте заявку ниже — клиника подтвердит время.')
+    + (history.length ? `<details class="history-group" data-detail-id="appointment-history"><summary>История и другие записи · ${history.length}</summary>${renderGrid(history, render)}</details>` : '');
+}
+
+function isUpcomingAppointment(item) {
+  return ['PLANNED', 'ARRIVED', 'IN_PROGRESS'].includes(item.status) && Date.parse(item.endsAt || item.startsAt) >= Date.now();
 }
 
 function renderVisits(items) {
   return renderGrid(items, (item) => `
-    <article class="card"><details><summary>${formatDateTime(item.startedAt)} · ${escapeHtml(item.animal?.nickname || 'Питомец')}</summary>
+    <article class="card"><details data-detail-id="visit-${escapeHtml(item.id)}"><summary>${formatDateTime(item.startedAt)} · ${escapeHtml(item.animal?.nickname || 'Питомец')}</summary>
       <p><strong>Врач:</strong> ${escapeHtml(item.employee?.fullName || '—')}</p>
       <p><strong>Цель приёма:</strong> ${escapeHtml(item.exam?.purpose || '—')}</p>
       <p><strong>Анамнез:</strong> ${escapeHtml(item.exam?.anamnesis || '—')}</p>
@@ -465,13 +484,18 @@ function renderDocuments(items) {
 }
 
 function renderBills(items) {
-  return renderGrid(items, (item) => `
-    <article class="card"><h3>${formatMoney(item.totalAmount)} · ${escapeHtml(item.animal?.nickname || 'Счёт')}</h3>
+  const remaining = (item) => !['CANCELLED', 'REFUNDED'].includes(item.status) ? Math.max(0, Number(item.totalAmount) - Number(item.paidAmount)) : 0;
+  const due = items.filter((item) => remaining(item) > 0);
+  const history = items.filter((item) => !(remaining(item) > 0));
+  const render = (item) => `
+    <article class="card bill-card${remaining(item) > 0 ? ' bill-due' : ''}"><div class="card-heading"><h3>${formatMoney(item.totalAmount)} · ${escapeHtml(item.animal?.nickname || 'Счёт')}</h3>${remaining(item) > 0 ? '<span class="badge badge-attention">К оплате</span>' : ''}</div>
       <p><strong>Дата:</strong> ${formatDateTime(item.createdAt)}</p>
       <p><strong>Статус:</strong> ${escapeHtml(billStatusLabel(item.status))}</p>
       <p><strong>Оплачено:</strong> ${formatMoney(item.paidAmount)}</p>${!['CANCELLED', 'REFUNDED'].includes(item.status) ? `<p><strong>Остаток:</strong> ${formatMoney(Math.max(0, Number(item.totalAmount) - Number(item.paidAmount)))}</p>${Number(item.paidAmount) > Number(item.totalAmount) ? `<p>Оплата сверх суммы счёта: ${formatMoney(Number(item.paidAmount) - Number(item.totalAmount))}. Уточните зачёт в клинике.</p>` : ''}` : ''}
-      <p>${array(item.items).map((value) => `${escapeHtml(value.title)} — ${escapeHtml(value.quantity)} шт., сумма ${formatMoney(value.totalAmount)}`).join('<br>') || 'Позиции не указаны'}</p>
-    </article>`);
+      <details class="bill-items" data-detail-id="bill-${escapeHtml(item.id)}"><summary>Позиции счёта · ${array(item.items).length}</summary><p>${array(item.items).map((value) => `${escapeHtml(value.title)} — ${escapeHtml(value.quantity)} шт., сумма ${formatMoney(value.totalAmount)}`).join('<br>') || 'Позиции не указаны'}</p></details>
+    </article>`;
+  return renderGrid(due, render, 'По загруженным счетам доплата не требуется.')
+    + (history.length ? `<details class="history-group" data-detail-id="bill-history"><summary>История счетов · ${history.length}</summary>${renderGrid(history, render)}</details>` : '');
 }
 
 function renderNotifications(items) {

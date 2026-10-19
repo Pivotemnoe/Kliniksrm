@@ -245,3 +245,78 @@ summary { cursor: pointer; font-weight: 700; color: #23455f; line-height: 1.5; }
 
 .hospital-summary-link { width: 100%; display: grid; gap: 5px; text-align: left; padding: 15px; margin-top: 14px; border: 1px solid #b9d4df; border-radius: 12px; background: #f1f7fa; color: #23455f; cursor: pointer; }
 .hospital-summary-link span { font-size: 13px; line-height: 1.4; }
+
+/* The owner portal shares the staff CRM's blue palette and visual hierarchy. */
+:root { color: #20324f; background: #f3f6fc; --portal-blue: #2563eb; --portal-ink: #20324f; }
+.topbar { color: var(--portal-ink); background: #fff; border-bottom: 1px solid #dce5f3; box-shadow: none; }
+.brand small { color: #657591; }
+.button { background: var(--portal-blue); border-radius: 10px; }
+.button:hover { filter: brightness(.96); }
+.button-quiet, .secondary { color: #2453aa; background: #edf3ff; }
+.hero h1, .panel h2, .card h3, .card strong, summary { color: var(--portal-ink); }
+.eyebrow, .hero .eyebrow { color: #4268a6; }
+.hero-meta { color: #687995; }
+.pet-toolbar { border-color: #dce5f3; border-radius: 12px; box-shadow: 0 3px 10px #233a6310; }
+.pet-toolbar select { color: var(--portal-ink); background: #f7f9fe; border-color: #d5dff0; }
+.tabs { padding: 5px; gap: 4px; background: #e8eef9; border-radius: 12px; }
+.tab { color: #526582; border-radius: 8px; }
+.tab[aria-selected="true"] { color: #245bd1; background: white; box-shadow: 0 2px 7px #213b6214; }
+.tab:focus-visible, button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible { outline-color: #79a1fc; }
+.panel { border-color: #dce5f3; border-radius: 14px; }
+.card { background: #fff; border-color: #e1e7f2; border-radius: 12px; }
+.grid { align-items: start; }
+.card p, .muted { color: #61718c; }
+.card-heading { display: flex; justify-content: space-between; align-items: start; gap: 12px; margin-bottom: 10px; }
+.card-heading > div { min-width: 0; }
+.card-heading .badge { flex-shrink: 0; font-size: 12px; padding: 5px 9px; }
+.badge { color: #245bc1; background: #edf3ff; }
+.next-appointment { background: #f1f5ff; border-color: #dce6fa; padding: 18px; }
+.next-appointment h3 { color: #244d93; }
+.summary-links button { border-color: #e1e7f2; }
+.summary-links strong { color: #245bd1; }
+.service-promo { margin: 0 0 18px; padding: 20px; grid-template-columns: minmax(0, 1fr) 270px; gap: 22px; border: 1px solid #bbd1fc; border-left: 4px solid #2563eb; background: linear-gradient(115deg, #edf3ff, #f6f9ff); border-radius: 12px; }
+.service-promo .eyebrow { color: #245bd1; }
+.service-promo h3 { color: #1f468d; font-size: 23px; }
+.service-promo-description { color: #526582; }
+.service-promo-benefits { color: #365e9e; }
+.service-promo-note { color: #667995; font-size: 11px; }
+.promo-text-link { color: #245bd1; }
+.service-promo-action { gap: 10px; }
+.service-promo-link { box-shadow: 0 4px 10px #2563eb20; }
+.result-details { border-top: 1px solid #e1e7f2; margin-top: 12px; padding-top: 4px; }
+.card .result-details > summary, .bill-items > summary { display: list-item; min-height: 44px; padding-block: 11px; color: #245bd1; font-size: 14px; }
+.result-details[open] > summary { margin-bottom: 4px; }
+.lab-results { margin-top: 0; }
+.history-group { margin-top: 18px; padding: 0 16px; border: 1px solid #e1e7f2; border-radius: 12px; background: #f8faff; }
+.history-group > summary { padding-block: 16px; }
+.history-group > .grid { margin-bottom: 16px; }
+.bill-due { border-left: 3px solid #e7a83e; }
+.badge-attention { color: #915a0b; background: #fff4de; }
+.bill-items { margin-top: 8px; border-top: 1px solid #e1e7f2; }
+.bill-items p { line-height: 1.7; padding-bottom: 6px; }
+.booking-note, .subnav a { color: #365b94; background: #eff4ff; }
+.booking-status, .subnav a { color: #245bd1; }
+.booking-request { background: #f8faff; border-color: #e1e7f2; }
+.portal-settings { border-color: #dce5f3; border-radius: 12px; }
+.local-owner-label { position: fixed; bottom: 0; left: 0; right: 0; z-index: 20; pointer-events: none; padding: 5px 12px; color: #fff; background: #244b8e; font-size: 11px; text-align: center; }
+@media (max-width: 700px) {
+  .hero h1 { font-size: 28px; }
+  .pet-toolbar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pet-toolbar select { grid-column: 1 / -1; max-width: none; width: 100%; }
+  .pet-toolbar > button { margin-left: 0; }
+  .pet-toolbar > button:last-child { grid-column: 1 / -1; }
+  .tabs { gap: 2px; padding: 4px; }
+  .tab { min-height: 44px; }
+  .panel { padding: 14px; }
+  .service-promo { grid-template-columns: 1fr; gap: 12px; margin-bottom: 14px; padding: 14px; }
+  .service-promo h3 { font-size: 20px; }
+  .service-promo-copy { gap: 6px; }
+  .service-promo .eyebrow { margin-bottom: 0; font-size: 11px; }
+  .service-promo-description { font-size: 13px; line-height: 1.45; }
+  .service-promo-benefits { font-size: 11px; }
+  .service-promo-note { font-size: 10px; line-height: 1.4; }
+  .promo-text-link { font-size: 12px; margin-top: 0; }
+  .card-heading { gap: 8px; }
+  .laboratory-card h3 { font-size: 16px; }
+  .history-group { padding-inline: 12px; }
+}

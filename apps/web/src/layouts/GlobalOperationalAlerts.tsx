@@ -1,7 +1,7 @@
 import { hasPermission } from '../auth/permissions';
 import { useCurrentEmployee } from '../auth/useAuth';
 import { dismissVaccinationReminders } from '../features/animals/animals.api';
-import { ExclamationCircleOutlined, EyeOutlined, MedicineBoxOutlined, MessageOutlined, NotificationOutlined } from '@ant-design/icons';
+import { ExclamationCircleOutlined, EyeOutlined, MedicineBoxOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Button, Drawer, Input, List, Modal, Space, Tag, Typography } from 'antd';
 import { useState } from 'react';
@@ -16,10 +16,12 @@ export function GlobalOperationalAlerts({
   internalMessages,
   remoteAccessMode = null,
   clinicalOnly = false,
+  onOpenAlerts,
 }: {
   internalMessages?: InternalMessageConversationsResponse;
   remoteAccessMode?: 'read-only' | 'director' | null;
   clinicalOnly?: boolean;
+  onOpenAlerts?: () => void;
 }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -79,92 +81,32 @@ export function GlobalOperationalAlerts({
   if (!alertsUnavailable && !remoteAccessMode && !latestUnreadConversation && !overdueVisits.length && !vaccinationAlerts.length && !otherUnreadAlerts.length) return null;
 
   return (
-    <div className="global-operational-alerts compact-operational-alerts" aria-label="Рабочие предупреждения клиники">
+    <div className="global-operational-alerts compact-operational-alerts operational-focus-bar" aria-label="Рабочие предупреждения клиники">
       {alertsUnavailable ? (
-        <div className="dashboard-overdue-banner dashboard-vaccination-banner-danger" role="alert">
-          <span className="dashboard-overdue-banner-copy">
-            <ExclamationCircleOutlined />
-            <strong>Не удалось проверить незавершённые приёмы и вакцинации</strong>
-            <span>Связь с сервером оповещений прервана</span>
-          </span>
-          <button type="button" className="dashboard-overdue-banner-action" onClick={() => void alertsQuery.refetch()}>Проверить снова</button>
-          <button type="button" className="dashboard-overdue-banner-action" onClick={() => {
+        <div className="operational-connection-error" role="alert">
+          <ExclamationCircleOutlined />
+          <span>Не удалось проверить незавершённые приёмы и вакцинации</span>
+          <Button size="small" onClick={() => void alertsQuery.refetch()}>Проверить снова</Button>
+          <Button size="small" type="text" onClick={() => {
             setAlertsErrorDismissed(true);
             try { sessionStorage.setItem('crm-staff-alert-error-dismissed', '1'); } catch {}
-          }}>Скрыть</button>
+          }}>Скрыть</Button>
         </div>
       ) : null}
-      {remoteAccessMode && !clinicalOnly ? (
-        <div className="dashboard-overdue-banner remote-read-only-banner" role="status" title={remoteAccessMode === 'director' ? 'Изменения разрешены по вашим правам и сохраняются в аудите' : 'Удалённый просмотр: изменение рабочих данных заблокировано'}>
-          <span className="dashboard-overdue-banner-copy">
-            <EyeOutlined />
-            <strong>{remoteAccessMode === 'director' ? 'Удалённая работа директора' : 'Удалённый просмотр'}</strong>
-            <span>{remoteAccessMode === 'director'
-              ? 'Изменения разрешены по вашим правам и сохраняются в аудите'
-              : 'Разделы доступны по вашей роли; изменение рабочих данных заблокировано'}</span>
-          </span>
+      <div className="operational-focus-content">
+        {remoteAccessMode && !clinicalOnly ? <Tag icon={<EyeOutlined />} className="operational-remote-mode" title={remoteAccessMode === 'director' ? 'Изменения разрешены по вашим правам и сохраняются в аудите' : 'Удалённый просмотр: изменение рабочих данных заблокировано'}>{remoteAccessMode === 'director' ? 'Удалённая работа директора' : 'Удалённый просмотр'}</Tag> : null}
+        <span className="operational-focus-label">{overdueVisits.length || vaccinationAlerts.length ? 'Требуют внимания' : 'Оповещения'}</span>
+        <div className="operational-focus-actions">
+          {overdueVisits.length ? <button type="button" className="operational-focus-pill is-urgent" onClick={() => void openAlert(overdueVisits[0])}
+            aria-label={`Незавершённые приёмы более часа: ${overdueVisits.length}. Открыть самый давний приём.`}>
+            <ExclamationCircleOutlined /><span>Приёмы</span><strong>{overdueVisits.length}</strong>
+          </button> : null}
+          {vaccinationAlerts.length ? <button type="button" className={`operational-focus-pill${overdueVaccinations.length ? ' is-urgent' : ''}`} onClick={() => setVaccinationsOpen(true)} aria-label={`Вакцинации: ${vaccinationAlerts.length}. Показать полный список.`}>
+            <MedicineBoxOutlined /><span>Вакцинации</span><strong>{vaccinationAlerts.length}</strong>
+          </button> : null}
+          {onOpenAlerts ? <Button type="text" size="small" className="operational-open-center" onClick={onOpenAlerts}>Все оповещения{otherUnreadAlerts.length + Number(Boolean(latestUnreadConversation)) > 0 ? <span className="operational-new-count">+{otherUnreadAlerts.length + Number(Boolean(latestUnreadConversation))}</span> : null} →</Button> : null}
         </div>
-      ) : null}
-      {latestUnreadConversation ? (
-        <button
-          type="button"
-          className="dashboard-overdue-banner staff-message-banner"
-          onClick={() => navigate(`/staff-messages?with=${encodeURIComponent(latestUnreadConversation.employee.id)}`)}
-        >
-          <span className="dashboard-overdue-banner-copy">
-            <MessageOutlined />
-            <strong>Новое сообщение от {latestUnreadConversation.employee.fullName}</strong>
-            <span>Непрочитанных сообщений: {internalMessages?.totalUnread ?? latestUnreadConversation.unreadCount}</span>
-          </span>
-          <span className="dashboard-overdue-banner-action">Открыть переписку</span>
-        </button>
-      ) : null}
-      {otherUnreadAlerts.map((item) => (
-        <button
-          key={item.key}
-          title={`${item.title}: ${item.description}`}
-          type="button"
-          className={`dashboard-overdue-banner staff-notice-banner${item.severity === 'error' ? ' dashboard-vaccination-banner-danger' : item.severity === 'warning' ? ' dashboard-vaccination-banner' : ''}`}
-          onClick={() => void openAlert(item)}
-        >
-          <span className="dashboard-overdue-banner-copy">
-            <NotificationOutlined />
-            <strong>{item.title}{item.count > 1 ? ` · ${item.count}` : ''}</strong>
-            <span>{item.description}</span>
-          </span>
-          <span className="dashboard-overdue-banner-action">Открыть</span>
-        </button>
-      ))}
-      {overdueVisits.length ? (
-        <button
-          type="button"
-          className="dashboard-overdue-banner"
-          onClick={() => void openAlert(overdueVisits[0])}
-          aria-label={`Незавершённые приёмы более часа: ${overdueVisits.length}. Открыть самый давний приём.`}
-        >
-          <span className="dashboard-overdue-banner-copy">
-            <ExclamationCircleOutlined />
-            <strong>Незавершённые приёмы</strong>
-            <span>Более часа: {overdueVisits.length}</span>
-          </span>
-          <span className="dashboard-overdue-banner-action">Открыть самый давний</span>
-        </button>
-      ) : null}
-      {vaccinationAlerts.length ? (
-        <button
-          type="button"
-          className={`dashboard-overdue-banner dashboard-vaccination-banner${overdueVaccinations.length ? ' dashboard-vaccination-banner-danger' : ''}`}
-          onClick={() => setVaccinationsOpen(true)}
-        >
-          <span className="dashboard-overdue-banner-copy">
-            <MedicineBoxOutlined />
-            <strong>{overdueVaccinations.length ? 'Вакцинации требуют внимания' : 'Внимание: сегодня назначена вакцинация'}</strong>
-            {todayVaccinations.length ? <span>Сегодня: {todayVaccinations.length}</span> : null}
-            {overdueVaccinations.length ? <span>Просрочено: {overdueVaccinations.length}</span> : null}
-          </span>
-          <span className="dashboard-overdue-banner-action">Показать полный список</span>
-        </button>
-      ) : null}
+      </div>
       <Drawer
         title="Вакцинации, требующие внимания"
         open={vaccinationsOpen}
