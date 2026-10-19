@@ -1,3 +1,5 @@
+BEGIN;
+
 CREATE TABLE "GroomingRequest" (
  "id" TEXT NOT NULL, "clientRequestId" TEXT NOT NULL, "inputHash" TEXT NOT NULL,
  "contactName" TEXT NOT NULL, "phone" TEXT NOT NULL, "petName" TEXT NOT NULL,
@@ -19,3 +21,5 @@ CREATE TABLE "GroomingMaxDelivery" (
 );
 CREATE UNIQUE INDEX "GroomingMaxDelivery_requestId_recipientId_key" ON "GroomingMaxDelivery"("requestId","recipientId");
 CREATE INDEX "GroomingMaxDelivery_status_nextAttemptAt_idx" ON "GroomingMaxDelivery"("status","nextAttemptAt");
+
+COMMIT;

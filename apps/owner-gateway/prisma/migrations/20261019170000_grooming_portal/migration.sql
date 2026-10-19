@@ -1,3 +1,5 @@
+BEGIN;
+
 -- CreateTable
 CREATE TABLE "GroomingPortalOperation" (
     "id" TEXT NOT NULL,
@@ -85,3 +87,4 @@ CREATE INDEX "GroomingBookingDraft_expiresAt_idx" ON "GroomingBookingDraft"("exp
 -- AddForeignKey
 ALTER TABLE "GroomingPortalOperation" ADD CONSTRAINT "GroomingPortalOperation_ownerId_fkey" FOREIGN KEY ("ownerId") REFERENCES "OwnerSnapshot"("ownerId") ON DELETE RESTRICT ON UPDATE CASCADE;
 
+COMMIT;

@@ -1,3 +1,5 @@
+BEGIN;
+
 -- CreateTable
 CREATE TABLE "GroomingSettings" (
     "installationId" TEXT NOT NULL,
@@ -285,3 +287,5 @@ SELECT r.id,p.id FROM "Role" r CROSS JOIN "Permission" p
 WHERE (r.code='director' AND p.code IN ('modules.manage','grooming.read','grooming.operate','grooming.manage','grooming.schedule'))
 OR (r.code='administrator' AND p.code IN ('grooming.read','grooming.operate','grooming.schedule'))
 OR (r.code='groomer' AND p.code IN ('grooming.read','grooming.operate')) ON CONFLICT DO NOTHING;
+
+COMMIT;

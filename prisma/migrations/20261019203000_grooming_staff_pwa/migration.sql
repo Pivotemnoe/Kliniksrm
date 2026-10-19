@@ -1,3 +1,5 @@
+BEGIN;
+
 -- CreateTable
 CREATE TABLE "GroomingStaffNotice" (
     "id" TEXT NOT NULL,
@@ -92,3 +94,4 @@ ALTER TABLE "GroomingPushDelivery" ADD CONSTRAINT "GroomingPushDelivery_subscrip
 ALTER TABLE "GroomingPushDelivery" ADD CONSTRAINT "grooming_push_status_check"
   CHECK ("status" IN ('QUEUED', 'SENDING', 'SENT', 'CANCELLED', 'FAILED', 'UNKNOWN'));
 
+COMMIT;
