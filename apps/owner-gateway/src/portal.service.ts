@@ -106,6 +106,7 @@ export class PortalService {
       syncedAt: session.owner.syncedAt,
       sessionExpiresAt,
       assistantEnabled: process.env.CLINIC_ASSISTANT_ENABLED === 'true',
+      groomingEnabled: process.env.GROOMING_CRM_SYNC_ENABLED === 'true',
     };
   }
 

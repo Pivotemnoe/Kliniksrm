@@ -1,0 +1,11 @@
+# Preserve the accepted clinical runtime; add only the independent module.
+FROM ghcr.io/pivotemnoe/kliniksrm-api:efd0f54fdc0656e1445ad292e98b820e673b02d0
+ARG TEMICHEVVET_GIT_COMMIT
+LABEL org.opencontainers.image.revision=$TEMICHEVVET_GIT_COMMIT
+LABEL org.temichevvet.base.revision="efd0f54fdc0656e1445ad292e98b820e673b02d0"
+ENV TEMICHEVVET_GIT_COMMIT=$TEMICHEVVET_GIT_COMMIT
+COPY prisma /app/prisma
+RUN /app/node_modules/.bin/prisma generate --schema /app/prisma/schema.prisma
+COPY apps/api/dist/modules/grooming /app/apps/api/dist/modules/grooming
+COPY apps/api/dist/modules/clinic-modules /app/apps/api/dist/modules/clinic-modules
+COPY apps/api/dist/app.module.js /app/apps/api/dist/app.module.js

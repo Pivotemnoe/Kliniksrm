@@ -1,0 +1,13 @@
+# Preserve contact-gate-staff and the deployed owner redesign verbatim.
+FROM temichevvet-owner-gateway:crm-redesign-20261019-r1
+ARG TEMICHEVVET_GIT_COMMIT
+LABEL org.opencontainers.image.revision=$TEMICHEVVET_GIT_COMMIT
+LABEL org.temichevvet.base.image="sha256:2bad6374d52318648bf786e7614bb75c5abcd91c42789ed67e920ef05e3373d5"
+ENV TEMICHEVVET_GIT_COMMIT=$TEMICHEVVET_GIT_COMMIT
+COPY apps/owner-gateway/prisma /app/apps/owner-gateway/prisma
+RUN /app/node_modules/.bin/prisma generate --schema /app/apps/owner-gateway/prisma/schema.prisma \
+ && cp -R /app/apps/owner-gateway/src/generated/client/. /app/apps/owner-gateway/dist/generated/client/
+COPY apps/owner-gateway/dist/grooming /app/apps/owner-gateway/dist/grooming
+COPY apps/owner-gateway/dist/app.module.js apps/owner-gateway/dist/max-bot.client.js apps/owner-gateway/dist/max-webhook.service.js apps/owner-gateway/dist/owner-notification.service.js apps/owner-gateway/dist/portal-page.controller.js apps/owner-gateway/dist/portal.service.js /app/apps/owner-gateway/dist/
+COPY apps/owner-gateway/dist/dto/owner-notification.dto.js /app/apps/owner-gateway/dist/dto/owner-notification.dto.js
+COPY apps/owner-gateway/public/grooming.html apps/owner-gateway/public/grooming.css apps/owner-gateway/public/grooming.js apps/owner-gateway/public/app.js apps/owner-gateway/public/index.html /app/apps/owner-gateway/dist/public/

@@ -14,10 +14,12 @@ export class MaxBotClient {
     await this.send(maxUserId, 'TemichevVet: MAX подключён. Откройте личный кабинет по кнопке ниже.', activationUrl);
   }
 
-  async sendMessage(maxUserId: string, text: string) {
+  async sendMessage(maxUserId: string, text: string, destination?: 'grooming') {
     const publicUrl = normalizeBaseUrl(process.env.OWNER_GATEWAY_PUBLIC_URL);
-    return this.send(maxUserId, text, publicUrl ? `${publicUrl}/portal` : null);
+    return this.send(maxUserId, text, publicUrl ? `${publicUrl}/portal${destination === 'grooming' ? '/grooming' : ''}` : null);
   }
+
+  async sendStaffMessage(maxUserId: string, text: string) { return this.send(maxUserId, text, null); }
 
   private async send(maxUserId: string, text: string, portalUrl: string | null) {
     const botToken = process.env.MAX_BOT_TOKEN?.trim();

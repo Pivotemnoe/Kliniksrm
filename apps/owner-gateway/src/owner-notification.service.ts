@@ -6,7 +6,8 @@ import { hashToken } from './security';
 import { DeliverOwnerNotificationDto, OwnerNotificationKind, OwnerNotificationPreferenceDto } from './dto/owner-notification.dto';
 import { nextNotificationTime, notificationLocalTime } from './owner-notification-policy';
 
-const fieldForKind = { APPOINTMENT_CHANGE: 'appointmentChanges', APPOINTMENT_REMINDER: 'appointmentReminders', REVISIT: 'revisitReminders', VACCINATION: 'vaccinationReminders' } as const;
+const fieldForKind = { APPOINTMENT_CHANGE: 'appointmentChanges', APPOINTMENT_REMINDER: 'appointmentReminders', REVISIT: 'revisitReminders', VACCINATION: 'vaccinationReminders', GROOMING_CHANGE: 'appointmentChanges', GROOMING_REMINDER: 'appointmentReminders' } as const;
+const groomingKinds = ['GROOMING_CHANGE', 'GROOMING_REMINDER'];
 @Injectable()
 export class OwnerNotificationService {
   constructor(private readonly prisma: PrismaService, private readonly max: MaxBotClient) {}
@@ -55,7 +56,7 @@ export class OwnerNotificationService {
     return owners.filter(x => x.bindings.length && (x.notificationPreference?.enabled ?? true)).map(x => ({ ownerId: x.ownerId, appointmentChanges: x.notificationPreference?.appointmentChanges ?? true, appointmentReminders: x.notificationPreference?.appointmentReminders ?? true, revisitReminders: x.notificationPreference?.revisitReminders ?? true, vaccinationReminders: x.notificationPreference?.vaccinationReminders ?? true }));
   }
   async deliver(id: string, input: DeliverOwnerNotificationDto, now = new Date()) {
-    if (process.env.CLINIC_ASSISTANT_REMINDERS_ENABLED !== 'true') return { status: 'DISABLED' };
+    if (input.kind.startsWith('GROOMING_') ? process.env.GROOMING_CLIENT_NOTIFICATIONS_ENABLED !== 'true' : process.env.CLINIC_ASSISTANT_REMINDERS_ENABLED !== 'true') return { status: 'DISABLED' };
     const expiresAt = new Date(input.expiresAt);
     if (!Number.isFinite(expiresAt.getTime()) || !input.text.trim() || input.text.length > 800 || !fieldForKind[input.kind]) throw new BadRequestException('Некорректное уведомление');
     const fingerprint = createHash('sha256').update(JSON.stringify(input)).digest('hex');
@@ -79,9 +80,9 @@ export class OwnerNotificationService {
       if (next > now) return { status: 'DEFERRED', retryAt: next.toISOString() };
       const dayKey = notificationLocalTime(now, preference.timezone).dayKey;
       // Recompute from instants, so changing timezone cannot reset today's counter.
-      const attempts = await tx.ownerNotificationDelivery.findMany({ where: { ownerId: input.ownerId, attemptedAt: { gt: new Date(now.getTime() - 48 * 3600000) }, status: { in: ['SENDING', 'SENT', 'UNKNOWN'] } }, select: { attemptedAt: true } });
+      const attempts = await tx.ownerNotificationDelivery.findMany({ where: { ownerId: input.ownerId, kind: input.kind.startsWith('GROOMING_') ? { in: groomingKinds } : { notIn: groomingKinds }, attemptedAt: { gt: new Date(now.getTime() - 48 * 3600000) }, status: { in: ['SENDING', 'SENT', 'UNKNOWN'] } }, select: { attemptedAt: true } });
       const count = attempts.filter(x => notificationLocalTime(x.attemptedAt, preference.timezone).dayKey === dayKey).length;
-      const limit = dailyLimit();
+      const limit = dailyLimit(input.kind);
       if (count >= limit) return { status: 'DEFERRED', retryAt: new Date(now.getTime() + 3600000).toISOString() };
       const delivery = await tx.ownerNotificationDelivery.create({ data: { id, ownerId: input.ownerId, fingerprint, kind: input.kind, status: 'SENDING', consentVersion: preference.version, channel: preference.channel, dayKey, attemptedAt: now } });
       return { status: 'CLAIMED', delivery, recipient: binding.externalUserId };
@@ -94,7 +95,7 @@ export class OwnerNotificationService {
       await this.finish(id, 'CANCELLED'); return { status: 'NO_CONSENT' };
     }
     try {
-      const receipt = await this.max.sendMessage(claim.recipient!, input.text);
+      const receipt = await this.max.sendMessage(claim.recipient!, input.text, input.kind.startsWith('GROOMING_') ? 'grooming' : undefined);
       await this.finish(id, 'SENT', receipt.messageId); return { status: 'SENT' };
     } catch (error) {
       const rejected = Boolean(error && typeof error === 'object' && 'maxRejected' in error && error.maxRejected);
@@ -111,4 +112,4 @@ export class OwnerNotificationService {
     return this.prisma.ownerNotificationDelivery.updateMany({ where: { id, status: 'SENDING' }, data: { status, completedAt: new Date(), providerMessageId: messageId, error: status === 'UNKNOWN' ? 'Нет подтверждения доставки; автоматический повтор запрещён' : status === 'REJECTED' ? 'MAX отклонил отправку; требуется другой способ связи' : null } });
   }
 }
-function dailyLimit() { const value = Number(process.env.CLINIC_ASSISTANT_NOTIFICATION_DAILY_LIMIT || 3); return Number.isInteger(value) ? Math.min(10, Math.max(1, value)) : 3; }
+function dailyLimit(kind: OwnerNotificationKind) { const grooming = kind.startsWith('GROOMING_'), fallback = grooming ? 10 : 3; const value = Number((grooming ? process.env.GROOMING_NOTIFICATION_DAILY_LIMIT : process.env.CLINIC_ASSISTANT_NOTIFICATION_DAILY_LIMIT) || fallback); return Number.isInteger(value) ? Math.min(10, Math.max(1, value)) : fallback; }

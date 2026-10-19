@@ -1,0 +1,25 @@
+.grooming-page { max-width: 1700px; }
+.grooming-banner { margin-bottom: 18px; }
+.grooming-calendar-scroll { overflow-x: auto; border: 1px solid #e3e9ee; border-radius: 16px; background: #fff; }
+.grooming-calendar { display: grid; min-height: 460px; }
+.grooming-calendar-column { padding: 18px; border-right: 1px solid #e3e9ee; }
+.grooming-calendar-column:last-child { border-right: 0; }
+.grooming-calendar-column h3 { font-size: 16px; margin: 0 0 12px; }
+.grooming-work-periods { display: grid; gap: 4px; min-height: 54px; font-size: 12px; color: #657786; }
+.grooming-day-events { display: grid; align-content: start; gap: 12px; padding-top: 15px; }
+.grooming-event { text-align: left; display: grid; gap: 6px; border: 1px solid #b4d1e8; border-left: 4px solid #2d739d; background: #f2f8fc; border-radius: 10px; padding: 13px; color: #19354a; cursor: pointer; width: 100%; }
+.grooming-event:hover { background: #e8f2fa; }
+.grooming-event-time { font-weight: 700; letter-spacing: .02em; }
+.grooming-event small { color: #627688; }
+.grooming-event-completed { background: #f0f8f1; border-color: #8fbea1; }
+.grooming-event-in_progress { background: #fff8e9; border-color: #d9bb70; }
+.grooming-event-no_show { opacity: .65; }
+.grooming-empty-day { color: #7d8d99; font-size: 13px; padding: 22px 0; }
+.grooming-specialists { display: grid; grid-template-columns: repeat(auto-fit,minmax(230px,1fr)); gap: 16px; }
+.grooming-settings-form { max-width: 650px; }
+.grooming-offers { display: grid; grid-template-columns: repeat(auto-fill,minmax(145px,1fr)); gap: 10px; max-height: 350px; overflow-y: auto; }
+.grooming-offer { display: grid; gap: 5px; padding: 14px; border: 1px solid #c9d7e0; border-radius: 10px; background: white; text-align: left; cursor: pointer; color: #17324d; }
+.grooming-offer.is-selected { border: 2px solid #196593; padding: 13px; background: #eff7fc; }
+.grooming-offer:focus-visible,.grooming-event:focus-visible { outline: 3px solid #4d97c5; outline-offset: 2px; }
+@media(max-width: 640px) { .grooming-page .ant-page-header { padding: 0; } .grooming-specialists { grid-template-columns: 1fr; } }
+.grooming-device-card .ant-typography{margin-bottom:0}.grooming-inbox{display:grid;gap:12px}.grooming-inbox article{display:flex;justify-content:space-between;align-items:center;gap:18px;padding:18px;border:1px solid #e1e7ee;border-radius:14px}.grooming-inbox .grooming-notice-unread{background:#f0f6ff;border-color:#a8c9ff}.grooming-inbox p{margin:8px 0;color:#526879}.grooming-device-card .ant-space-item{max-width:100%}@media(max-width:600px){.grooming-inbox article{align-items:stretch;flex-direction:column;padding:14px}.grooming-device-card .ant-card-head-title{white-space:normal}.grooming-inbox .ant-card-extra{margin-inline-start:6px}}

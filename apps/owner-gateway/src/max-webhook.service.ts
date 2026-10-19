@@ -5,6 +5,7 @@ import { MessengerChannel, PortalInviteChannel, PortalInviteStatus, Prisma } fro
 import { MaxBotClient } from './max-bot.client';
 import { PrismaService } from './prisma.service';
 import { assertSecret, hashToken } from './security';
+import { GroomingPortalService } from './grooming/grooming-portal.service';
 
 @Injectable()
 export class MaxWebhookService {
@@ -13,6 +14,7 @@ export class MaxWebhookService {
     private readonly maxBotClient: MaxBotClient,
     private readonly clinicChat: ClinicChatService,
     @Optional() private readonly notifications?: OwnerNotificationService,
+    @Optional() private readonly grooming?: GroomingPortalService,
   ) {}
 
   async handle(secret: string | undefined, update: unknown) {
@@ -34,6 +36,7 @@ export class MaxWebhookService {
       return { ok: true, handled: false };
     }
 
+    if (await this.grooming?.bindMax(botStarted.payload, botStarted.maxUserId)) return { ok: true, handled: true };
     if (process.env.CLINIC_ASSISTANT_ENABLED === 'true' && await this.clinicChat.bindMax(botStarted.payload, botStarted.maxUserId)) return { ok: true, handled: true };
     const invitation = await this.prisma.portalInvitation.findUnique({
       where: { tokenHash: hashToken(botStarted.payload) },

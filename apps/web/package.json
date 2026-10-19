@@ -8,7 +8,8 @@
     "build": "tsc --noEmit -p tsconfig.json && vite build",
     "assistant:build": "tsc --noEmit -p tsconfig.json && vite build --config vite.assistant.config.ts",
     "preview": "vite preview --host 0.0.0.0",
-    "typecheck": "tsc --noEmit -p tsconfig.json --pretty false"
+    "typecheck": "tsc --noEmit -p tsconfig.json --pretty false",
+    "grooming:build": "tsc --noEmit -p tsconfig.json && vite build --config vite.grooming.config.ts"
   },
   "dependencies": {
     "@ant-design/icons": "^6.0.0",

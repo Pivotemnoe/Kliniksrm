@@ -26,7 +26,7 @@ export class PortalPageController {
     this.assertAssistantEnabled();
     if (!/^[A-Za-z0-9_-]+\.(?:js|css)$/.test(fileName)) throw new NotFoundException('Файл не найден');
     response.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-    return response.sendFile(resolve(__dirname, `public/assistant/assets/${fileName}`));
+    return response.sendFile(fileName, { root: resolve(__dirname, 'public/assistant/assets') });
   }
 
   private assertAssistantEnabled() { if (process.env.CLINIC_ASSISTANT_ENABLED !== 'true') throw new NotFoundException('Чат пока не включён'); }
@@ -40,30 +40,42 @@ export class PortalPageController {
   @Get(['portal', 'portal/', 'portal/activate'])
   portal(@Res() response: Response) {
     response.setHeader('Cache-Control', 'no-store');
-    return response.sendFile(resolve(__dirname, 'public/index.html'));
+    return response.sendFile('index.html', { root: resolve(__dirname, 'public') });
   }
 
   @Get('portal/app.js')
   script(@Res() response: Response) {
-    return response.sendFile(resolve(__dirname, 'public/app.js'));
+    return response.sendFile('app.js', { root: resolve(__dirname, 'public') });
   }
+
+  @Get(['portal/grooming', 'portal/grooming/'])
+  grooming(@Res() response: Response) {
+    response.setHeader('Cache-Control', 'no-store');
+    return response.sendFile('grooming.html', { root: resolve(__dirname, 'public') });
+  }
+
+  @Get('portal/grooming.js')
+  groomingScript(@Res() response: Response) { return response.sendFile('grooming.js', { root: resolve(__dirname, 'public') }); }
+
+  @Get('portal/grooming.css')
+  groomingStyles(@Res() response: Response) { return response.sendFile('grooming.css', { root: resolve(__dirname, 'public') }); }
 
   @Get('portal/app.css')
   styles(@Res() response: Response) {
-    return response.sendFile(resolve(__dirname, 'public/app.css'));
+    return response.sendFile('app.css', { root: resolve(__dirname, 'public') });
   }
 
   @Get('manifest.webmanifest')
   manifest(@Res() response: Response) {
     response.type('application/manifest+json');
-    return response.sendFile(resolve(__dirname, 'public/manifest.webmanifest'));
+    return response.sendFile('manifest.webmanifest', { root: resolve(__dirname, 'public') });
   }
 
   @Get(['sw.js', 'portal/sw.js'])
   serviceWorker(@Res() response: Response) {
     response.type('application/javascript');
     response.setHeader('Cache-Control', 'no-cache');
-    return response.sendFile(resolve(__dirname, 'public/sw.js'));
+    return response.sendFile('sw.js', { root: resolve(__dirname, 'public') });
   }
 
   @Get('portal/icons/:fileName')
@@ -73,7 +85,7 @@ export class PortalPageController {
     }
 
     response.setHeader('Cache-Control', 'public, max-age=86400');
-    return response.sendFile(resolve(__dirname, `public/icons/${fileName}`));
+    return response.sendFile(fileName, { root: resolve(__dirname, 'public/icons') });
   }
 }
 

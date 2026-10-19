@@ -1,0 +1,20 @@
+{
+  "id": "/grooming/",
+  "name": "TemichevVet · Груминг",
+  "short_name": "Груминг",
+  "description": "Личный кабинет грумера: расписание и уведомления о записях",
+  "lang": "ru",
+  "start_url": "/grooming/calendar",
+  "scope": "/grooming/",
+  "display": "standalone",
+  "background_color": "#f3f5f8",
+  "theme_color": "#2563eb",
+  "icons": [
+    { "src": "/brand/temichevvet-favicon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/brand/temichevvet-logo.jpg", "sizes": "1280x1280", "type": "image/jpeg", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "Моё расписание", "url": "/grooming/calendar" },
+    { "name": "Мои уведомления", "url": "/grooming/notifications" }
+  ]
+}

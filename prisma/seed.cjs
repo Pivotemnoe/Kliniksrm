@@ -12,6 +12,11 @@ const DEFAULT_ORGANIZATION_ID = '11111111-1111-4111-8111-000000000001';
 const DEFAULT_OFFICE_ID = '11111111-1111-4111-8111-000000000101';
 
 const permissions = [
+  ['modules.manage', 'Подключение дополнений CRM'],
+  ['grooming.read', 'Просмотр записей груминга'],
+  ['grooming.operate', 'Ведение записей груминга'],
+  ['grooming.manage', 'Настройка груминга и графиков'],
+  ['grooming.schedule', 'Управление расписанием груминга'],
   ['news.read', 'Просмотр новостей клиники'],
   ['news.manage', 'Публикация новостей клиники'],
   ['dashboard.read', 'Просмотр сводки'],
@@ -71,11 +76,15 @@ const permissions = [
 ];
 
 const roles = [
+  ['groomer', 'Грумер', ['grooming.read', 'grooming.operate']],
   ['director', 'Директор', permissions.map(([code]) => code)],
   [
     'administrator',
     'Администратор клиники',
     [
+      'grooming.read',
+      'grooming.operate',
+      'grooming.schedule',
       'dashboard.read',
       'news.read',
       'news.manage',

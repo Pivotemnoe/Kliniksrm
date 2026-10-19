@@ -41,3 +41,7 @@ installers/*.exe
 .DS_Store
 .idea/
 .vscode/
+
+# Local module acceptance and private release receipts
+.artifacts/
+apps/web/dist-grooming*/

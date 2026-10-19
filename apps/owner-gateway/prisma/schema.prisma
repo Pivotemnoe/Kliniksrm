@@ -45,6 +45,7 @@ enum PublicClinicInquiryStatus {
 }
 
 model OwnerSnapshot {
+  groomingOperations GroomingPortalOperation[]
   ownerId           String                   @id
   displayName       String
   payload           Json
@@ -355,4 +356,102 @@ model ClinicChatLink {
   conversation ClinicConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   usedAt DateTime?
+}
+
+
+model GroomingRequest {
+  id String @id @default(uuid())
+  clientRequestId String @unique
+  inputHash String
+  contactName String
+  phone String
+  petName String
+  breedId String
+  serviceId String
+  preferredDate String?
+  timeWindow String
+  notes String
+  looks Json
+  consentVersion String
+  status String @default("NEW")
+  crmRequestId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deliveries GroomingMaxDelivery[]
+  @@index([status, createdAt])
+}
+
+
+model GroomingMaxDelivery {
+  id String @id @default(uuid())
+  requestId String
+  request GroomingRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  recipientId String
+  status String @default("PENDING")
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  startedAt DateTime?
+  providerMessageId String?
+  errorCode String?
+  sentAt DateTime?
+  @@unique([requestId, recipientId])
+  @@index([status, nextAttemptAt])
+}
+
+
+model GroomingPortalOperation {
+  id String @id @default(uuid())
+  ownerId String
+  owner OwnerSnapshot @relation(fields: [ownerId], references: [ownerId], onDelete: Restrict)
+  clientKey String
+  kind String
+  fingerprint String
+  input Json
+  status String @default("PENDING")
+  result Json?
+  error String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  completedAt DateTime?
+  @@unique([ownerId, clientKey])
+  @@index([status, createdAt])
+}
+
+
+model GroomingRegistration {
+  id String @id @default(uuid())
+  tokenHash String @unique
+  browserTokenHash String @unique
+  input Json
+  maxUserId String?
+  ownerId String?
+  status String @default("WAITING_MAX")
+  error String?
+  expiresAt DateTime
+  consumedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([status, createdAt])
+}
+
+
+model GroomingStaffDelivery {
+  id String @id
+  fingerprint String
+  recipientId String
+  status String
+  providerMessageId String?
+  attemptedAt DateTime @default(now())
+}
+
+
+model GroomingBookingDraft {
+  id String @id @default(uuid())
+  tokenHash String @unique
+  ipHash String
+  payload Json
+  consumedByOwnerId String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  @@index([ipHash, createdAt])
+  @@index([expiresAt])
 }

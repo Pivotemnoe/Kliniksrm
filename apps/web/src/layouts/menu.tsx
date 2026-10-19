@@ -53,6 +53,7 @@ export const menuItems: MenuProps['items'] = [
     ],
   },
   { key: '/schedule', icon: <CalendarOutlined />, label: 'Расписание' },
+  { key: '/grooming', icon: <CalendarOutlined />, label: 'Груминг' },
   { key: '/queue', icon: <OrderedListOutlined />, label: 'Очередь' },
   {
     key: '/communications-workspace',
@@ -99,6 +100,7 @@ export const menuItems: MenuProps['items'] = [
     icon: <SettingOutlined />,
     label: 'Настройки',
     children: [
+      { key: '/settings/modules', label: 'Подключаемые модули' },
       { key: '/settings/organization', icon: <ProfileOutlined />, label: 'Организация' },
       { key: '/settings/office', icon: <ApartmentOutlined />, label: 'Филиал' },
       { key: '/settings/employees', icon: <UserOutlined />, label: 'Сотрудники' },

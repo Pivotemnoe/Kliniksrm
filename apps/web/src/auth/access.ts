@@ -9,6 +9,12 @@ type RouteAccessRule = {
 };
 
 const routeAccessRules: RouteAccessRule[] = [
+  { path: '/grooming/admin/modules', anyOf: ['modules.manage'], roles: ['director'] },
+  { path: '/grooming/admin/remote-access', anyOf: ['remote_access.read'], roles: ['director'] },
+  { path: '/settings/modules', anyOf: ['modules.manage'], roles: ['director'] },
+  { path: '/grooming/settings', anyOf: ['grooming.manage'] },
+  { path: '/grooming/services', anyOf: ['grooming.manage'] },
+  { path: '/grooming', anyOf: ['grooming.read'] },
   { path: '/settings/organization', anyOf: ['settings.read', 'settings.manage'] },
   { path: '/settings/office', anyOf: ['settings.read', 'settings.manage'] },
   { path: '/settings/employees', anyOf: ['employees.read', 'employees.manage', 'roles.manage'] },
@@ -89,6 +95,7 @@ const fallbackRouteCandidates = [
   '/store',
   '/news',
   '/staff-messages',
+  '/grooming',
   '/profile',
 ];
 

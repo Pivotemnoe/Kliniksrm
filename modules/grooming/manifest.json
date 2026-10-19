@@ -1,0 +1,176 @@
+{
+  "key": "GROOMING",
+  "title": "Груминг",
+  "version": "1.0.0-local",
+  "defaultEnabled": false,
+  "kind": "optional-independent-module",
+  "source": "GROOMING_SITE",
+  "publicStorefront": "pet.temichevvet.ru",
+  "gatewayModule": "apps/owner-gateway/src/grooming/grooming.module.ts",
+  "frontend": "prototypes/temichevvet-grooming-fitting-20261015",
+  "storage": "CRM PostgreSQL: GroomingSettings, GroomingSpecialist, GroomingService, GroomingServiceRule, GroomingLocation, GroomingWorkplace, GroomingWorkPeriod, GroomingReservation, GroomingCommandReceipt, GroomingNotification; gateway: GroomingPortalOperation, GroomingRegistration, GroomingStaffDelivery, GroomingBookingDraft",
+  "crmIntegration": {
+    "status": "IMPLEMENTED_LOCAL_QA",
+    "specification": "modules/grooming/MODULE_REQUIREMENTS.md",
+    "moduleRegistry": "ClinicModulesService",
+    "route": "/grooming",
+    "permissions": [
+      "grooming.read",
+      "grooming.operate",
+      "grooming.manage",
+      "grooming.schedule"
+    ],
+    "clinicalAppointments": false,
+    "standaloneApi": "apps/api/src/grooming-main.ts",
+    "standaloneWeb": "apps/web/src/grooming-main.tsx",
+    "medicalScheduleDependency": false,
+    "sharedPlatform": [
+      "identity",
+      "authentication",
+      "Employee",
+      "Owner",
+      "Animal",
+      "licensing",
+      "audit",
+      "MAX-transport"
+    ]
+  },
+  "commercialization": {
+    "status": "LOCAL_IMPLEMENTED_LICENSE_CHECKS_BILLING_NOT_IMPLEMENTED",
+    "commercialType": "ADD_ON",
+    "licenseFeature": "GROOMING",
+    "scope": "CRM_INSTALLATION",
+    "price": null,
+    "billingIntegration": "NOT_IMPLEMENTED",
+    "accessChecks": [
+      "valid-license-entitlement",
+      "installation-enabled",
+      "employee-permission-and-record-scope"
+    ],
+    "disablePolicy": "STOP_NEW_BOOKINGS_PRESERVE_HISTORY_SERVICE_EXISTING_BOOKINGS"
+  },
+  "navigation": {
+    "status": "IMPLEMENTED_LOCAL_QA",
+    "sidebarLabel": "Груминг",
+    "sidebarRoute": "/grooming",
+    "defaultRoute": "/grooming/calendar",
+    "tabs": [
+      {
+        "key": "calendar",
+        "title": "Календарь",
+        "route": "/grooming/calendar"
+      },
+      {
+        "key": "bookings",
+        "title": "Записи",
+        "route": "/grooming/bookings"
+      },
+      {
+        "key": "clients",
+        "title": "Клиенты и питомцы",
+        "route": "/grooming/clients"
+      },
+      {
+        "key": "specialists",
+        "title": "Специалисты и графики",
+        "route": "/grooming/specialists"
+      },
+      {
+        "key": "services",
+        "title": "Услуги",
+        "route": "/grooming/services"
+      },
+      {
+        "key": "notifications",
+        "title": "Уведомления",
+        "route": "/grooming/notifications"
+      },
+      {
+        "key": "settings",
+        "title": "Настройки",
+        "route": "/grooming/settings"
+      }
+    ],
+    "bookingDetailsRoute": "/grooming/bookings/:id"
+  },
+  "implemented": [
+    "breed-catalogue",
+    "reference-comparison",
+    "device-saved-looks",
+    "wish-notes",
+    "durable-booking-intake",
+    "idempotency",
+    "max-outbox",
+    "protected-import-contract",
+    "scroll-process-chapters",
+    "reduced-motion",
+    "scroll-image-reveal",
+    "photo-detail-captions",
+    "optional-module-registry-and-licence-gate",
+    "grooming-sidebar-and-addressable-tabs",
+    "standalone-api-and-staff-interface",
+    "independent-work-periods-and-breaks",
+    "independent-locations-and-workplaces",
+    "own-price-list-and-duration-rules",
+    "atomic-self-booking",
+    "owner-cabinet-and-MAX-identity-onboarding",
+    "self-reschedule-cancel",
+    "durable-portal-operations-and-recovery",
+    "MAX-confirmations-reminders-and-delivery-log",
+    "owner-and-groomer-record-scope",
+    "opaque-catalogue-draft-handoff"
+  ],
+  "deferred": [
+    "customer-photo-ai",
+    "public-deployment",
+    "automatic-commercial-billing",
+    "real-clinic-acceptance",
+    "real-MAX-delivery-acceptance"
+  ],
+  "endpoints": {
+    "catalog": "GET /v1/public/grooming/catalog",
+    "booking": "POST /v1/public/grooming/bookings",
+    "crmPending": "GET /internal/v1/grooming/requests",
+    "crmAcknowledge": "POST /internal/v1/grooming/requests/:id/imported",
+    "draft": "POST /v1/public/grooming/drafts",
+    "ownerOperations": "POST /v1/portal/grooming/operations",
+    "crm": "/api/v1/grooming",
+    "staff": "/grooming/calendar",
+    "clientCabinet": "/portal/grooming",
+    "crmPortalQueue": "/internal/v1/grooming/portal/operations"
+  },
+  "requiredNextStage": {
+    "status": "IMPLEMENTED_LOCAL_QA",
+    "specification": "modules/grooming/SELF_BOOKING_REQUIREMENTS.md",
+    "capabilities": [
+      "specialist-selection",
+      "live-crm-availability",
+      "atomic-slot-reservation",
+      "client-portal-using-clinic-identity",
+      "self-reschedule-cancel",
+      "client-max-confirmations-reminders",
+      "groomer-calendar",
+      "optional-licensed-crm-module",
+      "dedicated-sidebar-workspace-and-tabs",
+      "module-role-and-record-scope",
+      "staff-installable-pwa",
+      "personal-staff-inbox",
+      "device-web-push"
+    ],
+    "manualConfirmationEveryBooking": false,
+    "sourceOfTruth": "GroomingWorkPeriod and GroomingReservation; independent of medical scheduling",
+    "currentBookingMode": "ATOMIC_SELF_BOOKING_IN_OWNER_CABINET",
+    "temporaryHold": false
+  },
+  "staffPwa": {
+    "status": "IMPLEMENTED_LOCAL_QA",
+    "manifest": "/grooming/manifest.webmanifest",
+    "scope": "/grooming/",
+    "startUrl": "/grooming/calendar",
+    "inbox": "/api/v1/grooming/staff/inbox",
+    "pushConfig": "/api/v1/grooming/staff/push/config",
+    "personalDeviceSubscription": true,
+    "genericLockScreenPayload": true,
+    "realDeviceAcceptance": "PENDING_HTTPS_AND_VAPID_CONFIGURATION"
+  }
+}

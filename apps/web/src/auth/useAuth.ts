@@ -32,7 +32,7 @@ export function useLoginMutation() {
   });
 }
 
-export function useLogoutMutation() {
+export function useLogoutMutation(loginPath = '/login') {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -41,7 +41,7 @@ export function useLogoutMutation() {
     onSettled: async () => {
       clearSharedActivity();
       queryClient.removeQueries({ queryKey: authQueryKey });
-      navigate('/login', { replace: true });
+      navigate(loginPath, { replace: true });
     },
   });
 }
@@ -56,7 +56,7 @@ export function useChangePasswordMutation() {
   });
 }
 
-export function useUnauthorizedListener() {
+export function useUnauthorizedListener(loginPath = '/login') {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -67,15 +67,15 @@ export function useUnauthorizedListener() {
 
     const handleUnauthorized = () => {
       queryClient.removeQueries({ queryKey: authQueryKey });
-      navigate('/login', { replace: true });
+      navigate(loginPath, { replace: true });
     };
 
     window.addEventListener('crm:unauthorized', handleUnauthorized);
     return () => window.removeEventListener('crm:unauthorized', handleUnauthorized);
-  }, [navigate, queryClient]);
+  }, [navigate, queryClient, loginPath]);
 }
 
-export function useIdleLogout(enabled: boolean) {
+export function useIdleLogout(enabled: boolean, loginPath = '/login') {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -149,7 +149,7 @@ export function useIdleLogout(enabled: boolean) {
       } finally {
         clearSharedActivity();
         queryClient.removeQueries({ queryKey: authQueryKey });
-        navigate('/login', { replace: true, state: { reason: 'idle' } });
+        navigate(loginPath, { replace: true, state: { reason: 'idle' } });
       }
     }
 
@@ -190,7 +190,7 @@ export function useIdleLogout(enabled: boolean) {
       window.removeEventListener('storage', handleSharedActivity);
       document.removeEventListener('visibilitychange', handleReturnToVisible);
     };
-  }, [enabled, navigate, queryClient]);
+  }, [enabled, navigate, queryClient, loginPath]);
 }
 
 function readSharedActivityAt() {

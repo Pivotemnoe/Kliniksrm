@@ -15,6 +15,7 @@ import { Alert, Avatar, Badge, Button, ConfigProvider, Drawer, Dropdown, Layout,
 import { useEffect, useMemo, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { appConfig, isDemoAuthMode } from '../app/config';
+import { apiRequest } from '../api/client';
 import { hasPermission } from '../auth/permissions';
 import { useCurrentEmployee, useLogoutMutation } from '../auth/useAuth';
 import { RouteLoadBoundary } from '../app/RouteLoadBoundary';
@@ -38,6 +39,7 @@ const roleLabels: Record<string, string> = {
   assistant: 'Ассистент',
   cashier: 'Кассир',
   stock: 'Склад',
+  groomer: 'Грумер',
 };
 
 export function CrmLayout() {
@@ -54,7 +56,9 @@ export function CrmLayout() {
   const { data } = useCurrentEmployee();
   const logoutMutation = useLogoutMutation();
   const employee = data?.employee;
-  const accessibleMenuItems = useMemo(() => getAccessibleMenuItems(employee), [employee]);
+  const moduleAvailability = useQuery({ queryKey: ['clinic-module-availability'], queryFn: () => apiRequest<Array<{ key: string; available: boolean }>>('/v1/clinic-modules/availability'), enabled: Boolean(employee && (hasPermission(employee, 'grooming.read') || hasPermission(employee, 'modules.manage'))), refetchInterval: 30000 });
+  const groomingAvailable = moduleAvailability.data?.some(item => item.key === 'GROOMING' && item.available) || false;
+  const accessibleMenuItems = useMemo(() => getAccessibleMenuItems(employee)?.filter(item => item && ('key' in item) && (item.key !== '/grooming' || groomingAvailable)), [employee, groomingAvailable]);
   useActivityTracking(Boolean(employee));
   useLiveUpdates(Boolean(employee), queryClient);
   const selectedKey = useMemo(() => getSelectedMenuKey(location.pathname), [location.pathname]);

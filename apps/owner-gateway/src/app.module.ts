@@ -1,3 +1,4 @@
+import { GroomingModule } from './grooming/grooming.module';
 import { ClinicChatController, ClinicChatInternalController } from './clinic-chat.controller';
 import { OwnerNotificationController, OwnerNotificationInternalController } from './owner-notification.controller';
 import { OwnerNotificationService } from './owner-notification.service';
@@ -27,6 +28,7 @@ import { PublicClinicCatalogController } from './public-clinic-catalog.controlle
 import { PublicClinicCatalogService } from './public-clinic-catalog.service';
 
 @Module({
+  imports: [GroomingModule],
   controllers: [
     HealthController,
     OwnerNotificationController, OwnerNotificationInternalController,

@@ -1,3 +1,5 @@
+import { GroomingCrmModule } from './modules/grooming/grooming.module';
+import { ClinicModulesModule } from './modules/clinic-modules/clinic-modules.module';
 import { Module } from '@nestjs/common';
 import { AddressesModule } from './modules/addresses/addresses.module';
 import { AnimalsModule } from './modules/animals/animals.module';
@@ -42,6 +44,8 @@ import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
   imports: [
+    GroomingCrmModule,
+    ClinicModulesModule,
     PrismaModule,
     AddressesModule,
     BackupsModule,
