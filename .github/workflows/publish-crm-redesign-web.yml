@@ -20,6 +20,12 @@ jobs:
       ARCHIVE_URL: ${{ secrets.CRM_REDESIGN_IMAGE_DOWNLOAD_URL }}
       WEB_IMAGE: ghcr.io/pivotemnoe/kliniksrm-web:bdc570cb24a7acdc5c8f0648112daf2d008e7300
     steps:
+      - name: Match the qualified OCI image store
+        uses: docker/setup-docker-action@v5
+        with:
+          version: v29.6.2
+          daemon-config: |
+            {"features":{"containerd-snapshotter":true}}
       - name: Download the locally qualified image
         run: curl --fail --location --retry 2 --silent --show-error "$ARCHIVE_URL" --output web-image.tar.gz
       - name: Verify archive and exact image identity
