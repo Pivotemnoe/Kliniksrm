@@ -1,7 +1,9 @@
-FROM temichevvet-crm-web:crm-redesign-20261019-r3
+ARG BASE_WEB_IMAGE=temichevvet-crm-web:crm-redesign-20261019-r3
+FROM ${BASE_WEB_IMAGE}
 ARG TEMICHEVVET_GIT_COMMIT
+ARG BASE_WEB_REVISION=bdc570cb24a7acdc5c8f0648112daf2d008e7300
 LABEL org.opencontainers.image.revision=$TEMICHEVVET_GIT_COMMIT
-LABEL org.temichevvet.base.revision="bdc570cb24a7acdc5c8f0648112daf2d008e7300"
+LABEL org.temichevvet.base.revision=$BASE_WEB_REVISION
 COPY apps/web/dist /usr/share/nginx/html
 COPY apps/web/dist/assets /opt/temichevvet-web-assets
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
