@@ -17,12 +17,11 @@ jobs:
   publish-verified-web:
     runs-on: ubuntu-latest
     env:
-      GH_REPO: ${{ github.repository }}
-      GH_TOKEN: ${{ github.token }}
+      ARCHIVE_URL: ${{ secrets.CRM_REDESIGN_IMAGE_DOWNLOAD_URL }}
       WEB_IMAGE: ghcr.io/pivotemnoe/kliniksrm-web:bdc570cb24a7acdc5c8f0648112daf2d008e7300
     steps:
       - name: Download the locally qualified image
-        run: gh release download crm-redesign-20261019-r3 --pattern web-image.tar.gz
+        run: curl --fail --location --retry 2 --silent --show-error "$ARCHIVE_URL" --output web-image.tar.gz
       - name: Verify archive and exact image identity
         shell: bash
         run: |
