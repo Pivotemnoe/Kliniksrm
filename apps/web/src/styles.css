@@ -3614,6 +3614,24 @@ body {
   flex: 0 0 auto;
 }
 
+.supply-invoice-lines,
+.supply-invoice-pagination {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.supply-invoice-pagination {
+  margin-bottom: 12px;
+}
+
+.supply-line-placeholder {
+  min-height: 330px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: linear-gradient(110deg, #f8fafc, #f1f5f9);
+}
+
 .supply-line-card {
   padding: 8px 10px 9px;
   border: 1px solid #e5e7eb;
@@ -3818,6 +3836,7 @@ body {
 }
 
 @media (max-width: 900px) {
+  .supply-line-placeholder { min-height: 500px; }
   .supply-line-values-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -3915,6 +3934,7 @@ body {
 }
 
 @media (max-width: 760px) {
+  .supply-line-placeholder { min-height: 850px; }
   .supply-line-primary-grid,
   .supply-line-values-grid {
     grid-template-columns: 1fr;
