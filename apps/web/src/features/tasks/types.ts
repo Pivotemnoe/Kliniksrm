@@ -38,7 +38,7 @@ export type TaskMutationInput = {
   dueAt?: string | null;
 };
 
-export type CreateTaskInput = TaskMutationInput & {
+export type CreateTaskInput = Omit<TaskMutationInput, 'status'> & {
   title: string;
 };
 

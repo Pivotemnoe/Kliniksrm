@@ -111,7 +111,7 @@ export function TaskFormDrawer({
       assigneeId: values.assigneeMode === 'employee' ? values.assigneeId : null,
       assigneeRoleCode: values.assigneeMode === 'role' ? values.assigneeRoleCode : null,
       dueAt: values.dueAt ? fromDatetimeLocal(values.dueAt) : null,
-      status: values.status,
+      ...(isEdit ? { status: values.status } : {}),
       comment: values.comment,
     });
   }
