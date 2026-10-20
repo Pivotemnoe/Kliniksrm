@@ -71,6 +71,7 @@ const DailyFinancePage = lazyPage(() => import('../features/business/DailyFinanc
 const SaleCardPage = lazyPage(() => import('../features/sales/SaleCardPage'), 'SaleCardPage');
 const SalesPage = lazyPage(() => import('../features/sales/SalesPage'), 'SalesPage');
 const ClinicResourcesPage = lazyPage(() => import('../features/scheduling/ClinicResourcesPage'), 'ClinicResourcesPage');
+const AvitoPage = lazyPage(() => import('../features/avito/AvitoPage'), 'AvitoPage');
 const GroomingPage = lazyPage(() => import('../features/grooming/GroomingPage'), 'GroomingPage');
 const ClinicModulesPage = lazyPage(() => import('../features/clinicModules/ClinicModulesPage'), 'ClinicModulesPage');
 const SettingsOverviewPage = lazyPage(() => import('../features/settings/SettingsOverviewPage'), 'SettingsOverviewPage');
@@ -162,6 +163,7 @@ export const routes: RouteObject[] = [
           { path: '/store/labels', element: <StorePage /> },
           { path: '/employees', element: <EmployeesPage /> },
           { path: '/grooming/*', element: <GroomingPage /> },
+          { path: '/avito', element: <AvitoPage /> },
           { path: '/settings/modules', element: <ClinicModulesPage /> },
           { path: '/settings', element: <SettingsOverviewPage /> },
           { path: '/settings/assistant-booking', element: <AssistantBookingSettingsPage /> },

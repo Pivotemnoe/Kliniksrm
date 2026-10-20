@@ -9,9 +9,10 @@ type RouteAccessRule = {
 };
 
 const routeAccessRules: RouteAccessRule[] = [
+  { path: '/avito', anyOf: ['avito.read'], roles: ['director', 'administrator'] },
   { path: '/grooming/admin/modules', anyOf: ['modules.manage'], roles: ['director'] },
   { path: '/grooming/admin/remote-access', anyOf: ['remote_access.read'], roles: ['director'] },
-  { path: '/settings/modules', anyOf: ['modules.manage'], roles: ['director'] },
+  { path: '/settings/modules', anyOf: ['modules.manage', 'avito.manage'], roles: ['director'] },
   { path: '/grooming/settings', anyOf: ['grooming.manage'] },
   { path: '/grooming/services', anyOf: ['grooming.manage'] },
   { path: '/grooming', anyOf: ['grooming.read'] },

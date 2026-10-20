@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Card, Drawer, Empty, Space, Tag, Typography } from 'antd';
-import { BellOutlined, DownloadOutlined, MobileOutlined } from '@ant-design/icons';
+import { Alert, App, Button, Card, Collapse, Drawer, Empty, Input, Segmented, Space, Tag, Typography } from 'antd';
+import { BellOutlined, CalendarOutlined, CheckOutlined, CloseCircleOutlined, DownloadOutlined, InfoCircleOutlined, MobileOutlined, SearchOutlined, SwapOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { apiRequest } from '../../api/client';
 import { ApiError, getErrorMessage } from '../../api/errors';
 import { at } from './grooming.api';
+import '../../shared/ui/module-ui.css';
 
 type Notice = { id: string; title: string; body: string; href: string; event: string; readAt: string | null; supersededAt: string | null; createdAt: string };
 type Inbox = { items: Notice[]; unread: number };
@@ -13,7 +14,7 @@ type PushConfig = { available: boolean; publicKey: string | null; devices: { id:
 type InstallPrompt = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
 let pendingInstallPrompt: InstallPrompt | undefined;
 const base = '/v1/grooming/staff';
-export const useGroomingInbox = (actorId: string, enabled = true) => useQuery({ queryKey: ['grooming', actorId, 'staff-inbox'], queryFn: () => apiRequest<Inbox>(`${base}/inbox`), enabled: Boolean(actorId) && enabled, refetchInterval: 15000 });
+export const useGroomingInbox = (actorId: string, enabled = true, poll = true) => useQuery({ queryKey: ['grooming', actorId, 'staff-inbox'], queryFn: () => apiRequest<Inbox>(`${base}/inbox`), enabled: Boolean(actorId) && enabled, refetchInterval: poll ? 15000 : false });
 async function registration() { return navigator.serviceWorker.register('/grooming/sw.js', { scope: '/grooming/' }); }
 function keyBytes(value: string) { return Uint8Array.from(atob(value.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(value.length / 4) * 4, '=')), char => char.charCodeAt(0)); }
 function serialize(subscription: PushSubscription) { const data = subscription.toJSON(); return { endpoint: subscription.endpoint, p256dh: data.keys?.p256dh || '', auth: data.keys?.auth || '' }; }
@@ -33,7 +34,11 @@ export function useGroomingManifest() {
 
 export function GroomingPhoneButton({ actorId }: { actorId: string }) {
   const [open, setOpen] = useState(false);
-  return <><Button icon={<MobileOutlined />} onClick={() => setOpen(true)}>На телефон</Button><Drawer title="Приложение грумера" width={520} open={open} onClose={() => setOpen(false)}><GroomingDeviceCard actorId={actorId} /></Drawer></>;
+  return <><Button icon={<MobileOutlined />} onClick={() => setOpen(true)}>На телефон</Button><GroomingPhoneDrawer actorId={actorId} open={open} onClose={() => setOpen(false)} /></>;
+}
+
+export function GroomingPhoneDrawer({ actorId, open, onClose }: { actorId: string; open: boolean; onClose: () => void }) {
+  return <Drawer title="Приложение грумера" width="min(520px, 100vw)" open={open} onClose={onClose}><GroomingDeviceCard actorId={actorId} /></Drawer>;
 }
 
 export function GroomingDeviceCard({ actorId }: { actorId: string }) {
@@ -102,12 +107,44 @@ export function GroomingDeviceCard({ actorId }: { actorId: string }) {
   </Space></Card>;
 }
 
+const noticeGroups = [
+  { key: 'CREATED', title: 'Новые записи', icon: <CalendarOutlined /> },
+  { key: 'RESCHEDULED', title: 'Переносы', icon: <SwapOutlined /> },
+  { key: 'CANCELLED', title: 'Отмены', icon: <CloseCircleOutlined /> },
+  { key: 'REASSIGNED', title: 'Передано другому грумеру', icon: <SwapOutlined /> },
+  { key: 'INFORMATION', title: 'Информация', icon: <InfoCircleOutlined /> },
+  { key: 'HISTORY', title: 'Предыдущие события', icon: <InfoCircleOutlined /> },
+];
+function noticeGroup(item: Notice) {
+  if (item.supersededAt) return 'HISTORY';
+  if (item.event === 'CONFIRMED' || item.event === 'BOOKED' || item.event === 'CREATED') return 'CREATED';
+  return noticeGroups.some(group => group.key === item.event) ? item.event : 'INFORMATION';
+}
+
 export function GroomingInbox({ actorId }: { actorId: string }) {
-  const query = useGroomingInbox(actorId), client = useQueryClient(), navigate = useNavigate(), { message } = App.useApp();
+  const query = useGroomingInbox(actorId, true, false), client = useQueryClient(), navigate = useNavigate(), { message } = App.useApp();
+  const [view, setView] = useState('unread'), [search, setSearch] = useState(''), [expanded, setExpanded] = useState<string[]>([]);
   const read = useMutation({ mutationFn: (id?: string) => apiRequest(`${base}/inbox/${id ? `${encodeURIComponent(id)}/read` : 'read-all'}`, { method: 'POST' }), onSuccess: () => client.invalidateQueries({ queryKey: ['grooming', actorId, 'staff-inbox'] }), onError: error => message.error(getErrorMessage(error)) });
-  return <Card title="Мои уведомления" extra={<Button disabled={!query.data?.unread} loading={read.isPending} onClick={() => read.mutate(undefined)}>Прочитать все</Button>} loading={query.isLoading}>
-    {query.isError && <Alert type="error" message={getErrorMessage(query.error)} action={<Button onClick={() => void query.refetch()}>Повторить</Button>} />}
-    {!query.isError && !query.isLoading && !query.data?.items.length && <Empty description="Новая запись, перенос или отмена появятся здесь" />}
-    <div className="grooming-inbox">{query.data?.items.map(item => <article key={item.id} className={!item.readAt && !item.supersededAt ? 'grooming-notice-unread' : ''}><div><Space wrap><strong>{item.title}</strong>{!item.readAt && !item.supersededAt && <Tag color="blue">Новое</Tag>}{item.supersededAt && <Tag>Запись изменилась</Tag>}</Space><p>{item.body}</p><Typography.Text type="secondary">{at(item.createdAt)}</Typography.Text></div><Space wrap><Button onClick={async () => { await read.mutateAsync(item.id); navigate(item.href); }}>Открыть</Button>{!item.readAt && <Button type="text" onClick={() => read.mutate(item.id)}>Прочитано</Button>}</Space></article>)}</div>
+  const visible = (query.data?.items || []).filter(item => (view !== 'unread' || (!item.readAt && !item.supersededAt)) && `${item.title} ${item.body}`.toLocaleLowerCase('ru').includes(search.trim().toLocaleLowerCase('ru')));
+  const groups = noticeGroups.map(group => ({ ...group, items: visible.filter(item => noticeGroup(item) === group.key) })).filter(group => group.items.length);
+  async function openNotice(item: Notice) {
+    try { if (!item.readAt) await read.mutateAsync(item.id); navigate(item.href); }
+    catch { /* Keep the notice visible; the mutation displays its error. */ }
+  }
+  return <Card className="module-inbox-card" title={<Space><BellOutlined />Мои оповещения</Space>} loading={query.isLoading}>
+    <div className="module-inbox-toolbar">
+      <div className="module-inbox-summary"><span>Новых событий: <strong>{query.data?.unread || 0}</strong></span><Button type="text" size="small" icon={<CheckOutlined />} disabled={!query.data?.unread} loading={read.isPending} onClick={() => read.mutate(undefined)}>Просмотрено всё</Button></div>
+      <div className="module-inbox-controls"><Segmented aria-label="Фильтр оповещений груминга" value={view} onChange={value => setView(String(value))} options={[{ value: 'unread', label: 'Новые' }, { value: 'all', label: 'Все' }]} /><Input allowClear prefix={<SearchOutlined />} aria-label="Поиск в оповещениях груминга" placeholder="Питомец или событие" value={search} onChange={event => setSearch(event.target.value)} /></div>
+    </div>
+    {query.isError && <Alert type="error" showIcon message={getErrorMessage(query.error)} action={<Button onClick={() => void query.refetch()}>Повторить</Button>} />}
+    {!query.isLoading && (groups.length ? <Collapse key={`${view}:${search.trim()}`} className="module-notice-groups" defaultActiveKey={groups.length === 1 ? [groups[0].key] : []} expandIconPosition="end" items={groups.map(group => ({
+      key: group.key,
+      label: <span className="module-notice-group-title">{group.icon}<strong>{group.title}</strong><Tag>{group.items.length}</Tag></span>,
+      children: <>{group.items.slice(0, expanded.includes(group.key) ? undefined : 3).map(item => <article key={item.id} className={`module-notice${!item.readAt && !item.supersededAt ? ' is-unread' : ''}${item.supersededAt ? ' is-superseded' : ''}`}>
+        <span className={`module-notice-icon${item.event === 'CANCELLED' ? ' is-cancelled' : ''}`}>{group.icon}</span>
+        <div className="module-notice-copy"><div className="module-notice-title"><strong>{item.title}</strong>{!item.readAt && !item.supersededAt && <Tag color="blue">Новое</Tag>}{item.supersededAt && <Tag>Запись изменилась</Tag>}</div><p>{item.body}</p><div className="module-notice-time">{at(item.createdAt)}{item.readAt ? ' · Просмотрено' : ''}</div><div className="module-notice-actions"><Button type="link" disabled={read.isPending} onClick={() => void openNotice(item)}>{item.href.includes('/bookings/') ? 'Открыть запись' : 'Открыть'} →</Button>{!item.readAt && <Button type="text" disabled={read.isPending} onClick={() => read.mutate(item.id)}>Просмотрено</Button>}</div></div>
+      </article>)}{group.items.length > 3 && <Button type="text" className="module-notice-more" onClick={() => setExpanded(current => current.includes(group.key) ? current.filter(key => key !== group.key) : [...current, group.key])}>{expanded.includes(group.key) ? 'Свернуть список' : `Показать ещё ${group.items.length - 3}`}</Button>}</>,
+    }))} /> : !query.isError && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={search.trim() ? 'По этому запросу ничего не найдено' : view === 'unread' ? 'Новых оповещений нет' : 'Событий пока нет'} />)}
+    <p className="module-inbox-footnote">Отметка «Просмотрено» не завершает запись и не меняет её статус.</p>
   </Card>;
 }

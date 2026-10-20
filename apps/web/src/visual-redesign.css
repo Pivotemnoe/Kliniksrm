@@ -15,6 +15,14 @@
   background: var(--crm-canvas);
 }
 
+/* A module-only role may not have the global search field. Keep its phone header to one row. */
+@media (max-width: 760px) {
+  .crm-shell .crm-header:not(:has(.global-search-wrap)) {
+    min-height: 62px;
+    grid-template-areas: "navigation actions";
+  }
+}
+
 .crm-shell :focus-visible {
   outline: 2px solid #0768df;
   outline-offset: 2px;

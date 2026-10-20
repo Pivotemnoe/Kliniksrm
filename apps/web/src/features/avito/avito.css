@@ -1,0 +1,31 @@
+.avito-page .avito-status { margin-bottom: 12px; }
+.avito-page .avito-notice { margin-bottom: 16px; }
+.avito-toolbar { margin: 0 0 16px; }
+.avito-row-link { display: flex; align-items: flex-start; flex-direction: column; height: auto; padding: 0; white-space: normal; text-align: left; }
+.avito-row-link span { font-size: 12px; color: var(--crm-muted, #586e8a); }
+.avito-thread { display: flex; flex-direction: column; gap: 12px; max-height: 430px; overflow: auto; padding: 12px; background: var(--crm-canvas, #f4f8fd); border-radius: 10px; }
+.avito-bubble { align-self: flex-start; width: fit-content; max-width: 92%; padding: 10px 14px; border: 1px solid var(--crm-line, #dbe7f5); border-radius: 10px; background: white; white-space: pre-wrap; overflow-wrap: anywhere; }
+.avito-out { align-self: flex-end; background: var(--crm-blue-soft, #eaf4ff); border-color: #bfd8f4; }
+.avito-bubble > div { margin-top: 5px; }
+.avito-outbox-text { white-space: pre-wrap; overflow-wrap: anywhere; margin: 12px 0; }
+.avito-knowledge { margin-bottom: 12px; }
+.avito-editor-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 16px; }
+.avito-editor-photo { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 10px; border: 1px solid var(--crm-line, #dbe7f5); border-radius: 10px; }
+.avito-editor-photo > img { width: 100%; height: 140px; object-fit: contain; border-radius: 6px; background: var(--crm-canvas, #f4f8fd); }
+.avito-editor-preview { max-width: 720px; overflow-wrap: anywhere; }
+.avito-editor-cover { width: 100%; max-height: 340px; object-fit: contain; border-radius: 12px; background: var(--crm-canvas, #f4f8fd); }
+.avito-listing-rule { display: grid; grid-template-columns: minmax(100px, 150px) minmax(150px, 1fr) 180px auto auto; gap: 10px; align-items: center; margin-bottom: 12px; }
+@media (max-width: 760px) { .avito-listing-rule { grid-template-columns: 1fr 1fr; padding: 12px; background: var(--crm-canvas, #f4f8fd); border-radius: 8px; } .avito-listing-rule .ant-switch { justify-self: start; } }
+
+.avito-page .ant-card, .avito-bubble, .avito-editor-photo { border-color: var(--crm-line, #dbe7f5); }
+.avito-bubble { color: var(--crm-ink, #10294d); }
+.avito-thread { padding: 16px; border: 1px solid var(--crm-line, #dbe7f5); border-radius: 12px; }
+.avito-editor-photo { border-radius: 12px; background: #fff; }
+.avito-publishing-state { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 12px; font-size: 12px; }
+@media (max-width: 700px) {
+  .avito-page .page-header-extra { width: 100%; }
+  .avito-thread { padding: 10px; }
+  .avito-bubble { max-width: 96%; }
+  .avito-editor-photos { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+  .avito-editor-photo .ant-btn { min-height: 36px; }
+}

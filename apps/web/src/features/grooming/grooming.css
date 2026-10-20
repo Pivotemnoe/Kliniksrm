@@ -23,3 +23,20 @@
 .grooming-offer:focus-visible,.grooming-event:focus-visible { outline: 3px solid #4d97c5; outline-offset: 2px; }
 @media(max-width: 640px) { .grooming-page .ant-page-header { padding: 0; } .grooming-specialists { grid-template-columns: 1fr; } }
 .grooming-device-card .ant-typography{margin-bottom:0}.grooming-inbox{display:grid;gap:12px}.grooming-inbox article{display:flex;justify-content:space-between;align-items:center;gap:18px;padding:18px;border:1px solid #e1e7ee;border-radius:14px}.grooming-inbox .grooming-notice-unread{background:#f0f6ff;border-color:#a8c9ff}.grooming-inbox p{margin:8px 0;color:#526879}.grooming-device-card .ant-space-item{max-width:100%}@media(max-width:600px){.grooming-inbox article{align-items:stretch;flex-direction:column;padding:14px}.grooming-device-card .ant-card-head-title{white-space:normal}.grooming-inbox .ant-card-extra{margin-inline-start:6px}}
+
+/* Module content inherits the accepted CRM surfaces and interaction colours. */
+.grooming-calendar-scroll, .grooming-calendar-column { border-color: var(--crm-line, #dbe7f5); }
+.grooming-calendar-scroll { scrollbar-gutter: stable; }
+.grooming-event { color: var(--crm-ink, #10294d); border-color: #bfd8f4; border-left-color: #0868df; background: #f2f8ff; }
+.grooming-event:hover { background: #eaf4ff; }
+.grooming-event-completed { background: #f0f8f1; border-color: #8fbea1; }
+.grooming-event-in_progress { background: #fff8e9; border-color: #d9bb70; }
+.grooming-event small, .grooming-work-periods, .grooming-empty-day { color: var(--crm-muted, #586e8a); }
+.grooming-offer { border-color: var(--crm-line, #dbe7f5); color: var(--crm-ink, #10294d); }
+.grooming-offer.is-selected { border-color: #0868df; background: #eaf4ff; }
+.grooming-offer:focus-visible, .grooming-event:focus-visible { outline: 2px solid #0868df; outline-offset: 2px; }
+.grooming-calendar-hint { display: none; }
+@media (max-width: 700px) {
+  .grooming-page .page-header-extra { width: 100%; }
+  .grooming-calendar-hint { display: block; color: #586e8a; font-size: 12px; }
+}

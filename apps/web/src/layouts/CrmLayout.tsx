@@ -16,6 +16,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { appConfig, isDemoAuthMode } from '../app/config';
 import { apiRequest } from '../api/client';
+import { crmTheme } from '../shared/theme/crmTheme';
 import { hasPermission } from '../auth/permissions';
 import { useCurrentEmployee, useLogoutMutation } from '../auth/useAuth';
 import { RouteLoadBoundary } from '../app/RouteLoadBoundary';
@@ -141,7 +142,7 @@ export function CrmLayout() {
   }
 
   return (
-    <ConfigProvider theme={{ token: { colorPrimary: '#0868df', borderRadius: 10, colorBgLayout: '#f4f8fd' } }}>
+    <ConfigProvider theme={crmTheme}>
     <Layout className={`crm-shell ${navigationCollapsed ? 'navigation-collapsed' : 'navigation-expanded'}`}>
       <Sider width={224} collapsedWidth={72} collapsed={navigationCollapsed} className="crm-sider">
         <button className="brand" type="button" onClick={() => navigate(getEmployeeDefaultRoute(employee))} aria-label={appConfig.brandName}>

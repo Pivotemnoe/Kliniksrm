@@ -1,14 +1,15 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Badge, Button, Card, Checkbox, Descriptions, Drawer, Empty, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Spin, Switch, Table, Tabs, Tag, Typography } from 'antd';
-import { CalendarOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
+import { Alert, App, Badge, Button, Card, Checkbox, Collapse, Descriptions, Drawer, Empty, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Spin, Switch, Table, Tabs, Tag, Typography } from 'antd';
+import { CalendarOutlined, MobileOutlined, PlusOutlined, ReloadOutlined, SettingOutlined } from '@ant-design/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { getErrorMessage } from '../../api/errors';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { PageHeader } from '../../shared/ui/PageHeader';
+import { ModuleActions } from '../../shared/ui/ModuleActions';
 import { at, Booking, Client, coatLabels, day, deliveryLabels, groomingApi, groomingReference, Offer, Overview, Rule, Shift, sizeLabels, Specialist, speciesLabels, statusLabels, time } from './grooming.api';
 import './grooming.css';
-import { GroomingDeviceCard, GroomingInbox, GroomingPhoneButton, useGroomingInbox, useGroomingManifest } from './GroomingNotifications';
+import { GroomingDeviceCard, GroomingInbox, GroomingPhoneDrawer, useGroomingInbox, useGroomingManifest } from './GroomingNotifications';
 
 const GroomingActorContext = createContext('');
 
@@ -16,12 +17,12 @@ const optionMap = (value: Record<string, string>) => Object.entries(value).map((
 const key = () => crypto.randomUUID();
 const nextDay = (value: string, offset: number) => { const result = new Date(`${value}T12:00:00+03:00`); result.setUTCDate(result.getUTCDate() + offset); return day(result); };
 
-export function GroomingPage() {
+export function GroomingPage({ standalone = false }: { standalone?: boolean } = {}) {
   const location = useLocation(), navigate = useNavigate(), client = useQueryClient();
   const { data: auth } = useCurrentEmployee();
   const overview = useQuery({ queryKey: ['grooming', auth?.employee.id, 'overview'], queryFn: groomingApi.overview, enabled: Boolean(auth?.employee.id) });
   useGroomingManifest();
-  const inbox = useGroomingInbox(auth?.employee.id || '', Boolean(overview.data));
+  const inbox = useGroomingInbox(auth?.employee.id || '', Boolean(overview.data), !standalone);
   useEffect(() => {
     const handler = (event: MessageEvent) => { if (event.data?.type === 'GROOMING_INBOX_CHANGED') void client.invalidateQueries({ queryKey: ['grooming', auth?.employee.id] }); };
     navigator.serviceWorker?.addEventListener('message', handler);
@@ -29,7 +30,7 @@ export function GroomingPage() {
   }, [client, auth?.employee.id]);
   const selected = location.pathname.split('/')[2] || 'calendar';
   const bookingId = selected === 'bookings' ? location.pathname.split('/')[3] : undefined;
-  const [create, setCreate] = useState(false), [move, setMove] = useState<Booking>();
+  const [create, setCreate] = useState(false), [move, setMove] = useState<Booking>(), [phoneOpen, setPhoneOpen] = useState(false);
   const canOperate = auth?.employee.permissions.includes('grooming.operate') || false;
   const manager = auth?.employee.roles.some(role => ['director', 'administrator'].includes(role)) || false;
   const refresh = () => client.invalidateQueries({ queryKey: ['grooming'] });
@@ -42,11 +43,16 @@ export function GroomingPage() {
     { key: 'clients', label: 'Клиенты и питомцы', children: <Clients /> },
     { key: 'specialists', label: 'Специалисты и графики', children: <Specialists overview={data} refresh={refresh} /> },
     ...(data.canManage ? [{ key: 'services', label: 'Услуги', children: <Services overview={data} refresh={refresh} /> }] : []),
-    { key: 'notifications', label: <Space>Уведомления<Badge count={inbox.data?.unread || 0} title={`Непрочитанных: ${inbox.data?.unread || 0}`} /></Space>, children: <Notifications /> },
+    { key: 'notifications', label: <Space>Оповещения<Badge count={inbox.data?.unread || 0} title={`Непросмотренных: ${inbox.data?.unread || 0}`} /></Space>, children: <Notifications /> },
     ...(data.canManage ? [{ key: 'settings', label: 'Настройки', children: <Settings overview={data} refresh={refresh} /> }] : []),
   ];
   return <GroomingActorContext.Provider value={auth!.employee.id}><div key={auth!.employee.id} className="page grooming-page">
-    <PageHeader title="Груминг" description="Записи, команда и уход за питомцами" extra={<Space wrap><GroomingPhoneButton actorId={auth!.employee.id} /><Button icon={<ReloadOutlined />} onClick={refresh}>Обновить</Button>{manager && canOperate && !data.limited && <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreate(true)}>Записать питомца</Button>}{auth?.employee.roles.includes('director') && <Button onClick={() => navigate('/settings/modules')}>Подключение модуля</Button>}</Space>} />
+    <PageHeader title="Груминг" description="Записи, команда и уход за питомцами" extra={<ModuleActions primary={manager && canOperate && !data.limited ? <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreate(true)}>Записать питомца</Button> : <Button icon={<MobileOutlined />} onClick={() => setPhoneOpen(true)}>На телефон</Button>} actions={[
+      ...(manager && canOperate && !data.limited ? [{ key: 'phone', label: 'На телефон', icon: <MobileOutlined />, onClick: () => setPhoneOpen(true) }] : []),
+      { key: 'refresh', label: 'Обновить', icon: <ReloadOutlined />, onClick: refresh },
+      ...(auth!.employee.roles.includes('director') ? [{ key: 'module', label: 'Подключение модуля', icon: <SettingOutlined />, onClick: () => navigate(standalone ? '/grooming/admin/modules' : '/settings/modules') }] : []),
+    ]} />} />
+    <GroomingPhoneDrawer actorId={auth!.employee.id} open={phoneOpen} onClose={() => setPhoneOpen(false)} />
     {data.limited && <Alert className="grooming-banner" type="info" showIcon message="Модуль отключён. История сохранена, новые записи недоступны." />}
     {!data.limited && !data.settings.selfBookingEnabled && <Alert className="grooming-banner" type="info" showIcon message="Самостоятельная запись выключена. Настройте услуги и графики, затем включите её в настройках." />}
     <Tabs activeKey={items.some(item => item.key === selected) ? selected : 'calendar'} items={items} onChange={tab => navigate(`/grooming/${tab}`)} />
@@ -68,7 +74,8 @@ function CalendarView({ overview, onOpen }: { overview: Overview; onOpen: (id: s
   return <Space direction="vertical" size={16} className="full-width">
     <Space wrap><Input type="date" aria-label="Дата календаря" value={date} onInput={event => setDate(event.currentTarget.value || day(new Date()))} onChange={e => setDate(e.target.value || day(new Date()))} /><Select aria-label="Вид календаря" value={mode} options={[{ value: 'day', label: 'День' }, { value: 'week', label: 'Неделя' }]} onChange={setMode} /><Select aria-label="Грумер" value={specialist} options={[{ value: '', label: 'Все специалисты' }, ...overview.specialists.map(s => ({ value: s.employeeId, label: s.displayName }))]} onChange={setSpecialist} style={{ minWidth: 210 }} /><Tag>Время МСК</Tag></Space>
     {query.isError && <Alert type="error" message={getErrorMessage(query.error)} />}
-    {!columns.length ? <Empty description="Добавьте специалистов и их графики" /> : <div className="grooming-calendar-scroll"><div className="grooming-calendar" style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(210px, 1fr))` }}>
+    {columns.length > 1 && <span className="grooming-calendar-hint">Листайте календарь вбок, чтобы увидеть остальных специалистов</span>}
+    {!columns.length ? <Empty description="Добавьте специалистов и их графики" /> : <div className="grooming-calendar-scroll" tabIndex={0} role="region" aria-label="Календарь груминга, горизонтальная прокрутка"><div className="grooming-calendar" style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(210px, 1fr))` }}>
       {columns.map(column => { const bookings = (query.data || []).filter(b => b.status !== 'CANCELLED' && (!specialist || b.employeeId === specialist) && (mode === 'week' ? day(b.startsAt) === column.id : b.employeeId === column.id)); const work = (shifts.data || []).filter(s => s.isActive && (!specialist || s.employeeId === specialist) && (mode === 'week' ? new Date(s.startsAt) < new Date(`${nextDay(column.id, 1)}T00:00:00+03:00`) && new Date(s.endsAt) > new Date(`${column.id}T00:00:00+03:00`) : s.employeeId === column.id && new Date(s.startsAt) < new Date(`${end}T00:00:00+03:00`) && new Date(s.endsAt) > new Date(`${date}T00:00:00+03:00`))); return <section className="grooming-calendar-column" key={column.id}><h3>{column.title}</h3><div className="grooming-work-periods">{work.length ? work.map(s => <span key={s.id}>{mode === 'week' && `${s.employee.fullName} · `}{s.kind === 'BLOCK' ? 'Недоступен · ' : ''}{time(s.startsAt)}–{time(s.endsAt)}</span>) : <span>Рабочая смена не задана</span>}</div><div className="grooming-day-events">{bookings.map(b => <button className={`grooming-event grooming-event-${b.status.toLowerCase()}`} onClick={() => onOpen(b.id)} key={b.id}><span className="grooming-event-time">{time(b.startsAt)}–{time(b.endsAt)}</span><strong>{b.animal.nickname}</strong><span>{b.serviceTitle}</span><small>{mode === 'week' ? `${b.employee.fullName} · ` : ''}{statusLabels[b.status]}</small><small>Место занято до {time(b.blockedUntil)}</small></button>)}{!bookings.length && <p className="grooming-empty-day">Записей нет</p>}</div></section>; })}
     </div></div>}
   </Space>;
@@ -97,7 +104,8 @@ function BookingDetails({ id, canOperate, canMove, onClose, onMove, refresh }: {
   const booking = query.data;
   const actions: Record<string, string[]> = { CONFIRMED: ['ARRIVED', 'CANCELLED', 'NO_SHOW'], ARRIVED: ['IN_PROGRESS', 'CANCELLED'], IN_PROGRESS: ['COMPLETED'] };
   return <Drawer open={Boolean(id)} title="Запись на груминг" onClose={onClose} width="min(720px, 100vw)">{query.isError && <Alert type="error" message={getErrorMessage(query.error)} />}{booking && <Space direction="vertical" size={20} className="full-width"><Tag color="blue">{statusLabels[booking.status]}</Tag><Descriptions column={1} bordered size="small"><Descriptions.Item label="Питомец">{booking.animal.nickname} · {booking.animal.breed || booking.animal.species}</Descriptions.Item><Descriptions.Item label="Клиент">{booking.owner?.fullName} · {booking.owner?.phone}</Descriptions.Item><Descriptions.Item label="Услуга">{booking.serviceTitle} · {booking.price} ₽</Descriptions.Item><Descriptions.Item label="Время">{at(booking.startsAt)}–{time(booking.endsAt)} МСК</Descriptions.Item><Descriptions.Item label="Подготовка места">До {time(booking.blockedUntil)}</Descriptions.Item><Descriptions.Item label="Специалист">{booking.employee.fullName}</Descriptions.Item><Descriptions.Item label="Место">{booking.location.name} · {booking.workplace.name}</Descriptions.Item><Descriptions.Item label="Пожелания">{booking.notes || 'Не указаны'}</Descriptions.Item><Descriptions.Item label="Образы">{booking.looks?.length ? <Space direction="vertical">{booking.looks.map(id => { const reference = groomingReference(id); return reference.url ? <a key={id} href={reference.url} target="_blank" rel="noopener noreferrer">{reference.title} ↗</a> : <span key={id}>{reference.title}</span>; })}</Space> : 'Не выбраны'}</Descriptions.Item></Descriptions>
-    <Space wrap>{canMove && booking.status === 'CONFIRMED' && <Button onClick={() => onMove(booking)}>Перенести</Button>}{canOperate && actions[booking.status]?.map(status => <Popconfirm key={status} title={`Установить статус «${statusLabels[status]}»?`} onConfirm={() => mutation.mutate(status)}><Button danger={status === 'CANCELLED'} loading={mutation.isPending}>{statusLabels[status]}</Button></Popconfirm>)}</Space><Typography.Title level={5}>Уведомления</Typography.Title>{booking.notifications?.map(n => <div key={n.id}><Tag>{deliveryLabels[n.status] || n.status}</Tag>{n.recipientKind === 'OWNER' ? 'Клиент' : 'Сотрудник'} · {at(n.scheduledAt)}{n.lastError && <p>{n.lastError}</p>}</div>)}</Space>}</Drawer>;
+    <Space wrap>{canMove && booking.status === 'CONFIRMED' && <Button onClick={() => onMove(booking)}>Перенести</Button>}{canOperate && actions[booking.status]?.map(status => <Popconfirm key={status} title={`Установить статус «${statusLabels[status]}»?`} onConfirm={() => mutation.mutate(status)}><Button danger={status === 'CANCELLED'} loading={mutation.isPending}>{statusLabels[status]}</Button></Popconfirm>)}</Space>{booking.notifications?.some(item => item.status === 'FAILED' || item.status === 'UNKNOWN') && <Alert type="warning" showIcon message="Проверьте доставку оповещений" />}
+    {Boolean(booking.notifications?.length) && <Collapse className="full-width" items={[{ key: 'delivery', label: `Доставка оповещений · ${booking.notifications!.length}`, children: <Space direction="vertical" size={12} className="full-width">{booking.notifications!.map(n => <div key={n.id}><Tag>{deliveryLabels[n.status] || n.status}</Tag>{n.recipientKind === 'OWNER' ? 'Клиент' : 'Сотрудник'} · {at(n.scheduledAt)}{n.lastError && <Typography.Paragraph type="secondary" style={{ margin: '4px 0 0' }}>{({ DISABLED: 'Отправка выключена', DEFERRED: 'Отправка отложена', SENDING: 'Проверяется прежняя отправка', NO_CONSENT: 'Нет согласия на сообщения', EXPIRED: 'Срок сообщения истёк', CANCELLED: 'Сообщение отменено', UNKNOWN: 'Требуется сверить доставку' } as Record<string, string>)[n.lastError] || n.lastError}</Typography.Paragraph>}</div>)}</Space> }]} />}</Space>}</Drawer>;
 }
 
 function Clients() {
@@ -139,7 +147,19 @@ function Services({ overview, refresh }: { overview: Overview; refresh: () => Pr
 function Notifications() {
   const actorId = useContext(GroomingActorContext);
   const query = useQuery({ queryKey: ['grooming', actorId, 'notifications'], queryFn: groomingApi.notifications, refetchInterval: 15000 });
-  return <Space direction="vertical" size={20} className="full-width"><GroomingDeviceCard actorId={actorId} /><GroomingInbox actorId={actorId} /><Typography.Title level={4}>Доставка через MAX</Typography.Title><Typography.Paragraph type="secondary">Используется текущий MAX-бот клиники. Статус «MAX принял» означает подтверждение отправки сервисом.</Typography.Paragraph>{query.isError && <Alert type="error" message={getErrorMessage(query.error)} />}<Table rowKey="id" dataSource={query.data} loading={query.isLoading} scroll={{ x: 800 }} columns={[{ title: 'Запланировано', dataIndex: 'scheduledAt', render: at }, { title: 'Адресат', dataIndex: 'recipientKind', render: v => v === 'OWNER' ? 'Клиент' : 'Сотрудник' }, { title: 'Сообщение', dataIndex: 'text', width: 400 }, { title: 'Доставка', dataIndex: 'status', render: v => <Tag>{deliveryLabels[v] || v}</Tag> }, { title: 'Причина', dataIndex: 'lastError' }]} /></Space>;
+  const failed = query.data?.filter(item => item.status === 'FAILED' || item.status === 'UNKNOWN').length || 0;
+  return <Space direction="vertical" size={16} className="full-width">
+    <GroomingInbox actorId={actorId} />
+    {query.isError && <Alert type="error" showIcon message={getErrorMessage(query.error)} />}
+    {failed > 0 && <Alert type="warning" showIcon message={`Проверьте доставку MAX: ${failed}`} description="Подробности — в разделе доставки ниже." />}
+    <Collapse items={[
+      { key: 'device', label: 'Приложение и оповещения на телефоне', children: <GroomingDeviceCard actorId={actorId} /> },
+      { key: 'delivery', label: <Space>Доставка сообщений через MAX{failed > 0 && <Tag color="warning">{failed}</Tag>}</Space>, children: <>
+        <Typography.Paragraph type="secondary">Используется текущий MAX-бот клиники. Статус «MAX принял» означает подтверждение отправки сервисом.</Typography.Paragraph>
+        <Table rowKey="id" dataSource={query.data} loading={query.isLoading} scroll={{ x: 800 }} columns={[{ title: 'Запланировано', dataIndex: 'scheduledAt', render: at }, { title: 'Адресат', dataIndex: 'recipientKind', render: v => v === 'OWNER' ? 'Клиент' : 'Сотрудник' }, { title: 'Сообщение', dataIndex: 'text', width: 400 }, { title: 'Доставка', dataIndex: 'status', render: v => <Tag>{deliveryLabels[v] || v}</Tag> }, { title: 'Причина', dataIndex: 'lastError' }]} />
+      </> },
+    ]} />
+  </Space>;
 }
 
 function Settings({ overview, refresh }: { overview: Overview; refresh: () => Promise<unknown> }) {
