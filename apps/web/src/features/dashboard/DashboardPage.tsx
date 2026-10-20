@@ -73,21 +73,22 @@ export function DashboardPage() {
   const employee = auth?.employee;
   const today = useMemo(() => toDateInput(new Date()), []);
   const dashboardQuery = useQuery({
-    queryKey: ['dashboard', today],
+    queryKey: ['dashboard', employee?.id, today],
     queryFn: () => getDashboardToday({ date: today }),
+    enabled: Boolean(employee?.id),
     refetchInterval: 10_000,
   });
   const summary = dashboardQuery.data;
   const portalStatisticsQuery = useQuery({
-    queryKey: ['dashboard', 'portal-statistics'],
+    queryKey: ['dashboard', employee?.id, 'portal-statistics'],
     queryFn: getDirectorPortalStatistics,
-    enabled: summary?.workspace.mode === 'director',
+    enabled: Boolean(employee?.roles.includes('director') && summary?.workspace.mode === 'director'),
     refetchInterval: 60_000,
   });
   const siteAnalyticsQuery = useQuery({
-    queryKey: ['dashboard', 'site-analytics', siteAnalyticsDays],
+    queryKey: ['dashboard', employee?.id, 'site-analytics', siteAnalyticsDays],
     queryFn: () => getDirectorSiteAnalytics(siteAnalyticsDays),
-    enabled: summary?.workspace.mode === 'director',
+    enabled: Boolean(employee?.roles.includes('director') && summary?.workspace.mode === 'director'),
     refetchInterval: 60_000,
   });
   const todayVisits = summary?.visits.todayItems ?? summary?.visits.items ?? [];

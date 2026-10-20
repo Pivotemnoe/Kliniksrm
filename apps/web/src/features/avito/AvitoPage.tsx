@@ -13,13 +13,14 @@ import './avito.css';
 import { AvitoListingEditor } from './AvitoListingEditor';
 import { AvitoStatusPanel } from './AvitoStatusPanel';
 import { ModuleActions } from '../../shared/ui/ModuleActions';
+import { createOperationKey } from '../../shared/utils/operationKey';
 
 const directions = Object.entries(directionLabels).filter(([value]) => value !== 'UNASSIGNED').map(([value, label]) => ({ value, label }));
 const allDirections = [{ value: '', label: 'Все направления' }, ...directions, { value: 'UNASSIGNED', label: 'Без направления' }];
 const modeLabels: Record<string, string> = { MANUAL: 'Ручной', SUGGEST: 'Подсказки', AUTO: 'Автоматический', BOT: 'Помощник', HUMAN: 'Сотрудник', PAUSED: 'Пауза' };
 const statusLabels: Record<string, string> = { DRAFT: 'Черновик', PENDING: 'В очереди', SENDING: 'Отправляется', SENT: 'Отправлено', UNCERTAIN: 'Нужна сверка', CANCELLED: 'Отменено', FAILED: 'Ошибка' };
 const purposeLabels: Record<string, string> = { CONTACT: 'Запрос контактов', SUBMITTED: 'Передача заявки', REPLY: 'Ответ', CRM_REPLY: 'Ответ по справочникам CRM' };
-const key = () => crypto.randomUUID();
+const key = createOperationKey;
 
 export function AvitoPage() {
   const { data: auth } = useCurrentEmployee(); const navigate = useNavigate();
@@ -28,12 +29,16 @@ export function AvitoPage() {
   const query = useQuery({ queryKey: ['avito', 'overview'], queryFn: avitoApi.overview, retry: (attempt, error) => !(error instanceof ApiError && error.status === 404) && attempt < 2 });
   const overview = query.data;
   const unavailable = query.error instanceof ApiError && query.error.status === 404;
+  const defaultTab = director ? 'editor' : 'inbox';
+  const requestedTab = tabParams.get('tab') || defaultTab;
+  const activeTab = !director && ['editor', 'rules', 'test', 'connection'].includes(requestedTab) ? defaultTab : requestedTab;
+  const selectTab = (tab: string) => setTabParams(previous => { previous.set('tab', tab); previous.delete('conversation'); return previous; }, { replace: true });
   return <div className="page avito-page">
-    <PageHeader title="Администратор Авито" description="Один аккаунт — отдельные обращения, правила и ответы клиники, груминга и зоогостиницы." extra={<ModuleActions actions={[{ key: 'refresh', label: 'Обновить', icon: <ReloadOutlined />, onClick: () => query.refetch(), loading: query.isFetching }, ...(director && !unavailable ? [{ key: 'module', label: 'Подключение модуля', icon: <SettingOutlined />, onClick: () => navigate('/settings/modules') }] : [])]} />} />
+    <PageHeader title="Авито" description="Объявления и обращения клиентов. Для каждого направления — свои тексты и правила." extra={<ModuleActions actions={[{ key: 'refresh', label: 'Обновить', icon: <ReloadOutlined />, onClick: () => query.refetch(), loading: query.isFetching }, ...(director && !unavailable ? [{ key: 'module', label: 'Подключение модуля', icon: <SettingOutlined />, onClick: () => navigate('/settings/modules') }] : [])]} />} />
     {unavailable ? <Card><Empty description={<Space direction="vertical"><Typography.Text strong>Модуль Авито пока не подключён</Typography.Text><Typography.Text type="secondary">После подключения серверного модуля здесь появятся переписка, заявки и объявления.</Typography.Text></Space>} /></Card> : query.isError && <Alert type="error" showIcon message={getErrorMessage(query.error)} />}
     {overview && <>
-      <AvitoStatusPanel overview={overview} modeLabel={modeLabels[overview.mode]} />
-      <Tabs activeKey={director || !['editor','rules','test','connection'].includes(tabParams.get('tab') || '') ? tabParams.get('tab') || 'inquiries' : 'inquiries'} onChange={tab => setTabParams(previous => { previous.set('tab', tab); return previous; }, { replace: true })} items={[
+      <AvitoStatusPanel overview={overview} modeLabel={modeLabels[overview.mode]} director={director} onOpen={selectTab} />
+      <Tabs activeKey={activeTab} onChange={selectTab} items={[
         { key: 'inquiries', label: 'Готовые заявки', children: <ReadyInquiries overview={overview} canOperate={hasPermission(auth?.employee, 'avito.operate')} /> },
         { key: 'inbox', label: <Space><MessageOutlined />Переписка</Space>, children: <Inbox overview={overview} canOperate={hasPermission(auth?.employee, 'avito.operate')} /> },
         { key: 'metrics', label: <Space><PhoneOutlined />Звонки и эффективность</Space>, children: <CallMetrics overview={overview} canOperate={hasPermission(auth?.employee, 'avito.operate')} /> },

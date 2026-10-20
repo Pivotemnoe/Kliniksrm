@@ -1,0 +1,51 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { randomFillSync } from 'node:crypto';
+import test from 'node:test';
+import ts from 'typescript';
+import { QueryClient } from '@tanstack/react-query';
+
+function load(path, globals = {}) {
+  const exports = {};
+  const code = ts.transpileModule(readFileSync(new URL('../' + path, import.meta.url), 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  new Function('exports', ...Object.keys(globals), code)(exports, ...Object.values(globals));
+  return exports;
+}
+
+test('HTTP LAN creates independent valid operation keys without crypto.randomUUID', () => {
+  const { createOperationKey } = load('apps/web/src/shared/utils/operationKey.ts', {
+    globalThis: { crypto: { getRandomValues: bytes => randomFillSync(bytes) } },
+  });
+  const keys = Array.from({ length: 1000 }, () => createOperationKey());
+  assert.equal(new Set(keys).size, keys.length);
+  for (const key of keys) assert.match(key, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+});
+
+test('HTTPS keeps the native operation key generator', () => {
+  const { createOperationKey } = load('apps/web/src/shared/utils/operationKey.ts', {
+    globalThis: { crypto: { randomUUID: () => 'native-operation-key', getRandomValues: () => assert.fail('fallback was unnecessary') } },
+  });
+  assert.equal(createOperationKey(), 'native-operation-key');
+});
+
+test('switching employees removes director data and ignores a late director response', async () => {
+  const { clearStaffSessionCache } = load('apps/web/src/auth/sessionCache.ts');
+  const cache = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+  cache.setQueryData(['auth', 'me'], { employee: { id: 'director', roles: ['director'] } });
+  cache.setQueryData(['dashboard', 'director', 'portal-statistics'], { invitedOwners: 78 });
+  cache.setQueryData(['avito', 'overview'], { settings: { directorOnly: true } });
+  let completeDirectorRequest;
+  const lateResponse = new Promise(resolve => { completeDirectorRequest = resolve; });
+  const request = cache.fetchQuery({ queryKey: ['dashboard', 'director', 'today'], queryFn: () => lateResponse }).catch(() => undefined);
+  await clearStaffSessionCache(cache);
+  assert.equal(cache.getQueryCache().getAll().length, 0);
+  cache.setQueryData(['auth', 'me'], { employee: { id: 'administrator', roles: ['administrator'] } });
+  completeDirectorRequest({ workspace: { mode: 'director' } });
+  await request;
+  assert.equal(cache.getQueryData(['dashboard', 'director', 'today']), undefined);
+  assert.equal(cache.getQueryData(['avito', 'overview']), undefined);
+  assert.equal(cache.getQueryData(['auth', 'me']).employee.id, 'administrator');
+  cache.clear();
+});

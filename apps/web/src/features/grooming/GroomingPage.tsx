@@ -7,6 +7,7 @@ import { getErrorMessage } from '../../api/errors';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { ModuleActions } from '../../shared/ui/ModuleActions';
+import { createOperationKey } from '../../shared/utils/operationKey';
 import { at, Booking, Client, coatLabels, day, deliveryLabels, groomingApi, groomingReference, Offer, Overview, Rule, Shift, sizeLabels, Specialist, speciesLabels, statusLabels, time } from './grooming.api';
 import './grooming.css';
 import { GroomingDeviceCard, GroomingInbox, GroomingPhoneDrawer, useGroomingInbox, useGroomingManifest } from './GroomingNotifications';
@@ -14,7 +15,7 @@ import { GroomingDeviceCard, GroomingInbox, GroomingPhoneDrawer, useGroomingInbo
 const GroomingActorContext = createContext('');
 
 const optionMap = (value: Record<string, string>) => Object.entries(value).map(([value, label]) => ({ value, label }));
-const key = () => crypto.randomUUID();
+const key = createOperationKey;
 const nextDay = (value: string, offset: number) => { const result = new Date(`${value}T12:00:00+03:00`); result.setUTCDate(result.getUTCDate() + offset); return day(result); };
 
 export function GroomingPage({ standalone = false }: { standalone?: boolean } = {}) {
