@@ -4,12 +4,16 @@ The public static client is served at https://pet.temichevvet.ru/ on RU
 193.188.23.65. NL is SSH transit only. The clinic API, CRM Web and owner gateway
 images are not rebuilt by this website deployment.
 
-- Static release: `grooming-site-20261020-r1`, source
+- Current static release: `grooming-site-20261020-prices-r2`, source
+  `be34b88b9b96ecf5cf6d885003eabbf66d36a34b`.
+- Previous release retained for rollback: `grooming-site-20261020-r1`, source
   `ef20104bae63e37dffc7f68ba9e2c2bb9043434e`.
 - Root: `/var/www/temichevvet-grooming/current`.
 - Vhost: `/etc/nginx/sites-available/pet.temichevvet.ru`.
 - Nginx backup and release receipts:
   `/var/backups/temichevvet-grooming/grooming-site-20261020-r1`.
+- Static price-update receipt:
+  `/var/backups/temichevvet-grooming/grooming-site-20261020-prices-r2`.
 - `release.py` scopes staging, HTTPS verification and rollback to this hostname.
   Stage is intentionally one-shot. Inspect its receipt before repeating a run.
 - Subsequent static updates use `update-static.py`. It validates the archive and
@@ -56,6 +60,14 @@ prices, workplaces and groomer shifts, which the owner chose to enter in CRM.
 Self-booking remains disabled until that setup is complete. This deployment
 does not assert that a new appointment or MAX reminder was sent.
 
+The published price section contains 65 dog breed/weight categories, cat care
+and 15 additional procedures. It uses the owner's clear handwritten corrections
+and the confirmed +300 RUB increase on every monetary amount, including both
+range bounds, hourly rates and supplements. The 30% supplement stays a percentage.
+Illegible or covered source prices remain quotes before booking. The source
+photographs and their private provenance are not part of the public package.
+
 Evidence is saved in the shared workspace under
-`output/deployments/grooming-site-20261020-r1/`. Local build/cache cleanup has a
+`output/deployments/grooming-site-20261020-r1/` and
+`output/grooming-prices-20261020/`. Local build/cache cleanup has a
 separate receipt under `output/maintenance/crm-cache-cleanup-20261020/`.
