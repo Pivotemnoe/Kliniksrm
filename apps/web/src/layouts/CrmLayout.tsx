@@ -57,9 +57,10 @@ export function CrmLayout() {
   const { data } = useCurrentEmployee();
   const logoutMutation = useLogoutMutation();
   const employee = data?.employee;
-  const moduleAvailability = useQuery({ queryKey: ['clinic-module-availability'], queryFn: () => apiRequest<Array<{ key: string; available: boolean }>>('/v1/clinic-modules/availability'), enabled: Boolean(employee && (hasPermission(employee, 'grooming.read') || hasPermission(employee, 'modules.manage'))), refetchInterval: 30000 });
+  const moduleAvailability = useQuery({ queryKey: ['clinic-module-availability'], queryFn: () => apiRequest<Array<{ key: string; available: boolean }>>('/v1/clinic-modules/availability'), enabled: Boolean(employee && (hasPermission(employee, 'grooming.read') || hasPermission(employee, 'pet_hotel.read') || hasPermission(employee, 'modules.manage'))), refetchInterval: 30000 });
   const groomingAvailable = moduleAvailability.data?.some(item => item.key === 'GROOMING' && item.available) || false;
-  const accessibleMenuItems = useMemo(() => getAccessibleMenuItems(employee)?.filter(item => item && ('key' in item) && (item.key !== '/grooming' || groomingAvailable)), [employee, groomingAvailable]);
+  const petHotelAvailable = moduleAvailability.data?.some(item => item.key === 'PET_HOTEL' && item.available) || false;
+  const accessibleMenuItems = useMemo(() => getAccessibleMenuItems(employee)?.filter(item => item && ('key' in item) && (item.key !== '/grooming' || groomingAvailable) && (item.key !== '/pet-hotel' || petHotelAvailable)), [employee, groomingAvailable, petHotelAvailable]);
   useActivityTracking(Boolean(employee));
   useLiveUpdates(Boolean(employee), queryClient);
   const selectedKey = useMemo(() => getSelectedMenuKey(location.pathname), [location.pathname]);

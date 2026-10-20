@@ -7,6 +7,7 @@ import { getErrorMessage } from '../../api/errors';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { ModuleActions } from '../../shared/ui/ModuleActions';
+import { ModulePublicLink, groomingPublicUrl } from '../../shared/ui/ModulePublicLink';
 import { createOperationKey } from '../../shared/utils/operationKey';
 import { at, Booking, Client, coatLabels, day, deliveryLabels, groomingApi, groomingReference, Offer, Overview, Rule, Shift, sizeLabels, Specialist, speciesLabels, statusLabels, time } from './grooming.api';
 import './grooming.css';
@@ -53,6 +54,7 @@ export function GroomingPage({ standalone = false }: { standalone?: boolean } = 
       { key: 'refresh', label: 'Обновить', icon: <ReloadOutlined />, onClick: refresh },
       ...(auth!.employee.roles.includes('director') ? [{ key: 'module', label: 'Подключение модуля', icon: <SettingOutlined />, onClick: () => navigate(standalone ? '/grooming/admin/modules' : '/settings/modules') }] : []),
     ]} />} />
+    <ModulePublicLink label="Сайт груминга" href={groomingPublicUrl} />
     <GroomingPhoneDrawer actorId={auth!.employee.id} open={phoneOpen} onClose={() => setPhoneOpen(false)} />
     {data.limited && <Alert className="grooming-banner" type="info" showIcon message="Модуль отключён. История сохранена, новые записи недоступны." />}
     {!data.limited && !data.settings.selfBookingEnabled && <Alert className="grooming-banner" type="info" showIcon message="Самостоятельная запись выключена. Настройте услуги и графики, затем включите её в настройках." />}

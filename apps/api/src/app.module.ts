@@ -1,5 +1,6 @@
 import { AvitoModule } from './modules/avito/avito.module';
 import { GroomingCrmModule } from './modules/grooming/grooming.module';
+import { PetHotelModule } from './modules/pet-hotel/pet-hotel.module';
 import { ClinicModulesModule } from './modules/clinic-modules/clinic-modules.module';
 import { Module } from '@nestjs/common';
 import { AddressesModule } from './modules/addresses/addresses.module';
@@ -47,6 +48,7 @@ import { PrismaModule } from './prisma/prisma.module';
   imports: [
     AvitoModule,
     GroomingCrmModule,
+    PetHotelModule,
     ClinicModulesModule,
     PrismaModule,
     AddressesModule,

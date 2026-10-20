@@ -46,3 +46,5 @@
   .module-notice-actions .ant-btn { min-height: 40px; }
   .module-inbox-card .ant-card-body { padding: 14px; }
 }
+.module-public-link { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; margin: -4px 0 18px; min-width: 0; font-size: 13px; color: var(--crm-muted, #586e8a); }
+.module-public-link a { color: var(--crm-primary, #0868df); overflow-wrap: anywhere; }

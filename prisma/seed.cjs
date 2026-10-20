@@ -12,6 +12,9 @@ const DEFAULT_ORGANIZATION_ID = '11111111-1111-4111-8111-000000000001';
 const DEFAULT_OFFICE_ID = '11111111-1111-4111-8111-000000000101';
 
 const permissions = [
+  ['pet_hotel.read', 'Просмотр зоогостиницы'],
+  ['pet_hotel.operate', 'Брони, заезд и выезд зоогостиницы'],
+  ['pet_hotel.manage', 'Места и условия зоогостиницы'],
   ['avito.read', 'Просмотр обращений Авито'],
   ['avito.operate', 'Обработка обращений Авито'],
   ['avito.manage', 'Подключение и настройки Авито'],
@@ -85,6 +88,8 @@ const roles = [
     'administrator',
     'Администратор клиники',
     [
+      'pet_hotel.read',
+      'pet_hotel.operate',
       'avito.read',
       'avito.operate',
       'grooming.read',

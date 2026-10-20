@@ -9,6 +9,8 @@ type RouteAccessRule = {
 };
 
 const routeAccessRules: RouteAccessRule[] = [
+  { path: '/pet-hotel/settings', anyOf: ['pet_hotel.manage'] },
+  { path: '/pet-hotel', anyOf: ['pet_hotel.read'] },
   { path: '/avito', anyOf: ['avito.read'], roles: ['director', 'administrator'] },
   { path: '/grooming/admin/modules', anyOf: ['modules.manage'], roles: ['director'] },
   { path: '/grooming/admin/remote-access', anyOf: ['remote_access.read'], roles: ['director'] },
@@ -96,6 +98,7 @@ const fallbackRouteCandidates = [
   '/store',
   '/news',
   '/grooming',
+  '/pet-hotel',
   '/staff-messages',
   '/profile',
 ];
