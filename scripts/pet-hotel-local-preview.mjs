@@ -21,4 +21,4 @@ await writeFile('output/pet-hotel-module-20261020/preview-access.json',JSON.stri
 await f.close();
 const app=await hotelQaApp(); await app.listen(4292,'127.0.0.1');
 console.log('Synthetic pet hotel API ready at http://127.0.0.1:4292/api');
-for(const signal of ['SIGINT','SIGTERM']) process.on(signal,async()=>{await app.close();process.exit(0);});
+for(const signal of ['SIGINT','SIGTERM']) process.on(signal,async()=>{app.getHttpServer().closeAllConnections();await app.close();process.exit(0);});
