@@ -455,3 +455,11 @@ model GroomingBookingDraft {
   @@index([ipHash, createdAt])
   @@index([expiresAt])
 }
+
+
+model GroomingStorefrontSnapshot {
+  id String @id
+  payload Json
+  fingerprint String
+  receivedAt DateTime @default(now())
+}

@@ -1,0 +1,1262 @@
+{
+  "version": "grooming-prices-20261020-300",
+  "pricePolicy": {
+    "increaseRub": 300,
+    "alreadyApplied": true,
+    "percentageUnchanged": true
+  },
+  "dogs": [
+    {
+      "id": "westie",
+      "name": "Вест-хайленд-уайт-терьер",
+      "group": "Жёсткая шерсть",
+      "source": 3,
+      "dry": null,
+      "hygiene": null,
+      "full": {
+        "min": 2500,
+        "max": 3300
+      },
+      "catalogueId": "westie",
+      "duration": "около 3 часов"
+    },
+    {
+      "id": "griffon",
+      "name": "Брюссельский гриффон",
+      "group": "Жёсткая шерсть",
+      "source": 3,
+      "dry": null,
+      "hygiene": null,
+      "full": null
+    },
+    {
+      "id": "fox-terrier",
+      "name": "Фокстерьер",
+      "group": "Жёсткая шерсть",
+      "source": 3,
+      "dry": null,
+      "hygiene": null,
+      "full": {
+        "min": 2800,
+        "max": 4300
+      }
+    },
+    {
+      "id": "airedale",
+      "name": "Эрдельтерьер",
+      "group": "Жёсткая шерсть",
+      "source": 3,
+      "dry": null,
+      "hygiene": null,
+      "full": null,
+      "catalogueId": "airedale",
+      "duration": "около 3 часов"
+    },
+    {
+      "id": "mini-schnauzer",
+      "name": "Цвергшнауцер",
+      "group": "Жёсткая шерсть",
+      "source": 3,
+      "dry": null,
+      "hygiene": null,
+      "full": null,
+      "catalogueId": "schnauzer"
+    },
+    {
+      "id": "mittel-schnauzer",
+      "name": "Миттельшнауцер",
+      "group": "Жёсткая шерсть",
+      "source": 3,
+      "dry": null,
+      "hygiene": null,
+      "full": null,
+      "catalogueId": "standard-schnauzer"
+    },
+    {
+      "id": "giant-schnauzer",
+      "name": "Ризеншнауцер",
+      "group": "Жёсткая шерсть",
+      "source": 3,
+      "dry": null,
+      "hygiene": null,
+      "full": {
+        "min": 4800,
+        "max": 6300
+      },
+      "catalogueId": "giant-schnauzer"
+    },
+    {
+      "id": "scottie",
+      "name": "Скотч-терьер",
+      "group": "Жёсткая шерсть",
+      "source": 3,
+      "dry": {
+        "min": 1600,
+        "max": 1600
+      },
+      "hygiene": {
+        "min": 1500,
+        "max": 1500
+      },
+      "full": {
+        "min": 2200,
+        "max": 2800
+      },
+      "catalogueId": "scottie"
+    },
+    {
+      "id": "afghan",
+      "name": "Афганская борзая",
+      "group": "Длинная шерсть",
+      "source": 3,
+      "dry": null,
+      "hygiene": null,
+      "full": {
+        "min": 4300,
+        "max": 7300
+      }
+    },
+    {
+      "id": "york",
+      "name": "Йоркширский терьер",
+      "group": "Длинная шерсть",
+      "source": 3,
+      "dry": {
+        "min": 1800,
+        "max": 1800
+      },
+      "hygiene": {
+        "min": 2100,
+        "max": 2100
+      },
+      "full": null,
+      "catalogueId": "york",
+      "duration": "2–2,5 часа"
+    },
+    {
+      "id": "chinese-crested",
+      "name": "Китайская хохлатая",
+      "group": "Длинная шерсть",
+      "source": 3,
+      "dry": {
+        "min": 1600,
+        "max": 1800
+      },
+      "hygiene": {
+        "min": 1400,
+        "max": 1800
+      },
+      "full": {
+        "min": 2100,
+        "max": 2500
+      },
+      "note": "Голая и пуховая разновидности — состав ухода обсудим отдельно."
+    },
+    {
+      "id": "lhasa",
+      "name": "Лхаса апсо",
+      "group": "Длинная шерсть",
+      "source": 3,
+      "dry": {
+        "min": 1400,
+        "max": 1400
+      },
+      "hygiene": {
+        "min": 1300,
+        "max": 1300
+      },
+      "full": null,
+      "catalogueId": "lhasa",
+      "duration": "около 2 часов"
+    },
+    {
+      "id": "maltese",
+      "name": "Мальтийская болонка",
+      "group": "Длинная шерсть",
+      "source": 3,
+      "dry": {
+        "min": 1800,
+        "max": 1800
+      },
+      "hygiene": {
+        "min": 1500,
+        "max": 1500
+      },
+      "full": {
+        "min": 2100,
+        "max": 2500
+      },
+      "catalogueId": "maltese"
+    },
+    {
+      "id": "pekingese",
+      "name": "Пекинес",
+      "group": "Длинная шерсть",
+      "source": 3,
+      "dry": {
+        "min": 1800,
+        "max": 1800
+      },
+      "hygiene": {
+        "min": 1600,
+        "max": 1600
+      },
+      "full": {
+        "min": 2100,
+        "max": 2800
+      },
+      "catalogueId": "pekingese"
+    },
+    {
+      "id": "skye",
+      "name": "Скайтерьер",
+      "group": "Длинная шерсть",
+      "source": 3,
+      "dry": null,
+      "hygiene": null,
+      "full": {
+        "min": 2100,
+        "max": 2800
+      }
+    },
+    {
+      "id": "bobtail",
+      "name": "Бобтейл",
+      "group": "Длинная шерсть",
+      "source": 3,
+      "dry": {
+        "min": 3300,
+        "max": 3300
+      },
+      "hygiene": {
+        "min": 2800,
+        "max": 2800
+      },
+      "full": {
+        "min": 6300,
+        "max": 7300
+      },
+      "duration": "2–6 часов"
+    },
+    {
+      "id": "shihtzu",
+      "name": "Ши-тцу",
+      "group": "Длинная шерсть",
+      "source": 3,
+      "dry": {
+        "min": 1800,
+        "max": 1800
+      },
+      "hygiene": {
+        "min": 1600,
+        "max": 1600
+      },
+      "full": {
+        "min": 2500,
+        "max": 2800
+      },
+      "catalogueId": "shih-tzu"
+    },
+    {
+      "id": "japanese-chin",
+      "name": "Японский хин",
+      "group": "Длинная шерсть",
+      "source": 3,
+      "dry": {
+        "min": 1500,
+        "max": 1500
+      },
+      "hygiene": {
+        "min": 1400,
+        "max": 1400
+      },
+      "full": {
+        "min": 2100,
+        "max": 2500
+      }
+    },
+    {
+      "id": "maltipoo",
+      "name": "Мальтипу",
+      "group": "Длинная шерсть",
+      "source": 3,
+      "dry": null,
+      "hygiene": null,
+      "full": null,
+      "catalogueId": "maltipoo",
+      "note": "Стоимость зависит от размера питомца и состояния шерсти."
+    },
+    {
+      "id": "sheltie",
+      "name": "Шелти",
+      "group": "Средняя длина шерсти",
+      "source": 3,
+      "dry": {
+        "min": 2800,
+        "max": 2800
+      },
+      "hygiene": {
+        "min": 2300,
+        "max": 2300
+      },
+      "full": {
+        "min": 2700,
+        "max": 3600
+      },
+      "coatCare": true
+    },
+    {
+      "id": "english-setter",
+      "name": "Английский сеттер",
+      "group": "Средняя длина шерсти",
+      "source": 3,
+      "dry": {
+        "min": 2100,
+        "max": 2100
+      },
+      "hygiene": {
+        "min": 1900,
+        "max": 1900
+      },
+      "full": {
+        "min": 2700,
+        "max": 2700
+      }
+    },
+    {
+      "id": "bernese",
+      "name": "Бернский зенненхунд",
+      "group": "Средняя длина шерсти",
+      "source": 3,
+      "dry": {
+        "min": 3100,
+        "max": 3100
+      },
+      "hygiene": {
+        "min": 3300,
+        "max": 3300
+      },
+      "full": {
+        "min": 3700,
+        "max": 5300
+      },
+      "catalogueId": "bernese",
+      "coatCare": true
+    },
+    {
+      "id": "border-collie",
+      "name": "Бордер-колли",
+      "group": "Средняя длина шерсти",
+      "source": 3,
+      "dry": {
+        "min": 2100,
+        "max": 2100
+      },
+      "hygiene": {
+        "min": 1900,
+        "max": 1900
+      },
+      "full": {
+        "min": 4300,
+        "max": 5300
+      },
+      "catalogueId": "border-collie",
+      "coatCare": true
+    },
+    {
+      "id": "welsh-springer",
+      "name": "Вельш-спрингер-спаниель",
+      "group": "Средняя длина шерсти",
+      "source": 3,
+      "dry": {
+        "min": 1800,
+        "max": 1800
+      },
+      "hygiene": {
+        "min": 1600,
+        "max": 1600
+      },
+      "full": {
+        "min": 3300,
+        "max": 4800
+      }
+    },
+    {
+      "id": "golden",
+      "name": "Золотистый ретривер",
+      "group": "Средняя длина шерсти",
+      "source": 3,
+      "dry": {
+        "min": 2200,
+        "max": 2200
+      },
+      "hygiene": {
+        "min": 2100,
+        "max": 2100
+      },
+      "full": {
+        "min": 4300,
+        "max": 5800
+      },
+      "catalogueId": "golden-retriever",
+      "coatCare": true
+    },
+    {
+      "id": "irish-setter",
+      "name": "Ирландский сеттер",
+      "group": "Средняя длина шерсти",
+      "source": 3,
+      "dry": {
+        "min": 2100,
+        "max": 2100
+      },
+      "hygiene": {
+        "min": 2300,
+        "max": 2300
+      },
+      "full": {
+        "min": 2700,
+        "max": 3300
+      }
+    },
+    {
+      "id": "cavalier",
+      "name": "Кавалер-кинг-чарльз-спаниель",
+      "group": "Средняя длина шерсти",
+      "source": 3,
+      "dry": null,
+      "hygiene": null,
+      "full": {
+        "min": 2500,
+        "max": 2800
+      }
+    },
+    {
+      "id": "papillon",
+      "name": "Папильон",
+      "group": "Средняя длина шерсти",
+      "source": 3,
+      "dry": {
+        "min": 1800,
+        "max": 1800
+      },
+      "hygiene": {
+        "min": 1600,
+        "max": 1600
+      },
+      "full": null,
+      "catalogueId": "papillon"
+    },
+    {
+      "id": "borzoi",
+      "name": "Русская псовая борзая",
+      "group": "Средняя длина шерсти",
+      "source": 3,
+      "dry": {
+        "min": 2300,
+        "max": 2300
+      },
+      "hygiene": {
+        "min": 2100,
+        "max": 2100
+      },
+      "full": {
+        "min": 4300,
+        "max": 5300
+      }
+    },
+    {
+      "id": "dachshund-long",
+      "name": "Такса длинношёрстная",
+      "group": "Средняя длина шерсти",
+      "source": 3,
+      "dry": {
+        "min": 1500,
+        "max": 1500
+      },
+      "hygiene": {
+        "min": 1400,
+        "max": 1400
+      },
+      "full": {
+        "min": 2300,
+        "max": 2800
+      }
+    },
+    {
+      "id": "chihuahua",
+      "name": "Чихуахуа",
+      "group": "Средняя длина шерсти",
+      "source": 3,
+      "dry": {
+        "min": 1400,
+        "max": 1400
+      },
+      "hygiene": {
+        "min": 1500,
+        "max": 1500
+      },
+      "full": {
+        "min": 2300,
+        "max": 2800
+      }
+    },
+    {
+      "id": "silky",
+      "name": "Австралийский силки-терьер",
+      "group": "Средняя длина шерсти",
+      "source": 3,
+      "dry": {
+        "min": 1400,
+        "max": 1400
+      },
+      "hygiene": {
+        "min": 1300,
+        "max": 1300
+      },
+      "full": null
+    },
+    {
+      "id": "poodle-toy",
+      "name": "Пудель карликовый",
+      "group": "Пудели",
+      "source": 4,
+      "dry": {
+        "min": 1600,
+        "max": 1600
+      },
+      "hygiene": {
+        "min": 1500,
+        "max": 1500
+      },
+      "full": {
+        "min": 1900,
+        "max": 2100
+      },
+      "catalogueId": "poodle-mini",
+      "duration": "2,5–3,5 часа"
+    },
+    {
+      "id": "poodle-small",
+      "name": "Пудель малый",
+      "group": "Пудели",
+      "source": 4,
+      "dry": {
+        "min": 1700,
+        "max": 1700
+      },
+      "hygiene": {
+        "min": 1600,
+        "max": 1600
+      },
+      "full": {
+        "min": 2000,
+        "max": 2300
+      },
+      "duration": "2,5–3,5 часа"
+    },
+    {
+      "id": "poodle-medium",
+      "name": "Пудель средний",
+      "group": "Пудели",
+      "source": 4,
+      "dry": {
+        "min": 1900,
+        "max": 1900
+      },
+      "hygiene": {
+        "min": 1700,
+        "max": 1700
+      },
+      "full": {
+        "min": 2200,
+        "max": 2800
+      },
+      "duration": "2,5–3,5 часа"
+    },
+    {
+      "id": "poodle-royal",
+      "name": "Пудель королевский",
+      "group": "Пудели",
+      "source": 4,
+      "dry": {
+        "min": 2100,
+        "max": 2100
+      },
+      "hygiene": {
+        "min": 1900,
+        "max": 1900
+      },
+      "full": {
+        "min": 2800,
+        "max": 3800
+      },
+      "catalogueId": "poodle-standard",
+      "duration": "2,5–3,5 часа"
+    },
+    {
+      "id": "russian-spaniel",
+      "name": "Русский спаниель",
+      "group": "Стрижка и тримминг",
+      "source": 4,
+      "dry": {
+        "min": 2000,
+        "max": 2000
+      },
+      "hygiene": {
+        "min": 1800,
+        "max": 1800
+      },
+      "full": {
+        "min": 3300,
+        "max": 3800
+      }
+    },
+    {
+      "id": "cocker",
+      "name": "Английский кокер-спаниель",
+      "group": "Стрижка и тримминг",
+      "source": 4,
+      "dry": null,
+      "hygiene": null,
+      "full": {
+        "min": 2600,
+        "max": 3100
+      },
+      "catalogueId": "cocker",
+      "duration": "2,5–3,5 часа"
+    },
+    {
+      "id": "american-cocker",
+      "name": "Американский кокер-спаниель",
+      "group": "Стрижка и тримминг",
+      "source": 4,
+      "dry": {
+        "min": 2000,
+        "max": 2000
+      },
+      "hygiene": {
+        "min": 2100,
+        "max": 2100
+      },
+      "full": {
+        "min": 2300,
+        "max": 3800
+      }
+    },
+    {
+      "id": "english-springer",
+      "name": "Английский спрингер-спаниель",
+      "group": "Стрижка и тримминг",
+      "source": 4,
+      "dry": {
+        "min": 2000,
+        "max": 2000
+      },
+      "hygiene": {
+        "min": 1900,
+        "max": 1900
+      },
+      "full": {
+        "min": 2300,
+        "max": 2300
+      }
+    },
+    {
+      "id": "bedlington",
+      "name": "Бедлингтон-терьер",
+      "group": "Стрижка и тримминг",
+      "source": 4,
+      "dry": {
+        "min": 2300,
+        "max": 2300
+      },
+      "hygiene": {
+        "min": 2100,
+        "max": 2100
+      },
+      "full": {
+        "min": 2900,
+        "max": 2900
+      },
+      "catalogueId": "bedlington"
+    },
+    {
+      "id": "bichon",
+      "name": "Бишон фризе",
+      "group": "Стрижка и тримминг",
+      "source": 4,
+      "dry": {
+        "min": 2000,
+        "max": 2000
+      },
+      "hygiene": {
+        "min": 1600,
+        "max": 1600
+      },
+      "full": {
+        "min": 2300,
+        "max": 2800
+      },
+      "catalogueId": "bichon",
+      "duration": "2–3,5 часа"
+    },
+    {
+      "id": "kerry-blue",
+      "name": "Керри-блю-терьер",
+      "group": "Стрижка и тримминг",
+      "source": 4,
+      "dry": {
+        "min": 2300,
+        "max": 2300
+      },
+      "hygiene": {
+        "min": 2100,
+        "max": 2100
+      },
+      "full": {
+        "min": 2900,
+        "max": 2900
+      }
+    },
+    {
+      "id": "black-terrier",
+      "name": "Русский чёрный терьер",
+      "group": "Стрижка и тримминг",
+      "source": 4,
+      "dry": {
+        "min": 3300,
+        "max": 3300
+      },
+      "hygiene": {
+        "min": 2800,
+        "max": 3800
+      },
+      "full": {
+        "min": 3800,
+        "max": 8800
+      }
+    },
+    {
+      "id": "malamute",
+      "name": "Аляскинский маламут",
+      "group": "Густая шерсть",
+      "source": 4,
+      "dry": {
+        "min": 3300,
+        "max": 3300
+      },
+      "hygiene": null,
+      "full": {
+        "min": 3800,
+        "max": 6300
+      },
+      "catalogueId": "malamute",
+      "coatCare": true
+    },
+    {
+      "id": "collie",
+      "name": "Длинношёрстный колли",
+      "group": "Густая шерсть",
+      "source": 4,
+      "dry": null,
+      "hygiene": null,
+      "full": {
+        "min": 2800,
+        "max": 3300
+      },
+      "catalogueId": "rough-collie",
+      "coatCare": true
+    },
+    {
+      "id": "german-shepherd",
+      "name": "Немецкая овчарка",
+      "group": "Густая шерсть",
+      "source": 4,
+      "dry": {
+        "min": 2300,
+        "max": 2300
+      },
+      "hygiene": null,
+      "full": {
+        "min": 3800,
+        "max": 4800
+      },
+      "catalogueId": "german-shepherd",
+      "coatCare": true
+    },
+    {
+      "id": "newfoundland",
+      "name": "Ньюфаундленд",
+      "group": "Густая шерсть",
+      "source": 4,
+      "dry": {
+        "min": 3500,
+        "max": 3500
+      },
+      "hygiene": {
+        "min": 4300,
+        "max": 4300
+      },
+      "full": {
+        "min": 4100,
+        "max": 6300
+      },
+      "catalogueId": "newfoundland",
+      "coatCare": true
+    },
+    {
+      "id": "german-spitz",
+      "name": "Шпиц немецкий",
+      "group": "Густая шерсть",
+      "source": 4,
+      "dry": {
+        "min": 1800,
+        "max": 1800
+      },
+      "hygiene": {
+        "min": 1600,
+        "max": 1600
+      },
+      "full": {
+        "min": 2300,
+        "max": 2300
+      },
+      "coatCare": true
+    },
+    {
+      "id": "pomeranian",
+      "name": "Шпиц померанский",
+      "group": "Густая шерсть",
+      "source": 4,
+      "dry": {
+        "min": 1800,
+        "max": 1800
+      },
+      "hygiene": {
+        "min": 1600,
+        "max": 1600
+      },
+      "full": {
+        "min": 2000,
+        "max": 2200
+      },
+      "catalogueId": "pomeranian",
+      "coatCare": true
+    },
+    {
+      "id": "chow",
+      "name": "Чау-чау",
+      "group": "Густая шерсть",
+      "source": 4,
+      "dry": {
+        "min": 3800,
+        "max": 3800
+      },
+      "hygiene": null,
+      "full": {
+        "min": 6300,
+        "max": 6300
+      },
+      "catalogueId": "chow-chow",
+      "coatCare": true,
+      "note": "Стоимость зависит от состояния подшёрстка."
+    },
+    {
+      "id": "samoyed",
+      "name": "Самоед",
+      "group": "Густая шерсть",
+      "source": 4,
+      "dry": {
+        "min": 3100,
+        "max": 3100
+      },
+      "hygiene": null,
+      "full": null,
+      "catalogueId": "samoyed",
+      "coatCare": true,
+      "note": "Стоимость зависит от состояния подшёрстка."
+    },
+    {
+      "id": "saint",
+      "name": "Сенбернар",
+      "group": "Густая шерсть",
+      "source": 4,
+      "dry": {
+        "min": 3900,
+        "max": 3900
+      },
+      "hygiene": null,
+      "full": {
+        "max": 5300,
+        "kind": "upTo"
+      },
+      "catalogueId": "saint-bernard",
+      "coatCare": true,
+      "note": "Вычёсывание — без колтунов; комплекс зависит от состояния подшёрстка."
+    },
+    {
+      "id": "husky",
+      "name": "Сибирский хаски",
+      "group": "Густая шерсть",
+      "source": 4,
+      "dry": {
+        "min": 2800,
+        "max": 4300
+      },
+      "hygiene": null,
+      "full": {
+        "max": 6300,
+        "kind": "upTo"
+      },
+      "catalogueId": "husky",
+      "coatCare": true,
+      "note": "Стоимость зависит от состояния подшёрстка."
+    },
+    {
+      "id": "tibetan-mastiff",
+      "name": "Тибетский мастиф",
+      "group": "Густая шерсть",
+      "source": 4,
+      "dry": null,
+      "hygiene": null,
+      "full": {
+        "min": 4300,
+        "max": 6300
+      },
+      "coatCare": true,
+      "note": "Стоимость зависит от состояния подшёрстка."
+    },
+    {
+      "id": "akita",
+      "name": "Акита",
+      "group": "Густая шерсть",
+      "source": 4,
+      "dry": null,
+      "hygiene": null,
+      "full": {
+        "min": 4800,
+        "max": 6300
+      },
+      "coatCare": true
+    },
+    {
+      "id": "mixed-small",
+      "name": "Метис до 5 кг",
+      "group": "Метисы",
+      "source": 4,
+      "dry": {
+        "min": 2000,
+        "max": 2000
+      },
+      "hygiene": {
+        "min": 1600,
+        "max": 1600
+      },
+      "full": {
+        "min": 2000,
+        "max": 2000
+      }
+    },
+    {
+      "id": "mixed-medium",
+      "name": "Метис 5–10 кг",
+      "group": "Метисы",
+      "source": 4,
+      "dry": {
+        "min": 2100,
+        "max": 2100
+      },
+      "hygiene": {
+        "min": 1700,
+        "max": 1700
+      },
+      "full": {
+        "min": 1900,
+        "max": 2100
+      }
+    },
+    {
+      "id": "mixed-large",
+      "name": "Метис 10–20 кг",
+      "group": "Метисы",
+      "source": 4,
+      "dry": {
+        "min": 2300,
+        "max": 2300
+      },
+      "hygiene": {
+        "min": 1800,
+        "max": 1800
+      },
+      "full": {
+        "min": 3300,
+        "max": 3800
+      }
+    },
+    {
+      "id": "mixed-xl",
+      "name": "Метис более 20 кг",
+      "group": "Метисы",
+      "source": 5,
+      "dry": {
+        "min": 2800,
+        "max": 3800
+      },
+      "hygiene": null,
+      "full": null
+    },
+    {
+      "id": "pug",
+      "name": "Мопс",
+      "group": "Гладкая шерсть",
+      "source": 5,
+      "dry": {
+        "min": 1500,
+        "max": 1800
+      },
+      "hygiene": null,
+      "full": {
+        "min": 2000,
+        "max": 2000
+      },
+      "coatCare": true
+    },
+    {
+      "id": "toy-terrier",
+      "name": "Той-терьер",
+      "group": "Гладкая шерсть",
+      "source": 5,
+      "dry": null,
+      "hygiene": null,
+      "full": {
+        "min": 1700,
+        "max": 1700
+      },
+      "coatCare": true
+    },
+    {
+      "id": "french-bulldog",
+      "name": "Французский бульдог",
+      "group": "Гладкая шерсть",
+      "source": 5,
+      "dry": null,
+      "hygiene": null,
+      "full": {
+        "min": 2200,
+        "max": 2800
+      },
+      "coatCare": true
+    },
+    {
+      "id": "labrador",
+      "name": "Лабрадор-ретривер",
+      "group": "Гладкая шерсть",
+      "source": 5,
+      "dry": null,
+      "hygiene": null,
+      "full": {
+        "min": 3300,
+        "max": 4800
+      },
+      "catalogueId": "labrador",
+      "coatCare": true
+    },
+    {
+      "id": "kurzhaar",
+      "name": "Курцхаар",
+      "group": "Гладкая шерсть",
+      "source": 5,
+      "dry": null,
+      "hygiene": null,
+      "full": {
+        "min": 3300,
+        "max": 3300
+      },
+      "coatCare": true
+    }
+  ],
+  "cats": {
+    "clean": {
+      "dry": {
+        "min": 2000,
+        "max": 2800
+      },
+      "wash": {
+        "min": 2500,
+        "max": 3300
+      },
+      "deshedWash": null
+    },
+    "matted": {
+      "dry": {
+        "min": 2300,
+        "max": 2600
+      },
+      "wash": {
+        "min": 2100,
+        "max": 2800
+      },
+      "deshedWash": {
+        "min": 2000,
+        "max": 2800
+      }
+    },
+    "deshed": {
+      "min": 1300,
+      "max": 2300
+    },
+    "assistant": {
+      "min": 800,
+      "max": 800
+    },
+    "duration": "1–2 часа",
+    "source": 5
+  },
+  "extras": [
+    {
+      "id": "claws",
+      "name": "Подстригание когтей",
+      "price": {
+        "min": 550,
+        "max": 550
+      },
+      "source": 1
+    },
+    {
+      "id": "ear-clean",
+      "name": "Чистка ушей",
+      "price": {
+        "min": 400,
+        "max": 400
+      },
+      "source": 1
+    },
+    {
+      "id": "ear-cut",
+      "name": "Стрижка ушей",
+      "price": {
+        "min": 400,
+        "max": 400
+      },
+      "source": 1
+    },
+    {
+      "id": "muzzle",
+      "name": "Стрижка морды",
+      "price": {
+        "min": 800,
+        "max": 800
+      },
+      "source": 1
+    },
+    {
+      "id": "groin",
+      "name": "Стрижка паха",
+      "price": {
+        "min": 400,
+        "max": 400
+      },
+      "source": 1
+    },
+    {
+      "id": "tail",
+      "name": "Оформление области под хвостом",
+      "price": {
+        "min": 500,
+        "max": 500
+      },
+      "source": 1
+    },
+    {
+      "id": "mats",
+      "name": "Удаление колтунов",
+      "price": {
+        "min": 1300,
+        "max": 1300
+      },
+      "unit": "hour",
+      "source": 1
+    },
+    {
+      "id": "undercoat",
+      "name": "Вычёсывание подшёрстка",
+      "price": {
+        "min": 800,
+        "max": 800
+      },
+      "unit": "hour",
+      "source": 1
+    },
+    {
+      "id": "poodle-feet",
+      "name": "Выстригание шерсти на лапах по типу пуделиных",
+      "price": {
+        "min": 600,
+        "max": 600
+      },
+      "supplement": true,
+      "note": "К полному комплексу",
+      "source": 1
+    },
+    {
+      "id": "show",
+      "name": "Подготовка к выставке",
+      "price": {
+        "percent": 30
+      },
+      "supplement": true,
+      "note": "От стоимости полного комплекса",
+      "source": 1
+    },
+    {
+      "id": "behaviour",
+      "name": "Доплата за агрессивное поведение животного",
+      "price": {
+        "min": 800,
+        "max": 1800
+      },
+      "supplement": true,
+      "note": "Без ассистента",
+      "source": 1
+    },
+    {
+      "id": "parasite-wash",
+      "name": "Мытьё от паразитов",
+      "price": {
+        "min": 600,
+        "max": 800
+      },
+      "supplement": true,
+      "note": "К полному комплексу",
+      "source": 1
+    },
+    {
+      "id": "teeth",
+      "name": "Гигиена полости рта с использованием пасты",
+      "price": {
+        "min": 600,
+        "max": 600
+      },
+      "source": 2
+    },
+    {
+      "id": "glitter",
+      "name": "Блеск-тату",
+      "price": {
+        "min": 500,
+        "max": 500
+      },
+      "source": 2
+    },
+    {
+      "id": "ear-stones",
+      "name": "Стразы на уши",
+      "price": {
+        "min": 450,
+        "max": 600
+      },
+      "source": 2
+    }
+  ]
+}

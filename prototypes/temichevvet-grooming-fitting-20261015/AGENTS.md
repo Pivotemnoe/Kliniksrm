@@ -1,3 +1,9 @@
+## Booking completion and real photos — 2026-10-20
+
+- User now authorizes linking the approved price list to the independent grooming module, choosing a groomer and actual available time on the public site, a clear monthly calendar with bulk shift creation, and current MAX notifications for both client and assigned groomer. Reuse protected identity, transaction/collision checks and notification outbox. Preserve the current CRM redesign and coordinate production versions with its chat.
+- Latest user instructions: they will provide operational data here and Codex will enter it. A bounded test is authorized for Temichev Konstantin as groomer today 20 October 2026, 10:00–17:00 Moscow; small dogs 90 minutes and large dogs 180 minutes. Use the already verified current MAX account as both client and groomer. Clearly mark synthetic test records and do not invent medium-dog/cat durations or permanent commercial shifts.
+- After this booking work, process the twelve supplied IMG_4805–4817 HEIC photos as real pet-hotel/salon assets, preserve originals, and prepare the pet-hotel section on pet.temichevvet.ru. Actual salon-work photos will arrive later; prepared placeholders must be clearly distinguishable from real portfolio. Finish the grooming booking work before switching to the pet-hotel task.
+
 ## Grooming prices supplied — 2026-10-20
 
 - User supplied five photographs of a service/price list and authorized putting approximate services and prices on the public site. Prepare a readable dog/cat price section within the accepted photographic design.

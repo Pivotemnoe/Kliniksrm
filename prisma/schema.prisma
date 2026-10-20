@@ -2898,6 +2898,8 @@ model GroomingServiceRule {
 
 
 model GroomingReservation {
+  priceType String @default("FIXED")
+  maximumPrice Decimal? @db.Decimal(12, 2)
   id String @id @default(uuid())
   installationId String
   installation ClinicModuleInstallation @relation(fields: [installationId], references: [id], onDelete: Restrict)
@@ -3058,6 +3060,10 @@ model GroomingWorkplace {
 
 
 model GroomingService {
+  catalogKey String?
+  catalogData Json?
+  priceType String @default("FIXED")
+  maximumPrice Decimal? @db.Decimal(12, 2)
   id String @id @default(uuid())
   installationId String
   installation ClinicModuleInstallation @relation(fields: [installationId], references: [id], onDelete: Restrict)
@@ -3068,6 +3074,7 @@ model GroomingService {
   rules GroomingServiceRule[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  @@unique([installationId, catalogKey])
 }
 
 
