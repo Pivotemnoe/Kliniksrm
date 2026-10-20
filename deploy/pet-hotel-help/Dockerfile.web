@@ -1,0 +1,8 @@
+ARG BASE_WEB_IMAGE
+FROM ${BASE_WEB_IMAGE}
+ARG RELEASE_REVISION
+LABEL org.opencontainers.image.revision=$RELEASE_REVISION
+COPY web/ /usr/share/nginx/html/
+COPY web/assets/ /opt/temichevvet-web-assets/
+COPY expected-web-sha256.txt /tmp/hotel-help-sha256.txt
+RUN cd /usr/share/nginx/html && sha256sum -c /tmp/hotel-help-sha256.txt && rm /tmp/hotel-help-sha256.txt
