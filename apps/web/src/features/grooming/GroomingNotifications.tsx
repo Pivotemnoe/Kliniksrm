@@ -7,6 +7,7 @@ import { apiRequest } from '../../api/client';
 import { ApiError, getErrorMessage } from '../../api/errors';
 import { at } from './grooming.api';
 import '../../shared/ui/module-ui.css';
+import { GroomingPhones } from './GroomingPhones';
 
 type Notice = { id: string; title: string; body: string; href: string; event: string; readAt: string | null; supersededAt: string | null; createdAt: string };
 type Inbox = { items: Notice[]; unread: number };
@@ -37,8 +38,8 @@ export function GroomingPhoneButton({ actorId }: { actorId: string }) {
   return <><Button icon={<MobileOutlined />} onClick={() => setOpen(true)}>На телефон</Button><GroomingPhoneDrawer actorId={actorId} open={open} onClose={() => setOpen(false)} /></>;
 }
 
-export function GroomingPhoneDrawer({ actorId, open, onClose }: { actorId: string; open: boolean; onClose: () => void }) {
-  return <Drawer title="Приложение грумера" width="min(520px, 100vw)" open={open} onClose={onClose}><GroomingDeviceCard actorId={actorId} /></Drawer>;
+export function GroomingPhoneDrawer({ actorId, open, onClose, canManage = false, selectedId }: { actorId: string; open: boolean; onClose: () => void; canManage?: boolean; selectedId?: string }) {
+  return <Drawer title={canManage ? 'Подключение телефона грумера' : 'Приложение грумера'} width="min(720px, 100vw)" open={open} onClose={onClose}>{canManage ? <GroomingPhones actorId={actorId} selectedId={selectedId} /> : <GroomingDeviceCard actorId={actorId} />}</Drawer>;
 }
 
 export function GroomingDeviceCard({ actorId }: { actorId: string }) {
@@ -53,7 +54,7 @@ export function GroomingDeviceCard({ actorId }: { actorId: string }) {
     const media = window.matchMedia('(display-mode: standalone)');
     const updateInstalled = () => setInstalled(media.matches || Boolean((navigator as Navigator & { standalone?: boolean }).standalone));
     const capture = (event: Event) => { event.preventDefault(); setInstallPrompt(event as InstallPrompt); };
-    const finish = () => { setInstalled(true); setInstallPrompt(undefined); };
+    const finish = () => { setInstalled(true); setHint(false); setInstallPrompt(undefined); };
     updateInstalled(); media.addEventListener('change', updateInstalled);
     window.addEventListener('beforeinstallprompt', capture); window.addEventListener('appinstalled', finish);
     return () => { media.removeEventListener('change', updateInstalled); window.removeEventListener('beforeinstallprompt', capture); window.removeEventListener('appinstalled', finish); };
@@ -96,14 +97,14 @@ export function GroomingDeviceCard({ actorId }: { actorId: string }) {
   }, onSuccess: refresh, onError: error => setDeviceError(getErrorMessage(error)) });
   const test = useMutation({ mutationFn: () => apiRequest(`${base}/push/test`, { method: 'POST' }), onSuccess: async () => { message.success('Проверка поставлена в очередь. Посмотрите уведомления телефона'); await refresh(); }, onError: error => setDeviceError(getErrorMessage(error)) });
   return <Card className="grooming-device-card" title={<Space><MobileOutlined />На вашем телефоне</Space>}><Space direction="vertical" size={14} className="full-width">
-    <Typography.Paragraph>Установите «Груминг» на главный экран. Приложение открывает ваш кабинет и расписание.</Typography.Paragraph>
+    <Typography.Paragraph>{installed ? 'Приложение установлено. Ваш кабинет и расписание доступны с главного экрана.' : 'Установите «Груминг» на главный экран. Приложение открывает ваш кабинет и расписание.'}</Typography.Paragraph>
     <Space wrap><Button icon={<DownloadOutlined />} disabled={installed} onClick={async () => { const prompt = installPrompt || pendingInstallPrompt; if (!prompt) { setHint(true); return; } await prompt.prompt(); await prompt.userChoice; pendingInstallPrompt = undefined; setInstallPrompt(undefined); }}>{installed ? 'Приложение установлено' : 'Установить приложение'}</Button><Tag color={linked && permission === 'granted' ? 'green' : undefined}>{linked && permission === 'granted' ? 'Push подключён' : 'Push не подключён'}</Tag></Space>
-    {(hint || (ios && !installed)) && <Alert type="info" showIcon message={ios ? 'Установка на iPhone или iPad' : 'Установка из браузера'} description={ios ? 'В Safari откройте «Поделиться» → «На экран Домой». Откройте приложение с новой иконки, войдите и включите уведомления.' : 'В меню браузера выберите «Установить приложение» или «Добавить на главный экран». Если пункта нет, откройте ссылку в Chrome, Edge или Safari.'} />}
+    {(hint || (ios && !installed)) && <Alert type="info" showIcon message={ios ? 'Установка на iPhone или iPad' : 'Установка из браузера'} description={ios ? 'В Safari откройте «Поделиться» → «На экран Домой». Откройте приложение с новой иконки, войдите и включите уведомления.' : 'В Chrome откройте меню ⋮ → «Установить и создать ярлык» → «Установить». В других браузерах выберите «Установить приложение» или «Добавить на главный экран».'} />}
     {(!supported || !config.data?.available || (ios && !installed)) && <Typography.Paragraph type="secondary">{!window.isSecureContext ? 'Для уведомлений нужен защищённый адрес HTTPS.' : ios && !installed ? 'На iPhone push включается после установки на главный экран.' : !supported ? 'Этот браузер не поддерживает push. Список событий в кабинете доступен.' : config.isLoading ? 'Проверяем подключение уведомлений…' : 'Уведомления на телефон ещё не настроены на сервере. События уже сохраняются в кабинете.'}</Typography.Paragraph>}
     {permission === 'denied' && <Alert type="warning" message="Уведомления запрещены в настройках браузера" description="Разрешите их для этого сайта и откройте кабинет снова." />}
     {(deviceError || config.isError) && <Alert type="error" showIcon message={deviceError || getErrorMessage(config.error)} />}
     <Space wrap><Button type="primary" icon={<BellOutlined />} disabled={!supported || !config.data?.available || (ios && !installed) || permission === 'denied' || linked} loading={connect.isPending} onClick={() => connect.mutate(Notification.requestPermission())}>Включить уведомления</Button>{linked && <><Button loading={test.isPending} onClick={() => test.mutate()}>Отправить проверку</Button><Button loading={disconnect.isPending} onClick={() => disconnect.mutate()}>Отключить на устройстве</Button></>}</Space>
-    <Typography.Text type="secondary">Новая запись, перенос и отмена поступают назначенному грумеру и администратору. Подробности доступны после входа. MAX работает параллельно.</Typography.Text>
+    <Typography.Text type="secondary">Новая запись, перенос и отмена поступают назначенному грумеру и администратору. Подробности доступны после входа. MAX подключается отдельно.</Typography.Text>
   </Space></Card>;
 }
 

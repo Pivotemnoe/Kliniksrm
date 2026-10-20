@@ -36,6 +36,7 @@ export class EmployeesService {
 
   async listEmployees() {
     const employees = await this.prisma.employee.findMany({
+      where: { accountScope: 'CLINIC' },
       orderBy: { fullName: 'asc' },
       include: employeeInclude,
     });
@@ -44,8 +45,8 @@ export class EmployeesService {
   }
 
   async getEmployee(employeeId: string) {
-    const employee = await this.prisma.employee.findUnique({
-      where: { id: employeeId },
+    const employee = await this.prisma.employee.findFirst({
+      where: { id: employeeId, accountScope: 'CLINIC' },
       include: employeeInclude,
     });
 
@@ -175,7 +176,7 @@ export class EmployeesService {
       include: { user: true },
     });
 
-    if (!employee || !employee.userId || !employee.user) {
+    if (!employee || employee.accountScope !== 'CLINIC' || !employee.userId || !employee.user) {
       throw new NotFoundException('Сотрудник не найден');
     }
 

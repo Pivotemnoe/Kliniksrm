@@ -8,6 +8,7 @@ type Operation = { id: string; ownerId: string; kind: string; input: Record<stri
 @Injectable()
 export class GroomingSyncService implements OnApplicationBootstrap, OnModuleDestroy {
   private timer?: NodeJS.Timeout; private running = false; private logger = new Logger(GroomingSyncService.name);
+  private storefrontPublishedAt = 0;
   constructor(private readonly prisma: PrismaService, private readonly grooming: GroomingCrmService) {}
   onApplicationBootstrap() { if (process.env.GROOMING_CRM_SYNC_ENABLED === 'true') { this.timer = setInterval(() => void this.syncNow(), 3000); this.timer.unref(); void this.syncNow(); } }
   onModuleDestroy() { if (this.timer) clearInterval(this.timer); }
@@ -30,6 +31,10 @@ export class GroomingSyncService implements OnApplicationBootstrap, OnModuleDest
         await this.gateway(`/operations/${item.id}/result`, { status: 'DONE', result });
       }
       await this.dispatch();
+      if (Date.now() - this.storefrontPublishedAt >= 15000) {
+        await this.gateway('/storefront', { payload: await this.grooming.storefrontSnapshot() });
+        this.storefrontPublishedAt = Date.now();
+      }
     } catch { this.logger.warn('Синхронизация груминга отложена; сохранённые операции будут повторены'); }
     finally { this.running = false; }
   }
@@ -51,6 +56,14 @@ export class GroomingSyncService implements OnApplicationBootstrap, OnModuleDest
     for (const item of items) {
       if (item.expiresAt <= now || item.reservation.version !== item.reservationVersion || (item.event === 'REMINDER' && item.reservation.status !== 'CONFIRMED')) {
         await this.prisma.groomingNotification.updateMany({ where: { id: item.id, status: 'QUEUED' }, data: { status: 'CANCELLED', lastError: 'Запись изменилась или срок истёк' } }); continue;
+      }
+      if (item.recipientKind === 'STAFF') {
+        const assigned = await this.prisma.groomingSpecialist.findUnique({ where: { employeeId: item.reservation.employeeId } });
+        const settings = await this.prisma.groomingSettings.findUnique({ where: { installationId: item.reservation.installationId } });
+        const currentGroomer = assigned?.maxUserId === item.recipientId;
+        if (!currentGroomer && (item.event === 'REMINDER' || !settings?.administratorMaxIds.includes(item.recipientId))) {
+          await this.prisma.groomingNotification.updateMany({ where: { id: item.id, status: 'QUEUED' }, data: { status: 'CANCELLED', lastError: 'Получатель больше не назначен' } }); continue;
+        }
       }
       const claimed = await this.prisma.groomingNotification.updateMany({ where: { id: item.id, status: 'QUEUED' }, data: { status: 'SENDING', attemptedAt: now, attempts: { increment: 1 } } });
       if (!claimed.count) continue;

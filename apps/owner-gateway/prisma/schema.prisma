@@ -457,6 +457,14 @@ model GroomingBookingDraft {
 }
 
 
+model GroomingStorefrontSnapshot {
+  id String @id
+  payload Json
+  fingerprint String
+  receivedAt DateTime @default(now())
+}
+
+
 model AvitoAssistantRun {
   id String @id @default(uuid())
   clientKey String @unique

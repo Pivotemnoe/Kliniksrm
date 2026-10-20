@@ -60,3 +60,38 @@ test('switching employees removes director data and ignores a late director resp
   assert.equal(cache.getQueryData(['auth', 'me']).employee.id, 'administrator');
   cache.clear();
 });
+
+test('expired sessions retain the requested clinic or grooming page through cache clearing', async () => {
+  const { clearStaffSessionCache } = load('apps/web/src/auth/sessionCache.ts');
+  for (const [loginPath, pathname] of [['/login', '/stock/invoices'], ['/grooming/login', '/grooming/bookings/qa-booking']]) {
+    const cache = new QueryClient();
+    cache.setQueryData(['auth', 'me'], { employee: { id: 'expired-employee' } });
+    const location = { pathname, search: '?view=details', hash: '', key: 'qa-location', state: null };
+    const browserEvents = new EventTarget();
+    const navigations = [];
+    let cleanup;
+    const modules = {
+      '@tanstack/react-query': { useQueryClient: () => cache },
+      react: { useEffect: effect => { cleanup = effect(); } },
+      'react-router-dom': { useLocation: () => location, useNavigate: () => (...args) => navigations.push(args) },
+      '../app/config': { isDemoAuthMode: false },
+      '../api/errors': {},
+      './auth.api': {},
+      './sessionCache': { clearStaffSessionCache },
+    };
+    const { useUnauthorizedListener } = load('apps/web/src/auth/useAuth.ts', {
+      require: name => { assert.ok(name in modules, name); return modules[name]; },
+      window: browserEvents,
+    });
+    useUnauthorizedListener(loginPath);
+    browserEvents.dispatchEvent(new Event('crm:unauthorized'));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(cache.getQueryCache().getAll().length, 0);
+    assert.deepEqual(navigations, [[loginPath, { replace: true, state: { from: location } }]]);
+    cleanup();
+    browserEvents.dispatchEvent(new Event('crm:unauthorized'));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(navigations.length, 1);
+    cache.clear();
+  }
+});

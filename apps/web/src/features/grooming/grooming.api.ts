@@ -8,16 +8,28 @@ export function groomingReference(id: string) {
   url.search = new URLSearchParams({ breed: look.breedId, style: look.styleId }).toString(); url.hash = 'looks';
   return { title: `${look.breedName} · ${look.styleName}`, url: url.href };
 }
-export type Specialist = { id: string; employeeId: string; displayName: string; species: string[]; maxUserId?: string; isActive: boolean; version: number };
-export type Rule = { id: string; specialistId: string; serviceId: string; locationId: string; workplaceId: string; species: string; size: string; coat: string; durationMinutes: number; bufferMinutes: number; stepMinutes: number; minimumLeadMinutes: number; maximumDaysAhead: number; isActive: boolean; version: number; specialist: Specialist; service: { title: string; price: string }; location: { name: string; timezone: string }; workplace: { name: string } };
+export type Price = { price: string; maximumPrice?: string | null; priceType?: string; priceLabel?: string; catalogData?: { species?: string; category?: string; breedName?: string; unit?: string; supplement?: boolean } };
+export type GroomingServiceRow = Price & { id: string; title: string; isActive: boolean; version: number; catalogKey?: string };
+export function groomingPrice(value: Price) {
+  if (value.priceLabel) return value.priceLabel;
+  const n = (v: unknown) => new Intl.NumberFormat('ru-RU').format(Number(v));
+  const prefix = value.catalogData?.supplement ? '+ ' : '', suffix = value.catalogData?.unit === 'hour' ? ' / час' : '';
+  if(value.priceType === 'QUOTE')return 'Уточним перед записью';
+  if(value.priceType === 'UP_TO')return `${prefix}до ${n(value.maximumPrice)} ₽${suffix}`;
+  if(value.priceType === 'RANGE')return `${prefix}${n(value.price)}–${n(value.maximumPrice)} ₽${suffix}`;
+  if(value.priceType === 'PERCENT')return `${prefix}${n(value.price)}%`;
+  return `${prefix}${n(value.price)} ₽${suffix}`;
+}
+export type Specialist = { id: string; employeeId: string; displayName: string; species: string[]; maxUserId?: string; maxConnected?: boolean; isActive: boolean; version: number };
+export type Rule = { id: string; specialistId: string; serviceId: string; locationId: string; workplaceId: string; species: string; size: string; coat: string; durationMinutes: number; bufferMinutes: number; stepMinutes: number; minimumLeadMinutes: number; maximumDaysAhead: number; isActive: boolean; version: number; specialist: Specialist; service: Price & { title: string }; location: { name: string; timezone: string }; workplace: { name: string } };
 export type Pet = { id: string; nickname: string; species?: string; breed?: string };
 export type Client = { id: string; fullName: string; phone?: string; animals: Pet[] };
-export type Booking = { id: string; ownerId: string; animalId: string; employeeId: string; ruleId: string; serviceTitle: string; price: string; species: string; size: string; coat: string; startsAt: string; endsAt: string; blockedUntil: string; status: string; version: number; notes: string; looks: string[]; animal: Pet; owner?: { fullName: string; phone?: string }; employee: { fullName: string }; location: { name: string; timezone: string }; workplace: { name: string }; notifications?: Delivery[] };
+export type Booking = Price & { id: string; ownerId: string; animalId: string; employeeId: string; ruleId: string; serviceTitle: string; price: string; species: string; size: string; coat: string; startsAt: string; endsAt: string; blockedUntil: string; status: string; version: number; notes: string; looks: string[]; animal: Pet; owner?: { fullName: string; phone?: string }; employee: { fullName: string }; location: { name: string; timezone: string }; workplace: { name: string }; notifications?: Delivery[] };
 export type Delivery = { id: string; reservationId: string; event: string; recipientKind: string; status: string; text: string; scheduledAt: string; sentAt?: string; lastError?: string };
-export type Settings = { selfBookingEnabled: boolean; minimumCancelMinutes: number; reminderHours: number[]; administratorMaxIds: string[]; version: number };
-export type Overview = { installation: { enabled: boolean }; entitled: boolean; limited: boolean; canManage: boolean; canSchedule: boolean; specialists: Specialist[]; rules: Rule[]; settings: Settings; resources: { employees: { id: string; fullName: string }[]; locations: { id: string; name: string; address: string; timezone: string; isActive: boolean; version: number }[]; workplaces: { id: string; name: string; locationId: string; isActive: boolean; version: number }[]; services: { id: string; title: string; price: string; isActive: boolean; version: number }[] } | null };
-export type Shift = { id: string; locationId: string; kind: string; version: number; employeeId: string; employee: { fullName: string }; startsAt: string; endsAt: string; isActive: boolean; comment?: string };
-export type Offer = { offerToken: string; startsAt: string; endsAt: string; specialistName: string; serviceTitle: string; price: string; durationMinutes: number; bufferMinutes: number; timezone: string; locationName: string };
+export type Settings = { selfBookingEnabled: boolean; minimumCancelMinutes: number; reminderHours: number[]; administratorMaxIds: string[]; testClientMaxId?: string; version: number };
+export type Overview = { setup?: { futureWorkPeriods: number; connectedPhones: number }; installation: { enabled: boolean }; entitled: boolean; limited: boolean; canManage: boolean; canSchedule: boolean; specialists: Specialist[]; rules: Rule[]; settings: Settings; resources: { employees: { id: string; fullName: string }[]; locations: { id: string; name: string; address: string; timezone: string; isActive: boolean; version: number }[]; workplaces: { id: string; name: string; locationId: string; isActive: boolean; version: number }[]; services: GroomingServiceRow[] } | null };
+export type Shift = { id: string; workplaceId?: string; locationId: string; kind: string; version: number; employeeId: string; employee: { fullName: string }; startsAt: string; endsAt: string; isActive: boolean; comment?: string };
+export type Offer = Price & { offerToken: string; startsAt: string; endsAt: string; specialistName: string; serviceTitle: string; price: string; durationMinutes: number; bufferMinutes: number; timezone: string; locationName: string };
 const base = '/v1/grooming';
 export const groomingApi = {
   overview: () => apiRequest<Overview>(`${base}/overview`),

@@ -2,12 +2,13 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { groomingPriceEntries, groomingPriceLabel, groomingServiceBookable, groomingPriceCatalogVersion } from './price-catalog';
 import { AuditService } from '../audit/audit.service';
 import { AuthEmployee } from '../auth/auth.types';
 import { ClinicModulesService } from '../clinic-modules/clinic-modules.service';
 import { normalizePhoneForLookup } from '../../common/phone';
 import { queueGroomingStaffNotices, supersedeGroomingStaffNotices } from './grooming-staff-notifications.service';
-import { GroomingBookDto, GroomingCancelDto, GroomingChangeDto, GroomingLocationDto, GroomingOptionsDto, GroomingPetDto, GroomingRuleDto, GroomingServiceDto, GroomingSettingsDto, GroomingSpecialistDto, GroomingStatusDto, GroomingWorkPeriodDto, GroomingWorkplaceDto } from './grooming.dto';
+import { GroomingPriceImportDto, GroomingScheduleBatchDto, GroomingRulesBatchDto, GroomingBookDto, GroomingCancelDto, GroomingChangeDto, GroomingLocationDto, GroomingOptionsDto, GroomingPetDto, GroomingRuleDto, GroomingServiceDto, GroomingSettingsDto, GroomingSpecialistDto, GroomingStatusDto, GroomingWorkPeriodDto, GroomingWorkplaceDto } from './grooming.dto';
 
 const minute = 60000, day = 86400000;
 export const activeGroomingStatuses = ['CONFIRMED', 'ARRIVED', 'IN_PROGRESS'];
@@ -45,22 +46,24 @@ export class GroomingCrmService {
     const entitled = await this.modules.entitlement('GROOMING');
     if ((!installation.enabled || !entitled) && !actor.roles.includes('director')) throw new ForbiddenException('Модуль груминга не подключён');
     const settings = await this.settings();
-    const specialists = await this.prisma.groomingSpecialist.findMany({ where: { installationId: installation.id, ...(this.manager(actor) ? {} : { employeeId: actor.id }) }, include: { employee: { select: { id: true, fullName: true, status: true } } }, orderBy: { displayName: 'asc' } });
+    if (installation.enabled && entitled && actor.permissions.includes('grooming.manage') && await this.prisma.groomingService.count({ where: { installationId: installation.id, catalogKey: { not: null } } }) < groomingPriceEntries().length) await this.importPrices({ clientKey: 'initial-catalog-' + groomingPriceCatalogVersion }, actor);
+    const specialists = await this.prisma.groomingSpecialist.findMany({ where: { installationId: installation.id, ...(this.manager(actor) ? {} : { employeeId: actor.id }) }, include: { employee: { select: { id: true, fullName: true, status: true, accountScope: true } } }, orderBy: { displayName: 'asc' } });
     const rules = await this.prisma.groomingServiceRule.findMany({ where: { installationId: installation.id, ...(this.manager(actor) ? {} : { specialist: { employeeId: actor.id } }) }, include: ruleInclude, orderBy: { createdAt: 'asc' } });
     const canManage = actor.permissions.includes('grooming.manage'), canSchedule = canManage || actor.permissions.includes('grooming.schedule');
     const resources = canManage || canSchedule ? {
-      employees: await this.prisma.employee.findMany({ where: { status: 'ACTIVE' }, select: { id: true, fullName: true } }),
+      employees: specialists.map(s => ({ id: s.employeeId, fullName: s.displayName })),
       locations: await this.prisma.groomingLocation.findMany({ where: { installationId: installation.id }, orderBy: { name: 'asc' } }),
       workplaces: await this.prisma.groomingWorkplace.findMany({ where: { location: { installationId: installation.id } }, orderBy: { name: 'asc' } }),
       services: await this.prisma.groomingService.findMany({ where: { installationId: installation.id }, orderBy: { title: 'asc' } }),
     } : null;
-    return { installation, entitled, settings: canManage ? settings : { selfBookingEnabled: settings.selfBookingEnabled }, specialists: specialists.map(s => canManage ? s : { ...s, maxUserId: undefined }), rules, resources, canManage, canSchedule, limited: !installation.enabled || !entitled };
+    return { installation, entitled, settings: canManage ? settings : { selfBookingEnabled: settings.selfBookingEnabled }, specialists: specialists.map(s => canManage ? { ...s, maxConnected: Boolean(s.maxUserId) } : { ...s, maxConnected: Boolean(s.maxUserId), maxUserId: undefined }), rules, resources, setup: canManage ? { connectedPhones: await this.prisma.remoteAccessDevice.count({ where: { employeeId: { in: specialists.filter(s => s.employee.accountScope === 'GROOMING').map(s => s.employeeId) }, revokedAt: null } }), futureWorkPeriods: await this.prisma.groomingWorkPeriod.count({ where: { specialistId: { in: specialists.map(s => s.id) }, isActive: true, kind: 'WORK', endsAt: { gt: new Date() } } }) } : undefined, canManage, canSchedule, limited: !installation.enabled || !entitled };
   }
   async saveSettings(input: GroomingSettingsDto, actor: AuthEmployee) {
     const previous = await this.settings();
     return this.prisma.$transaction(async tx => {
       await lockGroomingSchedule(tx);
-      const { version, ...data } = input;
+      const { version, ...fields } = input;
+      const data = { ...fields, ...(fields.testClientMaxId === undefined ? {} : { testClientMaxId: fields.testClientMaxId || null }) };
       const changed = await tx.groomingSettings.updateMany({ where: { installationId: previous.installationId, version }, data: { ...data, reminderHours: [...new Set(data.reminderHours)], administratorMaxIds: [...new Set(data.administratorMaxIds)], version: { increment: 1 } } });
       if (!changed.count) throw new ConflictException('Настройки изменились. Обновите страницу');
       await this.audit.log({ actorId: actor.id, action: 'grooming.settings.save', entityType: 'GroomingSettings', entityId: previous.installationId }, tx);
@@ -84,6 +87,7 @@ export class GroomingCrmService {
       await lockGroomingSchedule(tx); const { version, ...data } = input;
       const location = await tx.groomingLocation.findFirst({ where: { id: input.locationId, installationId: installation.id } });
       if (!location) throw new BadRequestException('Выберите место из модуля груминга');
+      if (await tx.groomingWorkplace.findFirst({ where: { locationId: location.id, name: { equals: input.name.trim(), mode: 'insensitive' }, ...(id ? { id: { not: id } } : {}) } })) throw new ConflictException('Рабочее место с таким названием уже есть');
       let result;
       if (id) { const changed = await tx.groomingWorkplace.updateMany({ where: { id, location: { installationId: installation.id }, version: version ?? -1 }, data: { ...data, version: { increment: 1 } } }); if (!changed.count) throw new ConflictException('Рабочее место уже изменилось'); result = await tx.groomingWorkplace.findUniqueOrThrow({ where: { id } }); }
       else result = await tx.groomingWorkplace.create({ data });
@@ -93,16 +97,92 @@ export class GroomingCrmService {
   async saveService(input: GroomingServiceDto, actor: AuthEmployee, id?: string) {
     const installation = await this.modules.installation('GROOMING');
     return this.prisma.$transaction(async tx => {
-      await lockGroomingSchedule(tx); const { version, ...data } = input;
-      let result;
-      if (id) { const changed = await tx.groomingService.updateMany({ where: { id, installationId: installation.id, version: version ?? -1 }, data: { ...data, version: { increment: 1 } } }); if (!changed.count) throw new ConflictException('Услуга уже изменилась'); result = await tx.groomingService.findUniqueOrThrow({ where: { id } }); }
-      else result = await tx.groomingService.create({ data: { ...data, installationId: installation.id } });
+      await lockGroomingSchedule(tx);
+      const previous = id ? await tx.groomingService.findFirst({ where: { id, installationId: installation.id } }) : null;
+      if (id && (!previous || previous.version !== input.version)) throw new ConflictException('Услуга уже изменилась');
+      const type = input.priceType || previous?.priceType || 'FIXED';
+      const maximumPrice = input.maximumPrice === undefined ? previous?.maximumPrice : input.maximumPrice;
+      if (['RANGE', 'UP_TO'].includes(type) && (maximumPrice == null || Number(maximumPrice) <= 0 || (type === 'RANGE' && Number(maximumPrice) < input.price))) throw new BadRequestException('Укажите корректную верхнюю границу цены');
+      const data = { title: input.title.trim(), price: type === 'UP_TO' || type === 'QUOTE' ? 0 : input.price, priceType: type, maximumPrice: ['RANGE', 'UP_TO'].includes(type) ? maximumPrice : null, isActive: input.isActive ?? previous?.isActive ?? true };
+      const result = id ? await tx.groomingService.update({ where: { id }, data: { ...data, version: { increment: 1 } } }) : await tx.groomingService.create({ data: { ...data, installationId: installation.id } });
       await this.audit.log({ actorId: actor.id, action: 'grooming.service.save', entityType: 'GroomingService', entityId: result.id }, tx); return result;
     });
   }
+  async importPrices(input: GroomingPriceImportDto, actor: AuthEmployee) {
+    const installation = await this.modules.installation('GROOMING');
+    return this.prisma.$transaction(async tx => {
+      await lockGroomingSchedule(tx);
+      const receiptId = `grooming:price-import:${actor.id}:${input.clientKey}`;
+      const fingerprint = digest({ version: groomingPriceCatalogVersion });
+      const prior = await tx.groomingCommandReceipt.findUnique({ where: { id: receiptId } });
+      if (prior) return prior.result;
+      let created = 0, preserved = 0;
+      for (const entry of groomingPriceEntries()) {
+        const previous = await tx.groomingService.findUnique({ where: { installationId_catalogKey: { installationId: installation.id, catalogKey: entry.catalogKey } } });
+        if (previous) { preserved++; continue; }
+        await tx.groomingService.create({ data: { ...entry, catalogData: json(entry.catalogData), installationId: installation.id } }); created++;
+      }
+      const result = { created, preserved, catalogVersion: groomingPriceCatalogVersion, note: 'Цены перенесены без повторной наценки. Для записи задайте длительность, специалиста и смены.' };
+      await this.audit.log({ actorId: actor.id, action: 'grooming.prices.import', entityType: 'GroomingSettings', entityId: installation.id, metadata: result }, tx);
+      await tx.groomingCommandReceipt.create({ data: { id: receiptId, fingerprint, result } }); return result;
+    }, { timeout: 30000 });
+  }
+  async batchShifts(input: GroomingScheduleBatchDto, actor: AuthEmployee, preview = false) {
+    const installation = await this.modules.installation('GROOMING');
+    const from = date(`${input.from}T00:00:00+03:00`), to = date(`${input.to}T00:00:00+03:00`);
+    if (localDay(from, 'Europe/Moscow') !== input.from || localDay(to, 'Europe/Moscow') !== input.to || to < from || to.getTime() - from.getTime() > 61 * day || input.startsTime >= input.endsTime) throw new BadRequestException('Выберите период до 62 дней и окончание после начала смены');
+    return this.prisma.$transaction(async tx => {
+      await lockGroomingSchedule(tx);
+      const receiptId = `grooming:schedule:${actor.id}:${input.clientKey}`, fingerprint = digest(input);
+      const receipt = await tx.groomingCommandReceipt.findUnique({ where: { id: receiptId } });
+      if (receipt) { if (receipt.fingerprint !== fingerprint) throw new ConflictException('Ключ расписания уже использован'); return receipt.result; }
+      const location = await tx.groomingLocation.findFirst({ where: { id: input.locationId, installationId: installation.id, isActive: true } });
+      if (!location || location.timezone !== 'Europe/Moscow') throw new BadRequestException('Выберите действующее место с часовым поясом Europe/Moscow');
+      if (input.workplaceId && !await tx.groomingWorkplace.findFirst({ where: { id: input.workplaceId, locationId: location.id, isActive: true } })) throw new BadRequestException('Выберите рабочее место студии');
+      const ids = [...new Set(input.employeeIds)];
+      if (input.workplaceId && ids.length > 1) throw new BadRequestException('Назначьте каждому грумеру своё рабочее место и график');
+      const specialists = await tx.groomingSpecialist.findMany({ where: { installationId: installation.id, employeeId: { in: ids }, isActive: true, employee: { status: 'ACTIVE' } } });
+      if (specialists.length !== ids.length) throw new BadRequestException('Выберите действующих грумеров');
+      const tableShifts = input.workplaceId ? await tx.groomingWorkPeriod.findMany({ where: { workplaceId: input.workplaceId, isActive: true, kind: 'WORK', startsAt: { lt: new Date(to.getTime() + day) }, endsAt: { gt: from } } }) : [];
+      const existing = await tx.groomingWorkPeriod.findMany({ where: { specialistId: { in: specialists.map(s => s.id) }, isActive: true, kind: 'WORK', startsAt: { lt: new Date(to.getTime() + day) }, endsAt: { gt: from } } });
+      const planned: Array<{ specialistId: string; locationId: string; workplaceId?: string; startsAt: Date; endsAt: Date; comment: string }> = [], conflicts: string[] = []; let skipped = 0;
+      for (let d = from.getTime(); d <= to.getTime(); d += day) {
+        const value = localDay(new Date(d + 12 * 3600000), 'Europe/Moscow'), weekday = new Date(d + 12 * 3600000).getUTCDay();
+        if (!input.weekdays.includes(weekday) || input.excludedDates?.includes(value)) continue;
+        for (const specialist of specialists) {
+          const startsAt = date(`${value}T${input.startsTime}:00+03:00`), endsAt = date(`${value}T${input.endsTime}:00+03:00`);
+          const overlaps = existing.filter(p => p.specialistId === specialist.id && p.startsAt < endsAt && p.endsAt > startsAt);
+          if (overlaps.length === 1 && overlaps[0].locationId === location.id && (overlaps[0].workplaceId || undefined) === input.workplaceId && +overlaps[0].startsAt === +startsAt && +overlaps[0].endsAt === +endsAt) { skipped++; continue; }
+          if (overlaps.length || tableShifts.some(p => p.specialistId !== specialist.id && p.startsAt < endsAt && p.endsAt > startsAt)) { conflicts.push(`${specialist.displayName}: ${value}`); continue; }
+          planned.push({ specialistId: specialist.id, locationId: location.id, workplaceId: input.workplaceId, startsAt, endsAt, comment: input.comment });
+        }
+      }
+      const result = { created: planned.length, skipped, conflicts, preview, dates: [...new Set(planned.map(p => localDay(p.startsAt, 'Europe/Moscow')))] };
+      if (preview) return result;
+      if (conflicts.length) throw new ConflictException(`Есть пересечения смен: ${conflicts.slice(0, 5).join('; ')}. Ничего не добавлено.`);
+      if (planned.length) await tx.groomingWorkPeriod.createMany({ data: planned });
+      await this.audit.log({ actorId: actor.id, action: 'grooming.schedule.batch', entityType: 'GroomingSettings', entityId: installation.id, metadata: json(result) }, tx);
+      await tx.groomingCommandReceipt.create({ data: { id: receiptId, fingerprint, result: json(result) } }); return result;
+    }, { timeout: 30000 });
+  }
+  async storefrontSnapshot(now = new Date()) {
+    const installation = await this.modules.installation('GROOMING'), settings = await this.settings();
+    const entitled = await this.modules.entitlement('GROOMING');
+    const rules = (await this.prisma.groomingServiceRule.findMany({ where: { installationId: installation.id, isActive: true }, include: ruleInclude })).filter(usable);
+    const horizon = new Date(now.getTime() + 91 * day);
+    const shifts = await this.prisma.groomingWorkPeriod.findMany({ where: { specialist: { installationId: installation.id }, isActive: true, startsAt: { lt: horizon }, endsAt: { gt: now } }, take: 5001 });
+    const busy = await this.prisma.groomingReservation.findMany({ where: { installationId: installation.id, status: { in: activeGroomingStatuses }, startsAt: { lt: horizon }, blockedUntil: { gt: now } }, select: { employeeId: true, workplaceId: true, startsAt: true, blockedUntil: true }, take: 5001 });
+    const services = await this.prisma.groomingService.findMany({ where: { installationId: installation.id, isActive: true }, orderBy: { title: 'asc' } });
+    return { schemaVersion: 1, capturedAt: now.toISOString(), testMode: Boolean(settings.testClientMaxId), enabled: installation.enabled && entitled, selfBookingEnabled: installation.enabled && entitled && settings.selfBookingEnabled && shifts.length <= 5000 && busy.length <= 5000,
+      services: services.map(s => ({ id: s.id, title: s.title, price: String(s.price), priceType: s.priceType, maximumPrice: s.maximumPrice == null ? null : String(s.maximumPrice), priceLabel: groomingPriceLabel(s), catalogKey: s.catalogKey, catalogData: s.catalogData, bookable: groomingServiceBookable(s) && rules.some(r => r.serviceId === s.id), version: s.version })),
+      specialists: [...new Map(rules.map(r => [r.specialistId, { id: r.specialistId, employeeId: r.specialist.employeeId, displayName: r.specialist.displayName, species: r.specialist.species }])).values()],
+      rules: rules.map(r => ({ id: r.id, specialistId: r.specialistId, employeeId: r.specialist.employeeId, serviceId: r.serviceId, locationId: r.locationId, workplaceId: r.workplaceId, species: r.species, size: r.size, coat: r.coat, durationMinutes: r.durationMinutes, bufferMinutes: r.bufferMinutes, stepMinutes: r.stepMinutes, minimumLeadMinutes: r.minimumLeadMinutes, maximumDaysAhead: r.maximumDaysAhead, timezone: r.location.timezone, locationName: r.location.name })),
+      shifts: shifts.map(s => ({ specialistId: s.specialistId, locationId: s.locationId, kind: s.kind, startsAt: s.startsAt.toISOString(), endsAt: s.endsAt.toISOString() })),
+      busy: busy.map(b => ({ employeeId: b.employeeId, workplaceId: b.workplaceId, startsAt: b.startsAt.toISOString(), endsAt: b.blockedUntil.toISOString() })) };
+  }
   async shifts(actor: AuthEmployee, from?: string, to?: string) {
     const overview = await this.overview(actor);
-    return (await this.prisma.groomingWorkPeriod.findMany({ where: { specialistId: { in: overview.specialists.map(s => s.id) }, ...(from || to ? { startsAt: { ...(to ? { lt: date(to) } : {}) }, endsAt: { ...(from ? { gt: date(from) } : {}) } } : {}) }, include: { specialist: { include: { employee: { select: { id: true, fullName: true } } } }, location: { select: { id: true, name: true } } }, orderBy: { startsAt: 'asc' }, take: 500 })).map(p => ({ ...p, employeeId: p.specialist.employeeId, employee: p.specialist.employee }));
+    return (await this.prisma.groomingWorkPeriod.findMany({ where: { specialistId: { in: overview.specialists.map(s => s.id) }, ...(from || to ? { startsAt: { ...(to ? { lt: date(to) } : {}) }, endsAt: { ...(from ? { gt: date(from) } : {}) } } : {}) }, include: { specialist: { include: { employee: { select: { id: true, fullName: true } } } }, location: { select: { id: true, name: true } }, workplace: { select: { id: true, name: true } } }, orderBy: { startsAt: 'asc' }, take: from && to ? 5000 : 500 })).map(p => ({ ...p, employeeId: p.specialist.employeeId, employee: p.specialist.employee }));
   }
   async saveShift(input: GroomingWorkPeriodDto, actor: AuthEmployee, id?: string) {
     const installation = await this.modules.installation('GROOMING');
@@ -112,7 +192,10 @@ export class GroomingCrmService {
       await lockGroomingSchedule(tx);
       const specialist = await tx.groomingSpecialist.findFirst({ where: { employeeId: input.employeeId, installationId: installation.id } });
       const location = await tx.groomingLocation.findFirst({ where: { id: input.locationId, installationId: installation.id } });
-      if (!specialist || !location) throw new BadRequestException('Выберите специалиста и место груминга');
+      if (!specialist || !location) throw new BadRequestException('Выберите грумера и студию');
+      const workplace = input.workplaceId ? await tx.groomingWorkplace.findFirst({ where: { id: input.workplaceId, locationId: location.id, isActive: true } }) : null;
+      if (input.workplaceId && !workplace) throw new BadRequestException('Выберите рабочее место выбранной студии');
+      if (input.isActive && input.kind === 'WORK' && input.workplaceId && await tx.groomingWorkPeriod.findFirst({ where: { ...(id ? { id: { not: id } } : {}), workplaceId: input.workplaceId, kind: 'WORK', isActive: true, startsAt: { lt: endsAt }, endsAt: { gt: startsAt } } })) throw new ConflictException('Рабочее место уже назначено грумеру на это время');
       const previous = id ? await tx.groomingWorkPeriod.findFirst({ where: { id, specialist: { installationId: installation.id } } }) : null;
       if (id && (!previous || previous.version !== input.version || previous.specialistId !== specialist.id)) throw new ConflictException('Интервал уже изменился. Обновите страницу');
       if (input.isActive && input.kind === 'WORK' && await tx.groomingWorkPeriod.findFirst({ where: { ...(id ? { id: { not: id } } : {}), specialistId: specialist.id, kind: 'WORK', isActive: true, startsAt: { lt: endsAt }, endsAt: { gt: startsAt } } })) throw new ConflictException('У специалиста уже есть смена в это время');
@@ -120,7 +203,7 @@ export class GroomingCrmService {
       for (const booking of future) {
         if (input.isActive && input.kind === 'BLOCK' && startsAt < booking.blockedUntil && endsAt > booking.startsAt) throw new ConflictException('В этом интервале есть запись. Сначала перенесите её');
         if (previous?.kind === 'WORK' && previous.startsAt <= booking.startsAt && previous.endsAt >= booking.blockedUntil && previous.locationId === booking.locationId) {
-          const covered = input.isActive && input.kind === 'WORK' && input.locationId === booking.locationId && startsAt <= booking.startsAt && endsAt >= booking.blockedUntil || Boolean(await tx.groomingWorkPeriod.findFirst({ where: { id: { not: id }, specialistId: specialist.id, locationId: booking.locationId, kind: 'WORK', isActive: true, startsAt: { lte: booking.startsAt }, endsAt: { gte: booking.blockedUntil } } }));
+          const covered = input.isActive && input.kind === 'WORK' && input.locationId === booking.locationId && (!input.workplaceId || input.workplaceId === booking.workplaceId) && startsAt <= booking.startsAt && endsAt >= booking.blockedUntil || Boolean(await tx.groomingWorkPeriod.findFirst({ where: { id: { not: id }, specialistId: specialist.id, locationId: booking.locationId, OR: [{ workplaceId: null }, { workplaceId: booking.workplaceId }], kind: 'WORK', isActive: true, startsAt: { lte: booking.startsAt }, endsAt: { gte: booking.blockedUntil } } }));
           if (!covered) throw new ConflictException('Смена содержит будущую запись. Сначала перенесите её');
         }
       }
@@ -130,45 +213,68 @@ export class GroomingCrmService {
     });
   }
   async saveSpecialist(input: GroomingSpecialistDto, actor: AuthEmployee, id?: string) {
+    if (!id) throw new BadRequestException('Создайте грумера внутри модуля');
     const installation = await this.modules.installation('GROOMING');
-    const employee = await this.prisma.employee.findUnique({ where: { id: input.employeeId } });
+    const profile = await this.prisma.groomingSpecialist.findFirst({ where: { id, installationId: installation.id } });
+    if (!profile || input.employeeId && input.employeeId !== profile.employeeId) throw new BadRequestException('Учётную запись грумера изменить нельзя');
+    input = { ...input, employeeId: profile.employeeId };
+    const employee = await this.prisma.employee.findUnique({ where: { id: profile.employeeId } });
     if (!employee || (input.isActive && employee.status !== 'ACTIVE')) throw new BadRequestException('Выберите действующего сотрудника');
     return this.prisma.$transaction(async tx => {
       await lockGroomingSchedule(tx);
-      const { version, ...fields } = input;
+      const { version, employeeId: ignoredEmployeeId, ...fields } = input;
       const data = { ...fields, displayName: fields.displayName.trim(), maxUserId: fields.maxUserId || null };
-      if (id) {
-        const previous = await tx.groomingSpecialist.findFirst({ where: { id, installationId: installation.id } });
-        if (!previous || previous.employeeId !== input.employeeId) throw new BadRequestException('Сотрудника профиля изменить нельзя');
-        const changed = await tx.groomingSpecialist.updateMany({ where: { id, version: version ?? -1 }, data: { ...data, version: { increment: 1 } } });
-        if (!changed.count) throw new ConflictException('Профиль изменился. Обновите страницу');
-      } else await tx.groomingSpecialist.create({ data: { ...data, installationId: installation.id } });
+      const changed = await tx.groomingSpecialist.updateMany({ where: { id, installationId: installation.id, version: version ?? -1 }, data: { ...data, version: { increment: 1 } } });
+      if (!changed.count) throw new ConflictException('Профиль изменился. Обновите страницу');
+      if (employee.accountScope === 'GROOMING') await tx.employee.update({ where: { id: employee.id }, data: { fullName: data.displayName } });
       await this.audit.log({ actorId: actor.id, action: 'grooming.specialist.save', entityType: 'GroomingSpecialist', entityId: id || input.employeeId }, tx);
       return { ok: true };
     });
   }
   async saveRule(input: GroomingRuleDto, actor: AuthEmployee, id?: string) {
     const installation = await this.modules.installation('GROOMING');
+    return this.prisma.$transaction(async tx => { await lockGroomingSchedule(tx); return this.saveRuleInTransaction(tx, installation.id, input, actor, id); });
+  }
+  private async saveRuleInTransaction(tx: Prisma.TransactionClient, installationId: string, input: GroomingRuleDto, actor: AuthEmployee, id?: string) {
     if ([input.durationMinutes, input.bufferMinutes, input.stepMinutes].some(n => n % 5)) throw new BadRequestException('Длительность, подготовка и шаг должны быть кратны 5 минутам');
-    return this.prisma.$transaction(async tx => {
-      await lockGroomingSchedule(tx);
-      const specialist = await tx.groomingSpecialist.findFirst({ where: { id: input.specialistId, installationId: installation.id }, include: { employee: true } });
+      const specialist = await tx.groomingSpecialist.findFirst({ where: { id: input.specialistId, installationId: installationId }, include: { employee: true } });
       const workplace = await tx.groomingWorkplace.findUnique({ where: { id: input.workplaceId }, include: { location: true } });
       const service = await tx.groomingService.findUnique({ where: { id: input.serviceId } });
-      if (!specialist || !workplace || workplace.location.installationId !== installation.id || workplace.locationId !== input.locationId || !service || service.installationId !== installation.id || !specialist.species.includes(input.species)) throw new BadRequestException('Проверьте специалиста, вид питомца, услугу и рабочее место');
+      if (!specialist || !workplace || workplace.location.installationId !== installationId || workplace.locationId !== input.locationId || !service || service.installationId !== installationId || !specialist.species.includes(input.species)) throw new BadRequestException('Проверьте специалиста, вид питомца, услугу и рабочее место');
+      if ((service.catalogData as Record<string, unknown> | null)?.species && !['ANY', input.species].includes(String((service.catalogData as Record<string, unknown>).species))) throw new BadRequestException('Услуга предназначена для другого вида питомца');
+      if (input.isActive && !groomingServiceBookable(service)) throw new BadRequestException('Сначала уточните цену; доплаты не записываются отдельно');
       if (input.isActive && (!specialist.isActive || specialist.employee.status !== 'ACTIVE' || !service.isActive)) throw new BadRequestException('Для записи нужны действующие специалист и услуга');
       const { version, ...data } = input;
       if (id) {
-        const changed = await tx.groomingServiceRule.updateMany({ where: { id, installationId: installation.id, version: version ?? -1 }, data: { ...data, version: { increment: 1 } } });
+        const changed = await tx.groomingServiceRule.updateMany({ where: { id, installationId: installationId, version: version ?? -1 }, data: { ...data, version: { increment: 1 } } });
         if (!changed.count) throw new ConflictException('Правило изменилось. Обновите страницу');
-      } else await tx.groomingServiceRule.create({ data: { ...data, installationId: installation.id } });
+      } else await tx.groomingServiceRule.create({ data: { ...data, installationId: installationId } });
       await this.audit.log({ actorId: actor.id, action: 'grooming.rule.save', entityType: 'GroomingServiceRule', entityId: id || input.specialistId }, tx);
       return { ok: true };
-    });
+  }
+  async saveRules(input: GroomingRulesBatchDto, actor: AuthEmployee) {
+    const installation = await this.modules.installation('GROOMING');
+    return this.prisma.$transaction(async tx => {
+      await lockGroomingSchedule(tx);
+      const receiptId = `grooming:rules:${actor.id}:${input.clientKey}`, fingerprint = digest(input.rules);
+      const previous = await tx.groomingCommandReceipt.findUnique({ where: { id: receiptId } });
+      if (previous) { if (previous.fingerprint !== fingerprint) throw new ConflictException('Этот запрос уже использован'); return previous.result; }
+      let created = 0, preserved = 0;
+      for (const rule of input.rules) {
+        const existing = await tx.groomingServiceRule.findFirst({ where: { installationId: installation.id, serviceId: rule.serviceId, specialistId: rule.specialistId, locationId: rule.locationId, workplaceId: rule.workplaceId, species: rule.species, size: rule.size, coat: rule.coat } });
+        if (existing) {
+          if (['durationMinutes','bufferMinutes','stepMinutes','minimumLeadMinutes','maximumDaysAhead','isActive'].some(k => existing[k as keyof typeof existing] !== rule[k as keyof GroomingRuleDto])) throw new ConflictException('Для одной из услуг уже задана другая длительность. Измените существующую настройку. Новые настройки не добавлены.');
+          preserved++; continue;
+        }
+        await this.saveRuleInTransaction(tx, installation.id, rule, actor); created++;
+      }
+      const result = { created, preserved };
+      await tx.groomingCommandReceipt.create({ data: { id: receiptId, fingerprint, result } }); return result;
+    }, { timeout: 30000 });
   }
   async bookings(actor: AuthEmployee, from?: string, to?: string) {
     if (!this.manager(actor) && !await this.prisma.groomingSpecialist.findUnique({ where: { employeeId: actor.id } })) throw new ForbiddenException('Профиль грумера не найден');
-    return this.prisma.groomingReservation.findMany({ where: { ...this.scope(actor), ...(from || to ? { startsAt: { ...(from ? { gte: date(from) } : {}), ...(to ? { lt: date(to) } : {}) } } : {}) }, include: bookingInclude, orderBy: { startsAt: 'asc' }, take: 500 });
+    return this.prisma.groomingReservation.findMany({ where: { ...this.scope(actor), ...(from || to ? { startsAt: { ...(from ? { gte: date(from) } : {}), ...(to ? { lt: date(to) } : {}) } } : {}) }, include: bookingInclude, orderBy: { startsAt: 'asc' }, take: from && to ? 5000 : 500 });
   }
   async booking(id: string, actor: AuthEmployee) {
     const found = await this.prisma.groomingReservation.findFirst({ where: { id, ...this.scope(actor) }, include: { ...bookingInclude, notifications: { orderBy: { createdAt: 'desc' }, take: 30 } } });
@@ -201,13 +307,18 @@ export class GroomingCrmService {
     const rules = enabled && settings.selfBookingEnabled ? (await this.prisma.groomingServiceRule.findMany({ where: { installationId: installation.id, isActive: true }, include: ruleInclude })).filter(usable) : [];
     const bookings = await this.prisma.groomingReservation.findMany({ where: { ownerId }, include: bookingInclude, orderBy: { startsAt: 'desc' }, take: 100 });
     const animals = await this.prisma.animal.findMany({ where: { ownerId, archivedAt: null }, select: { id: true, nickname: true, species: true, breed: true }, orderBy: { nickname: 'asc' } });
-    return { enabled, selfBookingEnabled: enabled && settings.selfBookingEnabled, mode: process.env.GROOMING_QA_MODE === 'true' && process.env.NODE_ENV !== 'production' ? 'qa' : 'live', qaDelivery: process.env.GROOMING_QA_MODE === 'true' && process.env.NODE_ENV !== 'production' ? process.env.GROOMING_QA_DELIVERY || 'fake' : undefined, minimumCancelMinutes: settings.minimumCancelMinutes, owner: { id: owner.id, fullName: owner.fullName, phone: owner.phone }, animals,
-      services: [...new Map(rules.map(r => [r.serviceId, { id: r.serviceId, title: r.service.title, price: r.service.price, species: [...new Set(rules.filter(x => x.serviceId === r.serviceId).map(x => x.species))] }])).values()],
+    return { enabled, selfBookingEnabled: enabled && settings.selfBookingEnabled && (!settings.testClientMaxId || owner.maxUserId === settings.testClientMaxId), testMode: Boolean(settings.testClientMaxId), mode: process.env.GROOMING_QA_MODE === 'true' && process.env.NODE_ENV !== 'production' ? 'qa' : 'live', qaDelivery: process.env.GROOMING_QA_MODE === 'true' && process.env.NODE_ENV !== 'production' ? process.env.GROOMING_QA_DELIVERY || 'fake' : undefined, minimumCancelMinutes: settings.minimumCancelMinutes, owner: { id: owner.id, fullName: owner.fullName, phone: owner.phone }, animals,
+      services: [...new Map(rules.map(r => [r.serviceId, { id: r.serviceId, title: r.service.title, price: r.service.price, maximumPrice: r.service.maximumPrice, priceType: r.service.priceType, priceLabel: groomingPriceLabel(r.service), catalogKey: r.service.catalogKey, catalogData: r.service.catalogData, species: [...new Set(rules.filter(x => x.serviceId === r.serviceId).map(x => x.species))] }])).values()],
       specialists: [...new Map(rules.map(r => [r.specialistId, { id: r.specialistId, displayName: r.specialist.displayName, species: r.specialist.species }])).values()],
       bookings: bookings.map(publicBooking) };
   }
+  private async assertTestClient(ownerId: string, tx: Prisma.TransactionClient = this.prisma) {
+    const settings = await tx.groomingSettings.findFirst();
+    if (settings?.testClientMaxId) { const owner = await tx.owner.findUnique({ where: { id: ownerId }, select: { maxUserId: true } }); if (owner?.maxUserId !== settings.testClientMaxId) throw new ForbiddenException('Идёт тестовый запуск. Самостоятельная запись скоро откроется.'); }
+  }
   async options(ownerId: string, input: GroomingOptionsDto, now = new Date(), actor?: AuthEmployee) {
     await this.owner(ownerId); await this.animal(ownerId, input.animalId, input.species);
+    if (!actor) await this.assertTestClient(ownerId);
     await this.writable(undefined, !actor);
     if (actor && !this.manager(actor)) throw new ForbiddenException('Создавать записи может администратор');
     if (input.species === 'DOG' && input.size === 'ANY') throw new BadRequestException('Укажите размер собаки');
@@ -219,7 +330,7 @@ export class GroomingCrmService {
     for (const rule of rules) {
       const from = new Date(Math.max(center.getTime() - 26 * 3600000, now.getTime() + (actor ? 0 : rule.minimumLeadMinutes * minute))), to = new Date(Math.min(center.getTime() + 26 * 3600000, now.getTime() + rule.maximumDaysAhead * day));
       if (from >= to) continue;
-      const shifts = await this.prisma.groomingWorkPeriod.findMany({ where: { specialistId: rule.specialistId, locationId: rule.locationId, kind: 'WORK', isActive: true, startsAt: { lt: to }, endsAt: { gt: from } } });
+      const shifts = await this.prisma.groomingWorkPeriod.findMany({ where: { specialistId: rule.specialistId, locationId: rule.locationId, OR: [{ workplaceId: null }, { workplaceId: rule.workplaceId }], kind: 'WORK', isActive: true, startsAt: { lt: to }, endsAt: { gt: from } } });
       for (const shift of shifts) {
         const start = Math.max(shift.startsAt.getTime(), from.getTime());
         const step = rule.stepMinutes * minute;
@@ -228,7 +339,7 @@ export class GroomingCrmService {
           if (localDay(begins, rule.location.timezone) !== input.date) continue;
           if (await this.conflict(this.prisma, rule.specialist.employeeId, rule.workplaceId, begins, blocked, input.reservationId)) continue;
           const offer: Offer = { ownerId, animalId: input.animalId, ruleId: rule.id, ruleVersion: rule.version, serviceVersion: rule.service.updatedAt.toISOString(), startsAt: begins.toISOString(), expiresAt: new Date(now.getTime() + 5 * minute).toISOString(), species: input.species, size: input.size, coat: input.coat, ignoreId: input.reservationId, staff: Boolean(actor) };
-          offers.push({ offerToken: this.sign(offer), startsAt: begins.toISOString(), endsAt: end.toISOString(), blockedUntil: blocked.toISOString(), expiresAt: offer.expiresAt, specialistId: rule.specialistId, specialistName: rule.specialist.displayName, serviceTitle: rule.service.title, price: rule.service.price, durationMinutes: rule.durationMinutes, bufferMinutes: rule.bufferMinutes, timezone: rule.location.timezone, locationName: rule.location.name });
+          offers.push({ offerToken: this.sign(offer), startsAt: begins.toISOString(), endsAt: end.toISOString(), blockedUntil: blocked.toISOString(), expiresAt: offer.expiresAt, specialistId: rule.specialistId, specialistName: rule.specialist.displayName, serviceTitle: rule.service.title, price: rule.service.price, priceType: rule.service.priceType, maximumPrice: rule.service.maximumPrice, priceLabel: groomingPriceLabel(rule.service), durationMinutes: rule.durationMinutes, bufferMinutes: rule.bufferMinutes, timezone: rule.location.timezone, locationName: rule.location.name });
           if (offers.length >= 160) break;
         }
       }
@@ -254,6 +365,7 @@ export class GroomingCrmService {
       const previous = await tx.groomingCommandReceipt.findUnique({ where: { id: receiptId } });
       if (previous) { if (previous.fingerprint !== fingerprint) throw new ConflictException('Ключ записи уже использован с другими данными'); return previous.result; }
       await this.writable(tx, !actor);
+      if (!actor) await this.assertTestClient(ownerId, tx);
       if (actor && !this.manager(actor)) throw new ForbiddenException('Создавать и переносить записи может администратор');
       const offer = this.verify(input.offerToken);
       if (offer.ownerId !== ownerId || offer.staff !== Boolean(actor) || (offer.ignoreId || undefined) !== reschedule?.id || date(offer.expiresAt) <= now) throw new ConflictException('Предложение истекло. Обновите свободное время');
@@ -262,7 +374,7 @@ export class GroomingCrmService {
       if (!rule || !usable(rule) || rule.version !== offer.ruleVersion || rule.service.updatedAt.toISOString() !== offer.serviceVersion) throw new ConflictException('Условия услуги изменились. Обновите свободное время');
       const startsAt = date(offer.startsAt), endsAt = new Date(startsAt.getTime() + rule.durationMinutes * minute), blockedUntil = new Date(endsAt.getTime() + rule.bufferMinutes * minute);
       if (startsAt.getTime() < now.getTime() + (actor ? 0 : rule.minimumLeadMinutes * minute) || startsAt.getTime() > now.getTime() + rule.maximumDaysAhead * day) throw new ConflictException('Это время больше недоступно');
-      const shift = await tx.groomingWorkPeriod.findFirst({ where: { specialistId: rule.specialistId, locationId: rule.locationId, kind: 'WORK', isActive: true, startsAt: { lte: startsAt }, endsAt: { gte: blockedUntil } } });
+      const shift = await tx.groomingWorkPeriod.findFirst({ where: { specialistId: rule.specialistId, locationId: rule.locationId, OR: [{ workplaceId: null }, { workplaceId: rule.workplaceId }], kind: 'WORK', isActive: true, startsAt: { lte: startsAt }, endsAt: { gte: blockedUntil } } });
       if (!shift || await this.conflict(tx, rule.specialist.employeeId, rule.workplaceId, startsAt, blockedUntil, reschedule?.id)) throw new ConflictException('Время уже занято. Выберите другой интервал');
       let current: Booking | undefined;
       if (reschedule) {
@@ -272,7 +384,7 @@ export class GroomingCrmService {
         if (current.animalId !== offer.animalId) throw new BadRequestException('При переносе питомец сохраняется');
         await tx.groomingNotification.updateMany({ where: { reservationId: current.id, status: { in: ['QUEUED', 'FAILED'] } }, data: { status: 'CANCELLED', lastError: 'Запись перенесена' } });
       }
-      const data = { installationId: rule.installationId, ruleId: rule.id, ownerId, animalId: offer.animalId, employeeId: rule.specialist.employeeId, locationId: rule.locationId, workplaceId: rule.workplaceId, serviceTitle: rule.service.title, price: rule.service.price, species: offer.species, size: offer.size, coat: offer.coat, startsAt, endsAt, blockedUntil, notes: input.notes?.trim() || '', looks: json(input.looks || []), source: actor ? 'CRM' : 'CLIENT_PORTAL' };
+      const data = { installationId: rule.installationId, ruleId: rule.id, ownerId, animalId: offer.animalId, employeeId: rule.specialist.employeeId, locationId: rule.locationId, workplaceId: rule.workplaceId, serviceTitle: rule.service.title, price: rule.service.price, priceType: rule.service.priceType, maximumPrice: rule.service.maximumPrice, species: offer.species, size: offer.size, coat: offer.coat, startsAt, endsAt, blockedUntil, notes: input.notes?.trim() || '', looks: json(input.looks || []), source: actor ? 'CRM' : 'CLIENT_PORTAL' };
       const saved = current ? await tx.groomingReservation.update({ where: { id: current.id }, data: { ...data, version: { increment: 1 } }, include: bookingInclude }) : await tx.groomingReservation.create({ data, include: bookingInclude });
       await this.queueNotifications(tx, saved, current ? 'RESCHEDULED' : 'CONFIRMED', now, current?.employeeId);
       await this.audit.log({ actorId: actor?.id, action: current ? 'grooming.reschedule' : 'grooming.book', entityType: 'GroomingReservation', entityId: saved.id, metadata: { ownerId, animalId: saved.animalId, source: saved.source, contactConsent: true, bookingConsent: true } }, tx);
@@ -359,12 +471,13 @@ export class GroomingCrmService {
     const text = `TemichevVet · Груминг: ${event === 'CANCELLED' ? 'запись отменена' : event === 'RESCHEDULED' ? 'запись перенесена' : 'запись подтверждена'}. ${booking.animal.nickname}, ${booking.serviceTitle}, ${when}. Специалист: ${specialist?.displayName || booking.employee.fullName}. Подробности в кабинете.`.slice(0, 800);
     const expiresAt = event === 'CANCELLED' ? new Date(now.getTime() + day) : booking.startsAt;
     const recipients = [{ kind: 'OWNER', id: booking.ownerId }, ...[...new Set([...(settings?.administratorMaxIds || []), ...(specialist?.maxUserId ? [specialist.maxUserId] : [])])].map(id => ({ kind: 'STAFF', id }))];
-    for (const recipient of recipients) await tx.groomingNotification.create({ data: { reservationId: booking.id, reservationVersion: booking.version, event, recipientKind: recipient.kind, recipientId: recipient.id, dedupeKey: `${booking.id}:${booking.version}:${event}:${recipient.kind}:${recipient.id}`, text, scheduledAt: now, expiresAt } });
+    for (const recipient of recipients) await tx.groomingNotification.create({ data: { reservationId: booking.id, reservationVersion: booking.version, event, recipientKind: recipient.kind, recipientId: recipient.id, dedupeKey: `${booking.id}:${booking.version}:${event}:${recipient.kind}:${recipient.id}`, text: `${recipient.kind === 'OWNER' ? 'Для клиента. ' : 'Для грумера / администратора. '}${text}`.slice(0, 800), scheduledAt: now, expiresAt } });
     if (event === 'CANCELLED') return;
     for (const hours of settings?.reminderHours || [24]) {
       const scheduledAt = new Date(booking.startsAt.getTime() - hours * 3600000);
       if (scheduledAt.getTime() <= now.getTime() + 5 * minute) continue;
       await tx.groomingNotification.create({ data: { reservationId: booking.id, reservationVersion: booking.version, event: 'REMINDER', recipientKind: 'OWNER', recipientId: booking.ownerId, dedupeKey: `${booking.id}:${booking.version}:REMINDER:${hours}:${booking.ownerId}`, text: `TemichevVet · Груминг: напоминаем о записи. ${booking.animal.nickname}, ${when}. Специалист: ${specialist?.displayName || booking.employee.fullName}. Подробности в кабинете.`.slice(0, 800), scheduledAt, expiresAt: booking.startsAt } });
+      if (specialist?.maxUserId) await tx.groomingNotification.create({ data: { reservationId: booking.id, reservationVersion: booking.version, event: 'REMINDER', recipientKind: 'STAFF', recipientId: specialist.maxUserId, dedupeKey: `${booking.id}:${booking.version}:REMINDER:${hours}:STAFF:${specialist.maxUserId}`, text: `TemichevVet · Напоминание грумеру: ${booking.animal.nickname}, ${when}. ${booking.serviceTitle}. Подробности в вашем модуле.`.slice(0, 800), scheduledAt, expiresAt: booking.startsAt } });
     }
   }
   private secret() { const value = process.env.GROOMING_BOOKING_SIGNING_SECRET?.trim() || process.env.OWNER_GATEWAY_SYNC_SECRET?.trim(); if (!value || value.length < 24) throw new ServiceUnavailableException('Подписание записи не настроено'); return value; }
@@ -373,7 +486,7 @@ export class GroomingCrmService {
     try { const [body, signature, extra] = token.split('.'); const expected = createHmac('sha256', this.secret()).update(body).digest(); const received = Buffer.from(signature, 'base64url'); if (extra || received.length !== expected.length || !timingSafeEqual(received, expected)) throw Error(); const value = JSON.parse(Buffer.from(body, 'base64url').toString()) as Offer; if (!value.ruleId || !value.ownerId || !value.animalId || !value.expiresAt) throw Error(); return value; } catch { throw new ConflictException('Предложение недействительно. Обновите свободное время'); }
   }
 }
-function usable(rule: Rule) { return rule.isActive && rule.specialist.isActive && rule.specialist.employee.status === 'ACTIVE' && rule.service.isActive && rule.location.isActive && rule.workplace.isActive && rule.specialist.species.includes(rule.species); }
+function usable(rule: Rule) { return rule.isActive && rule.specialist.isActive && rule.specialist.employee.status === 'ACTIVE' && rule.service.isActive && groomingServiceBookable(rule.service) && rule.location.isActive && rule.workplace.isActive && rule.specialist.species.includes(rule.species); }
 function date(value: string) { const result = new Date(value); if (!/T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value) || !Number.isFinite(result.getTime())) throw new BadRequestException('Укажите дату с часовым поясом'); return result; }
 function localDay(value: Date, timezone: string) { return new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(value); }
-function publicBooking(booking: Booking) { const { owner, rule, ...rest } = booking; return { ...rest, serviceId: rule.serviceId, price: booking.price.toString() }; }
+function publicBooking(booking: Booking) { const { owner, rule, ...rest } = booking; return { ...rest, serviceId: rule.serviceId, price: booking.price.toString(), maximumPrice: booking.maximumPrice?.toString() ?? null, priceType: booking.priceType, priceLabel: groomingPriceLabel(booking) }; }

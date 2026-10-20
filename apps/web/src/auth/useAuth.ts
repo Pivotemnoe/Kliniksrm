@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { appConfig, isDemoAuthMode } from '../app/config';
 import { ApiError } from '../api/errors';
 import { changePassword, ChangePasswordInput, getMe, login, LoginInput, logout } from './auth.api';
@@ -62,6 +62,7 @@ export function useChangePasswordMutation() {
 export function useUnauthorizedListener(loginPath = '/login') {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     if (isDemoAuthMode) {
@@ -70,12 +71,12 @@ export function useUnauthorizedListener(loginPath = '/login') {
 
     const handleUnauthorized = async () => {
       await clearStaffSessionCache(queryClient);
-      navigate(loginPath, { replace: true });
+      navigate(loginPath, { replace: true, state: { from: location } });
     };
 
     window.addEventListener('crm:unauthorized', handleUnauthorized);
     return () => window.removeEventListener('crm:unauthorized', handleUnauthorized);
-  }, [navigate, queryClient, loginPath]);
+  }, [navigate, queryClient, loginPath, location]);
 }
 
 export function useIdleLogout(enabled: boolean, loginPath = '/login') {

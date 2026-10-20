@@ -290,6 +290,7 @@ export class AuthService {
     phone: string | null;
     position: string | null;
     defaultRoute: string | null;
+    accountScope?: string;
     restrictLoginToShifts?: boolean | null;
     allowRemoteOutsideShift?: boolean | null;
     status: string;
@@ -327,6 +328,11 @@ export class AuthService {
       }
     }
 
+    // Module accounts cannot acquire clinical access through a shared role or override.
+    if (employee.accountScope === 'GROOMING') {
+      for (const code of permissions) if (!['grooming.read', 'grooming.operate'].includes(code)) permissions.delete(code);
+    }
+
     return {
       id: employee.id,
       userId: employee.userId ?? '',
@@ -334,11 +340,12 @@ export class AuthService {
       phone: employee.phone,
       position: employee.position,
       defaultRoute: employee.defaultRoute,
+      accountScope: employee.accountScope || 'CLINIC',
       restrictLoginToShifts: Boolean(employee.restrictLoginToShifts),
       allowRemoteOutsideShift: Boolean(employee.allowRemoteOutsideShift),
       mustChangePassword,
       status: employee.status,
-      roles,
+      roles: employee.accountScope === 'GROOMING' ? ['groomer'] : roles,
       permissions: [...permissions].sort(),
     };
   }

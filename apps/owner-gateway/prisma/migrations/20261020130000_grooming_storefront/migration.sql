@@ -1,0 +1,1 @@
+CREATE TABLE "GroomingStorefrontSnapshot" ("id" TEXT NOT NULL, "payload" JSONB NOT NULL, "fingerprint" TEXT NOT NULL, "receivedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT "GroomingStorefrontSnapshot_pkey" PRIMARY KEY ("id"));

@@ -14,7 +14,7 @@ export class InternalMessagesService {
 
   listRecipients(actorId: string) {
     return this.prisma.employee.findMany({
-      where: { id: { not: actorId }, status: EmployeeStatus.ACTIVE },
+      where: { id: { not: actorId }, status: EmployeeStatus.ACTIVE, accountScope: 'CLINIC' },
       orderBy: { fullName: 'asc' },
       select: staffEmployeeSelect,
     });

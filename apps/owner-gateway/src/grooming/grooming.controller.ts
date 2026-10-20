@@ -4,12 +4,13 @@ import type { Request } from 'express';
 import { assertSecret } from '../security';
 import { GroomingBookingDto } from './grooming.dto';
 import { GroomingService } from './grooming.service';
+import { GroomingStorefrontService } from './grooming-storefront.service';
 class AckDto { @IsString() @MinLength(1) @MaxLength(100) crmRequestId!: string; }
 @Controller('v1/public/grooming')
 export class GroomingPublicController {
- constructor(private readonly service: GroomingService) {}
+ constructor(private readonly service: GroomingService, private readonly storefront: GroomingStorefrontService) {}
  @Get('catalog') @Header('Cache-Control','no-store')
- catalog() { return this.service.configuration(); }
+ async catalog() { return { ...this.service.configuration(), storefront: await this.storefront.catalog() }; }
  @Post('bookings') @Header('Cache-Control','no-store')
  create(@Body() dto:GroomingBookingDto,@Req() request:Request) {
   const origins = (process.env.GROOMING_SITE_ORIGINS || '').split(',').map(v=>v.trim()).filter(Boolean);

@@ -38,7 +38,7 @@ export class SchedulingService {
         },
       }),
       this.prisma.employee.findMany({
-        where: { status: EmployeeStatus.ACTIVE },
+        where: { status: EmployeeStatus.ACTIVE, accountScope: 'CLINIC' },
         orderBy: { fullName: 'asc' },
         select: {
           id: true,

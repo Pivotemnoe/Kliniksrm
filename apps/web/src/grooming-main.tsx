@@ -28,7 +28,7 @@ function GroomingLogin() {
   const login = useLoginMutation(), { data } = useCurrentEmployee(), navigate = useNavigate();
   const location = useLocation(), from = (location.state as { from?: { pathname?: string; search?: string } } | null)?.from;
   const destination = from?.pathname?.startsWith('/grooming/') ? `${from.pathname}${from.search || ''}` : '/grooming/calendar';
-  if (data?.employee) return <Navigate to="/grooming/calendar" replace />;
+  if (data?.employee) return <Navigate to={destination} replace />;
   return <main className="crm-shell grooming-login"><section><img src="/brand/temichevvet-logo.jpg" width="90" alt="TemichevVet" /><Typography.Text className="grooming-login-eyebrow">Кабинет грумера</Typography.Text><h1>Груминг</h1><p>Расписание команды, записи и забота о питомцах.</p></section><Form layout="vertical" onFinish={async values => { await login.mutateAsync(values); navigate(destination); }}><h2>Вход сотрудника</h2><Form.Item name="login" label="Телефон или email" rules={[{ required: true }]}><Input autoComplete="username" /></Form.Item><Form.Item name="password" label="Пароль" rules={[{ required: true }]}><Input.Password autoComplete="current-password" /></Form.Item>{login.isError && <Alert className="grooming-banner" type="error" message={getErrorMessage(login.error)} />}<Button htmlType="submit" type="primary" loading={login.isPending} block>Войти</Button></Form></main>;
 }
 function GroomingLayout() {
@@ -62,7 +62,7 @@ function GroomingLayout() {
           ] }}><Button type="text" className="employee-menu-button grooming-employee-button" aria-label="Меню сотрудника"><Avatar>{employee.fullName.slice(0, 1)}</Avatar><span className="grooming-employee-copy"><strong>{employee.fullName}</strong><small>{employee.roles.includes('director') ? 'Директор' : employee.roles.includes('administrator') ? 'Администратор' : employee.roles.includes('groomer') ? 'Грумер' : 'Сотрудник'}</small></span><DownOutlined /></Button></Dropdown>
         </div>
       </Layout.Header>
-      <Layout.Content className="crm-content">{import.meta.env.VITE_GROOMING_QA === 'true' && <Alert type="info" banner message={import.meta.env.VITE_GROOMING_QA_TRANSPORT === 'device' ? 'Проверка на телефоне · вымышленные данные · тестовые сообщения MAX' : 'Локальная проверка · вымышленные данные · MAX перехвачен'} />}<Outlet /></Layout.Content>
+      <Layout.Content className="crm-content">{import.meta.env.VITE_GROOMING_QA === 'true' && <Alert type="info" banner message={import.meta.env.VITE_GROOMING_QA_TRANSPORT === 'device' ? 'Проверка на телефоне · вымышленные данные · тестовые сообщения MAX' : 'Локальная проверка · вымышленные данные · без отправки в MAX'} />}<Outlet /></Layout.Content>
     </Layout>
   </Layout>;
 }

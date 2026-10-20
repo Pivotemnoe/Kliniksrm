@@ -40,7 +40,7 @@ export class PayrollService {
   async getResources() {
     const [employees, services, products] = await this.prisma.$transaction([
       this.prisma.employee.findMany({
-        where: { status: EmployeeStatus.ACTIVE },
+        where: { status: EmployeeStatus.ACTIVE, accountScope: 'CLINIC' },
         orderBy: { fullName: 'asc' },
         include: {
           payrollProfile: {

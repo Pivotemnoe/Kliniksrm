@@ -6,6 +6,7 @@ import { AuditService } from '../audit/audit.service';
 import { CreateRemoteAccessInvitationDto } from './dto/create-remote-access-invitation.dto';
 import { EnrollRemoteDeviceDto } from './dto/enroll-remote-device.dto';
 import { UpdateRemoteAccessPolicyDto } from './dto/update-remote-access-policy.dto';
+import { AuthEmployee } from '../auth/auth.types';
 
 @Injectable()
 export class RemoteAccessService {
@@ -150,6 +151,20 @@ export class RemoteAccessService {
     if (isRemote && dto.employeeId !== actorId) {
       throw new ForbiddenException('С удалённого доверенного устройства можно перепривязать только своё устройство');
     }
+    return this.issueInvitation(dto, actorId, ipAddress, isRemote);
+  }
+
+  async createGroomingInvitation(dto: CreateRemoteAccessInvitationDto, actor: AuthEmployee, ipAddress?: string | null, isRemote = false) {
+    if (!actor.permissions.includes('grooming.manage') || !actor.roles.some(role => ['director', 'administrator'].includes(role))) throw new ForbiddenException('Нет доступа к подключению грумеров');
+    const specialist = await this.prisma.groomingSpecialist.findFirst({ where: { employeeId: dto.employeeId,
+      employee: { accountScope: 'GROOMING', status: 'ACTIVE' }, installation: { moduleKey: 'GROOMING', enabled: true } } });
+    if (!specialist) throw new BadRequestException('Выберите отдельную учётную запись грумера, созданную в модуле');
+    return this.issueInvitation(dto, actor.id, ipAddress, isRemote, true);
+  }
+
+  private async issueInvitation(dto: CreateRemoteAccessInvitationDto, actorId: string, ipAddress?: string | null, isRemote = false, grooming = false) {
+    const publicUrl = process.env.REMOTE_STAFF_PUBLIC_URL?.trim().replace(/\/$/, '');
+    if (!publicUrl) throw new BadRequestException('Адрес подключения телефонов ещё не настроен');
 
     const organization = await this.getOrganization();
     const policy = await this.ensurePolicy(organization.id);
@@ -192,15 +207,14 @@ export class RemoteAccessService {
       action: 'remote_access.invitation_create',
       entityType: 'RemoteAccessInvitation',
       entityId: invitation.id,
-      metadata: { employeeId: employee.id, expiresAt: expiresAt.toISOString(), remoteAction: isRemote, selfRecovery: isRemote },
+      metadata: { employeeId: employee.id, expiresAt: expiresAt.toISOString(), remoteAction: isRemote, selfRecovery: isRemote && !grooming, ...(grooming ? { module: 'GROOMING' } : {}) },
       ipAddress,
     });
 
-    const publicUrl = process.env.REMOTE_STAFF_PUBLIC_URL!.trim().replace(/\/$/, '');
     return {
       id: invitation.id,
       code: token,
-      enrollmentUrl: `${publicUrl}/remote/enroll?code=${encodeURIComponent(token)}`,
+      enrollmentUrl: `${publicUrl}${grooming ? '/grooming' : ''}/remote/enroll?code=${encodeURIComponent(token)}`,
       expiresAt,
       employee: { id: employee.id, fullName: employee.fullName },
     };
