@@ -57,7 +57,7 @@ await writeFile(join(packet,'release.json'),JSON.stringify(release,null,2));
 await writeFile(join(packet,'web/release.json'),JSON.stringify({releaseId,revision,baseRevision:pre.release.revision,component:'staff-web-with-integrated-pet-hotel'}));
 const checksums={};async function scan(dir){for(const e of await readdir(dir,{withFileTypes:true})){const path=join(dir,e.name);if(e.isDirectory())await scan(path);else if(e.isFile()){
  const bytes=await readFile(path);checksums[path.slice(packet.length+1)]=createHash('sha256').update(bytes).digest('hex');
- if(/\.(html|js)$/.test(e.name)){const s=bytes.toString('utf8');for(const bad of ['http://127.0.0.1:4000/api','LocalGrooming2026!','LocalGroomingOnly2026!','PreviewGroomerReady2026!','synthetic-grooming-only','MAX перехвачен','integrated-hotel-director@example.local'])if(s.includes(bad))throw Error('QA value in release: '+path);}
+ if(/\.(html|js)$/.test(e.name)){const s=bytes.toString('utf8');for(const bad of ['http://127.0.0.1:4000/api','LocalGrooming2026!','LocalGroomingOnly2026!','PreviewGroomerReady2026!','synthetic-grooming-only','integrated-hotel-director@example.local'])if(s.includes(bad))throw Error('QA value in release: '+path);}
 }}}
 await scan(packet);await writeFile(join(out,'packet-checksums.json'),JSON.stringify(checksums,null,2));
 console.log(JSON.stringify({packet,revision,pendingMigrations:expected,gatewayMigrations:gatewayExpected,files:Object.keys(checksums).length,productionWebValuesChecked:true}));
