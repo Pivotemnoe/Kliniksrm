@@ -20,8 +20,13 @@ export class AvitoWorker implements OnModuleInit, OnModuleDestroy {
       if (this.api.ingestionEnabled() && Date.now() >= this.nextPoll) {
         const integration = await this.service.integration();
         if (integration.installation.enabled && integration.accountId) {
-          const result = await this.service.sync(this.offset);
-          this.offset = result.nextOffset ?? 0;
+          // New activity belongs to the newest page. Always check it first;
+          // walking older pages alone delays new enquiries by a full history sweep.
+          const newest = await this.service.sync(0);
+          if (this.offset > 0 && newest.nextOffset !== null) {
+            const older = await this.service.sync(this.offset);
+            this.offset = older.nextOffset ?? newest.nextOffset;
+          } else this.offset = newest.nextOffset ?? 0;
         }
         this.nextPoll = Date.now() + 60000;
       }
