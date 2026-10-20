@@ -29,6 +29,7 @@ import { getTaskTypeLabel } from '../tasks/types';
 import { visitStatusColors, visitStatusLabels } from '../visits/types';
 import { getDashboardToday, getDirectorPortalStatistics, getDirectorSiteAnalytics } from './dashboard.api';
 import { DashboardQueueItem, DashboardSummary, DirectorPortalOwnerItem, DirectorPortalStatistics, DirectorSiteAnalytics } from './types';
+import { resolveDashboardMode } from './workspaceMode';
 
 const hospitalStatusLabels = { ACTIVE: 'В стационаре', DISCHARGED: 'Выписан', CANCELLED: 'Отменён' } as const;
 const hospitalStatusColors = { ACTIVE: 'blue', DISCHARGED: 'green', CANCELLED: 'default' } as const;
@@ -73,21 +74,24 @@ export function DashboardPage() {
   const employee = auth?.employee;
   const today = useMemo(() => toDateInput(new Date()), []);
   const dashboardQuery = useQuery({
-    queryKey: ['dashboard', today],
+    queryKey: ['dashboard', employee?.id, today],
     queryFn: () => getDashboardToday({ date: today }),
+    enabled: Boolean(employee?.id),
     refetchInterval: 10_000,
   });
-  const summary = dashboardQuery.data;
+  const response = dashboardQuery.data;
+  const workspaceMode = resolveDashboardMode(employee, response?.workspace.mode);
+  const summary = response && workspaceMode ? { ...response, workspace: { ...response.workspace, mode: workspaceMode } } : undefined;
   const portalStatisticsQuery = useQuery({
-    queryKey: ['dashboard', 'portal-statistics'],
+    queryKey: ['dashboard', employee?.id, 'portal-statistics'],
     queryFn: getDirectorPortalStatistics,
-    enabled: summary?.workspace.mode === 'director',
+    enabled: Boolean(employee?.roles.includes('director') && summary?.workspace.mode === 'director'),
     refetchInterval: 60_000,
   });
   const siteAnalyticsQuery = useQuery({
-    queryKey: ['dashboard', 'site-analytics', siteAnalyticsDays],
+    queryKey: ['dashboard', employee?.id, 'site-analytics', siteAnalyticsDays],
     queryFn: () => getDirectorSiteAnalytics(siteAnalyticsDays),
-    enabled: summary?.workspace.mode === 'director',
+    enabled: Boolean(employee?.roles.includes('director') && summary?.workspace.mode === 'director'),
     refetchInterval: 60_000,
   });
   const todayVisits = summary?.visits.todayItems ?? summary?.visits.items ?? [];

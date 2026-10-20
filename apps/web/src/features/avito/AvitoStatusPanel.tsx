@@ -1,10 +1,12 @@
-import { Alert, Collapse, Space, Tag, Typography } from 'antd';
+import { Alert, Button, Collapse, Space, Tag, Typography } from 'antd';
 import { CheckCircleOutlined, WarningOutlined } from '@ant-design/icons';
 import { formatDateTime } from '../../shared/utils/date';
 import type { AvitoOverview } from './avito.api';
 import '../../shared/ui/module-ui.css';
 
-export function AvitoStatusPanel({ overview, modeLabel }: { overview: AvitoOverview; modeLabel: string }) {
+export function AvitoStatusPanel({ overview, modeLabel, director, onOpen }: { overview: AvitoOverview; modeLabel: string; director: boolean; onOpen: (tab: string) => void }) {
+  const automatic = overview.mode === 'AUTO' && overview.runtime.ingestionEnabled && overview.runtime.liveSendEnabled;
+  const activeDirections = overview.profiles.filter(profile => profile.enabled).map(profile => profile.title).join(', ');
   const warnings = [
     ...(overview.referenceData?.stale ? ['Прайс CRM нужно обновить'] : []),
     ...(overview.referenceData?.inventoryStale ? ['Наличие вакцин нужно обновить'] : []),
@@ -17,7 +19,8 @@ export function AvitoStatusPanel({ overview, modeLabel }: { overview: AvitoOverv
     ...(overview.runtime.pilotRestricted ? [{ key: 'pilot', title: 'Контрольный запуск Авито', text: 'Ответы и создание заявок разрешены только в выбранном тестовом диалоге. Остальную переписку продолжает сотрудник.' }] : []),
     ...(overview.referenceData ? [{ key: 'reference', title: 'Справочники CRM', text: `Услуг: ${overview.referenceData.services}. Филиалов: ${overview.referenceData.offices}. Вакцин: ${overview.referenceData.vaccineProducts ?? 0}. Получено: ${formatDateTime(overview.referenceData.capturedAt)}. Прайс действителен сутки, наличие вакцин — 15 минут. Заявки сохраняются в локальной базе.` }] : []),
     ...(!overview.runtime.languageModelConfigured ? [{ key: 'model', title: 'ИИ Авито ещё не включён в этой установке', text: 'Доступны утверждённые сценарии и сведения CRM; платные вызовы модели не выполняются.' }] : []),
-    ...(!overview.runtime.liveSendEnabled ? [{ key: 'send', title: 'Отправка клиентам выключена', text: 'Можно подготовить правила и проверить сценарии. Клиентам ничего не отправляется до отдельного включения на сервере.' }] : []),
+    ...(!overview.runtime.ingestionEnabled ? [{ key: 'ingest', title: 'Переписка загружается вручную', text: 'Автоматическое получение новых сообщений пока не включено. Директор может загрузить переписку в разделе «Подключение и возможности»; это не отправляет ответы клиентам.' }] : []),
+    ...(!overview.runtime.liveSendEnabled ? [{ key: 'send', title: 'Автоответы ещё не запущены', text: 'Отправка клиентам выключена на сервере. Выбор режима в правилах сам по себе её не включает. Тексты и сценарии уже можно готовить и проверять.' }] : []),
   ];
   return <section className="module-status-panel" aria-label="Состояние модуля Авито">
     <div className="module-status-summary">
@@ -26,9 +29,23 @@ export function AvitoStatusPanel({ overview, modeLabel }: { overview: AvitoOverv
       <Tag color={overview.installation.enabled ? 'green' : 'default'}>{overview.installation.enabled ? 'Модуль подключён' : 'Модуль отключён'}</Tag>
       <Tag color="blue">{modeLabel}</Tag>
       <Tag color={overview.runtime.liveSendEnabled ? 'gold' : 'default'}>{overview.runtime.liveSendEnabled ? 'Отправка клиентам включена' : 'Отправка клиентам выключена'}</Tag>
+      {overview.runtime.ingestionEnabled && <Tag color="green">Новые сообщения получаются автоматически</Tag>}
+      {overview.runtime.languageModelConfigured && <Tag color="green">ИИ подключён</Tag>}
       {overview.runtime.pilotRestricted && <Tag color="gold">Только тестовый диалог</Tag>}
       {overview.connection.accountName && <Typography.Text type="secondary">{overview.connection.accountName}</Typography.Text>}
     </div>
+    {overview.installation.enabled && overview.mode === 'MANUAL' && <div className="avito-working-mode">
+      <Typography.Text strong>{director ? 'Можно работать с объявлениями и проверять ответы' : 'Переписка и заявки для администратора'}</Typography.Text>
+      <Typography.Paragraph type="secondary">{director ? 'В ручном режиме тексты и фотографии сохраняются в CRM. Объявление размещается на Авито вручную. Новые сообщения не появляются автоматически, автоответы не отправляются.' : 'Открывайте загруженные диалоги и обрабатывайте готовые заявки. Новую переписку загружает директор через «Подключение и возможности». Отправка ответов из CRM пока выключена; отвечайте клиентам в Авито.'}</Typography.Paragraph>
+      <Space wrap>
+        {director ? <><Button type="primary" onClick={() => onOpen('editor')}>Подготовить объявление</Button><Button onClick={() => onOpen('test')}>Проверить ответ помощника</Button><Button onClick={() => onOpen('connection')}>Загрузить переписку и проверить доступ</Button></> : <Button type="primary" onClick={() => onOpen('inbox')}>Открыть загруженную переписку</Button>}
+      </Space>
+    </div>}
+    {overview.installation.enabled && overview.mode !== 'MANUAL' && <div className="avito-working-mode">
+      <Typography.Text strong>{automatic ? 'Ассистент отвечает на новые сообщения' : overview.mode === 'SUGGEST' ? 'Помощник готовит подсказки для сотрудника' : 'Для автоответов требуется завершить подключение'}</Typography.Text>
+      <Typography.Paragraph type="secondary">{automatic ? `Работают направления: ${activeDirections || 'не выбраны'}. Переписка и готовые заявки доступны ниже. Чтобы отвечать самостоятельно, откройте диалог и нажмите «Взять диалог».` : overview.mode === 'SUGGEST' ? 'Проверьте подготовленный ответ в переписке. В режиме подсказок окончательный ответ выбирает сотрудник.' : 'Режим выбран в правилах, но автоматическое получение или отправка сообщений на сервере ещё не включены. Тексты объявлений и проверка сценариев доступны.'}</Typography.Paragraph>
+      <Space wrap><Button type="primary" onClick={() => onOpen('inbox')}>Открыть переписку</Button><Button onClick={() => onOpen('inquiries')}>Заявки администратору</Button>{director && <><Button onClick={() => onOpen('editor')}>Объявления</Button><Button onClick={() => onOpen('test')}>Проверить ответ помощника</Button></>}</Space>
+    </div>}
     {warnings.length > 0 && <Alert type="warning" showIcon message="Требует внимания" description={<Space direction="vertical" size={2}>{warnings.map(text => <span key={text}>{text}</span>)}</Space>} />}
     {details.length > 0 && <Collapse ghost className="module-status-details" items={[{
       key: 'details', label: `Подключение и диагностика · ${details.length}`,

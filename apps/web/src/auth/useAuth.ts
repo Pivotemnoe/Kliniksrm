@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { appConfig, isDemoAuthMode } from '../app/config';
 import { ApiError } from '../api/errors';
 import { changePassword, ChangePasswordInput, getMe, login, LoginInput, logout } from './auth.api';
+import { clearStaffSessionCache } from './sessionCache';
 
 export const authQueryKey = ['auth', 'me'] as const;
 const sessionActivityStorageKey = 'temichevvet:staff-session:last-activity';
@@ -25,7 +26,9 @@ export function useLoginMutation() {
 
   return useMutation({
     mutationFn: (input: LoginInput) => login(input),
-    onSuccess: async () => {
+    onSuccess: async (session) => {
+      await clearStaffSessionCache(queryClient);
+      queryClient.setQueryData(authQueryKey, session);
       writeSharedActivityAt(Date.now());
       await queryClient.invalidateQueries({ queryKey: authQueryKey });
     },
@@ -40,7 +43,7 @@ export function useLogoutMutation(loginPath = '/login') {
     mutationFn: logout,
     onSettled: async () => {
       clearSharedActivity();
-      queryClient.removeQueries({ queryKey: authQueryKey });
+      await clearStaffSessionCache(queryClient);
       navigate(loginPath, { replace: true });
     },
   });
@@ -65,8 +68,8 @@ export function useUnauthorizedListener(loginPath = '/login') {
       return undefined;
     }
 
-    const handleUnauthorized = () => {
-      queryClient.removeQueries({ queryKey: authQueryKey });
+    const handleUnauthorized = async () => {
+      await clearStaffSessionCache(queryClient);
       navigate(loginPath, { replace: true });
     };
 
@@ -148,7 +151,7 @@ export function useIdleLogout(enabled: boolean, loginPath = '/login') {
         await logout();
       } finally {
         clearSharedActivity();
-        queryClient.removeQueries({ queryKey: authQueryKey });
+        await clearStaffSessionCache(queryClient);
         navigate(loginPath, { replace: true, state: { reason: 'idle' } });
       }
     }

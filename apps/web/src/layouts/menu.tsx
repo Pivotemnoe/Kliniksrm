@@ -55,7 +55,6 @@ export const menuItems: MenuProps['items'] = [
     ],
   },
   { key: '/schedule', icon: <CalendarOutlined />, label: 'Расписание' },
-  { key: '/grooming', icon: <ScissorOutlined />, label: 'Груминг' },
   { key: '/queue', icon: <OrderedListOutlined />, label: 'Очередь' },
   {
     key: '/communications-workspace',
@@ -66,7 +65,6 @@ export const menuItems: MenuProps['items'] = [
       { key: '/staff-messages', icon: <TeamOutlined />, label: 'Сообщения сотрудникам' },
       { key: '/messages', icon: <MessageOutlined />, label: 'Сообщения владельцам' },
       { key: '/online-requests', icon: <InboxOutlined />, label: 'Заявки с сайта' },
-      { key: '/avito', icon: <RobotOutlined />, label: 'Авито' },
     ],
   },
   { key: '/tasks', icon: <AuditOutlined />, label: 'Задачи' },
@@ -118,6 +116,8 @@ export const menuItems: MenuProps['items'] = [
       { key: '/settings/import', icon: <ExportOutlined />, label: 'Перенос данных' },
     ],
   },
+  { key: '/grooming', icon: <ScissorOutlined />, label: 'Груминг' },
+  { key: '/avito', icon: <RobotOutlined />, label: 'Авито' },
   { key: '/help', icon: <ReadOutlined />, label: 'Инструкция' },
 ];
 

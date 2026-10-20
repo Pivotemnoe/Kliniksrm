@@ -8,8 +8,9 @@ import { z } from 'zod';
 import { appConfig } from '../app/config';
 import { ApiError, getErrorMessage } from '../api/errors';
 import { logout } from '../auth/auth.api';
-import { authQueryKey, useCurrentEmployee, useLoginMutation } from '../auth/useAuth';
+import { useCurrentEmployee, useLoginMutation } from '../auth/useAuth';
 import { getEmployeeDefaultRoute } from '../shared/routes/defaultRoutes';
+import { clearStaffSessionCache } from '../auth/sessionCache';
 
 const loginSchema = z.object({
   login: z.string().min(2, 'Введите телефон или email'),
@@ -55,8 +56,8 @@ export function LoginPage() {
     let active = true;
     logout()
       .catch(() => undefined)
-      .finally(() => {
-        queryClient.removeQueries({ queryKey: authQueryKey });
+      .finally(async () => {
+        await clearStaffSessionCache(queryClient);
         if (active) {
           setIsClearingSession(false);
         }
