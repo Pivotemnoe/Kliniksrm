@@ -78,6 +78,9 @@ runs `nginx -t`, and reloads only Nginx. It then verifies every hotel file over
 public HTTPS against the manifest, the fresh public catalog, API denial
 boundaries, the unchanged public grooming index/release and all original
 grooming file hashes, unrelated enabled vhosts, and unchanged container IDs.
+A five-second readiness window tolerates old bytes while the previous Nginx
+workers drain after reload; every file must still converge to its exact expected
+hash. A persistent mismatch triggers the same guarded rollback.
 A successful run creates `published.json`. No booking or notification is sent
 by these publication checks; real booking acceptance is a separate test.
 

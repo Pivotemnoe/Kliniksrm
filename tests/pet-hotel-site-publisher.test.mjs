@@ -244,6 +244,24 @@ assert (p.releases / release).is_dir()
   }
 });
 
+test('asynchronous Nginx reload may serve old bytes briefly but must converge to every exact new file', () => {
+  python(String.raw`
+prepare()
+old_counts = {'release.json': 2, 'app.js': 1}
+def draining_fetch(url):
+    name=url.rsplit('/', 1)[-1]
+    if url.startswith(mod.SITE + '/pet-hotel/') and old_counts.get(name, 0):
+        old_counts[name] -= 1
+        return 200, b'previous nginx worker response'
+    return fake_fetch(url)
+pub.fetch=draining_fetch
+receipt=pub.activate(release,gateway_revision)
+assert receipt['status'] == 'PUBLISHED'
+assert all(count == 0 for count in old_counts.values())
+assert not (p.backups / release / 'failure.json').exists()
+`);
+});
+
 test('rollback refuses to replace a later release or overwrite any concurrent Nginx edit', () => {
   for (const change of [
     String.raw`newer=p.releases/'later-release'; newer.mkdir(); pub.switch(str(newer)); wanted='later hotel release'`,

@@ -15,6 +15,7 @@ import stat
 import subprocess
 import tarfile
 import tempfile
+import time
 from urllib.parse import quote
 
 DOMAIN = 'pet.temichevvet.ru'
@@ -389,8 +390,16 @@ class Publisher:
         root = self.p.releases / release / 'pet-hotel'
         metadata = self.manifest(root.parent, release)
         for name in ['release.json', *metadata['files']]:
-            body = self.get(SITE + '/pet-hotel/' + quote(name, safe='/'))
-            require(hashlib.sha256(body).hexdigest() == digest(root / name), 'Public hotel file differs: ' + name)
+            # Nginx reload is asynchronous: its previous workers may serve an
+            # immediate request. Require the exact new bytes within a bounded
+            # readiness window; persistent mismatches still trigger rollback.
+            deadline, expected = time.monotonic() + 5, digest(root / name)
+            while True:
+                body = self.get(SITE + '/pet-hotel/' + quote(name, safe='/'))
+                if hashlib.sha256(body).hexdigest() == expected:
+                    break
+                require(time.monotonic() < deadline, 'Public hotel file differs: ' + name)
+                time.sleep(0.2)
         self.ready_catalog(json.loads(self.get(SITE + '/v1/public/pet-hotel/catalog')))
         for path in ['/internal/v1/pet-hotel/portal/operations', '/v1/portal/pet-hotel/session',
                      '/v1/public/pet-hotel/unknown', '/pet-hotel/missing-release-check']:
