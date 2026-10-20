@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Alert, Button, Card, Col, Collapse, Descriptions, Drawer, Empty, Form, Input, Popconfirm, Row, Select, Space, Statistic, Switch, Table, Tabs, Tag, Typography } from 'antd';
 import { MessageOutlined, PhoneOutlined, PlusOutlined, ReloadOutlined, SettingOutlined } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { getErrorMessage } from '../../api/errors';
+import { ApiError, getErrorMessage } from '../../api/errors';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { hasPermission } from '../../auth/permissions';
 import { PageHeader } from '../../shared/ui/PageHeader';
@@ -25,11 +25,12 @@ export function AvitoPage() {
   const { data: auth } = useCurrentEmployee(); const navigate = useNavigate();
   const [tabParams, setTabParams] = useSearchParams();
   const director = Boolean(auth?.employee.roles.includes('director') && hasPermission(auth.employee, 'avito.manage'));
-  const query = useQuery({ queryKey: ['avito', 'overview'], queryFn: avitoApi.overview });
+  const query = useQuery({ queryKey: ['avito', 'overview'], queryFn: avitoApi.overview, retry: (attempt, error) => !(error instanceof ApiError && error.status === 404) && attempt < 2 });
   const overview = query.data;
+  const unavailable = query.error instanceof ApiError && query.error.status === 404;
   return <div className="page avito-page">
-    <PageHeader title="Администратор Авито" description="Один аккаунт — отдельные обращения, правила и ответы клиники, груминга и зоогостиницы." extra={<ModuleActions actions={[{ key: 'refresh', label: 'Обновить', icon: <ReloadOutlined />, onClick: () => query.refetch(), loading: query.isFetching }, ...(director ? [{ key: 'module', label: 'Подключение модуля', icon: <SettingOutlined />, onClick: () => navigate('/settings/modules') }] : [])]} />} />
-    {query.isError && <Alert type="error" showIcon message={getErrorMessage(query.error)} />}
+    <PageHeader title="Администратор Авито" description="Один аккаунт — отдельные обращения, правила и ответы клиники, груминга и зоогостиницы." extra={<ModuleActions actions={[{ key: 'refresh', label: 'Обновить', icon: <ReloadOutlined />, onClick: () => query.refetch(), loading: query.isFetching }, ...(director && !unavailable ? [{ key: 'module', label: 'Подключение модуля', icon: <SettingOutlined />, onClick: () => navigate('/settings/modules') }] : [])]} />} />
+    {unavailable ? <Card><Empty description={<Space direction="vertical"><Typography.Text strong>Модуль Авито пока не подключён</Typography.Text><Typography.Text type="secondary">После подключения серверного модуля здесь появятся переписка, заявки и объявления.</Typography.Text></Space>} /></Card> : query.isError && <Alert type="error" showIcon message={getErrorMessage(query.error)} />}
     {overview && <>
       <AvitoStatusPanel overview={overview} modeLabel={modeLabels[overview.mode]} />
       <Tabs activeKey={director || !['editor','rules','test','connection'].includes(tabParams.get('tab') || '') ? tabParams.get('tab') || 'inquiries' : 'inquiries'} onChange={tab => setTabParams(previous => { previous.set('tab', tab); return previous; }, { replace: true })} items={[
