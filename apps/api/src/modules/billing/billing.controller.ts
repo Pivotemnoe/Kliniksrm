@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { AuthEmployee } from '../auth/auth.types';
 import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
@@ -9,6 +9,7 @@ import { CreateBillDto } from './dto/create-bill.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { ListBillsQueryDto } from './dto/list-bills-query.dto';
 import { RefundPaymentDto } from './dto/refund-payment.dto';
+import { SplitPaymentDto } from './dto/split-payment.dto';
 import { UpdateBillDto } from './dto/update-bill.dto';
 import { UpdateBillItemDto } from './dto/update-bill-item.dto';
 import { BillingService } from './billing.service';
@@ -130,6 +131,13 @@ export class BillingController {
   @ApiCreatedResponse({ description: 'Payment accepted.' })
   createPayment(@Param('billId') billId: string, @Body() dto: CreatePaymentDto, @CurrentEmployee() actor: AuthEmployee) {
     return this.billingService.createPayment(billId, dto, actor.id);
+  }
+
+  @Post(':billId/payments/split')
+  @RequirePermissions('payments.manage')
+  @ApiCreatedResponse({ description: 'Two payment methods recorded atomically for the remaining bill balance.' })
+  createSplitPayment(@Param('billId', ParseUUIDPipe) billId: string, @Body() dto: SplitPaymentDto, @CurrentEmployee() actor: AuthEmployee) {
+    return this.billingService.createSplitPayment(billId, dto, actor.id);
   }
 
   @Post(':billId/payments/:paymentId/refund')

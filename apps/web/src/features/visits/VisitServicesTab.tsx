@@ -1,7 +1,8 @@
+import { MoneyStatistic } from '../../shared/ui/MoneyStatistic';
 import { CopyOutlined, DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Button, Checkbox, Drawer, Form, Input, List, Modal, Popconfirm, Select, Space, Statistic, Table, Tag, Typography } from 'antd';
+import { Alert, Button, Checkbox, Drawer, Form, Input, List, Modal, Popconfirm, Select, Space, Table, Tag, Typography } from 'antd';
 import { ColumnsType } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
@@ -192,7 +193,7 @@ export function VisitServicesTab({ visit, canManage, locked }: VisitServicesTabP
       <div className="toolbar-row">
         <Space size={24} wrap>
           <Typography.Text type="secondary">Товары и услуги приёма</Typography.Text>
-          <Statistic title="Сумма приёма" value={toMoneyNumber(visit.totalAmount)} precision={2} suffix="₽" />
+          <MoneyStatistic title="Сумма приёма" value={visit.totalAmount} />
         </Space>
         {!disabled ? (
           <Space wrap>

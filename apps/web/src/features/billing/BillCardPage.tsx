@@ -1,3 +1,4 @@
+import { SplitBillPaymentModal } from './SplitBillPaymentModal';
 import { groupHospitalBillItems, billQuantityText, billPriceText } from './groupBillLines';
 import { printBrandHeader, printImagesScript } from '../../shared/print/branding';
 import {
@@ -25,7 +26,7 @@ import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDate, formatDateTime, fromDatetimeLocal, toDatetimeLocal } from '../../shared/utils/date';
-import { formatMoney, toMoneyNumber } from '../../shared/utils/money';
+import { formatMoney, subtractMoney, toMoneyNumber } from '../../shared/utils/money';
 import { getNetStockWriteOffQuantity } from '../../shared/utils/stockMovement';
 import { getFinanceSettings } from '../finance/finance.api';
 import { formatServicePrice, getServiceDefaultPrice, getServicePriceHelp, getServicePriceRange, validateServicePrice } from '../stock/service-pricing';
@@ -34,6 +35,7 @@ import {
   addBillItem,
   cancelBill,
   createPayment,
+  createSplitPayment,
   deleteBillItem,
   getBill,
   refundPayment,
@@ -44,6 +46,7 @@ import {
 import {
   Bill,
   BillItem,
+  SplitPaymentInput,
   BillItemMutationInput,
   Payment,
   PaymentType,
@@ -100,7 +103,7 @@ export function BillCardPage() {
   });
 
   const bill = billQuery.data;
-  const debt = bill ? Math.max(toMoneyNumber(bill.totalAmount) - toMoneyNumber(bill.paidAmount), 0) : 0;
+  const debt = bill ? Math.max(subtractMoney(bill.totalAmount, bill.paidAmount), 0) : 0;
   const isOverdue = Boolean(bill?.dueAt && debt > 0 && new Date(bill.dueAt) < new Date());
   const canEditItems = Boolean(
     canManageBills
@@ -501,7 +504,7 @@ function BillPaymentsTab({ bill, canPay, canRefund, paymentRequestKey }: { bill:
   const { message } = App.useApp();
   const [payOpen, setPayOpen] = useState(false);
   const [refundPaymentRecord, setRefundPaymentRecord] = useState<Payment | null>(null);
-  const debt = Math.max(toMoneyNumber(bill.totalAmount) - toMoneyNumber(bill.paidAmount), 0);
+  const debt = Math.max(subtractMoney(bill.totalAmount, bill.paidAmount), 0);
 
   useEffect(() => {
     if (paymentRequestKey > 0 && canPay) {
@@ -527,6 +530,15 @@ function BillPaymentsTab({ bill, canPay, canRefund, paymentRequestKey }: { bill:
         queryClient.invalidateQueries({ queryKey: ['owners'] }),
       ]);
       message.success('Оплата проведена');
+      setPayOpen(false);
+    },
+    onError: (error) => message.error(getErrorMessage(error)),
+  });
+  const splitMutation = useMutation({
+    mutationFn: (input: SplitPaymentInput) => createSplitPayment(bill.id, input),
+    onSuccess: async () => {
+      await Promise.all([['bills'], ['owners'], ['sales'], ['business'], ['reports'], ['dashboard']].map(queryKey => queryClient.invalidateQueries({ queryKey })));
+      message.success('Счёт оплачен двумя способами');
       setPayOpen(false);
     },
     onError: (error) => message.error(getErrorMessage(error)),
@@ -602,7 +614,8 @@ function BillPaymentsTab({ bill, canPay, canRefund, paymentRequestKey }: { bill:
         open={payOpen}
         debt={debt}
         ownerBalance={toMoneyNumber(bill.owner?.balance)}
-        loading={payMutation.isPending}
+        loading={payMutation.isPending || splitMutation.isPending}
+        onSplitSubmit={(input) => splitMutation.mutate(input)}
         onClose={() => setPayOpen(false)}
         onSubmit={(values) => payMutation.mutate(values)}
       />
@@ -899,6 +912,7 @@ function PaymentModal({
   loading,
   onClose,
   onSubmit,
+  onSplitSubmit,
 }: {
   open: boolean;
   debt: number;
@@ -906,7 +920,10 @@ function PaymentModal({
   loading: boolean;
   onClose: () => void;
   onSubmit: (values: PaymentFormValues) => void;
+  onSplitSubmit: (input: SplitPaymentInput) => void;
 }) {
+  const [splitOpen, setSplitOpen] = useState(false);
+  useEffect(() => { if (!open) setSplitOpen(false); }, [open]);
   const { control, handleSubmit, reset, setValue } = useForm<PaymentFormValues>({
     resolver: zodResolver(paymentFormSchema),
     defaultValues: getPaymentDefaults(debt),
@@ -948,10 +965,10 @@ function PaymentModal({
     }
   }, [activeCashboxes, activePaymentMethods, cashboxId, financeQuery.isLoading, open, paymentMethodId, setValue]);
 
-  return (
+  return (<>
     <Modal
       title="Принять оплату"
-      open={open}
+      open={open && !splitOpen}
       okText="Провести"
       cancelText="Отмена"
       confirmLoading={loading}
@@ -961,6 +978,7 @@ function PaymentModal({
       destroyOnHidden
       width={560}
     >
+      <Button onClick={() => setSplitOpen(true)} style={{ marginBottom: 16 }}>Разделить оплату</Button>
       <Form layout="vertical">
         <Controller
           control={control}
@@ -1026,7 +1044,8 @@ function PaymentModal({
         />
       </Form>
     </Modal>
-  );
+    <SplitBillPaymentModal open={open && splitOpen} debt={debt} ownerBalance={ownerBalance} loading={loading} onBack={() => setSplitOpen(false)} onClose={onClose} onSubmit={onSplitSubmit} />
+  </>);
 }
 
 function getPaymentDefaults(debt: number): PaymentFormValues {
@@ -1181,7 +1200,7 @@ function BillPrintEditor({ open, bill, onClose }: { open: boolean; bill: Bill; o
     }
   }, [open]);
 
-  const debt = Math.max(toMoneyNumber(bill.totalAmount) - toMoneyNumber(bill.paidAmount), 0);
+  const debt = Math.max(subtractMoney(bill.totalAmount, bill.paidAmount), 0);
 
   return (
     <Modal
@@ -1241,7 +1260,7 @@ function printBillDocument(bill: Bill, settings: BillPrintSettings) {
     return;
   }
 
-  const debt = Math.max(toMoneyNumber(bill.totalAmount) - toMoneyNumber(bill.paidAmount), 0);
+  const debt = Math.max(subtractMoney(bill.totalAmount, bill.paidAmount), 0);
   const overdue = Boolean(bill.dueAt && debt > 0 && new Date(bill.dueAt) < new Date());
   const printItems = bill.source === 'HOSPITAL' ? groupHospitalBillItems(bill.items) : bill.items;
   const itemRows = printItems
@@ -1275,6 +1294,13 @@ function printBillDocument(bill: Bill, settings: BillPrintSettings) {
   const receiptItems = printItems
     .map((item) => `<div class="receipt-item"><span>${escapeHtml(item.title)} × ${escapeHtml(bill.source === 'HOSPITAL' ? billQuantityText(item) : String(item.quantity))}</span><strong>${escapeHtml(formatMoney(item.totalAmount))}</strong></div>`)
     .join('');
+  const receiptPayments = bill.payments.map((payment) => `
+    <div class="receipt-payment">
+      <div class="receipt-payment-title"><span>${escapeHtml(payment.paymentMethod?.title ?? paymentTypeLabels[payment.type])}</span><strong>${escapeHtml(formatMoney(payment.amount))}</strong></div>
+      <div>${escapeHtml(formatDateTime(payment.paidAt))}</div>
+      <div>${escapeHtml(payment.cashbox?.title ?? '—')}</div>
+    </div>
+  `).join('');
   const isReceipt = settings.paper !== 'A4';
   const pageWidth = settings.paper === 'RECEIPT_58' ? '58mm' : '80mm';
   const pageCss = isReceipt
@@ -1303,6 +1329,10 @@ function printBillDocument(bill: Bill, settings: BillPrintSettings) {
     .total { font-size: 18px; font-weight: 700; }
     .receipt-items { display: grid; gap: 6px; margin-top: 10px; }
     .receipt-item { display: flex; gap: 8px; justify-content: space-between; border-bottom: 1px dotted #9ca3af; padding-bottom: 4px; }
+    .receipt-payment { border-bottom: 1px dotted #9ca3af; padding: 6px 0; overflow-wrap: anywhere; }
+    .receipt-payment-title { display: flex; gap: 6px; justify-content: space-between; align-items: flex-start; }
+    .receipt-payment-title span { min-width: 0; }
+    .receipt-payment-title strong { white-space: nowrap; }
     ${isReceipt ? 'h1 { font-size: 17px; } h2 { font-size: 13px; margin-top: 14px; } .grid { grid-template-columns: 1fr; } .totals { width: 100%; }' : ''}
   </style>
 </head>
@@ -1356,7 +1386,7 @@ function printBillDocument(bill: Bill, settings: BillPrintSettings) {
   </div>
 
   ${settings.showPayments ? `<h2>Оплаты</h2>
-  <table>
+  ${isReceipt ? (receiptPayments || 'Оплат пока нет') : `<table>
     <thead>
       <tr>
         <th>Дата</th>
@@ -1366,7 +1396,7 @@ function printBillDocument(bill: Bill, settings: BillPrintSettings) {
       </tr>
     </thead>
     <tbody>${paymentRows}</tbody>
-  </table>` : ''}
+  </table>`}` : ''}
   ${printImagesScript()}
 </body>
 </html>`);

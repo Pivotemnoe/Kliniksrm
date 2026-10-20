@@ -1,20 +1,25 @@
 import { printBrandHeader, printImagesScript } from '../../shared/print/branding';
-import { formatMoney } from '../../shared/utils/money';
+import { formatMoney, moneyForExport } from '../../shared/utils/money';
 import { ClinicReport } from './types';
 
-type ExportCell = string | number | null | undefined;
+type ExportCell = string | number | null | undefined | { money: number };
+const moneyCell = (value: number): ExportCell => ({ money: value });
 
 export function exportReportToExcel(report: ClinicReport) {
+  download(new Blob([buildReportWorkbook(report)], { type: 'application/vnd.ms-excel;charset=utf-8' }), `temichevvet-report-${report.range.from}-${report.range.to}.xls`);
+}
+
+export function buildReportWorkbook(report: ClinicReport) {
   const sheets = [
     sheet('Сводка', [
       ['Показатель', 'Значение'],
       ['Период', `${report.range.from} — ${report.range.to}`],
-      ['Начислено', report.finance.billedAmount],
-      ['Оплачено', report.finance.paidAmount],
-      ['Возвраты', report.finance.refundedAmount],
-      ['Задолженность', report.finance.debtAmount],
-      ['Депозиты владельцев', report.finance.depositsAmount],
-      ['Валовая прибыль', report.profit.grossProfit],
+      ['Начислено', moneyCell(report.finance.billedAmount)],
+      ['Оплачено', moneyCell(report.finance.paidAmount)],
+      ['Возвраты', moneyCell(report.finance.refundedAmount)],
+      ['Задолженность', moneyCell(report.finance.debtAmount)],
+      ['Депозиты владельцев', moneyCell(report.finance.depositsAmount)],
+      ['Валовая прибыль', moneyCell(report.profit.grossProfit)],
       ['Приёмы', report.traffic.visitsTotal],
       ['Завершено приёмов', report.traffic.visitsCompleted],
       ['Не завершено более часа', report.traffic.visitsOverdue],
@@ -23,17 +28,17 @@ export function exportReportToExcel(report: ClinicReport) {
     ]),
     sheet('Оплаты', [
       ['Способ оплаты', 'Поступило', 'Возвраты', 'Итого', 'Операций'],
-      ...report.finance.paymentMethods.map((item) => [item.title, item.received, item.refunded, item.net, item.count]),
+      ...report.finance.paymentMethods.map((item) => [item.title, moneyCell(item.received), moneyCell(item.refunded), moneyCell(item.net), item.count]),
     ]),
     sheet('Задолженность', [
       ['Владелец', 'Телефон', 'Дата счёта', 'Срок оплаты', 'Долг'],
-      ...report.finance.debtors.map((item) => [item.ownerName, item.phone, date(item.createdAt), date(item.dueAt), item.debt]),
+      ...report.finance.debtors.map((item) => [item.ownerName, item.phone, date(item.createdAt), date(item.dueAt), moneyCell(item.debt)]),
     ]),
     sheet('Услуги', salesRows(report.sales.services)),
     sheet('Товары', salesRows(report.sales.products)),
     sheet('Сотрудники', [
       ['Сотрудник', 'Должность', 'Приёмы', 'Завершено', 'Более часа', 'Оповещений', 'Начислено'],
-      ...report.employees.map((item) => [item.fullName, item.position, item.visits, item.completedVisits, item.overdueVisits, item.overdueNotifications, item.billedAmount]),
+      ...report.employees.map((item) => [item.fullName, item.position, item.visits, item.completedVisits, item.overdueVisits, item.overdueNotifications, moneyCell(item.billedAmount)]),
     ]),
     sheet('Контроль приёмов', [
       ['Дата', 'Начато', 'Завершено', 'Не завершено более часа', 'Оповещений'],
@@ -52,11 +57,11 @@ export function exportReportToExcel(report: ClinicReport) {
     sheet('Склад', [
       ['Раздел', 'Статус', 'Товар', 'Склад', 'Серия', 'Срок годности', 'Остаток', 'Единица', 'Закупочная цена', 'Минимум'],
       ...report.stock.lowStockItems.map((item) => ['Низкий остаток', '', item.title, '', '', '', item.rest, item.unit, '', item.minStock]),
-      ...report.stock.expiryItems.map((item) => ['Срок годности', item.status === 'EXPIRED' ? 'Просрочено' : 'Истекает', item.productTitle, item.warehouseName, item.series, date(item.expiresAt), item.rest, item.unit, item.purchasePrice, '']),
+      ...report.stock.expiryItems.map((item) => ['Срок годности', item.status === 'EXPIRED' ? 'Просрочено' : 'Истекает', item.productTitle, item.warehouseName, item.series, date(item.expiresAt), item.rest, item.unit, moneyCell(item.purchasePrice), '']),
     ]),
   ].join('');
-  const workbook = `<?xml version="1.0" encoding="UTF-8"?><?mso-application progid="Excel.Sheet"?>\n<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">${sheets}</Workbook>`;
-  download(new Blob([workbook], { type: 'application/vnd.ms-excel;charset=utf-8' }), `temichevvet-report-${report.range.from}-${report.range.to}.xls`);
+  const workbook = `<?xml version="1.0" encoding="UTF-8"?><?mso-application progid="Excel.Sheet"?>\n<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Styles><Style ss:ID="Money"><NumberFormat ss:Format="0.00"/></Style></Styles>${sheets}</Workbook>`;
+  return workbook;
 }
 
 export function printReportAsPdf(report: ClinicReport) {
@@ -83,7 +88,7 @@ export function printReportAsPdf(report: ClinicReport) {
 function salesRows(items: ClinicReport['sales']['services']): ExportCell[][] {
   return [
     ['Наименование', 'Количество', 'Строк', 'Скидка', 'Выручка'],
-    ...items.map((item) => [item.title, item.quantity, item.lines, item.discount, item.revenue]),
+    ...items.map((item) => [item.title, item.quantity, item.lines, moneyCell(item.discount), moneyCell(item.revenue)]),
   ];
 }
 
@@ -92,6 +97,7 @@ function sheet(title: string, rows: ExportCell[][]) {
 }
 
 function cell(value: ExportCell) {
+  if (value && typeof value === 'object') return `<Cell ss:StyleID="Money"><Data ss:Type="Number">${moneyForExport(value.money)}</Data></Cell>`;
   const numeric = typeof value === 'number' && Number.isFinite(value);
   return `<Cell><Data ss:Type="${numeric ? 'Number' : 'String'}">${escapeXml(value ?? '')}</Data></Cell>`;
 }

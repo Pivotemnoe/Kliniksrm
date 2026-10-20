@@ -11,7 +11,8 @@ import { useCurrentEmployee } from '../../auth/useAuth';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { ProgressiveTable } from '../../shared/ui/InfiniteTable';
 import { formatDate, formatDateTime } from '../../shared/utils/date';
-import { formatMoney } from '../../shared/utils/money';
+import { formatMoney, moneyForExport, roundMoney } from '../../shared/utils/money';
+import { MoneyStatistic } from '../../shared/ui/MoneyStatistic';
 import { BusinessEntryModal } from './BusinessEntryModal';
 import { BusinessEntryCorrectionModal } from './BusinessEntryCorrectionModal';
 import { BusinessCategoriesModal } from './BusinessCategoriesModal';
@@ -96,8 +97,8 @@ export function BusinessPage() {
           <MetricCard title="Операционная прибыль" value={summary.current.operatingProfit} previous={summary.previous.operatingProfit} />
           <Card><Statistic title="Маржа" value={summary.current.marginPercent} precision={1} suffix="%" valueStyle={{ color: summary.current.marginPercent >= 0 ? '#237804' : '#cf1322' }} /></Card>
           <MetricCard title="Денежный поток" value={summary.current.cashNet} previous={summary.previous.cashNet} />
-          <Card><Statistic title="Долги клиентов" value={summary.balances.debtorsAmount} precision={2} suffix="₽" /></Card>
-          <Card><Statistic title="Долг поставщикам" value={summary.balances.supplierPayable} precision={2} suffix="₽" /></Card>
+          <Card><MoneyStatistic title="Долги клиентов" value={summary.balances.debtorsAmount} /></Card>
+          <Card><MoneyStatistic title="Долг поставщикам" value={summary.balances.supplierPayable} /></Card>
         </div>
         {summary.control.unresolvedEntries || summary.control.submittedDays ? <Alert type="warning" showIcon message="Есть операции, требующие внимания" description={`Операций на утверждении: ${summary.control.unresolvedEntries}. Закрытий дня на проверке: ${summary.control.submittedDays}. Операции, внесённые администратором, подтверждаются директором отдельно или вместе с закрытием дня.`} action={summary.control.unresolvedEntries ? <Button size="small" onClick={() => setActiveTab('operations')}>Открыть операции</Button> : undefined} /> : null}
         <div className="list-panel">
@@ -122,7 +123,7 @@ export function BusinessPage() {
 
 function MetricCard({ title, value, previous }: { title: string; value: number; previous: number }) {
   const change = previous === 0 ? null : (value - previous) / Math.abs(previous) * 100;
-  return <Card><Statistic title={title} value={value} precision={2} suffix="₽" valueStyle={{ color: value >= 0 ? undefined : '#cf1322' }} />{change === null ? <Typography.Text type="secondary">Нет данных для сравнения</Typography.Text> : <Typography.Text type={change >= 0 ? 'success' : 'danger'}>{change >= 0 ? '+' : ''}{change.toFixed(1)}% к предыдущему периоду</Typography.Text>}</Card>;
+  return <Card><MoneyStatistic title={title} value={value} valueStyle={{ color: roundMoney(value) >= 0 ? undefined : '#cf1322' }} />{change === null ? <Typography.Text type="secondary">Нет данных для сравнения</Typography.Text> : <Typography.Text type={change >= 0 ? 'success' : 'danger'}>{change >= 0 ? '+' : ''}{change.toFixed(1)}% к предыдущему периоду</Typography.Text>}</Card>;
 }
 
 function ProfitTab({ summary }: { summary: BusinessSummary }) {
@@ -190,15 +191,15 @@ function ControlTab({ summary }: { summary: BusinessSummary }) {
     { title: 'Ожидалось', dataIndex: 'expectedAmount', align: 'right', render: formatMoney }, { title: 'Фактически', dataIndex: 'actualAmount', align: 'right', render: formatMoney },
     { title: 'Расхождение', dataIndex: 'difference', align: 'right', render: (value) => <Typography.Text type={Number(value) === 0 ? 'secondary' : 'danger'}>{formatMoney(value)}</Typography.Text> },
   ];
-  return <><div className="report-metrics-grid"><Card><Statistic title="Черновиков" value={summary.control.draftDays} /></Card><Card><Statistic title="Ожидают проверки" value={summary.control.submittedDays} /></Card><Card><Statistic title="Утверждено" value={summary.control.approvedDays} /></Card><Card><Statistic title="Сумма расхождений" value={summary.control.totalDifference} precision={2} suffix="₽" /></Card></div><ProgressiveTable rowKey="id" columns={columns} dataSource={summary.closes} scroll={{ x: 850 }} locale={{ emptyText: 'Закрытий дня за период нет' }} /></>;
+  return <><div className="report-metrics-grid"><Card><Statistic title="Черновиков" value={summary.control.draftDays} /></Card><Card><Statistic title="Ожидают проверки" value={summary.control.submittedDays} /></Card><Card><Statistic title="Утверждено" value={summary.control.approvedDays} /></Card><Card><MoneyStatistic title="Сумма расхождений" value={summary.control.totalDifference} /></Card></div><ProgressiveTable rowKey="id" columns={columns} dataSource={summary.closes} scroll={{ x: 850 }} locale={{ emptyText: 'Закрытий дня за период нет' }} /></>;
 }
 
 function exportSummary(summary: BusinessSummary) {
   const rows = [
-    ['Период', `${summary.range.from} — ${summary.range.to}`], ['Выручка по счетам CRM', summary.current.accruedSystemRevenue], ['Выручка, внесённая вручную', summary.current.unrecordedProfitRevenue], ['Прочие доходы', summary.current.otherProfitIncome], ['Выручка всего', summary.current.accruedRevenue], ['Себестоимость', summary.current.costOfGoods],
-    ['Валовая прибыль', summary.current.grossProfit], ['Начислено в разделе «Зарплата»', summary.current.payrollExpense], ['Зарплата, выданная через закрытие дня', summary.current.dailySalaryExpense], ['Остальные операционные расходы', summary.current.operatingExpenses],
-    ['Операционная прибыль', summary.current.operatingProfit], ['Маржа, %', summary.current.marginPercent], ['Денежный поток', summary.current.cashNet],
-    ['Долги клиентов', summary.balances.debtorsAmount], ['Долг поставщикам', summary.balances.supplierPayable],
+    ['Период', `${summary.range.from} — ${summary.range.to}`], ['Выручка по счетам CRM', moneyForExport(summary.current.accruedSystemRevenue)], ['Выручка, внесённая вручную', moneyForExport(summary.current.unrecordedProfitRevenue)], ['Прочие доходы', moneyForExport(summary.current.otherProfitIncome)], ['Выручка всего', moneyForExport(summary.current.accruedRevenue)], ['Себестоимость', moneyForExport(summary.current.costOfGoods)],
+    ['Валовая прибыль', moneyForExport(summary.current.grossProfit)], ['Начислено в разделе «Зарплата»', moneyForExport(summary.current.payrollExpense)], ['Зарплата, выданная через закрытие дня', moneyForExport(summary.current.dailySalaryExpense)], ['Остальные операционные расходы', moneyForExport(summary.current.operatingExpenses)],
+    ['Операционная прибыль', moneyForExport(summary.current.operatingProfit)], ['Маржа, %', summary.current.marginPercent], ['Денежный поток', moneyForExport(summary.current.cashNet)],
+    ['Долги клиентов', moneyForExport(summary.balances.debtorsAmount)], ['Долг поставщикам', moneyForExport(summary.balances.supplierPayable)],
   ];
   const content = `\uFEFF${rows.map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(';')).join('\r\n')}`;
   const url = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8' }));

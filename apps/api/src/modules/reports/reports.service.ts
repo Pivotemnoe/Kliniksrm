@@ -1,3 +1,4 @@
+import { addReportMoney, sumReportMoney, subtractReportMoney, multiplyReportMoney } from './report-money';
 import { Injectable } from '@nestjs/common';
 import {
   AppointmentStatus,
@@ -242,7 +243,7 @@ export class ReportsService {
     const billedAmount = sum(bills, (item) => item.totalAmount);
     const receivedAmount = sum(payments.filter((item) => number(item.amount) > 0), (item) => item.amount);
     const refundedAmount = -sum(payments.filter((item) => number(item.amount) < 0), (item) => item.amount);
-    const paidAmount = receivedAmount - refundedAmount;
+    const paidAmount = subtractReportMoney(receivedAmount, refundedAmount);
     const debtors = debtBills
       .map((bill) => ({
         billId: bill.id,
@@ -251,7 +252,7 @@ export class ReportsService {
         phone: bill.owner?.phone ?? null,
         createdAt: bill.createdAt,
         dueAt: bill.dueAt,
-        debt: Math.max(number(bill.totalAmount) - number(bill.paidAmount), 0),
+        debt: Math.max(subtractReportMoney(bill.totalAmount, bill.paidAmount), 0),
       }))
       .filter((item) => item.debt > 0)
       .sort((left, right) => right.debt - left.debt);
@@ -275,13 +276,13 @@ export class ReportsService {
           const isDocumentedCorrection = movement.type === StockMovementType.CORRECTION
             && Boolean(movement.billItemId || movement.visitId || movement.saleId);
           if (movement.type === StockMovementType.CORRECTION && !isDocumentedCorrection) return total;
-          return total - number(movement.quantity) * number(movement.unitCost ?? movement.stockBatch?.purchasePrice);
+          return subtractReportMoney(total, multiplyReportMoney(movement.quantity, movement.unitCost ?? movement.stockBatch?.purchasePrice));
         },
         0,
       ),
       0,
     );
-    const grossProfit = billedAmount - costOfGoods;
+    const grossProfit = subtractReportMoney(billedAmount, costOfGoods);
 
     return {
       generatedAt: new Date().toISOString(),
@@ -367,8 +368,8 @@ function aggregateBillItems(bills: ReportBill[]) {
         lines: 0,
       };
       row.quantity += number(item.quantity);
-      row.revenue += number(item.totalAmount);
-      row.discount += number(item.discount);
+      row.revenue = addReportMoney(row.revenue, number(item.totalAmount));
+      row.discount = addReportMoney(row.discount, number(item.discount));
       row.lines += 1;
       rows.set(key, row);
     }
@@ -439,7 +440,7 @@ function aggregateEmployees(
     const employee = bill.visit?.employee ?? bill.hospitalStay?.employee;
     if (!employee) continue;
     const row = rows.get(employee.id);
-    if (row) row.billedAmount += number(bill.totalAmount);
+    if (row) row.billedAmount = addReportMoney(row.billedAmount, number(bill.totalAmount));
   }
 
   return [...rows.values()]
@@ -460,9 +461,9 @@ function aggregatePayments(payments: ReportPayment[]) {
       count: 0,
     };
     const amount = number(payment.amount);
-    if (amount >= 0) row.received += amount;
-    else row.refunded += -amount;
-    row.net += amount;
+    if (amount >= 0) row.received = addReportMoney(row.received, amount);
+    else row.refunded = addReportMoney(row.refunded, -amount);
+    row.net = addReportMoney(row.net, amount);
     row.count += 1;
     rows.set(key, row);
   }
@@ -478,8 +479,8 @@ function aggregateStock(batches: ReportStockBatch[], now: Date, expiresSoon: Dat
 
   for (const batch of batches) {
     const rest = number(batch.rest);
-    purchaseValue += rest * number(batch.purchasePrice);
-    retailValue += rest * number(batch.product.retailPrice);
+    purchaseValue = addReportMoney(purchaseValue, multiplyReportMoney(batch.rest, batch.purchasePrice));
+    retailValue = addReportMoney(retailValue, multiplyReportMoney(batch.rest, batch.product.retailPrice));
     if (batch.expiresAt && batch.expiresAt < now) expiredBatches += 1;
     else if (batch.expiresAt && batch.expiresAt <= expiresSoon) expiringBatches += 1;
     const product = products.get(batch.product.id) ?? {
@@ -514,7 +515,7 @@ function aggregateStock(batches: ReportStockBatch[], now: Date, expiresSoon: Dat
   return {
     purchaseValue,
     retailValue,
-    potentialMarkup: retailValue - purchaseValue,
+    potentialMarkup: subtractReportMoney(retailValue, purchaseValue),
     batches: batches.length,
     products: products.size,
     lowStock: lowStockItems.length,
@@ -541,8 +542,8 @@ function aggregateDaily(
     rows.set(key, row);
     return row;
   };
-  bills.forEach((bill) => { getRow(bill.createdAt).billedAmount += number(bill.totalAmount); });
-  payments.forEach((payment) => { getRow(payment.paidAt).paidAmount += number(payment.amount); });
+  bills.forEach((bill) => { getRow(bill.createdAt).billedAmount = addReportMoney(getRow(bill.createdAt).billedAmount, bill.totalAmount); });
+  payments.forEach((payment) => { getRow(payment.paidAt).paidAmount = addReportMoney(getRow(payment.paidAt).paidAmount, payment.amount); });
   visits.forEach((visit) => { getRow(visit.startedAt).visits += 1; });
   completedVisits.forEach((visit) => {
     if (visit.completedAt) getRow(visit.completedAt).completedVisits += 1;
@@ -635,7 +636,7 @@ function number(value: Prisma.Decimal.Value | null | undefined) {
 }
 
 function sum<T>(items: T[], selector: (item: T) => Prisma.Decimal.Value | number | null | undefined) {
-  return items.reduce((total, item) => total + number(selector(item)), 0);
+  return sumReportMoney(items.map(selector));
 }
 
 type ReportBill = {

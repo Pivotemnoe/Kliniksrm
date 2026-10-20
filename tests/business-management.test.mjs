@@ -178,7 +178,7 @@ test('зарплата закрытия дня независима от рас�
   assert.match(seed, /'daily_salary', 'Зарплата, выданная за день'/);
   assert.match(service, /category\.code === 'daily_salary'[\s\S]*?укажите сотрудника или получателя/);
   assert.match(service, /const dailySalaryExpense/);
-  assert.match(service, /grossProfit - input\.payrollExpense - input\.dailySalaryExpense - input\.operatingExpenses/);
+  assert.match(service, /subtractReportMoney\(grossProfit, input\.payrollExpense, input\.dailySalaryExpense, input\.operatingExpenses\)/);
   assert.match(business, /Начислено в разделе «Зарплата»/);
   assert.match(business, /Фактически выдано через закрытие дня/);
   assert.match(daily, /самостоятельной фактической выплатой/);

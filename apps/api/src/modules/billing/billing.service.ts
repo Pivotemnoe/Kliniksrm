@@ -1,5 +1,6 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { BillSource, PaymentStatus, PaymentType, Prisma, StockMovementType } from '@prisma/client';
+import { createHash } from 'node:crypto';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BillSource, Payment, PaymentStatus, PaymentType, Prisma, StockMovementType } from '@prisma/client';
 import { parsePagination } from '../../common/pagination';
 import { withRussianSearchVariants } from '../../common/search-ranking';
 import { AuditService } from '../audit/audit.service';
@@ -15,6 +16,7 @@ import { CreateBillDto } from './dto/create-bill.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { BillAmountFilter, ListBillsQueryDto } from './dto/list-bills-query.dto';
 import { RefundPaymentDto } from './dto/refund-payment.dto';
+import { SplitPaymentDto } from './dto/split-payment.dto';
 import { UpdateBillDto } from './dto/update-bill.dto';
 import { UpdateBillItemDto } from './dto/update-bill-item.dto';
 
@@ -509,6 +511,66 @@ export class BillingService {
     return payment;
   }
 
+  async createSplitPayment(billId: string, dto: SplitPaymentDto, actorId: string) {
+    if (dto.parts.length !== 2 || new Set(dto.parts.map(part => part.paymentMethodId)).size !== 2) {
+      throw new BadRequestException('Выберите два разных способа оплаты');
+    }
+    const amounts = dto.parts.map(part => decimal(part.amount));
+    if (amounts.some(amount => !amount.isFinite() || amount.lte(0) || amount.decimalPlaces() > 2 || amount.gt(999999999))) {
+      throw new BadRequestException('Укажите положительные суммы с точностью до копейки');
+    }
+    const requestHash = createHash('sha256').update(JSON.stringify({
+      parts: dto.parts.map((part, index) => ({ paymentMethodId: part.paymentMethodId, cashboxId: part.cashboxId, amount: amounts[index].toFixed(2) })).sort((a, b) => a.paymentMethodId.localeCompare(b.paymentMethodId)),
+      paidAt: dto.paidAt ? new Date(dto.paidAt).toISOString() : null, comment: dto.comment?.trim() || null,
+    })).digest('hex');
+    const warehouseScope = await this.getWarehouseScope(actorId);
+    return this.prisma.$transaction(async tx => {
+      const bill = await this.getBillForUpdate(tx, billId);
+      // The bill lock serializes concurrent attempts, including retries after a lost response.
+      const prior = await tx.auditLog.findFirst({ where: {
+        action: 'payment.split_create', entityType: 'Bill', entityId: billId, actorId,
+        metadata: { path: ['operationId'], equals: dto.operationId },
+      } });
+      if (prior) {
+        const metadata = prior.metadata as { requestHash?: string; paymentIds?: string[] };
+        if (metadata.requestHash !== requestHash) throw new ConflictException('Эта оплата уже проведена с другими суммами. Обновите счёт');
+        const ids = metadata.paymentIds ?? [];
+        const payments = await tx.payment.findMany({ where: { billId, id: { in: ids } } });
+        if (ids.length !== 2 || payments.length !== 2) throw new ConflictException('Не удалось сверить ранее проведённую оплату. Обновите счёт');
+        return ids.map(id => payments.find(payment => payment.id === id)!);
+      }
+      assertBillCanBePaid(bill, billId);
+      const remaining = decimal(bill.totalAmount).minus(bill.paidAmount);
+      if (!amounts[0].plus(amounts[1]).eq(remaining)) {
+        throw new BadRequestException('Сумма двух частей должна точно совпадать с остатком счёта. Обновите суммы');
+      }
+      const settings = [];
+      for (const part of dto.parts) {
+        const [method, cashbox] = await Promise.all([
+          tx.paymentMethod.findUnique({ where: { id: part.paymentMethodId } }),
+          tx.cashbox.findUnique({ where: { id: part.cashboxId } }),
+        ]);
+        if (!method?.isActive || !cashbox?.isActive) throw new BadRequestException('Способ оплаты или касса недоступны. Обновите настройки оплаты');
+        settings.push({ type: method.type, paymentMethodId: method.id, cashboxId: cashbox.id });
+      }
+      const paidAt = dto.paidAt ? new Date(dto.paidAt) : new Date();
+      const payments: Payment[] = [];
+      for (let index = 0; index < dto.parts.length; index++) {
+        const setting = settings[index], amount = amounts[index];
+        if (setting.type === PaymentType.DEPOSIT) await this.withdrawOwnerDeposit(tx, bill, amount, billId);
+        const payment = await tx.payment.create({ data: { billId, employeeId: actorId, ...setting, amount, paidAt, comment: dto.comment?.trim() || undefined } });
+        payments.push(payment);
+        await this.auditService.log({ actorId, action: 'payment.create', entityType: 'Payment', entityId: payment.id, metadata: { billId, amount: amount.toFixed(2), ...setting, operationId: dto.operationId } }, tx);
+      }
+      await this.recalculateBillTotals(tx, billId);
+      const updatedBill = await tx.bill.findUniqueOrThrow({ where: { id: billId }, select: billStockContextSelect });
+      if (updatedBill.status !== PaymentStatus.PAID) throw new ConflictException('Сумма счёта изменилась. Обновите счёт и повторите оплату');
+      await this.ensureBillProductItemsWrittenOff(tx, updatedBill, warehouseScope);
+      await this.auditService.log({ actorId, action: 'payment.split_create', entityType: 'Bill', entityId: billId, metadata: { operationId: dto.operationId, requestHash, paymentIds: payments.map(payment => payment.id), amount: remaining.toFixed(2) } }, tx);
+      return payments;
+    }, { timeout: 30000 });
+  }
+
   async refundPayment(billId: string, paymentId: string, dto: RefundPaymentDto, actorId: string) {
     const refundPayment = await this.prisma.$transaction(async (tx) => {
       const bill = await this.getBillForUpdate(tx, billId);
@@ -783,14 +845,14 @@ export class BillingService {
       throw new NotFoundException('Owner not found');
     }
 
-    if (decimal(owner.balance).lessThan(amount)) {
-      throw new BadRequestException('Недостаточно средств на балансе владельца');
-    }
-
-    await tx.owner.update({
-      where: { id: owner.id },
+    // A different bill may be paid from this owner's deposit concurrently.
+    const withdrawn = await tx.owner.updateMany({
+      where: { id: owner.id, balance: { gte: amount } },
       data: { balance: { decrement: amount } },
     });
+    if (withdrawn.count !== 1) {
+      throw new BadRequestException('Недостаточно средств на балансе владельца');
+    }
 
     await tx.ownerBalanceOperation.create({
       data: {

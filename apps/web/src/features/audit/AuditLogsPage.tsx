@@ -253,6 +253,7 @@ const actionLabels: Record<string, string> = {
   'visit.overdue_alert': 'Приём не завершён более часа',
   'bill.create': 'Счёт создан',
   'bill.cancel': 'Счёт отменён',
+  'payment.split_create': 'Счёт оплачен двумя способами',
   'payment.create': 'Оплата проведена',
   'payment.refund': 'Возврат оплаты',
   'employee.create': 'Сотрудник создан',
