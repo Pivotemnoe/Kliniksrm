@@ -1,3 +1,4 @@
+BEGIN;
 CREATE TABLE "PetHotelSettings" (
   "installationId" TEXT PRIMARY KEY REFERENCES "ClinicModuleInstallation"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
   "dailyRate" DECIMAL(12,2) NOT NULL DEFAULT 700, "walkRate" DECIMAL(12,2) NOT NULL DEFAULT 150,
@@ -45,3 +46,4 @@ SELECT r."id",p."id" FROM "Role" r CROSS JOIN "Permission" p
 WHERE (r."code"='director' AND p."code" IN ('pet_hotel.read','pet_hotel.operate','pet_hotel.manage'))
    OR (r."code"='administrator' AND p."code" IN ('pet_hotel.read','pet_hotel.operate'))
 ON CONFLICT DO NOTHING;
+COMMIT;

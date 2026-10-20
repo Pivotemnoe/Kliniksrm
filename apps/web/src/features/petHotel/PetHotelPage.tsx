@@ -39,6 +39,7 @@ export function PetHotelPage() {
     ...(auth?.employee.roles.includes('director') ? [{ key: 'module', label: 'Подключение модуля', icon: <SettingOutlined />, onClick: () => navigate('/settings/modules') }] : []),
   ]} />} />
     <ModulePublicLink label="Сайт зоогостиницы" href={data.settings.siteUrl} />
+    {import.meta.env.VITE_PET_HOTEL_SITE_PUBLISHED !== 'true' && <Typography.Paragraph type="secondary">Страница зоогостиницы готовится к публикации.</Typography.Paragraph>}
     {data.mode === 'qa' && <Alert className="hotel-notice" type="info" showIcon message="Локальная проверка · владельцы, питомцы и брони вымышленные" />}
     {data.limited && <Alert className="hotel-notice" type="info" showIcon message="Модуль отключён. История и брони сохранены; выезд и отмена доступны. Новые брони и заезды недоступны." />}
     {!data.rooms.length && <Alert className="hotel-notice" type="info" showIcon message="Сначала добавьте боксы" description="Откройте вкладку «Боксы»: можно создать согласованные 8 кошачьих и 4 собачьих бокса или добавить их отдельно." />}
