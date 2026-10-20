@@ -6,7 +6,7 @@ const {PrismaClient}=req('@prisma/client');const prisma=new PrismaClient();
 async function protectedModules(){
  const installation=await prisma.clinicModuleInstallation.findMany({where:{moduleKey:{not:'PET_HOTEL'}},orderBy:{id:'asc'}});
  const grooming=await prisma.groomingSettings.findMany({orderBy:{installationId:'asc'}});
- const avito=await prisma.avitoIntegration.findMany({orderBy:{id:'asc'}});
+ const avito=await prisma.avitoIntegration.findMany({orderBy:{id:'asc'},select:{id:true,installationId:true,accountId:true,settings:true,settingsVersion:true}});
  return createHash('sha256').update(JSON.stringify({installation,grooming,avito})).digest('hex');
 }
 async function initialize(){

@@ -29,3 +29,5 @@ Backups:
 - RU: `/opt/temichevvet-owner-gateway/backups/crm-pet-hotel-integrated-20261020-r1`
 
 `verified-backup.json`, `candidate-qualification.json`, `deployment-receipt.json` и `pet-hotel-integrated-state.json` служат отдельными доказательствами восстановления, квалификации и переключения.
+
+Проверка сохранности Авито сравнивает аккаунт и постоянные настройки. Штатные `lastSyncAt`, результаты проверки связи и `updatedAt` могут меняться во время фоновой работы; они не являются изменением конфигурации зоогостиницей. При операционной дельте после заморозки images её revision/checksum фиксируются отдельно, а инициализация повторно квалифицируется на восстановленной копии.
