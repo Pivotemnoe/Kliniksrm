@@ -47,6 +47,12 @@ function Put-Env([string]$Path,[hashtable]$Values) {
 function Assert-Protected($Items) {
   foreach($item in $Items) { if($item.name -eq $apiName) { continue };$c=Container $item.name;if($c.Id -ne $item.id -or $c.State.StartedAt -ne $item.started -or $c.Image -ne $item.image) { throw "Protected service changed: $($item.name)" } }
 }
+function Reload-WebUpstream {
+  # Nginx resolves the API service when its workers start. Refresh that address
+  # gracefully after API recreation, while keeping the Web container and pages.
+  $null=Invoke-AvitoDocker -Arguments @('exec',$webName,'nginx','-t')
+  $null=Invoke-AvitoDocker -Arguments @('exec',$webName,'nginx','-s','reload')
+}
 function Restore-Configuration($State,[switch]$OwnedFailure) {
   foreach($file in $State.configuration) {
     $live=Join-Path $Root $file.name
@@ -77,6 +83,7 @@ if($Mode -eq 'Rollback') {
   Assert-Protected $state.protected
   Restore-Configuration $state
   $null=Compose -Arguments @('up','-d','--no-deps','--no-build','--pull','never','api')
+  Reload-WebUpstream
   Wait-Healthy $state.previousApiId $state.previousWebId
   Assert-Protected $state.protected
   $state.phase='ROLLED_BACK';$state|ConvertTo-Json -Depth 9|Set-Content $statePath -Encoding UTF8
@@ -131,6 +138,7 @@ try {
   $state.phase='MIGRATED';$state|ConvertTo-Json -Depth 9|Set-Content $statePath -Encoding UTF8
   $appsStarted=$true
   $null=Compose -Arguments @('up','-d','--no-deps','--no-build','--pull','never','api')
+  Reload-WebUpstream
   Wait-Healthy $manifest.images.api.id $manifest.images.web.id -Candidate
   $null=Invoke-AvitoDocker -Arguments @('cp',(Join-Path $PackagePath 'initialization'),($apiName+':/tmp/avito-initialization'))
   $initialized=Invoke-AvitoDocker -Arguments @('exec','-e','AVITO_RELEASE_EXECUTE=clinic-20261020','-e',('AVITO_RELEASE_ACTOR_ID='+$manifest.actorId),$apiName,'node','/tmp/avito-initialization/initialize-module.cjs')
@@ -153,7 +161,7 @@ try {
       }
     }
   } finally { Restore-Configuration $state -OwnedFailure }
-  if($appsStarted) { $null=Compose -Arguments @('up','-d','--no-deps','--no-build','--pull','never','api');Wait-Healthy $state.previousApiId $state.previousWebId }
+  if($appsStarted) { $null=Compose -Arguments @('up','-d','--no-deps','--no-build','--pull','never','api');Reload-WebUpstream;Wait-Healthy $state.previousApiId $state.previousWebId }
   Assert-Protected $state.protected
   throw $failure
 }

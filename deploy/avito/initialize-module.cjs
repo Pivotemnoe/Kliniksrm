@@ -39,6 +39,16 @@ async function main() {
   const editor = new AvitoEditorService(prisma, avito, api, audit, model);
   const profile = await api.self();
   if (String(profile.id) !== String(plan.expectedAvitoAccountId)) throw Error('Connected Avito account differs from the approved clinic account');
+  // All seven drafts belong to this same verified account. Share each bounded
+  // read of its inventory during this import instead of rereading five statuses
+  // for every draft. This cache exists only for the lifetime of the release job.
+  const inventory = new Map();
+  const ownListings = api.ownListings.bind(api);
+  api.ownListings = (page = 1, status = 'all') => {
+    const key = `${page}:${status}`;
+    if (!inventory.has(key)) inventory.set(key, ownListings(page, status));
+    return inventory.get(key);
+  };
   let integration = await avito.integration();
   if (JSON.stringify(integration.settings) !== JSON.stringify(settings)) await avito.updateSettings({ version: integration.settingsVersion, settings }, actor.id);
   const installation = await modules.installation('avito-administrator');
