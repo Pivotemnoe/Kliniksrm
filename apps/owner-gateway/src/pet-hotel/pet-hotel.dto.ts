@@ -22,3 +22,10 @@ export class HotelRegistrationResultDto {
   @IsOptional() @IsObject() result?: Record<string, unknown>;
   @IsOptional() @IsString() @MaxLength(300) error?: string;
 }
+export class HotelDeliveryDto {
+  @IsIn(['OWNER', 'STAFF']) recipientKind!: 'OWNER' | 'STAFF';
+  @IsString() @MinLength(1) @MaxLength(100) recipientId!: string;
+  @IsIn(['PET_HOTEL_CHANGE', 'PET_HOTEL_REMINDER']) kind!: 'PET_HOTEL_CHANGE' | 'PET_HOTEL_REMINDER';
+  @IsString() @MinLength(1) @MaxLength(800) text!: string;
+  @IsString() @MaxLength(40) expiresAt!: string;
+}

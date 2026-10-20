@@ -1,6 +1,6 @@
 # Hotel website / owner gateway / clinic bridge — local v1
 
-Coordination: website and gateway are owned by this chat in `pet-hotel-site-20261020`; clinic API, CRM, rates and delivery outbox are owned by the authorized CRM redesign chat. No production changes. The old 4291/4292 and accepted 4261–4264 stands stay untouched.
+Coordination: website and gateway are owned by this chat in `pet-hotel-site-20261020`; clinic API, CRM, rates and delivery outbox are owned by the authorized CRM redesign chat. Production release is now explicitly authorized by the human on 20.10.2026. The CRM chat owns the shared API/Web/gateway switch; this chat owns coordinated static-site publication. No switch has been performed from this checkout. The old 4291/4292 and accepted 4261–4264 stands stay untouched.
 
 ## Integration baseline — CRM handoff on 20.10.2026
 
@@ -8,7 +8,7 @@ The authorized CRM chat reports grooming release `crm-grooming-independent-20261
 
 Continue hotel integration from that baseline (or a newly verified later revision). Do not deploy this older hotel checkout over it. Local hotel implementation `19c04ea0bb4661ffc0c3660789815a2f40c5969e` is an integration candidate; merge/cherry-pick its additions while preserving current Avito, grooming and shared MAX behavior. In particular, retain public grooming `shift.workplaceId` and availability matching the assigned workplace, including the legacy null fallback. Resolve shared AppModule/MAX webhook/Prisma changes as additions, never by replacing the newer files wholesale.
 
-The grooming release freeze is lifted, but hotel deployment remains unauthorized. The CRM chat will resume the actual hotel processor connection separately after the human reviews grooming. The local read-only hotel fixture stays unchanged and is not evidence of a saved clinical booking or MAX delivery.
+The human subsequently instructed joint verification and production release of the hotel CRM and public site. Integration now continues from operational revision `534c22a247b6bcd17c4ab748e2a010f8a8b14186`, preserving the deployed application baseline `908cbbdd0aae9e302fc9b7ed5cc56de00804436d`; the real processor is being implemented in `pet-hotel-production-20261020`. The local read-only hotel fixture stays unchanged and is not evidence of a saved clinical booking or MAX delivery.
 
 ## Gateway internal endpoints
 
@@ -22,6 +22,7 @@ Base: `/internal/v1/pet-hotel/portal`.
   Busy: `{roomId,startsAt:ISO,endsAt:ISO,status:'CONFIRMED'|'IN_HOUSE'}`. Include overdue IN_HOUSE stays: they block a room until checkout.
 - `GET /operations` → `{items:[{id,ownerId,clientKey,kind,input,expiresAt,...}]}`.
 - `POST /operations/:id/result` body `{status:'DONE'|'FAILED',result?:object,error?:string}`. Results persist and repeated identical completion is accepted.
+- `POST /deliveries/:id` (UUID) body `{recipientKind:'OWNER'|'STAFF',recipientId,kind:'PET_HOTEL_CHANGE'|'PET_HOTEL_REMINDER',text,expiresAt}`. OWNER recipientId is the shared owner ID; STAFF recipientId is an explicit numeric MAX user ID supplied by the trusted clinical module. Text is 1..800 characters and expiresAt is a strict ISO instant with timezone. Same durable delivery ID and payload must be reused on transport recovery; a changed intent is rejected.
 - `GET /registrations` → `{items:[{id,maxUserId,input:{knownOwnerId?,fullName?,phone?}}]}`.
 - `POST /registrations/:id/result` body `{result}` or `{error}`. Result: `{status:'NEEDS_DETAILS'|'REVIEW_REQUIRED',message?}` or `{ownerId,displayName,owner,animals}`.
 
@@ -50,7 +51,7 @@ Use gateway operation `id` as the clinic command idempotency key. Check for an e
 
 ## Public website
 
-- GET `/v1/public/pet-hotel/catalog` returns sanitized current settings/room rates and connection/freshness/capability flags. No busy list, client IDs or personal records.
+- GET `/v1/public/pet-hotel/catalog` returns sanitized current settings/room rates and connection/freshness/capability flags, including `capturedAt` (and the compatible `asOf`). No busy list, client IDs or personal records.
 - GET `/v1/public/pet-hotel/availability?species=CAT&startsAt=...&endsAt=...&walkCount=0` returns `{enabled,rooms:[offer],asOf,version,testMode,notice}`. Rates come from the chosen room. Unfresh snapshot (90s) fails closed. Gateway public offer tokens last 5 minutes, store only selection/quote preferences.
 - POST `/v1/public/pet-hotel/drafts` body `{offerToken}` checks the selected room and current tariff again, then returns `{token,expiresAt}`. The public site transfers this opaque 15-minute token in `/portal/pet-hotel#draft=...`.
 - Authenticated POST `/v1/portal/pet-hotel/draft` body `{token}` claims it for one owner and returns the saved selection/quote. The portal requests clinic OPTIONS again; a site draft never creates a reservation.
@@ -60,3 +61,11 @@ Changes and confirmations/reminders go through the clinic-owned MAX outbox. The 
 ## Local preview boundary
 
 `node scripts/pet-hotel-gateway-preview.mjs --fixture-readonly` starts an isolated loopback-only fixture on 4313 with allowlisted synthetic database `pet_hotel_gateway_preview_20261020_qa`. It implements STATE/OPTIONS contract responses, sets `bridgeReady:false`, and cannot create or change real bookings or deliver MAX. Browser and HTTP evidence from this fixture is gateway/frontend evidence, not clinical booking acceptance. The real clinic processor and its idempotency receipts must be tested separately before self-booking can be released.
+
+## Hotel MAX delivery policy
+
+`PET_HOTEL_CLIENT_NOTIFICATIONS_ENABLED=true` enables new hotel deliveries independently of GROOMING and clinical reminder flags. Default is off. OWNER delivery reuses the shared MAX binding, global opt-out, change/reminder preferences and quiet hours. `PET_HOTEL_NOTIFICATION_DAILY_LIMIT` is a separate owner/day budget (default 10, bounded 1..10); hotel attempts do not consume clinical or grooming limits. The MAX button points directly to `/portal/pet-hotel`.
+
+STAFF receipts persist in new gateway table `PetHotelStaffDelivery`, additive migration `20261020200000_pet_hotel_staff_delivery`. OWNER uses the existing `OwnerNotificationDelivery` with hotel kinds. Responses: SENT, SENDING, UNKNOWN, REJECTED, CANCELLED, NO_CONSENT, NOT_LINKED, DEFERRED (retryAt), EXPIRED, DISABLED. Existing hotel receipts are recovered even after expiry or disabling; interrupted SENDING becomes UNKNOWN. Do not automatically retry UNKNOWN, REJECTED or terminal opt-out states. DEFERRED may be rescheduled with the same durable ID and unchanged original body; poll/retry SENDING with that ID only. SENT means the provider returned a message ID, not that the human read the message.
+
+QA blocks external network and substitutes fake MAX senders. Delivery HTTP tests cover authorization, concurrency, replay after disable/expiry, uncertain responses, interrupted worker, opt-out, quiet hours, independent daily budgets and the hotel deep link. Real MAX receipt remains a separate release acceptance step.

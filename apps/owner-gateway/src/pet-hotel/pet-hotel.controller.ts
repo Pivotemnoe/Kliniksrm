@@ -4,7 +4,8 @@ import { assertSecret, hashToken } from '../security';
 import { PetHotelPortalService } from './pet-hotel-portal.service';
 import { PetHotelStorefrontService } from './pet-hotel-storefront.service';
 import { PetHotelRegistrationService } from './pet-hotel-registration.service';
-import { HotelDraftDto, HotelOperationDto, HotelRegistrationDetailsDto, HotelRegistrationResultDto, HotelResultDto, HotelSnapshotDto, HotelTokenDto } from './pet-hotel.dto';
+import { PetHotelDeliveryService } from './pet-hotel-delivery.service';
+import { HotelDeliveryDto, HotelDraftDto, HotelOperationDto, HotelRegistrationDetailsDto, HotelRegistrationResultDto, HotelResultDto, HotelSnapshotDto, HotelTokenDto } from './pet-hotel.dto';
 const sessionName = () => process.env.OWNER_GATEWAY_SESSION_COOKIE || 'temichevvet_owner_session';
 function cookie(header: string | undefined, name: string) { try { return decodeURIComponent(header?.split(';').map(s => s.trim()).find(s => s.startsWith(name + '='))?.slice(name.length + 1) || ''); } catch { return ''; } }
 function sameOrigin(req: Request) {
@@ -57,11 +58,12 @@ export class PetHotelPublicController {
 }
 @Controller('internal/v1/pet-hotel/portal')
 export class PetHotelInternalController {
-  constructor(private readonly portal: PetHotelPortalService, private readonly storefront: PetHotelStorefrontService, private readonly registration: PetHotelRegistrationService) {}
+  constructor(private readonly portal: PetHotelPortalService, private readonly storefront: PetHotelStorefrontService, private readonly registration: PetHotelRegistrationService, private readonly deliveries: PetHotelDeliveryService) {}
   private auth(secret?: string) { assertSecret(secret, process.env.OWNER_GATEWAY_SYNC_SECRET, 'Секрет шлюза не настроен'); }
   @Post('storefront') store(@Headers('x-owner-gateway-secret') secret: string | undefined, @Body() dto: HotelSnapshotDto) { this.auth(secret); return this.storefront.store(dto.payload); }
   @Get('operations') pending(@Headers('x-owner-gateway-secret') secret?: string) { this.auth(secret); return this.portal.pending(); }
   @Post('operations/:id/result') complete(@Headers('x-owner-gateway-secret') secret: string | undefined, @Param('id', new ParseUUIDPipe()) id: string, @Body() dto: HotelResultDto) { this.auth(secret); return this.portal.complete(id, dto); }
   @Get('registrations') registrations(@Headers('x-owner-gateway-secret') secret?: string) { this.auth(secret); return this.registration.pendingRegistrations(); }
   @Post('registrations/:id/result') registrationResult(@Headers('x-owner-gateway-secret') secret: string | undefined, @Param('id', new ParseUUIDPipe()) id: string, @Body() dto: HotelRegistrationResultDto) { this.auth(secret); return this.registration.completeRegistration(id, dto); }
+  @Post('deliveries/:id') deliver(@Headers('x-owner-gateway-secret') secret: string | undefined, @Param('id', new ParseUUIDPipe()) id: string, @Body() dto: HotelDeliveryDto) { this.auth(secret); return this.deliveries.deliver(id, dto); }
 }

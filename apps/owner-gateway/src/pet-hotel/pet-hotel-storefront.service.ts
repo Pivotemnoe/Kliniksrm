@@ -25,7 +25,7 @@ export class PetHotelStorefrontService {
   async catalog() {
     const source = await this.snapshot();
     if (!source) return { connected: false, enabled: false, selfBookingEnabled: false, rooms: [] };
-    return { schemaVersion: 1, connected: true, enabled: source.data.enabled, selfBookingEnabled: this.online(source.data, source.fresh), fresh: source.fresh, asOf: source.data.capturedAt, version: source.version, testMode: source.data.testMode, settings: source.data.settings, rooms: source.data.rooms.filter(r => r.isActive).sort((a, b) => a.sortOrder - b.sortOrder), portalUrl: process.env.OWNER_GATEWAY_PUBLIC_URL ? process.env.OWNER_GATEWAY_PUBLIC_URL.replace(/\/+$/, '') + '/portal/pet-hotel' : null };
+    return { schemaVersion: 1, connected: true, enabled: source.data.enabled, selfBookingEnabled: this.online(source.data, source.fresh), fresh: source.fresh, capturedAt: source.data.capturedAt, asOf: source.data.capturedAt, version: source.version, testMode: source.data.testMode, settings: source.data.settings, rooms: source.data.rooms.filter(r => r.isActive).sort((a, b) => a.sortOrder - b.sortOrder), portalUrl: process.env.OWNER_GATEWAY_PUBLIC_URL ? process.env.OWNER_GATEWAY_PUBLIC_URL.replace(/\/+$/, '') + '/portal/pet-hotel' : null };
   }
   async availability(query: Record<string, unknown>, ip: string) {
     this.limits.consume('hotel-options:' + ip, 20, 60000);

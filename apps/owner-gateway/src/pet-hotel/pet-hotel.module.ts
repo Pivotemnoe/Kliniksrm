@@ -5,5 +5,8 @@ import { PetHotelPortalService } from './pet-hotel-portal.service';
 import { PetHotelStorefrontService } from './pet-hotel-storefront.service';
 import { PetHotelRegistrationService } from './pet-hotel-registration.service';
 import { PetHotelPageController } from './pet-hotel-page.controller';
-@Module({ controllers: [PetHotelPublicController, PetHotelPortalController, PetHotelInternalController, PetHotelPageController], providers: [PrismaService, PetHotelPortalService, PetHotelStorefrontService, PetHotelRegistrationService], exports: [PetHotelRegistrationService] })
+import { PetHotelDeliveryService } from './pet-hotel-delivery.service';
+import { MaxBotClient } from '../max-bot.client';
+import { OwnerNotificationService } from '../owner-notification.service';
+@Module({ controllers: [PetHotelPublicController, PetHotelPortalController, PetHotelInternalController, PetHotelPageController], providers: [PrismaService, PetHotelPortalService, PetHotelStorefrontService, PetHotelRegistrationService, PetHotelDeliveryService, MaxBotClient, OwnerNotificationService], exports: [PetHotelRegistrationService] })
 export class PetHotelModule {}

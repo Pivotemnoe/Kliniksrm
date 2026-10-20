@@ -531,3 +531,15 @@ model PetHotelRegistration {
   createdAt DateTime @default(now())
   @@index([status, createdAt])
 }
+
+model PetHotelStaffDelivery {
+  id String @id
+  fingerprint String
+  recipientId String
+  kind String
+  status String
+  providerMessageId String?
+  attemptedAt DateTime @default(now())
+  completedAt DateTime?
+  @@index([status, attemptedAt])
+}
