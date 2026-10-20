@@ -107,6 +107,7 @@ export class PortalService {
       sessionExpiresAt,
       assistantEnabled: process.env.CLINIC_ASSISTANT_ENABLED === 'true',
       groomingEnabled: process.env.GROOMING_CRM_SYNC_ENABLED === 'true',
+      petHotelEnabled: process.env.PET_HOTEL_CRM_SYNC_ENABLED === 'true',
     };
   }
 
