@@ -1,15 +1,25 @@
 import {articles} from './articles.js';
+import {HotelBooking} from './booking.js';
 const $=selector=>document.querySelector(selector), $$=selector=>[...document.querySelectorAll(selector)];
 const root=document.documentElement;
-const rubles=value=>new Intl.NumberFormat('ru-RU',{style:'currency',currency:'RUB',maximumFractionDigits:0}).format(value);
+const rubles=value=>new Intl.NumberFormat('ru-RU',{style:'currency',currency:'RUB',minimumFractionDigits:0,maximumFractionDigits:2}).format(value);
 const dateLabel=value=>new Intl.DateTimeFormat('ru-RU',{day:'numeric',month:'long',year:'numeric',timeZone:'Europe/Moscow'}).format(new Date(value+'T12:00:00Z'));
 const dateShort=value=>new Intl.DateTimeFormat('ru-RU',{day:'numeric',month:'long',timeZone:'Europe/Moscow'}).format(new Date(value+'T12:00:00Z'));
 const todayParts=new Intl.DateTimeFormat('en-US',{timeZone:'Europe/Moscow',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
 const today=['year','month','day'].map(k=>todayParts.find(x=>x.type===k).value).join('-');
 const addDays=(date,days)=>new Date(Date.parse(date+'T12:00:00Z')+days*86400000).toISOString().slice(0,10);
 const arrival=$('#arrival'), departure=$('#departure'), arrivalTime=$('#arrival-time'), departureTime=$('#departure-time'), kind=$('#pet-kind'), weight=$('#dog-weight'), walks=$('#walk-count');
-arrival.min=today; arrival.value=today; departure.min=addDays(today,2); departure.value=departure.min;
-let trip=null;
+arrival.min=today; arrival.value=addDays(today,1); departure.min=addDays(arrival.value,2); departure.value=departure.min;
+let trip=null, selectedQuote=null, booking=null, startingRate=700;
+let terms={dailyRate:700,walkRate:150,minimumDays:2,maximumDogWeightKg:10,checkInFrom:'09:00',checkInTo:'18:00'};
+function updateMobile(quote,currentTrip,dog){
+ const mobileBar=$('.mobile-trip-bar');
+ $('#mobile-pet').textContent=quote?`${quote.roomName} · ${currentTrip.days} сут.`:dog?`Для собаки до ${terms.maximumDogWeightKg} кг · от ${terms.minimumDays} суток`:`Для кошки · от ${terms.minimumDays} суток`;
+ mobileBar.querySelector('[data-start-rate]').textContent=quote?new Intl.NumberFormat('ru-RU').format(currentTrip.total):'от '+new Intl.NumberFormat('ru-RU').format(startingRate);
+ mobileBar.querySelector('i').textContent=quote?'за проживание':'/ сутки';
+ mobileBar.querySelector('a').href=quote?'#trip-summary':'#estimate';
+ mobileBar.querySelector('a').innerHTML=(quote?'К итогу':'Спланировать')+' <span aria-hidden="true">↗</span>';
+}
 function recalculate(){
  const dog=kind.value==='DOG';
  $('#dog-options').hidden=!dog;weight.disabled=!dog;weight.required=dog;walks.disabled=!dog;
@@ -18,26 +28,29 @@ function recalculate(){
  const walkCount=dog?Number(walks.value):0,dogWeight=Number(weight.value);let error='';
  if(!arrival.value||!departure.value||!arrivalTime.value||!departureTime.value||!Number.isFinite(days))error='Выберите даты и время заезда и выезда.';
  else if(arrival.value<today)error='Выберите дату заезда сегодня или позже.';
- else if(arrivalTime.value<'09:00'||arrivalTime.value>'18:00')error='Заселение проходит с 09:00 до 18:00. Выберите время в этом промежутке.';
- else if(elapsedHours<48)error='Минимальный срок — двое суток (48 часов). Выберите выезд минимум через два дня с учётом времени.';
+ else if(Date.parse(arrival.value+'T'+arrivalTime.value+':00+03:00')<=Date.now())error='Выберите будущее время заезда.';
+ else if(arrivalTime.value<terms.checkInFrom||arrivalTime.value>terms.checkInTo)error=`Заселение проходит с ${terms.checkInFrom} до ${terms.checkInTo}. Выберите время в этом промежутке.`;
+ else if(elapsedHours<terms.minimumDays*24)error=`Минимальный срок — ${terms.minimumDays} сут. (${terms.minimumDays*24} ч.). Проверьте дату и время выезда.`;
  else if(days>365)error='Для более длительного проживания обсудите расчёт с администратором.';
- else if(dog&&(!Number.isFinite(dogWeight)||dogWeight<=0||dogWeight>10))error='Принимаем собак весом до 10 кг. Проверьте вес питомца.';
+ else if(dog&&(!Number.isFinite(dogWeight)||dogWeight<=0||dogWeight>terms.maximumDogWeightKg))error=`Принимаем собак весом до ${terms.maximumDogWeightKg} кг. Проверьте вес питомца.`;
  else if(!Number.isInteger(walkCount)||walkCount<0||walkCount>100)error='Укажите количество выгулов от 0 до 100 либо обсудите их с администратором.';
  $('#estimate-error').textContent=error;$('#estimate-error').hidden=!error;$('#estimate-result').hidden=!!error;$('#summary-invalid').hidden=!error;$('#copy-trip').disabled=!!error;$('#copy-status').textContent='';
  $('#summary-pet').textContent=dog?'Для вашей собаки.':'Для вашей кошки.';
  $('#summary-dates').textContent=!error?`${dateShort(arrival.value)}, ${arrivalTime.value} — ${dateShort(departure.value)}, ${departureTime.value}`:'Желаемые даты проживания';
  $$('[data-duration]').forEach(b=>b.setAttribute('aria-pressed',String(Number(b.dataset.duration)*24===elapsedHours)));
- if(error){trip=null;return;}
- const stay=days*700,walkPrice=walkCount*150;trip={dog,days,elapsedHours,walkCount,dogWeight,arrival:arrival.value,departure:departure.value,arrivalTime:arrivalTime.value,departureTime:departureTime.value,total:stay+walkPrice};
- $('#stay-label').textContent=`${days} сут. × 700 ₽`;$('#stay-price').textContent=rubles(stay);
- $('#walk-price-line').hidden=!dog||walkCount===0;$('#walk-price-label').textContent=`${walkCount} выгул. × 150 ₽`;$('#walk-price').textContent=rubles(walkPrice);$('#trip-total').textContent=rubles(trip.total);
+ if(error){trip=null;updateMobile(null,null,dog);booking?.updateTrip(null);return;}
+ const stay=selectedQuote?Number(selectedQuote.stayPrice):days*Number(terms.dailyRate),walkPrice=selectedQuote?Number(selectedQuote.walksPrice):walkCount*Number(terms.walkRate);trip={dog,days,elapsedHours,walkCount,dogWeight,arrival:arrival.value,departure:departure.value,arrivalTime:arrivalTime.value,departureTime:departureTime.value,total:stay+walkPrice,...(selectedQuote?{roomName:selectedQuote.roomName}: {})};
+ $('#stay-label').textContent=`${days} сут. × ${rubles(selectedQuote?.dailyRate??terms.dailyRate)}`;$('#stay-price').textContent=rubles(stay);
+ $('#walk-price-line').hidden=!dog||walkCount===0;$('#walk-price-label').textContent=`${walkCount} выгул. × ${rubles(selectedQuote?.walkRate??terms.walkRate)}`;$('#walk-price').textContent=rubles(walkPrice);$('#trip-total').textContent=rubles(trip.total);
+ $('#total-label').textContent=selectedQuote?'По выбранному номеру':'Предварительно';
+ updateMobile(selectedQuote,trip,dog);
+ booking?.updateTrip(trip);
 }
 function choosePet(value){
  const dog=value==='DOG';kind.value=dog?'DOG':'CAT';if(!dog)walks.value='0';
  $$('input[name="species"]').forEach(input=>{input.checked=input.value===kind.value;input.closest('.pet-option').classList.toggle('is-selected',input.checked);});
  $$('[data-pet-choose]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.petChoose===kind.value)));
  $('#hero-cat').classList.toggle('is-active',!dog);$('#hero-dog').classList.toggle('is-active',dog);
- $('#mobile-pet').textContent=dog?'Для собаки до 10 кг · от 2 суток':'Для кошки · от 2 суток';
  $('#packing-image').src=dog?'assets/guest-6.jpg':'assets/guest-2.jpg';
  $('#packing-image').alt=dog?'Вест-хайленд-терьер в нашей гостинице, обработка качества с AI':'Кошки в нашей гостинице, обработка качества с AI';
  recalculate();
@@ -48,6 +61,7 @@ $('#trip-form').addEventListener('input',event=>{if(event.target===arrival&&arri
 $('#trip-form').addEventListener('submit',event=>event.preventDefault());
 $$('[data-duration]').forEach(button=>button.addEventListener('click',()=>{if(!arrival.value)arrival.value=today;departure.min=addDays(arrival.value,2);departure.value=addDays(arrival.value,Number(button.dataset.duration));departureTime.value=arrivalTime.value;recalculate();}));
 choosePet('CAT');
+booking=new HotelBooking({getTrip:()=>trip,onQuote:q=>{selectedQuote=q;recalculate();},onCatalog:data=>{terms={...terms,...data.settings};arrivalTime.min=terms.checkInFrom;arrivalTime.max=terms.checkInTo;weight.max=String(terms.maximumDogWeightKg);const rates=data.rooms.map(r=>Number(r.dailyRate)).filter(Number.isFinite);if(rates.length){startingRate=Math.min(...rates);$$('[data-start-rate]').forEach(e=>e.textContent='от '+new Intl.NumberFormat('ru-RU').format(startingRate));}recalculate();}});
 $('#copy-trip').addEventListener('click',async()=>{
  if(!trip)return;
  const text=`Здравствуйте! Хочу уточнить размещение в зоогостинице TemichevVET.\nПитомец: ${trip.dog?'собака, '+trip.dogWeight+' кг':'кошка'}.\nЖелаемые даты: ${dateLabel(trip.arrival)}, ${trip.arrivalTime} — ${dateLabel(trip.departure)}, ${trip.departureTime}.\nОплачиваемых суток: ${trip.days}; неполные сутки округляются вверх.\n${trip.dog?'Выгулов за всё проживание: '+trip.walkCount+'.\n':''}Предварительно: ${rubles(trip.total)}. Прошу подтвердить наличие номера, время выезда и итоговую стоимость.\nКорм и миски привезу с собой.`;
