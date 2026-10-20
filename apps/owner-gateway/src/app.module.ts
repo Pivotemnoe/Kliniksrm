@@ -2,6 +2,7 @@ import { AvitoAssistantController } from './avito-assistant.controller';
 import { AvitoAssistantService } from './avito-assistant.service';
 import { AvitoAssistantModel } from './avito-assistant.model';
 import { GroomingModule } from './grooming/grooming.module';
+import { PetHotelModule } from './pet-hotel/pet-hotel.module';
 import { ClinicChatController, ClinicChatInternalController } from './clinic-chat.controller';
 import { OwnerNotificationController, OwnerNotificationInternalController } from './owner-notification.controller';
 import { OwnerNotificationService } from './owner-notification.service';
@@ -31,7 +32,7 @@ import { PublicClinicCatalogController } from './public-clinic-catalog.controlle
 import { PublicClinicCatalogService } from './public-clinic-catalog.service';
 
 @Module({
-  imports: [GroomingModule],
+  imports: [GroomingModule, PetHotelModule],
   controllers: [
     AvitoAssistantController,
     HealthController,

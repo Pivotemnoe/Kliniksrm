@@ -15,6 +15,7 @@ export class PetHotelController {
   @Get('bookings') bookings(@Query('from') from?: string, @Query('to') to?: string) { return this.service.bookings(from, to); }
   @Get('bookings/:id') booking(@Param('id') id: string) { return this.service.booking(id); }
   @Get('clients') clients(@Query('search') search?: string) { return this.service.clients(search); }
+  @Get('notifications') notifications() { return this.service.notifications(); }
   @Post('availability') @RequirePermissions('pet_hotel.operate') availability(@Body() dto: AvailabilityDto) { return this.service.availability(dto); }
   @Post('bookings') @RequirePermissions('pet_hotel.operate') book(@Body() dto: PetHotelBookingDto, @CurrentEmployee() actor: AuthEmployee) { return this.service.book(dto, actor); }
   @Patch('bookings/:id') @RequirePermissions('pet_hotel.operate') update(@Param('id') id: string, @Body() dto: PetHotelChangeDto, @CurrentEmployee() actor: AuthEmployee) { return this.service.book(dto, actor, id); }

@@ -10,5 +10,6 @@ import { LiveUpdatesService } from './live-updates.service';
     LiveUpdatesService,
     { provide: APP_INTERCEPTOR, useClass: LiveUpdatesInterceptor },
   ],
+  exports: [LiveUpdatesService],
 })
 export class LiveUpdatesModule {}

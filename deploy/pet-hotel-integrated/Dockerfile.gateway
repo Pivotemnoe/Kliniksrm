@@ -1,0 +1,14 @@
+ARG BASE_GATEWAY_IMAGE
+FROM ${BASE_GATEWAY_IMAGE}
+ARG RELEASE_REVISION
+LABEL org.opencontainers.image.revision=$RELEASE_REVISION
+ENV TEMICHEVVET_GIT_COMMIT=$RELEASE_REVISION
+COPY gateway/prisma /app/apps/owner-gateway/prisma
+COPY engines/schema-engine-linux-musl-openssl-3.0.x /app/node_modules/@prisma/engines/schema-engine-linux-musl-openssl-3.0.x
+RUN mkdir -p /tmp/pet-hotel-integrated-engine \
+ && cp /app/apps/owner-gateway/dist/generated/client/libquery_engine-linux-musl-openssl-3.0.x.so.node /tmp/pet-hotel-integrated-engine/query.so.node \
+ && chmod 755 /app/node_modules/@prisma/engines/schema-engine-linux-musl-openssl-3.0.x \
+ && PRISMA_SCHEMA_ENGINE_BINARY=/app/node_modules/@prisma/engines/schema-engine-linux-musl-openssl-3.0.x PRISMA_QUERY_ENGINE_LIBRARY=/tmp/pet-hotel-integrated-engine/query.so.node /app/node_modules/.bin/prisma generate --schema /app/apps/owner-gateway/prisma/schema.prisma \
+ && cp -R /app/apps/owner-gateway/src/generated/client/. /app/apps/owner-gateway/dist/generated/client/
+COPY gateway/dist/ /app/apps/owner-gateway/dist/
+COPY gateway/public/ /app/apps/owner-gateway/public/

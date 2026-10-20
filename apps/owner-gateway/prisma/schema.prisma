@@ -45,6 +45,7 @@ enum PublicClinicInquiryStatus {
 }
 
 model OwnerSnapshot {
+  petHotelOperations PetHotelPortalOperation[]
   groomingOperations GroomingPortalOperation[]
   ownerId           String                   @id
   displayName       String
@@ -479,4 +480,72 @@ model AvitoAssistantRun {
   createdAt DateTime @default(now())
   finishedAt DateTime?
   @@index([createdAt])
+}
+
+model PetHotelPortalOperation {
+  id String @id @default(uuid())
+  ownerId String
+  owner OwnerSnapshot @relation(fields: [ownerId], references: [ownerId], onDelete: Restrict)
+  clientKey String
+  kind String
+  fingerprint String
+  input Json
+  status String @default("PENDING")
+  result Json?
+  error String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  completedAt DateTime?
+  @@unique([ownerId, clientKey])
+  @@index([status, createdAt])
+}
+model PetHotelBookingDraft {
+  id String @id @default(uuid())
+  purpose String
+  tokenHash String @unique
+  ipHash String
+  payload Json
+  consumedByOwnerId String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  @@index([ipHash, createdAt])
+  @@index([expiresAt])
+}
+model PetHotelStorefrontSnapshot {
+  id String @id
+  payload Json
+  fingerprint String
+  receivedAt DateTime @default(now())
+}
+model PetHotelRegistration {
+  id String @id @default(uuid())
+  tokenHash String @unique
+  browserTokenHash String @unique
+  input Json
+  maxUserId String?
+  ownerId String?
+  status String @default("WAITING_MAX")
+  error String?
+  expiresAt DateTime
+  consumedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([status, createdAt])
+}
+
+model PetHotelDeliveryIntent {
+  id String @id
+  fingerprint String
+  createdAt DateTime @default(now())
+}
+
+model PetHotelStaffDelivery {
+  id String @id
+  fingerprint String
+  recipientId String
+  kind String
+  status String
+  providerMessageId String?
+  attemptedAt DateTime @default(now())
+  completedAt DateTime?
+  @@index([status, attemptedAt])
 }

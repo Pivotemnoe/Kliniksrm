@@ -16,7 +16,9 @@ test('independent pet hotel: persisted bookings, money, races, module boundaries
   await t.test('explicit 8+4 setup is repeatable and preserves edited names', async () => {
     assert.equal(f.rooms.filter(r => r.species === 'CAT').length, 8); assert.equal(f.rooms.filter(r => r.species === 'DOG').length, 4);
     await f.service.saveRoom({ ...cat2, name:'Кошачий бокс №2 · проверено' }, f.director, cat2.id);
+    await f.prisma.petHotelRoom.update({where:{id:cat1.id},data:{name:'Кошачий бокс №1'}});
     const key=randomUUID(); await f.service.setupRooms(key,f.director); await f.service.setupRooms(key,f.director);
+    assert.equal((await f.prisma.petHotelRoom.findUniqueOrThrow({where:{id:cat1.id}})).name,'Номер №1 для кошки');
     assert.equal(await f.prisma.petHotelRoom.count(),12); assert.equal((await f.prisma.petHotelRoom.findUniqueOrThrow({where:{id:cat2.id}})).name,'Кошачий бокс №2 · проверено');
   });
   await t.test('2 days plus 3 hours costs 3 days; idempotent save persists exact cents', async () => {

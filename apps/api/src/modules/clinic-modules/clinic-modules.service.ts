@@ -7,7 +7,7 @@ import { AVITO_MODULE_KEY, AVITO_CAPABILITIES } from '../avito/avito.settings';
 export const CLINIC_MODULE_CATALOG = [
   { key: AVITO_MODULE_KEY, title: 'Администратор Авито', description: 'Обращения и объявления Авито. Отдельные правила клиники, груминга и зоогостиницы.', licenseFeature: AVITO_MODULE_KEY, commercialType: 'ADD_ON', route: '/avito', capabilities: AVITO_CAPABILITIES },
   { key: 'GROOMING', title: 'Груминг', description: 'Графики грумеров, самостоятельная запись, кабинет владельца и уведомления MAX.', licenseFeature: 'GROOMING', commercialType: 'ADD_ON', route: '/grooming', capabilities: ['calendar', 'self-booking', 'client-portal', 'max-notifications'] },
-  { key: 'PET_HOTEL', title: 'Зоогостиница', description: 'Боксы для кошек и собак, календарь занятости, брони, заезд и выезд, расчёт проживания.', licenseFeature: 'PET_HOTEL', commercialType: 'ADD_ON', route: '/pet-hotel', capabilities: ['rooms', 'occupancy-calendar', 'reservations', 'check-in-out', 'stay-pricing'] },
+  { key: 'PET_HOTEL', title: 'Зоогостиница', description: 'Номера для кошек и собак, календарь занятости, брони, заезд и выезд, расчёт проживания.', licenseFeature: 'PET_HOTEL', commercialType: 'ADD_ON', route: '/pet-hotel', capabilities: ['rooms', 'occupancy-calendar', 'reservations', 'check-in-out', 'stay-pricing'] },
 ] as const;
 
 @Injectable()

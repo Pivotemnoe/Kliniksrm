@@ -1,5 +1,5 @@
 import { IsBoolean, IsIn, IsInt, IsISO8601, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
-export const notificationKinds = ['APPOINTMENT_CHANGE', 'APPOINTMENT_REMINDER', 'REVISIT', 'VACCINATION', 'GROOMING_CHANGE', 'GROOMING_REMINDER'] as const;
+export const notificationKinds = ['APPOINTMENT_CHANGE', 'APPOINTMENT_REMINDER', 'REVISIT', 'VACCINATION', 'GROOMING_CHANGE', 'GROOMING_REMINDER', 'PET_HOTEL_CHANGE', 'PET_HOTEL_REMINDER'] as const;
 export type OwnerNotificationKind = typeof notificationKinds[number];
 export class OwnerNotificationPreferenceDto {
   @IsBoolean() enabled!: boolean;

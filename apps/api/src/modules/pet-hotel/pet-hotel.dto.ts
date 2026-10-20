@@ -1,4 +1,4 @@
-import { IsBoolean, IsIn, IsInt, IsISO8601, IsNumber, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { ArrayMaxSize, ArrayUnique, IsArray, IsBoolean, IsIn, IsInt, IsISO8601, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
 
 export class PetHotelBookingDto {
   @IsString() @MinLength(8) @MaxLength(100) clientKey!: string;
@@ -25,6 +25,7 @@ export class PetHotelRoomDto {
   @IsIn(['CAT', 'DOG']) species!: string;
   @IsInt() @Min(0) @Max(10000) sortOrder!: number;
   @IsBoolean() isActive!: boolean;
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(1000000) dailyRate?: number | null;
   @IsOptional() @IsInt() @Min(1) version?: number;
 }
 export class PetHotelSetupDto {
@@ -38,5 +39,8 @@ export class PetHotelSettingsDto {
   @IsString() @MaxLength(5) checkInFrom!: string;
   @IsString() @MaxLength(5) checkInTo!: string;
   @IsString() @MaxLength(500) siteUrl!: string;
+  @IsOptional() @IsBoolean() selfBookingEnabled?: boolean;
+  @IsOptional() @IsArray() @ArrayMaxSize(20) @ArrayUnique() @IsString({ each: true }) @Matches(/^\d{1,24}$/, { each: true }) administratorMaxIds?: string[];
+  @IsOptional() @IsArray() @ArrayMaxSize(5) @ArrayUnique() @IsInt({ each: true }) @Min(1, { each: true }) @Max(168, { each: true }) reminderHours?: number[];
   @IsInt() @Min(1) version!: number;
 }
