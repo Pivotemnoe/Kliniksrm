@@ -1,5 +1,15 @@
 # Local pet-hotel section — 20.10.2026
 
+## Latest direct user brief — premium visual revision
+
+- Subsequent correction: reject the newly generated bichon/groomer scene as too AI-looking. Exclude it from both websites. The two hotel cat/dog staging images may remain. User supplied six actual Avito-photo screenshots and now asks for only modest quality restoration on those (same pets and premises, no invented additions). Preserve screenshot originals privately, remove webpage UI from web copies, retain provenance. Prefer these real guest photos in the hotel gallery and selection.
+- Further business facts verified from the human's replies in the coordinated CRM redesign chat on 20.10.2026: 8 numbered glass boxes for cats and 4 boxes for dogs. Incomplete additional days round upward (48 hours plus 3 hours = 3 billable days). The site estimator includes desired entry/exit times and this rule; hotel booking API integration is still a separate future step owned with the independent PET_HOTEL module.
+
+- Main redesign effort is the pet hotel. Preserve the accepted grooming design, motion and booking mechanics; replace only suitable process photography there and retain generated references when better suited.
+- The user explicitly authorizes stronger creative photo editing: remove clutter/empty bottles, improve staging/lighting, and add animals. Preserve every original. This supersedes the older no-added-animals restriction below. Label staged compositions as visualizations based on the premises, and keep a separate factual room gallery.
+- Research official pet-hotel websites and use purposeful photo exploration, a clear pet/date selection, and readable owner guides. Do not invent live vacancies, room tiers, amenities or care guarantees. Read-only use of the user's Avito ad is authorized, but browser site-safety blocked reading it; do not work around that block.
+- Keep all accepted runtime files on 4261–4264 unchanged, including dist/client. Show the new grooming frontend on a separate loopback port. All changes stay local; no production, data, backend or MAX webhook edits.
+
 - User authorizes preparing the pet-hotel website after completing the grooming booking integration. Use actual supplied photos, preserve originals, and keep optional references clearly distinct from real salon work.
 - Exact operational facts supplied by the user: cats and dogs; dogs up to 10 kg; check-in 09:00–18:00; minimum two days; accommodation 700 RUB/day; dog walking 150 RUB per walk. Food and bowls must be brought; toys, beds, toilet and litter may be brought as needed. Do not invent checkout hours, room capacity, vaccination rules, service guarantees or animal welfare claims.
 - Use the clinic's address and phone. Current accepted clinic source content.js supplies Armavir, Kasparova 27/2, +7 928 421-45-42. Preserve provenance and clarify contradictions rather than changing it to an inferred branch.

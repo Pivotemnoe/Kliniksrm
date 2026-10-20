@@ -7,6 +7,7 @@ import { SiteBooking } from "./SiteBooking";
 
 const STORE = "temichevvet-grooming-wishes-v1";
 const DEVICE_QA = import.meta.env.VITE_GROOMING_QA_TRANSPORT === "device";
+const VISUAL_PREVIEW = import.meta.env.VITE_GROOMING_VISUAL_PREVIEW === "1";
 const readSaved = () => {
  try { const x = JSON.parse(localStorage.getItem(STORE) || "{}"); return {ids:Array.isArray(x.ids) ? x.ids.filter(id => typeof id === "string" && groomingLook(id)).slice(0,GROOMING_LOOK_COUNT) : [], notes:typeof x.notes === "string" ? x.notes.slice(0,1500) : ""}; }
  catch { return {ids:[],notes:""}; }
@@ -19,7 +20,7 @@ const initialStyle=initialBreed.styles.find(style=>style.id===initialParams.get(
 const chapters = [
  {name:"Знакомство",image:"process-hero.webp",tag:"Характер и привычки",text:"Расскажите, что нравится вашему питомцу."},
  {name:"Уход",image:"process-care.jpg",tag:"Уход за шерстью",text:"Обсудим состав ухода и ваши пожелания."},
- {name:"Детали стрижки",image:"process-meet.jpg",tag:"Форма и силуэт",text:"Выберите детали образа для обсуждения."},
+ {name:"Наш салон",image:"salon-real-4808.jpg",tag:"Знакомство с местом",text:"Фотография нашего салона при клинике."},
 ];
 function LookPhoto({breed,frame=0,className="",label}) {
  return <div className={"look-photo "+className} role="img" aria-label={label || breed.name}><img loading="lazy" src={breed.image} alt="" style={{transform:"translateX(-"+(frame*100/3)+"%)"}} /></div>;
@@ -43,7 +44,7 @@ export function App() {
  const breed=BREEDS.find(v=>v.id===breedId)||BREEDS[0];
  useGroomingMotion(motion,setChapter);
  useEffect(()=>{if(initialParams.has("breed")&&location.hash==="#looks")requestAnimationFrame(()=>document.getElementById("looks")?.scrollIntoView({behavior:"instant"}));},[]);
- useEffect(()=>{let live=true;const load=()=>fetch("/v1/public/grooming/catalog",{cache:"no-store"}).then(r=>{if(!r.ok)throw Error();return r.json();}).then(x=>{if(live)setConfig(x);}).catch(()=>{});void load();const timer=setInterval(()=>{if(document.visibilityState==="visible")void load();},30000);return()=>{live=false;clearInterval(timer);};},[]);
+ useEffect(()=>{if(VISUAL_PREVIEW){let live=true;fetch("/visual-preview-catalog.json").then(r=>r.json()).then(x=>{if(live)setConfig(x);}).catch(()=>{});return()=>{live=false;};}let live=true;const load=()=>fetch("/v1/public/grooming/catalog",{cache:"no-store"}).then(r=>{if(!r.ok)throw Error();return r.json();}).then(x=>{if(live)setConfig(x);}).catch(()=>{});void load();const timer=setInterval(()=>{if(document.visibilityState==="visible")void load();},30000);return()=>{live=false;clearInterval(timer);};},[]);
  useEffect(()=>{try{localStorage.setItem(STORE,JSON.stringify(saved));setStorageError("");}catch{setStorageError("Браузер не разрешил сохранение. Образы доступны до закрытия страницы.");}},[saved]);
  useEffect(()=>{if(!toast)return;const t=setTimeout(()=>setToast(""),2800);return()=>clearTimeout(t);},[toast]);
  const chooseBreed=id=>{const next=BREEDS.find(v=>v.id===id);if(!next)return;setSpecies(next.species);setBreedId(id);setA("shape");setB("everyday");setPosition(50);};
@@ -63,13 +64,14 @@ export function App() {
    {config.bookingPortalUrl&&<a className="text-link cabinet-link" href={config.bookingPortalUrl}>Мой кабинет</a>}<button className="button header-book" onClick={openBooking}>Записаться <ArrowRight size={22}/></button>
    <button className="mobile-menu icon-button" aria-label="Открыть меню" aria-expanded={menu} onClick={()=>setMenu(!menu)}>{menu?<X size={24}/>:<List size={24}/>}</button>
   </header>
+  {VISUAL_PREVIEW&&<aside className="visual-preview-note">Просмотр фотографий · <a href="http://127.0.0.1:4264/">Открыть проверенную версию с записью ↗</a><a href="http://127.0.0.1:4274/pet-hotel/">Зоогостиница ↗</a></aside>}
   <main>
    <section className="hero" aria-labelledby="hero-title">
     <div className="hero-photography" aria-hidden="true">{chapters.map((c,i)=><img key={c.image} className={chapter===i?"active":""} src={"/assets/v1/"+c.image} alt="" fetchPriority={i===0?"high":"auto"}/>)}</div>
     <div className="hero-shade" aria-hidden="true"/>
     <div className="hero-copy"><p className="eyebrow light">TEMICHEVVET · СОБАКИ И КОШКИ</p><h1 id="hero-title">БЛИЖЕ<br/>К ДЕТАЛЯМ.</h1><p className="hero-description">Посмотрите, как устроен уход,<br className="desktop-break"/> и обсудите стрижку с грумером.</p><div className="hero-actions"><button className="button" onClick={()=>go("services")}>Выбрать уход <ArrowRight size={23}/></button><a className="text-link white" href="#catalogue">Каталог образов <ArrowRight size={24}/></a></div></div>
     <div className="hero-detail" key={chapter}><span>{chapters[chapter].tag}</span><p>{chapters[chapter].text}</p></div>
-    <div className="hero-bottom"><div className="chapters" aria-label="Этапы ухода">{chapters.map((c,i)=><button key={c.name} className={chapter===i?"selected":""} aria-pressed={chapter===i} onClick={()=>setChapter(i)}><span>0{i+1} / {c.name}</span><i/></button>)}</div><a href="#intro" className="hero-down" aria-label="Далее"><ArrowDown size={38} weight="thin"/></a><small>Процесс груминга · фото для концепции</small></div>
+    <div className="hero-bottom"><div className="chapters" aria-label="Этапы ухода">{chapters.map((c,i)=><button key={c.name} className={chapter===i?"selected":""} aria-pressed={chapter===i} onClick={()=>setChapter(i)}><span>0{i+1} / {c.name}</span><i/></button>)}</div><a href="#intro" className="hero-down" aria-label="Далее"><ArrowDown size={38} weight="thin"/></a><small>{chapter===2?"Наш салон · обработка света и цвета с AI":"Процесс груминга · фото для концепции"}</small></div>
    </section>
    <section className="intro section" id="intro">
     <div className="intro-copy reveal"><h2>ПОНЯТЬ ОБРАЗ.<br/>ОБСУДИТЬ ДЕТАЛИ.</h2><p>Для собак и кошек.<br/>Выберите образ и добавьте<br className="desktop-break"/> его к записи на груминг.</p><a className="text-link" href="#catalogue">Открыть каталог <ArrowRight size={23}/></a></div>
@@ -102,11 +104,12 @@ export function App() {
    <PriceList breed={breed} storefront={config.storefront} bookingPortalUrl={config.bookingPortalUrl} onShowLooks={id=>{chooseBreed(id);go("looks");}} onBook={context=>{const target=BREEDS.find(b=>b.id===context.breedId)||{id:context.breedId,name:context.breedName,species:context.species,size:"",defaultServiceId:"haircut"};if(BREEDS.some(b=>b.id===target.id))chooseBreed(target.id);setBookingContext({...context,breed:target});setOverlay("booking");}}/>
    <section className="closing section reveal"><p className="eyebrow">НАЧНЁМ СО ЗНАКОМСТВА</p><h2>У вашего питомца<br/>свой характер.<br/><span>Расскажите о нём.</span></h2><button className="button" onClick={openBooking}>{config.bookingPortalUrl?"Выбрать время":"Оставить заявку"} <ArrowRight size={23}/></button></section>
   </main>
-  <footer className="footer"><a href="#" className="footer-brand">TemichevVET · груминг</a><p>Фото: Goochie Poochie Grooming / Pexels; главный кадр адаптирован с AI.<br/>Каталог: иллюстративные референсы для обсуждения с грумером.</p><button className="motion-button" onClick={()=>setMotion(!motion)} aria-pressed={motion}>{motion?<Pause size={17}/>:<Play size={17}/>}Движение {motion?"включено":"выключено"}</button>{config.mode==="qa"&&<p className="qa-note">{DEVICE_QA ? "Проверка на телефоне: вымышленные данные и тестовые сообщения MAX." : "Локальная проверка: заявки сохраняются в тестовой базе. Сообщения MAX перехватываются тестовым получателем."}</p>}</footer>
+  <footer className="footer"><a href="#" className="footer-brand">TemichevVET · груминг</a><p>Фото: Goochie Poochie Grooming / Pexels; главный кадр адаптирован с AI.<br/>Глава «Наш салон»: собственная фотография, обработка света и цвета с AI.<br/>Каталог: иллюстративные референсы для обсуждения с грумером.</p><button className="motion-button" onClick={()=>setMotion(!motion)} aria-pressed={motion}>{motion?<Pause size={17}/>:<Play size={17}/>}Движение {motion?"включено":"выключено"}</button>{config.mode==="qa"&&<p className="qa-note">{DEVICE_QA ? "Проверка на телефоне: вымышленные данные и тестовые сообщения MAX." : "Локальная проверка: заявки сохраняются в тестовой базе. Сообщения MAX перехватываются тестовым получателем."}</p>}</footer>
   <button className="help-button" onClick={()=>setOverlay("help")} aria-label="Помощь с записью"><ChatCircleDots size={26}/><span>Помочь с выбором?</span></button>
   {toast&&<div className="toast" role="status"><Check size={20}/>{toast}</div>}
   {overlay==="help"&&<Dialog title="Поможем с выбором" onClose={()=>setOverlay(null)}><p>Выберите породу, сохраните понравившиеся образы и расскажите о привычках питомца. Помощник соберёт эти пожелания в заявку.</p><div className="help-options"><button onClick={()=>{setOverlay(null);go("catalogue");}}>Хочу выбрать образ <ArrowRight size={21}/></button><button onClick={()=>setOverlay("booking:first")}>Это первый груминг <ArrowRight size={21}/></button><button onClick={openBooking}>Нужна помощь сотрудника <ArrowRight size={21}/></button></div><p className="muted">Стоимость, длительность и время визита согласует администратор.</p></Dialog>}
-  {overlay?.startsWith("booking")&&<Booking config={config} breed={bookingContext?.breed||breed} priceContext={bookingContext} saved={saved} defaultLook={breed.id+":"+a} serviceId={overlay.split(":")[1]||breed.defaultServiceId} onClose={()=>setOverlay(null)}/>}
+  {VISUAL_PREVIEW&&overlay?.startsWith("booking")&&<Dialog title="Перейти к записи" onClose={()=>setOverlay(null)}><p>Сейчас открыт просмотр новых фотографий. Выбор специалиста и времени доступен в проверенной версии сайта.</p><a className="button" href={"http://127.0.0.1:4264/?breed="+encodeURIComponent(bookingContext?.breed?.id||breed.id)+"&style="+encodeURIComponent(a)+"#services"}>Открыть запись <ArrowRight size={22}/></a></Dialog>}
+  {!VISUAL_PREVIEW&&overlay?.startsWith("booking")&&<Booking config={config} breed={bookingContext?.breed||breed} priceContext={bookingContext} saved={saved} defaultLook={breed.id+":"+a} serviceId={overlay.split(":")[1]||breed.defaultServiceId} onClose={()=>setOverlay(null)}/>}
  </>
 }
 

@@ -1,3 +1,8 @@
+## Current visual revision — 2026-10-20
+
+- Keep this photographic design, motion, catalogue, pricing and booking code. The user asks only to replace suitable process photographs with stronger edited own salon pictures, retaining generated references where useful. Main redesign effort belongs to the hotel prototype.
+- Strong staged editing, removing clutter and adding animals is explicitly authorized. Preserve originals, disclose compositions as visualizations, and do not call them real salon results. Preview on a separate loopback port; never change the accepted 4261–4264 runtime, backend, databases or production.
+
 ## Current release boundary — 2026-10-20
 
 - Verified direct user instruction in the coordinated CRM redesign chat: "Сначала всё локально, на боевую пока не выкладывай". This supersedes deployment authorization for the new booking integration. Keep production data, configuration, images and public r2 website unchanged. Prepare and physically test the new version in isolated local databases. Real MAX test messages are allowed only to the previously verified account of the user. The redesign chat currently owns the Android device; coordinate before using it.

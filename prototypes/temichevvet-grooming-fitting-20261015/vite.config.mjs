@@ -1,5 +1,8 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { readFileSync } from "node:fs";
+
+const visualPreview = process.env.VITE_GROOMING_VISUAL_PREVIEW === "1";
 
 export default defineConfig({
   build: {
@@ -18,5 +21,10 @@ export default defineConfig({
       clientFiles: ["./src/main.jsx"],
     },
   },
-  plugins: [react()],
+  plugins: [react(), ...(visualPreview ? [{
+    name: "local-visual-preview-catalogue",
+    generateBundle() {
+      this.emitFile({type:"asset",fileName:"visual-preview-catalog.json",source:readFileSync(new URL("./fixtures/visual-preview-catalog.json",import.meta.url),"utf8")});
+    },
+  }] : [])],
 });

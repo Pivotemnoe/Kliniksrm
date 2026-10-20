@@ -1,0 +1,1541 @@
+{
+  "mode": "visual-preview",
+  "enabled": false,
+  "bookingPortalUrl": "http://127.0.0.1:4263/portal/grooming",
+  "storefront": {
+    "connected": true,
+    "testMode": true,
+    "selfBookingEnabled": true,
+    "fresh": true,
+    "asOf": "2026-10-20T12:48:49.589Z",
+    "version": "824999327e556b66b91a7202cf8591c921f3366b194d7aa87c544f86926d448d",
+    "services": [
+      {
+        "catalogKey": "dog:silky:hygiene",
+        "priceType": "FIXED",
+        "price": "1300",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:silky:full",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:silky:dry",
+        "priceType": "FIXED",
+        "price": "1400",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:akita:dry",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:akita:hygiene",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:akita:full",
+        "priceType": "RANGE",
+        "price": "4800",
+        "maximumPrice": "6300",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:malamute:dry",
+        "priceType": "FIXED",
+        "price": "3300",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:malamute:hygiene",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:malamute:full",
+        "priceType": "RANGE",
+        "price": "3800",
+        "maximumPrice": "6300",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:american-cocker:hygiene",
+        "priceType": "FIXED",
+        "price": "2100",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:american-cocker:full",
+        "priceType": "RANGE",
+        "price": "2300",
+        "maximumPrice": "3800",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:american-cocker:dry",
+        "priceType": "FIXED",
+        "price": "2000",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:cocker:hygiene",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:cocker:full",
+        "priceType": "RANGE",
+        "price": "2600",
+        "maximumPrice": "3100",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:cocker:dry",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:english-setter:hygiene",
+        "priceType": "FIXED",
+        "price": "1900",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:english-setter:full",
+        "priceType": "FIXED",
+        "price": "2700",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:english-setter:dry",
+        "priceType": "FIXED",
+        "price": "2100",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:english-springer:hygiene",
+        "priceType": "FIXED",
+        "price": "1900",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:english-springer:full",
+        "priceType": "FIXED",
+        "price": "2300",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:english-springer:dry",
+        "priceType": "FIXED",
+        "price": "2000",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:afghan:hygiene",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:afghan:full",
+        "priceType": "RANGE",
+        "price": "4300",
+        "maximumPrice": "7300",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:afghan:dry",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:bedlington:hygiene",
+        "priceType": "FIXED",
+        "price": "2100",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:bedlington:full",
+        "priceType": "FIXED",
+        "price": "2900",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:bedlington:dry",
+        "priceType": "FIXED",
+        "price": "2300",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:bernese:dry",
+        "priceType": "FIXED",
+        "price": "3100",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:bernese:hygiene",
+        "priceType": "FIXED",
+        "price": "3300",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:bernese:full",
+        "priceType": "RANGE",
+        "price": "3700",
+        "maximumPrice": "5300",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:bichon:hygiene",
+        "priceType": "FIXED",
+        "price": "1600",
+        "maximumPrice": null,
+        "bookable": true
+      },
+      {
+        "catalogKey": "dog:bichon:full",
+        "priceType": "RANGE",
+        "price": "2300",
+        "maximumPrice": "2800",
+        "bookable": true
+      },
+      {
+        "catalogKey": "dog:bichon:dry",
+        "priceType": "FIXED",
+        "price": "2000",
+        "maximumPrice": null,
+        "bookable": true
+      },
+      {
+        "catalogKey": "extra:glitter",
+        "priceType": "FIXED",
+        "price": "500",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:bobtail:hygiene",
+        "priceType": "FIXED",
+        "price": "2800",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:bobtail:full",
+        "priceType": "RANGE",
+        "price": "6300",
+        "maximumPrice": "7300",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:bobtail:dry",
+        "priceType": "FIXED",
+        "price": "3300",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:border-collie:dry",
+        "priceType": "FIXED",
+        "price": "2100",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:border-collie:hygiene",
+        "priceType": "FIXED",
+        "price": "1900",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:border-collie:full",
+        "priceType": "RANGE",
+        "price": "4300",
+        "maximumPrice": "5300",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:griffon:hygiene",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:griffon:full",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:griffon:dry",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:welsh-springer:hygiene",
+        "priceType": "FIXED",
+        "price": "1600",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:welsh-springer:full",
+        "priceType": "RANGE",
+        "price": "3300",
+        "maximumPrice": "4800",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:welsh-springer:dry",
+        "priceType": "FIXED",
+        "price": "1800",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:westie:hygiene",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:westie:full",
+        "priceType": "RANGE",
+        "price": "2500",
+        "maximumPrice": "3300",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:westie:dry",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "extra:poodle-feet",
+        "priceType": "FIXED",
+        "price": "600",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "extra:undercoat",
+        "priceType": "FIXED",
+        "price": "800",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "extra:teeth",
+        "priceType": "FIXED",
+        "price": "600",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:collie:dry",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:collie:hygiene",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:collie:full",
+        "priceType": "RANGE",
+        "price": "2800",
+        "maximumPrice": "3300",
+        "bookable": false
+      },
+      {
+        "catalogKey": "extra:behaviour",
+        "priceType": "RANGE",
+        "price": "800",
+        "maximumPrice": "1800",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:golden:dry",
+        "priceType": "FIXED",
+        "price": "2200",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:golden:hygiene",
+        "priceType": "FIXED",
+        "price": "2100",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:golden:full",
+        "priceType": "RANGE",
+        "price": "4300",
+        "maximumPrice": "5800",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:irish-setter:hygiene",
+        "priceType": "FIXED",
+        "price": "2300",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:irish-setter:full",
+        "priceType": "RANGE",
+        "price": "2700",
+        "maximumPrice": "3300",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:irish-setter:dry",
+        "priceType": "FIXED",
+        "price": "2100",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:york:hygiene",
+        "priceType": "FIXED",
+        "price": "2100",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:york:full",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:york:dry",
+        "priceType": "FIXED",
+        "price": "1800",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:cavalier:hygiene",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:cavalier:full",
+        "priceType": "RANGE",
+        "price": "2500",
+        "maximumPrice": "2800",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:cavalier:dry",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:kerry-blue:hygiene",
+        "priceType": "FIXED",
+        "price": "2100",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:kerry-blue:full",
+        "priceType": "FIXED",
+        "price": "2900",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:kerry-blue:dry",
+        "priceType": "FIXED",
+        "price": "2300",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:chinese-crested:hygiene",
+        "priceType": "RANGE",
+        "price": "1400",
+        "maximumPrice": "1800",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:chinese-crested:full",
+        "priceType": "RANGE",
+        "price": "2100",
+        "maximumPrice": "2500",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:chinese-crested:dry",
+        "priceType": "RANGE",
+        "price": "1600",
+        "maximumPrice": "1800",
+        "bookable": false
+      },
+      {
+        "catalogKey": "cat:extra:assistant",
+        "priceType": "FIXED",
+        "price": "800",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "cat:clean:dry",
+        "priceType": "RANGE",
+        "price": "2000",
+        "maximumPrice": "2800",
+        "bookable": false
+      },
+      {
+        "catalogKey": "cat:matted:dry",
+        "priceType": "RANGE",
+        "price": "2300",
+        "maximumPrice": "2600",
+        "bookable": false
+      },
+      {
+        "catalogKey": "cat:clean:wash",
+        "priceType": "RANGE",
+        "price": "2500",
+        "maximumPrice": "3300",
+        "bookable": false
+      },
+      {
+        "catalogKey": "cat:matted:wash",
+        "priceType": "RANGE",
+        "price": "2100",
+        "maximumPrice": "2800",
+        "bookable": false
+      },
+      {
+        "catalogKey": "cat:extra:deshed",
+        "priceType": "RANGE",
+        "price": "1300",
+        "maximumPrice": "2300",
+        "bookable": false
+      },
+      {
+        "catalogKey": "cat:clean:deshedWash",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "cat:matted:deshedWash",
+        "priceType": "RANGE",
+        "price": "2000",
+        "maximumPrice": "2800",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:kurzhaar:dry",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:kurzhaar:hygiene",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:kurzhaar:full",
+        "priceType": "FIXED",
+        "price": "3300",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:labrador:dry",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:labrador:hygiene",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:labrador:full",
+        "priceType": "RANGE",
+        "price": "3300",
+        "maximumPrice": "4800",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:lhasa:hygiene",
+        "priceType": "FIXED",
+        "price": "1300",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:lhasa:full",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:lhasa:dry",
+        "priceType": "FIXED",
+        "price": "1400",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:maltese:hygiene",
+        "priceType": "FIXED",
+        "price": "1500",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:maltese:full",
+        "priceType": "RANGE",
+        "price": "2100",
+        "maximumPrice": "2500",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:maltese:dry",
+        "priceType": "FIXED",
+        "price": "1800",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:maltipoo:hygiene",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:maltipoo:full",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:maltipoo:dry",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:mixed-large:hygiene",
+        "priceType": "FIXED",
+        "price": "1800",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:mixed-large:full",
+        "priceType": "RANGE",
+        "price": "3300",
+        "maximumPrice": "3800",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:mixed-large:dry",
+        "priceType": "FIXED",
+        "price": "2300",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:mixed-medium:hygiene",
+        "priceType": "FIXED",
+        "price": "1700",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:mixed-medium:full",
+        "priceType": "RANGE",
+        "price": "1900",
+        "maximumPrice": "2100",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:mixed-medium:dry",
+        "priceType": "FIXED",
+        "price": "2100",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:mixed-xl:hygiene",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:mixed-xl:full",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:mixed-xl:dry",
+        "priceType": "RANGE",
+        "price": "2800",
+        "maximumPrice": "3800",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:mixed-small:hygiene",
+        "priceType": "FIXED",
+        "price": "1600",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:mixed-small:full",
+        "priceType": "FIXED",
+        "price": "2000",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:mixed-small:dry",
+        "priceType": "FIXED",
+        "price": "2000",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:mittel-schnauzer:hygiene",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:mittel-schnauzer:full",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:mittel-schnauzer:dry",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:pug:dry",
+        "priceType": "RANGE",
+        "price": "1500",
+        "maximumPrice": "1800",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:pug:hygiene",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:pug:full",
+        "priceType": "FIXED",
+        "price": "2000",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "extra:parasite-wash",
+        "priceType": "RANGE",
+        "price": "600",
+        "maximumPrice": "800",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:german-shepherd:dry",
+        "priceType": "FIXED",
+        "price": "2300",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:german-shepherd:hygiene",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:german-shepherd:full",
+        "priceType": "RANGE",
+        "price": "3800",
+        "maximumPrice": "4800",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:newfoundland:dry",
+        "priceType": "FIXED",
+        "price": "3500",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:newfoundland:hygiene",
+        "priceType": "FIXED",
+        "price": "4300",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:newfoundland:full",
+        "priceType": "RANGE",
+        "price": "4100",
+        "maximumPrice": "6300",
+        "bookable": false
+      },
+      {
+        "catalogKey": "extra:tail",
+        "priceType": "FIXED",
+        "price": "500",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:papillon:hygiene",
+        "priceType": "FIXED",
+        "price": "1600",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:papillon:full",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:papillon:dry",
+        "priceType": "FIXED",
+        "price": "1800",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:pekingese:hygiene",
+        "priceType": "FIXED",
+        "price": "1600",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:pekingese:full",
+        "priceType": "RANGE",
+        "price": "2100",
+        "maximumPrice": "2800",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:pekingese:dry",
+        "priceType": "FIXED",
+        "price": "1800",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "extra:show",
+        "priceType": "PERCENT",
+        "price": "30",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "extra:claws",
+        "priceType": "FIXED",
+        "price": "550",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:poodle-toy:hygiene",
+        "priceType": "FIXED",
+        "price": "1500",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:poodle-toy:full",
+        "priceType": "RANGE",
+        "price": "1900",
+        "maximumPrice": "2100",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:poodle-toy:dry",
+        "priceType": "FIXED",
+        "price": "1600",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:poodle-royal:hygiene",
+        "priceType": "FIXED",
+        "price": "1900",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:poodle-royal:full",
+        "priceType": "RANGE",
+        "price": "2800",
+        "maximumPrice": "3800",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:poodle-royal:dry",
+        "priceType": "FIXED",
+        "price": "2100",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:poodle-small:hygiene",
+        "priceType": "FIXED",
+        "price": "1600",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:poodle-small:full",
+        "priceType": "RANGE",
+        "price": "2000",
+        "maximumPrice": "2300",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:poodle-small:dry",
+        "priceType": "FIXED",
+        "price": "1700",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:poodle-medium:hygiene",
+        "priceType": "FIXED",
+        "price": "1700",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:poodle-medium:full",
+        "priceType": "RANGE",
+        "price": "2200",
+        "maximumPrice": "2800",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:poodle-medium:dry",
+        "priceType": "FIXED",
+        "price": "1900",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:giant-schnauzer:hygiene",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:giant-schnauzer:full",
+        "priceType": "RANGE",
+        "price": "4800",
+        "maximumPrice": "6300",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:giant-schnauzer:dry",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:borzoi:hygiene",
+        "priceType": "FIXED",
+        "price": "2100",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:borzoi:full",
+        "priceType": "RANGE",
+        "price": "4300",
+        "maximumPrice": "5300",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:borzoi:dry",
+        "priceType": "FIXED",
+        "price": "2300",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:russian-spaniel:hygiene",
+        "priceType": "FIXED",
+        "price": "1800",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:russian-spaniel:full",
+        "priceType": "RANGE",
+        "price": "3300",
+        "maximumPrice": "3800",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:russian-spaniel:dry",
+        "priceType": "FIXED",
+        "price": "2000",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:black-terrier:hygiene",
+        "priceType": "RANGE",
+        "price": "2800",
+        "maximumPrice": "3800",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:black-terrier:full",
+        "priceType": "RANGE",
+        "price": "3800",
+        "maximumPrice": "8800",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:black-terrier:dry",
+        "priceType": "FIXED",
+        "price": "3300",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:samoyed:dry",
+        "priceType": "FIXED",
+        "price": "3100",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:samoyed:hygiene",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:samoyed:full",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:saint:dry",
+        "priceType": "FIXED",
+        "price": "3900",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:saint:hygiene",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:saint:full",
+        "priceType": "UP_TO",
+        "price": "0",
+        "maximumPrice": "5300",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:husky:dry",
+        "priceType": "RANGE",
+        "price": "2800",
+        "maximumPrice": "4300",
+        "bookable": true
+      },
+      {
+        "catalogKey": "dog:husky:hygiene",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:husky:full",
+        "priceType": "UP_TO",
+        "price": "0",
+        "maximumPrice": "6300",
+        "bookable": true
+      },
+      {
+        "catalogKey": "dog:skye:hygiene",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:skye:full",
+        "priceType": "RANGE",
+        "price": "2100",
+        "maximumPrice": "2800",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:skye:dry",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:scottie:hygiene",
+        "priceType": "FIXED",
+        "price": "1500",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:scottie:full",
+        "priceType": "RANGE",
+        "price": "2200",
+        "maximumPrice": "2800",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:scottie:dry",
+        "priceType": "FIXED",
+        "price": "1600",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "extra:ear-stones",
+        "priceType": "RANGE",
+        "price": "450",
+        "maximumPrice": "600",
+        "bookable": false
+      },
+      {
+        "catalogKey": "extra:muzzle",
+        "priceType": "FIXED",
+        "price": "800",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "extra:groin",
+        "priceType": "FIXED",
+        "price": "400",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "extra:ear-cut",
+        "priceType": "FIXED",
+        "price": "400",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:dachshund-long:hygiene",
+        "priceType": "FIXED",
+        "price": "1400",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:dachshund-long:full",
+        "priceType": "RANGE",
+        "price": "2300",
+        "maximumPrice": "2800",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:dachshund-long:dry",
+        "priceType": "FIXED",
+        "price": "1500",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:tibetan-mastiff:dry",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:tibetan-mastiff:hygiene",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:tibetan-mastiff:full",
+        "priceType": "RANGE",
+        "price": "4300",
+        "maximumPrice": "6300",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:toy-terrier:dry",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:toy-terrier:hygiene",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:toy-terrier:full",
+        "priceType": "FIXED",
+        "price": "1700",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "extra:mats",
+        "priceType": "FIXED",
+        "price": "1300",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:fox-terrier:hygiene",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:fox-terrier:full",
+        "priceType": "RANGE",
+        "price": "2800",
+        "maximumPrice": "4300",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:fox-terrier:dry",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:french-bulldog:dry",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:french-bulldog:hygiene",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:french-bulldog:full",
+        "priceType": "RANGE",
+        "price": "2200",
+        "maximumPrice": "2800",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:mini-schnauzer:hygiene",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:mini-schnauzer:full",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:mini-schnauzer:dry",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:chow:dry",
+        "priceType": "FIXED",
+        "price": "3800",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:chow:hygiene",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:chow:full",
+        "priceType": "FIXED",
+        "price": "6300",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "extra:ear-clean",
+        "priceType": "FIXED",
+        "price": "400",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:chihuahua:hygiene",
+        "priceType": "FIXED",
+        "price": "1500",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:chihuahua:full",
+        "priceType": "RANGE",
+        "price": "2300",
+        "maximumPrice": "2800",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:chihuahua:dry",
+        "priceType": "FIXED",
+        "price": "1400",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:sheltie:dry",
+        "priceType": "FIXED",
+        "price": "2800",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:sheltie:hygiene",
+        "priceType": "FIXED",
+        "price": "2300",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:sheltie:full",
+        "priceType": "RANGE",
+        "price": "2700",
+        "maximumPrice": "3600",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:shihtzu:hygiene",
+        "priceType": "FIXED",
+        "price": "1600",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:shihtzu:full",
+        "priceType": "RANGE",
+        "price": "2500",
+        "maximumPrice": "2800",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:shihtzu:dry",
+        "priceType": "FIXED",
+        "price": "1800",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:german-spitz:dry",
+        "priceType": "FIXED",
+        "price": "1800",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:german-spitz:hygiene",
+        "priceType": "FIXED",
+        "price": "1600",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:german-spitz:full",
+        "priceType": "FIXED",
+        "price": "2300",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:pomeranian:dry",
+        "priceType": "FIXED",
+        "price": "1800",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:pomeranian:hygiene",
+        "priceType": "FIXED",
+        "price": "1600",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:pomeranian:full",
+        "priceType": "RANGE",
+        "price": "2000",
+        "maximumPrice": "2200",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:airedale:hygiene",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:airedale:full",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:airedale:dry",
+        "priceType": "QUOTE",
+        "price": "0",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:japanese-chin:hygiene",
+        "priceType": "FIXED",
+        "price": "1400",
+        "maximumPrice": null,
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:japanese-chin:full",
+        "priceType": "RANGE",
+        "price": "2100",
+        "maximumPrice": "2500",
+        "bookable": false
+      },
+      {
+        "catalogKey": "dog:japanese-chin:dry",
+        "priceType": "FIXED",
+        "price": "1500",
+        "maximumPrice": null,
+        "bookable": false
+      }
+    ]
+  }
+}

@@ -44,6 +44,94 @@
       "originalFilename": "IMG_4817.HEIC",
       "sourceSha256": "cbd655bc2d33b0eb036872412cf2baad499051bd0657ae29d7e2f5a9f113924e",
       "webAssetSha256": "bebf9e4b40a2827a2d0515456abe1c26d9cc37970717e094cfc11185bd7a78b9"
+    },
+    {
+      "asset": "hotel-cat-premium.jpg",
+      "source": "IMG_4817.HEIC",
+      "generatedPng": "exec-8c0bdd96-79f2-4835-86fd-dd0795fa2f07.png",
+      "classification": "staged visualization based on real premises; animal and portable bedding added",
+      "promptFile": "premium-image-prompts.json",
+      "webAssetSha256": "efd749b3d510aeeca309883ea8f99091f13d6bbb8b8dfabde252854ff4984c56",
+      "review": "Owner explicitly permits retaining the two hotel scenes. Caption distinguishes visualization from actual guest photographs."
+    },
+    {
+      "asset": "hotel-dog-premium.jpg",
+      "source": "IMG_4817.HEIC",
+      "generatedPng": "exec-1b3a5472-bd23-4015-b949-8bc9b6f1c206.png",
+      "classification": "staged visualization based on real premises; animal and portable bedding added",
+      "promptFile": "premium-image-prompts.json",
+      "webAssetSha256": "ed505f0f0187e514061a52a56edbac49e8b4dd14432779b6d290184d99ef7202",
+      "review": "Owner explicitly permits retaining the two hotel scenes. Caption distinguishes visualization from actual guest photographs."
+    },
+    {
+      "asset": "guest-1.jpg",
+      "sourceScreenshot": "Снимок экрана — 2026-10-20 в 15.28.24.png",
+      "sourceSha256": "f99d95992ab5352d7555b272e8f01272189d178285dc024eb38743471e6a1c40",
+      "generatedPng": "exec-83a3854a-9147-4f17-8023-8f90a7f73dcc.png",
+      "classification": "restoration of owner-supplied real guest photograph; source pose and premises retained; AI quality processing disclosed",
+      "promptFile": "real-photo-prompts.json",
+      "webAssetSha256": "8c98ad23e94cb326b43e2a067990d9d9244d79d1494049d0ee6e496f0ce9534b",
+      "review": "Compared with supplied screenshot: same animals, main pose, room layout and objects. Screenshot UI removed; moderate color, exposure and sharpness restoration. Not a pixel-preserving documentary original."
+    },
+    {
+      "asset": "guest-2.jpg",
+      "sourceScreenshot": "Снимок экрана — 2026-10-20 в 15.28.38.png",
+      "sourceSha256": "2e3e682d65fd9afb52643adee19c74eb0ef5a73b599258f46f86960ed1b03e71",
+      "generatedPng": "exec-d6a92c49-e3c3-4d07-a8c0-41e17ba50ec4.png",
+      "classification": "restoration of owner-supplied real guest photograph; source pose and premises retained; AI quality processing disclosed",
+      "promptFile": "real-photo-prompts.json",
+      "webAssetSha256": "fd5ef85434799e850f2a5f8b9fdf3a499d949bb5169ef75ee065678b05c55134",
+      "review": "Compared with supplied screenshot: same animals, main pose, room layout and objects. Screenshot UI removed; moderate color, exposure and sharpness restoration. Not a pixel-preserving documentary original."
+    },
+    {
+      "asset": "guest-3.jpg",
+      "sourceScreenshot": "Снимок экрана — 2026-10-20 в 15.28.46.png",
+      "sourceSha256": "392d16c63ee611f22e95743f97b6e20390f7385ac3a5ae346793ddf1a605ba5b",
+      "generatedPng": "exec-379fef38-3620-43f8-9585-c803a01e3af2.png",
+      "classification": "restoration of owner-supplied real guest photograph; source pose and premises retained; AI quality processing disclosed",
+      "promptFile": "real-photo-prompts.json",
+      "webAssetSha256": "846db0c5118d6d572ccaaf5597e6b768c8b5a1997f28094c7d5bc1050de10eb1",
+      "review": "Compared with supplied screenshot: same animals, main pose, room layout and objects. Screenshot UI removed; moderate color, exposure and sharpness restoration. Not a pixel-preserving documentary original."
+    },
+    {
+      "asset": "guest-4.jpg",
+      "sourceScreenshot": "Снимок экрана — 2026-10-20 в 15.28.56.png",
+      "sourceSha256": "138c9f320a9bc3ddf03b4b0ff8e4dd1168713c9b1375f8b9842c9fe8cd520337",
+      "generatedPng": "exec-cb3ff58c-70aa-4357-8d99-a992fb96a7e0.png",
+      "classification": "restoration of owner-supplied real guest photograph; source pose and premises retained; AI quality processing disclosed",
+      "promptFile": "real-photo-prompts.json",
+      "webAssetSha256": "947e517f1f66874cb8e6c20dfb3253a5d4b4a7c522669d62f5b503b6a6ca5a9a",
+      "review": "Compared with supplied screenshot: same animals, main pose, room layout and objects. Screenshot UI removed; moderate color, exposure and sharpness restoration. Not a pixel-preserving documentary original."
+    },
+    {
+      "asset": "guest-5.jpg",
+      "sourceScreenshot": "Снимок экрана — 2026-10-20 в 15.29.06.png",
+      "sourceSha256": "328d4fa052c011700827167b34449ac4c335e2e1f079c6396ce26f32c5d018f3",
+      "generatedPng": "exec-1bde8b25-2b57-4b56-bcbc-d3241f817531.png",
+      "classification": "restoration of owner-supplied real guest photograph; source pose and premises retained; AI quality processing disclosed",
+      "promptFile": "real-photo-prompts.json",
+      "webAssetSha256": "3437f5630d602678ccc1956a5720660506f61e7c27f29aa44ea7f12782e5b5dd",
+      "review": "Compared with supplied screenshot: same animals, main pose, room layout and objects. Screenshot UI removed; moderate color, exposure and sharpness restoration. Not a pixel-preserving documentary original."
+    },
+    {
+      "asset": "guest-6.jpg",
+      "sourceScreenshot": "Снимок экрана — 2026-10-20 в 15.29.16.png",
+      "sourceSha256": "47731f758997d3870a4a39614c1d085d64a07a550860df4af458a6566d7e5228",
+      "generatedPng": "exec-8b0adebc-fa10-4e65-adfa-48ccd9d520a7.png",
+      "classification": "restoration of owner-supplied real guest photograph; source pose and premises retained; AI quality processing disclosed",
+      "promptFile": "real-photo-prompts.json",
+      "webAssetSha256": "cb9db905773799f2bd06db0cc17ca7f151db362cfc8a9ac1c5cfaade2723fa52",
+      "review": "Compared with supplied screenshot: same animals, main pose, room layout and objects. Screenshot UI removed; moderate color, exposure and sharpness restoration. Not a pixel-preserving documentary original."
     }
-  ]
+  ],
+  "revision": 2,
+  "policy": "Latest owner direction: keep two staged hotel hero scenes, reject the synthetic grooming bichon scene; restore six supplied Avito-photo screenshots conservatively, preserve sources and identify AI processing.",
+  "rejected": [
+    {
+      "generatedPng": "exec-60b5bdf2-01ef-4373-b69c-b91136b33800.png",
+      "key": "grooming-salon-premium",
+      "reason": "Owner rejected as too AI-looking. Excluded from both public asset directories. Original generated file preserved outside the website."
+    }
+  ],
+  "groomingUsage": "The original process hero and catalogue references are retained. Real salon IMG_4808 light/color treatment is copied into grooming chapter 03, with matching caption. No real guest hotel image is presented as a grooming result."
 }

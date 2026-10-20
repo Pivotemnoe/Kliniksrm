@@ -1,0 +1,10 @@
+import {readFile,writeFile,mkdir} from 'node:fs/promises';
+const base=new URL('../public/pet-hotel/',import.meta.url);
+const source=await readFile(new URL('articles.js',base),'utf8');
+const {articles}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+await mkdir(new URL('journal/',base),{recursive:true});
+for(const article of Object.values(articles)){
+ const html=`<!doctype html><html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>${article.title} — TemichevVET</title><meta name="description" content="${article.title} Практическая памятка перед размещением в зоогостинице TemichevVET."><link rel="icon" href="../../assets/temichevvet-logo.jpg"><link rel="stylesheet" href="../style.css"></head><body class="article-page"><a class="skip" href="#main">К статье</a><header class="header"><a class="brand" href="../" aria-label="TemichevVET — зоогостиница"><img src="../../assets/temichevvet-logo.jpg" alt="" width="42" height="42"><span>Temichev<b>VET</b><small>ЗООГОСТИНИЦА ПРИ КЛИНИКЕ</small></span></a><nav aria-label="Основное меню"><a href="../#rooms">Пространство</a><a href="../#estimate">Проживание</a><a href="../#journal">Журнал</a></nav><a class="header-contact" href="tel:+79284214542">+7 (928) 421-45-42 ↗</a></header><main id="main"><a class="article-back" href="../#journal">← Вернуться в журнал</a><p class="eyebrow">${article.category}</p><h1>${article.title}</h1><img class="article-cover" src="../assets/${article.image}" alt="${article.imageNote}"><p class="cover-note">${article.imageNote}</p><div class="article-body">${article.body}</div><a class="button" href="../#estimate">Спланировать проживание <span aria-hidden="true">↗</span></a></main><footer><a class="brand-text" href="../">TemichevVET</a><p>Зоогостиница · Армавир, Каспарова, 27/2</p><span class="preview-label">Локальный просмотр</span></footer></body></html>`;
+ await writeFile(new URL(`journal/${article.slug}.html`,base),html);
+}
+process.stdout.write('3 journal pages generated from the same content as article dialogs.\n');
