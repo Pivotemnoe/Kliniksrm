@@ -1,3 +1,7 @@
+## Current release boundary — 2026-10-20
+
+- Verified direct user instruction in the coordinated CRM redesign chat: "Сначала всё локально, на боевую пока не выкладывай". This supersedes deployment authorization for the new booking integration. Keep production data, configuration, images and public r2 website unchanged. Prepare and physically test the new version in isolated local databases. Real MAX test messages are allowed only to the previously verified account of the user. The redesign chat currently owns the Android device; coordinate before using it.
+
 ## Booking completion and real photos — 2026-10-20
 
 - User now authorizes linking the approved price list to the independent grooming module, choosing a groomer and actual available time on the public site, a clear monthly calendar with bulk shift creation, and current MAX notifications for both client and assigned groomer. Reuse protected identity, transaction/collision checks and notification outbox. Preserve the current CRM redesign and coordinate production versions with its chat.

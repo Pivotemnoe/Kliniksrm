@@ -7,5 +7,7 @@ import { GroomingDraftPublicController, GroomingPortalController, GroomingPortal
 import { GroomingPortalService } from './grooming-portal.service';
 import { MaxBotClient } from '../max-bot.client';
 import { OwnerNotificationService } from '../owner-notification.service';
-@Module({controllers:[GroomingPublicController,GroomingInternalController,GroomingPortalController,GroomingPortalInternalController,GroomingDraftPublicController],providers:[PrismaService,GroomingService,GroomingMaxClient,GroomingPortalService,MaxBotClient,OwnerNotificationService],exports:[GroomingPortalService]})
+import { GroomingStorefrontService } from './grooming-storefront.service';
+import { GroomingAvailabilityController, GroomingStorefrontInternalController } from './grooming-storefront.controller';
+@Module({controllers:[GroomingPublicController,GroomingInternalController,GroomingPortalController,GroomingPortalInternalController,GroomingDraftPublicController,GroomingAvailabilityController,GroomingStorefrontInternalController],providers:[PrismaService,GroomingService,GroomingMaxClient,GroomingPortalService,MaxBotClient,OwnerNotificationService,GroomingStorefrontService],exports:[GroomingPortalService]})
 export class GroomingModule {}

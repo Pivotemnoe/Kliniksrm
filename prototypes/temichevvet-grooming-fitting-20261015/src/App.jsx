@@ -3,6 +3,7 @@ import { ArrowRight, ArrowDown, ArrowsHorizontal, BookmarkSimple, Check, CheckCi
 import { GROOMING_BREEDS as BREEDS, GROOMING_SERVICES as SERVICES, GROOMING_LOOK_COUNT, groomingLook } from "../../../apps/owner-gateway/src/grooming/catalog";
 import { useGroomingMotion } from "./motion";
 import { PriceList } from "./PriceList";
+import { SiteBooking } from "./SiteBooking";
 
 const STORE = "temichevvet-grooming-wishes-v1";
 const DEVICE_QA = import.meta.env.VITE_GROOMING_QA_TRANSPORT === "device";
@@ -37,11 +38,12 @@ export function App() {
  const [a,setA]=useState(initialStyle),[b,setB]=useState(initialStyle==="everyday"?"shape":"everyday"),[position,setPosition]=useState(50);
  const [savedOnly,setSavedOnly]=useState(false),[overlay,setOverlay]=useState(null),[menu,setMenu]=useState(false);
  const [chapter,setChapter]=useState(0),[motion,setMotion]=useState(true),[toast,setToast]=useState("");
+ const [bookingContext,setBookingContext]=useState(null);
  const [config,setConfig]=useState({enabled:false,mode:"unavailable",privacyUrl:null});
  const breed=BREEDS.find(v=>v.id===breedId)||BREEDS[0];
  useGroomingMotion(motion,setChapter);
  useEffect(()=>{if(initialParams.has("breed")&&location.hash==="#looks")requestAnimationFrame(()=>document.getElementById("looks")?.scrollIntoView({behavior:"instant"}));},[]);
- useEffect(()=>{let live=true; fetch("/v1/public/grooming/catalog").then(r=>{if(!r.ok)throw Error();return r.json();}).then(x=>{if(live)setConfig(x);}).catch(()=>{});return()=>{live=false;};},[]);
+ useEffect(()=>{let live=true;const load=()=>fetch("/v1/public/grooming/catalog",{cache:"no-store"}).then(r=>{if(!r.ok)throw Error();return r.json();}).then(x=>{if(live)setConfig(x);}).catch(()=>{});void load();const timer=setInterval(()=>{if(document.visibilityState==="visible")void load();},30000);return()=>{live=false;clearInterval(timer);};},[]);
  useEffect(()=>{try{localStorage.setItem(STORE,JSON.stringify(saved));setStorageError("");}catch{setStorageError("Браузер не разрешил сохранение. Образы доступны до закрытия страницы.");}},[saved]);
  useEffect(()=>{if(!toast)return;const t=setTimeout(()=>setToast(""),2800);return()=>clearTimeout(t);},[toast]);
  const chooseBreed=id=>{const next=BREEDS.find(v=>v.id===id);if(!next)return;setSpecies(next.species);setBreedId(id);setA("shape");setB("everyday");setPosition(50);};
@@ -49,7 +51,7 @@ export function App() {
  const savedHere=saved.ids.filter(id=>groomingLook(id)?.species===species);
  const openSaved=()=>{if(!savedHere.length&&saved.ids.length)chooseSpecies(groomingLook(saved.ids[0]).species);setSavedOnly(true);setQuery("");setSize("all");go("catalogue");};
  const toggleSave=id=>{const exists=saved.ids.includes(id);setSaved(v=>({...v,ids:exists?v.ids.filter(x=>x!==id):[...v.ids,id]}));setToast(exists?"Образ убран из избранного":"Образ сохранён на этом устройстве");};
- const openBooking=()=>{setMenu(false);setOverlay("booking");};
+ const openBooking=()=>{setBookingContext(null);setMenu(false);setOverlay("booking");};
  const go=id=>{setMenu(false);document.getElementById(id)?.scrollIntoView({behavior:motion&&!matchMedia("(prefers-reduced-motion: reduce)").matches?"smooth":"instant"});};
  const found=BREEDS.filter(v=>v.species===species&&(species==="cat"||size==="all"||v.size===size)&&searchKey(v.name+" "+v.group).includes(searchKey(query))&&(!savedOnly||saved.ids.some(id=>id.startsWith(v.id+":"))));
  const shown=query||expanded||savedOnly?found:found.slice(0,6);
@@ -97,19 +99,19 @@ export function App() {
     </div><div className="comparison-captions"><span>{breed.styles.find(v=>v.id===a).name}</span><span>{breed.styles.find(v=>v.id===b).name}</span></div></div>
    </section>
    <section className="wish-section section"><BookmarkSimple size={35} weight="light"/><div><p className="eyebrow">КАРТОЧКА ПОЖЕЛАНИЙ</p><h2>Образ — с собой.</h2><p>Сохранено: {saved.ids.length}. Выбор хранится на этом устройстве.</p><label htmlFor="wishes">Что особенно нравится в образе?</label><textarea id="wishes" value={saved.notes} maxLength={1500} rows={3} placeholder="Например: оставить объём на ушах, обсудить длину корпуса" onChange={e=>setSaved(v=>({...v,notes:e.target.value}))}/></div><button className="button" onClick={openBooking}>Обсудить и записаться <ArrowRight size={22}/></button></section>
-   <PriceList breed={breed} bookingPortalUrl={config.bookingPortalUrl} onShowLooks={id=>{chooseBreed(id);go("looks");}} onBook={id=>{chooseBreed(id);openBooking();}}/>
+   <PriceList breed={breed} storefront={config.storefront} bookingPortalUrl={config.bookingPortalUrl} onShowLooks={id=>{chooseBreed(id);go("looks");}} onBook={context=>{const target=BREEDS.find(b=>b.id===context.breedId)||{id:context.breedId,name:context.breedName,species:context.species,size:"",defaultServiceId:"haircut"};if(BREEDS.some(b=>b.id===target.id))chooseBreed(target.id);setBookingContext({...context,breed:target});setOverlay("booking");}}/>
    <section className="closing section reveal"><p className="eyebrow">НАЧНЁМ СО ЗНАКОМСТВА</p><h2>У вашего питомца<br/>свой характер.<br/><span>Расскажите о нём.</span></h2><button className="button" onClick={openBooking}>{config.bookingPortalUrl?"Выбрать время":"Оставить заявку"} <ArrowRight size={23}/></button></section>
   </main>
   <footer className="footer"><a href="#" className="footer-brand">TemichevVET · груминг</a><p>Фото: Goochie Poochie Grooming / Pexels; главный кадр адаптирован с AI.<br/>Каталог: иллюстративные референсы для обсуждения с грумером.</p><button className="motion-button" onClick={()=>setMotion(!motion)} aria-pressed={motion}>{motion?<Pause size={17}/>:<Play size={17}/>}Движение {motion?"включено":"выключено"}</button>{config.mode==="qa"&&<p className="qa-note">{DEVICE_QA ? "Проверка на телефоне: вымышленные данные и тестовые сообщения MAX." : "Локальная проверка: заявки сохраняются в тестовой базе. Сообщения MAX перехватываются тестовым получателем."}</p>}</footer>
   <button className="help-button" onClick={()=>setOverlay("help")} aria-label="Помощь с записью"><ChatCircleDots size={26}/><span>Помочь с выбором?</span></button>
   {toast&&<div className="toast" role="status"><Check size={20}/>{toast}</div>}
   {overlay==="help"&&<Dialog title="Поможем с выбором" onClose={()=>setOverlay(null)}><p>Выберите породу, сохраните понравившиеся образы и расскажите о привычках питомца. Помощник соберёт эти пожелания в заявку.</p><div className="help-options"><button onClick={()=>{setOverlay(null);go("catalogue");}}>Хочу выбрать образ <ArrowRight size={21}/></button><button onClick={()=>setOverlay("booking:first")}>Это первый груминг <ArrowRight size={21}/></button><button onClick={openBooking}>Нужна помощь сотрудника <ArrowRight size={21}/></button></div><p className="muted">Стоимость, длительность и время визита согласует администратор.</p></Dialog>}
-  {overlay?.startsWith("booking")&&<Booking config={config} breed={breed} saved={saved} defaultLook={breed.id+":"+a} serviceId={overlay.split(":")[1]||breed.defaultServiceId} onClose={()=>setOverlay(null)}/>}
+  {overlay?.startsWith("booking")&&<Booking config={config} breed={bookingContext?.breed||breed} priceContext={bookingContext} saved={saved} defaultLook={breed.id+":"+a} serviceId={overlay.split(":")[1]||breed.defaultServiceId} onClose={()=>setOverlay(null)}/>}
  </>
 }
 
-function Booking({config,breed,saved,defaultLook,serviceId,onClose}) {
- const ids=[...new Set([...saved.ids.filter(id=>id.startsWith(breed.id+":")),defaultLook])].slice(0,3);
+function Booking({config,breed,priceContext,saved,defaultLook,serviceId,onClose}) {
+ const ids=[...new Set([...saved.ids.filter(id=>id.startsWith(breed.id+":")),...(groomingLook(defaultLook)?.breedId===breed.id?[defaultLook]:[])])].slice(0,3);
  const [form,setForm]=useState({contactName:"",phone:"",petName:"",serviceId,preferredDate:"",timeWindow:"ANY",notes:saved.notes,contactConsent:false,website:""});
  const [selected,setSelected]=useState(ids),[busy,setBusy]=useState(false),[error,setError]=useState(""),[result,setResult]=useState(null);
  const [manual,setManual]=useState(!config.bookingPortalUrl);
@@ -117,11 +119,6 @@ function Booking({config,breed,saved,defaultLook,serviceId,onClose}) {
  const requestId=useRef(crypto.randomUUID());
  const change=(key,value)=>{setForm(v=>({...v,[key]:value}));requestId.current=crypto.randomUUID();setError("");};
  const today=new Intl.DateTimeFormat("en-CA",{timeZone:"Europe/Moscow",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
- const chooseTime=async()=>{if(busy)return;setBusy(true);setError("");try{
-  const response=await fetch("/v1/public/grooming/drafts",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({breedId:breed.id,looks:selected,notes:form.notes}),signal:AbortSignal.timeout(15000)});
-  const data=await response.json().catch(()=>null);if(!response.ok||!data?.token)throw Error(data?.message||"Не удалось перенести образы. Попробуйте ещё раз.");
-  const url=new URL(config.bookingPortalUrl);if(!["https:","http:"].includes(url.protocol))throw Error("Кабинет ещё не подключён");url.hash=new URLSearchParams({draft:data.token}).toString();window.location.assign(url.href);
- }catch(e){setError(e.name==="TimeoutError"?"Ответ задержался. Попробуйте ещё раз.":e.message||"Нет связи с кабинетом");setBusy(false);}};
  const submit=async e=>{e.preventDefault();if(busy)return;setError("");setBusy(true);try{
   const payload={...form,clientRequestId:requestId.current,breedId:breed.id,lookIds:selected};if(!payload.preferredDate)delete payload.preferredDate;
   const response=await fetch("/v1/public/grooming/bookings",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload),signal:AbortSignal.timeout(15000)});
@@ -131,7 +128,8 @@ function Booking({config,breed,saved,defaultLook,serviceId,onClose}) {
  }catch(e){setError(e.name==="TimeoutError"?"Ответ задержался. Нажмите ещё раз: повтор не создаст вторую заявку.":e.name==="TypeError"?"Нет связи с сервером. Попробуйте ещё раз.":e.message||"Нет связи с сервером. Попробуйте ещё раз.");}finally{setBusy(false);}};
  return <Dialog title={result?"Заявка сохранена":manual?"Заявка на груминг":"Записаться на груминг"} onClose={onClose} wide>
   {result?<div className="booking-result"><CheckCircle size={52} weight="light"/><h3>{result.mode==="qa"?"Тестовая заявка принята":"Спасибо, "+form.contactName+"."}</h3><p>{result.mode==="qa"?"Данные сохранены в отдельной тестовой базе. Реальным сотрудникам сообщения не отправлялись.":"Администратор свяжется с вами, чтобы согласовать уход, стоимость и время."}</p><p>Питомец: {form.petName} · {breed.name}<br/>Образов в заявке: {selected.length}</p><p className="request-number">Номер заявки: {result.requestId}</p><p>Время визита пока не подтверждено.</p><button className="button" onClick={onClose}>Вернуться к образам <ArrowRight size={22}/></button></div>:
-   !manual?<div className="self-booking-entry"><p className="booking-intro">{breed.species==="cat"?"Кошка":"Собака"} · {breed.name}</p>{config.mode==="qa"&&<p className="notice">{DEVICE_QA ? "Проверка на телефоне · вымышленные данные · тестовые сообщения MAX." : "Локальная проверка · вымышленные данные · сообщения MAX перехвачены."}</p>}<p>Выберите грумера и свободное время в личном кабинете. Войти можно через текущего бота MAX.</p><fieldset disabled={busy}><div className="booking-looks"><p>Образы для грумера</p>{ids.map(id=><label className="check-line" key={id}><input type="checkbox" checked={selected.includes(id)} onChange={()=>setSelected(v=>v.includes(id)?v.filter(x=>x!==id):[...v,id])}/>{groomingLook(id).styleName}</label>)}</div><label>Пожелания и привычки питомца<textarea maxLength={1500} rows={3} value={form.notes} onChange={e=>change("notes",e.target.value)}/></label>{error&&<p className="error" role="alert">{error}</p>}<button type="button" className="button booking-submit" onClick={chooseTime}>{busy?"Открываем кабинет…":"Выбрать время и грумера"}<ArrowRight size={22}/></button><p className="muted">Образы и пожелания перейдут в запись. Время бронируется после вашего подтверждения в кабинете.</p>{config.enabled&&<button type="button" className="text-link" onClick={()=>setManual(true)}>Нужна помощь администратора <ArrowRight size={20}/></button>}</fieldset></div>:
+   !manual?<SiteBooking config={config} breed={breed} priceContext={priceContext} notes={form.notes} onNotes={value=>change("notes",value)} lookIds={ids} selectedLooks={selected} onToggleLook={id=>setSelected(v=>v.includes(id)?v.filter(x=>x!==id):[...v,id])} lookName={id=>groomingLook(id)?.styleName||id}/>:
+
    <form onSubmit={submit}><p className="booking-intro">{breed.species==="cat"?"Кошка":"Собака"} · {breed.name} · пожелания и выбранные образы прикрепим к заявке.</p>{config.mode==="qa"&&<p className="notice">Локальная проверка. Используйте тестовые данные; сообщения в MAX не уходят реальным людям.</p>}{!config.enabled&&<p className="notice">Приём заявок ещё не подключён. Выбранные образы можно сохранить на устройстве.</p>}
     <fieldset disabled={busy}><div className="booking-grid"><label>Как к вам обращаться<input autoComplete="given-name" required minLength={2} maxLength={100} value={form.contactName} onChange={e=>change("contactName",e.target.value)}/></label><label>Телефон<input type="tel" autoComplete="tel" required maxLength={32} placeholder="+7 …" pattern="[+0-9 ()-]{10,32}" value={form.phone} onChange={e=>change("phone",e.target.value)}/></label><label>Кличка питомца<input required maxLength={80} value={form.petName} onChange={e=>change("petName",e.target.value)}/></label><label>Услуга<select value={form.serviceId} onChange={e=>change("serviceId",e.target.value)}>{SERVICES.map(s=><option value={s.id} key={s.id}>{s.name}</option>)}</select></label><label>Желаемая дата · необязательно<input type="date" min={today} value={form.preferredDate} onInput={e=>change("preferredDate",e.target.value)} onChange={e=>change("preferredDate",e.target.value)}/></label><label>Удобное время<select value={form.timeWindow} onChange={e=>change("timeWindow",e.target.value)}><option value="ANY">Обсудить</option><option value="MORNING">Утро</option><option value="AFTERNOON">День</option><option value="EVENING">Вечер</option></select></label></div>
     <div className="booking-looks"><p>Образы для грумера</p>{ids.map(id=>{const look=groomingLook(id);return <label className="check-line" key={id}><input type="checkbox" checked={selected.includes(id)} onChange={()=>{setSelected(v=>v.includes(id)?v.filter(x=>x!==id):[...v,id]);requestId.current=crypto.randomUUID();}}/>{look.styleName}</label>;})}</div>

@@ -36,15 +36,16 @@ export class GroomingPortalService {
   }
   async result(token: string, id: string) { const session = await this.session(token); const operation = await this.prisma.groomingPortalOperation.findFirst({ where: { id, ownerId: session.ownerId } }); if (!operation) throw new NotFoundException('Операция не найдена'); return this.publicOperation(operation); }
   async byKey(token: string, clientKey: string) { const session = await this.session(token); const operation = await this.prisma.groomingPortalOperation.findUnique({ where: { ownerId_clientKey: { ownerId: session.ownerId, clientKey } } }); if (!operation) throw new NotFoundException('Операция не поступила в шлюз'); return this.publicOperation(operation); }
-  async createDraft(input: GroomingDraftDto, ip: string) {
+  async createDraft(input: GroomingDraftDto, ip: string, selection?: Record<string, any>) {
     this.enabled();
-    const breed = GROOMING_BREEDS.find(b => b.id === input.breedId);
+    const breed = GROOMING_BREEDS.find(b => b.id === input.breedId) || (selection?.catalogData?.breedId === input.breedId ? { id: input.breedId, name: selection.catalogData.breedName, species: selection.species === 'CAT' ? 'cat' : 'dog', size: selection.size.toLowerCase() } : undefined);
     if (!breed || input.looks.some(id => groomingLook(id)?.breedId !== breed.id)) throw new BadRequestException('Выберите образы этой породы');
     const ipHash = hashToken(ip), now = new Date();
     await this.prisma.groomingBookingDraft.deleteMany({ where: { expiresAt: { lt: now } } });
     if (await this.prisma.groomingBookingDraft.count({ where: { ipHash, createdAt: { gt: new Date(now.getTime() - 3600000) } } }) >= 20) throw new ConflictException('Слишком много запросов. Попробуйте позже');
     const token = randomBytes(32).toString('base64url');
-    await this.prisma.groomingBookingDraft.create({ data: { tokenHash: hashToken(token), ipHash, expiresAt: new Date(now.getTime() + 15 * 60000), payload: json({ breedId: breed.id, breed: breed.name, species: breed.species === 'cat' ? 'CAT' : 'DOG', size: breed.species === 'cat' ? 'ANY' : String(breed.size || 'small').toUpperCase(), looks: input.looks, notes: input.notes }) } });
+    if (selection && selection.species !== (breed.species === 'cat' ? 'CAT' : 'DOG')) throw new BadRequestException('Выберите услугу для этого вида питомца');
+    await this.prisma.groomingBookingDraft.create({ data: { tokenHash: hashToken(token), ipHash, expiresAt: new Date(now.getTime() + 15 * 60000), payload: json({ breedId: breed.id, breed: breed.name, species: breed.species === 'cat' ? 'CAT' : 'DOG', size: breed.species === 'cat' ? 'ANY' : String(breed.size || 'small').toUpperCase(), looks: input.looks, notes: input.notes, ...(selection ? { selection, serviceId: selection.serviceId, specialistId: selection.specialistId, date: selection.date, coat: selection.coat, size: selection.size } : {}) }) } });
     return { token };
   }
   async consumeDraft(sessionToken: string, token: string) {

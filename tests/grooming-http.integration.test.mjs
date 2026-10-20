@@ -7,8 +7,8 @@ const keep = Object.fromEntries(['PATH', 'HOME', 'TMPDIR', 'LANG', 'TZ'].filter(
 for (const key of Object.keys(process.env)) delete process.env[key];
 Object.assign(process.env, keep, {
   NODE_ENV: 'test', CLINIC_RUNTIME_MODE: 'test', TEMICHEVVET_LICENSE_MODE: 'compatibility',
-  DATABASE_URL: 'postgresql://grooming_module_qa:synthetic-grooming-only@127.0.0.1:55440/avito_merge_grooming_crm_20261020',
-  OWNER_GATEWAY_DATABASE_URL: 'postgresql://grooming_module_qa:synthetic-grooming-only@127.0.0.1:55440/avito_merge_grooming_portal_20261020',
+  DATABASE_URL: 'postgresql://grooming_module_qa:synthetic-grooming-only@127.0.0.1:55440/grooming_crm_integration_qa',
+  OWNER_GATEWAY_DATABASE_URL: 'postgresql://grooming_module_qa:synthetic-grooming-only@127.0.0.1:55440/grooming_portal_integration_qa',
   OWNER_GATEWAY_SYNC_SECRET: 'grooming-local-isolated-qa-secret-20261019', SESSION_COOKIE_SECURE: 'false',
   OWNER_GATEWAY_SESSION_COOKIE: 'grooming_http_owner', SESSION_COOKIE_NAME: 'grooming_http_staff',
   APP_URL: 'http://127.0.0.1:4245', GROOMING_SITE_ORIGINS: 'http://127.0.0.1:4244',

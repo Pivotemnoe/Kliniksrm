@@ -1,4 +1,5 @@
-import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsIn, IsInt, IsISO8601, IsNumber, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsIn, IsInt, IsISO8601, IsNumber, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class GroomingSpecialistDto {
   @IsString() @MinLength(1) employeeId!: string;
@@ -25,6 +26,7 @@ export class GroomingRuleDto {
   @IsOptional() @IsInt() @Min(1) version?: number;
 }
 export class GroomingSettingsDto {
+  @IsOptional() @IsString() @Matches(/^\d{1,24}$|^$/) testClientMaxId?: string;
   @IsBoolean() selfBookingEnabled!: boolean;
   @IsInt() @Min(0) @Max(10080) minimumCancelMinutes!: number;
   @IsArray() @ArrayMaxSize(2) @IsIn([2, 24], { each: true }) reminderHours!: number[];
@@ -34,8 +36,27 @@ export class GroomingSettingsDto {
 export class GroomingServiceDto {
   @IsString() @MinLength(2) @MaxLength(180) title!: string;
   @IsNumber() @Min(0) @Max(1000000) price!: number;
+  @IsOptional() @IsIn(['FIXED', 'RANGE', 'UP_TO', 'QUOTE', 'PERCENT']) priceType?: string;
+  @IsOptional() @IsNumber() @Min(0) @Max(1000000) maximumPrice?: number | null;
   @IsOptional() @IsBoolean() isActive?: boolean;
   @IsOptional() @IsInt() @Min(1) version?: number;
+}
+export class GroomingPriceImportDto {
+  @IsString() @MinLength(16) @MaxLength(120) clientKey!: string;
+}
+export class GroomingRulesBatchDto extends GroomingPriceImportDto {
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(250) @ValidateNested({ each: true }) @Type(() => GroomingRuleDto) rules!: GroomingRuleDto[];
+}
+export class GroomingScheduleBatchDto extends GroomingPriceImportDto {
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(10) @IsString({ each: true }) employeeIds!: string[];
+  @IsString() locationId!: string;
+  @IsString() @Matches(/^\d{4}-\d{2}-\d{2}$/) from!: string;
+  @IsString() @Matches(/^\d{4}-\d{2}-\d{2}$/) to!: string;
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(7) @IsIn([0, 1, 2, 3, 4, 5, 6], { each: true }) weekdays!: number[];
+  @IsString() @Matches(/^(?:[01]\d|2[0-3]):[0-5]\d$/) startsTime!: string;
+  @IsString() @Matches(/^(?:[01]\d|2[0-3]):[0-5]\d$/) endsTime!: string;
+  @IsOptional() @IsArray() @ArrayMaxSize(62) @Matches(/^\d{4}-\d{2}-\d{2}$/, { each: true }) excludedDates?: string[];
+  @IsString() @MaxLength(500) comment!: string;
 }
 export class GroomingLocationDto {
   @IsString() @MinLength(2) @MaxLength(120) name!: string;

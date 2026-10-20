@@ -6,7 +6,7 @@ import { RequirePermissions, RequireRoles } from '../auth/decorators/require-per
 import { AllowRemoteMutation } from '../auth/decorators/allow-remote-mutation.decorator';
 import { AuthEmployee } from '../auth/auth.types';
 import { GroomingCrmService } from './grooming.service';
-import { GroomingBookDto, GroomingChangeDto, GroomingLocationDto, GroomingOptionsDto, GroomingRuleDto, GroomingServiceDto, GroomingSettingsDto, GroomingSpecialistDto, GroomingStatusDto, GroomingWorkPeriodDto, GroomingWorkplaceDto } from './grooming.dto';
+import { GroomingBookDto, GroomingChangeDto, GroomingLocationDto, GroomingOptionsDto, GroomingRuleDto, GroomingServiceDto, GroomingSettingsDto, GroomingSpecialistDto, GroomingStatusDto, GroomingWorkPeriodDto, GroomingWorkplaceDto, GroomingPriceImportDto, GroomingScheduleBatchDto, GroomingRulesBatchDto } from './grooming.dto';
 class StaffOptions extends GroomingOptionsDto { @IsString() ownerId!: string; }
 class StaffBook extends GroomingBookDto { @IsString() ownerId!: string; }
 class StaffChange extends GroomingChangeDto { @IsString() ownerId!: string; }
@@ -36,10 +36,14 @@ export class GroomingController {
   updateSpecialist(@CurrentEmployee() actor: AuthEmployee, @Param('id') id: string, @Body() input: GroomingSpecialistDto) { return this.service.saveSpecialist(input, actor, id); }
   @Post('rules') @RequirePermissions('grooming.manage')
   rule(@CurrentEmployee() actor: AuthEmployee, @Body() input: GroomingRuleDto) { return this.service.saveRule(input, actor); }
+  @Post('rules/batch') @RequirePermissions('grooming.manage')
+  rulesBatch(@CurrentEmployee() actor: AuthEmployee, @Body() input: GroomingRulesBatchDto) { return this.service.saveRules(input, actor); }
   @Patch('rules/:id') @RequirePermissions('grooming.manage')
   updateRule(@CurrentEmployee() actor: AuthEmployee, @Param('id') id: string, @Body() input: GroomingRuleDto) { return this.service.saveRule(input, actor, id); }
   @Post('services') @RequirePermissions('grooming.manage')
   createService(@CurrentEmployee() actor: AuthEmployee, @Body() input: GroomingServiceDto) { return this.service.saveService(input, actor); }
+  @Post('services/import-prices') @RequirePermissions('grooming.manage')
+  importPrices(@CurrentEmployee() actor: AuthEmployee, @Body() input: GroomingPriceImportDto) { return this.service.importPrices(input, actor); }
   @Patch('services/:id') @RequirePermissions('grooming.manage')
   updateService(@CurrentEmployee() actor: AuthEmployee, @Param('id') id: string, @Body() input: GroomingServiceDto) { return this.service.saveService(input, actor, id); }
   @Post('locations') @RequirePermissions('grooming.manage')
@@ -54,6 +58,10 @@ export class GroomingController {
   settings(@CurrentEmployee() actor: AuthEmployee, @Body() input: GroomingSettingsDto) { return this.service.saveSettings(input, actor); }
   @Post('shifts') @RequirePermissions('grooming.schedule')
   shift(@CurrentEmployee() actor: AuthEmployee, @Body() input: GroomingWorkPeriodDto) { return this.service.saveShift(input, actor); }
+  @Post('shifts/preview') @RequirePermissions('grooming.schedule')
+  previewSchedule(@CurrentEmployee() actor: AuthEmployee, @Body() input: GroomingScheduleBatchDto) { return this.service.batchShifts(input, actor, true); }
+  @Post('shifts/batch') @RequirePermissions('grooming.schedule')
+  createSchedule(@CurrentEmployee() actor: AuthEmployee, @Body() input: GroomingScheduleBatchDto) { return this.service.batchShifts(input, actor); }
   @Patch('shifts/:id') @RequirePermissions('grooming.schedule')
   updateShift(@CurrentEmployee() actor: AuthEmployee, @Param('id') id: string, @Body() input: GroomingWorkPeriodDto) { return this.service.saveShift(input, actor, id); }
   @Get('notifications')

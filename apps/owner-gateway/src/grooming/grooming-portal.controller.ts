@@ -2,6 +2,7 @@ import { Body, Controller, Get, Header, Headers, Param, ParseUUIDPipe, Post, Req
 import type { Request, Response } from 'express';
 import { assertSecret } from '../security';
 import { GroomingPortalService } from './grooming-portal.service';
+import { GroomingStorefrontService } from './grooming-storefront.service';
 import { GroomingDeliveryDto, GroomingDraftDto, GroomingDraftConsumeDto, GroomingOperationDto, GroomingOperationResultDto, GroomingRegistrationDetailsDto, GroomingRegistrationResultDto } from './grooming-portal.dto';
 const sessionName = () => process.env.OWNER_GATEWAY_SESSION_COOKIE || 'temichevvet_owner_session';
 function cookie(header: string | undefined, name: string) { try { return decodeURIComponent(header?.split(';').map(s => s.trim()).find(s => s.startsWith(`${name}=`))?.slice(name.length + 1) || ''); } catch { return ''; } }
@@ -36,12 +37,13 @@ export class GroomingPortalController {
 }
 @Controller('v1/public/grooming')
 export class GroomingDraftPublicController {
-  constructor(private readonly service: GroomingPortalService) {}
+  constructor(private readonly service: GroomingPortalService, private readonly storefront: GroomingStorefrontService) {}
   @Post('drafts') @Header('Cache-Control', 'no-store')
-  create(@Req() request: Request, @Body() input: GroomingDraftDto) {
+  async create(@Req() request: Request, @Body() input: GroomingDraftDto) {
     const origins = (process.env.GROOMING_SITE_ORIGINS || '').split(',').map(value => value.trim());
     if (!request.headers.origin || !origins.includes(request.headers.origin)) throw new ForbiddenException('Откройте запись с сайта груминга');
-    return this.service.createDraft(input, request.ip || 'unknown');
+    const selection = input.selection ? await this.storefront.selection(input.selection) : undefined;
+    return this.service.createDraft(input, request.ip || 'unknown', selection);
   }
 }
 @Controller('internal/v1/grooming/portal')

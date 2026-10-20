@@ -1,5 +1,5 @@
 // Final owner-approved prices. The 300 RUB increase is already applied in this shared catalog.
-import catalog from '../../../../apps/api/src/modules/grooming/price-catalog.json';
+import catalog from '../../../apps/api/src/modules/grooming/price-catalog.json';
 export const PRICE_INCREASE_RUB = catalog.pricePolicy.increaseRub;
 export const DOG_PRICES = catalog.dogs;
 export const CAT_PRICES = catalog.cats;

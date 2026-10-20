@@ -1,4 +1,5 @@
-import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsObject, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsObject, IsOptional, IsString, MaxLength, MinLength, IsISO8601, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
 export class GroomingOperationDto {
   @IsString() @MinLength(16) @MaxLength(120) clientKey!: string;
   @IsIn(['STATE', 'OPTIONS', 'BOOK', 'RESCHEDULE', 'CANCEL', 'PET_CREATE']) kind!: string;
@@ -25,9 +26,18 @@ export class GroomingDeliveryDto {
   @IsString() @MinLength(1) @MaxLength(800) text!: string;
   @IsString() @MaxLength(40) expiresAt!: string;
 }
+export class GroomingSiteSelectionDto {
+  @IsString() @MaxLength(100) serviceId!: string;
+  @IsString() @MaxLength(100) specialistId!: string;
+  @IsISO8601() startsAt!: string;
+  @IsIn(['DOG', 'CAT']) species!: string;
+  @IsIn(['ANY', 'SMALL', 'MEDIUM', 'LARGE']) size!: string;
+  @IsIn(['ANY', 'SHORT', 'LONG', 'CURLY', 'DOUBLE']) coat!: string;
+}
 export class GroomingDraftDto {
   @IsString() @MaxLength(100) breedId!: string;
   @IsArray() @ArrayMaxSize(6) @IsString({ each: true }) @MaxLength(180, { each: true }) looks!: string[];
   @IsString() @MaxLength(2000) notes!: string;
+  @IsOptional() @ValidateNested() @Type(() => GroomingSiteSelectionDto) selection?: GroomingSiteSelectionDto;
 }
 export class GroomingDraftConsumeDto { @IsString() @MinLength(32) @MaxLength(100) token!: string; }

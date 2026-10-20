@@ -2842,6 +2842,7 @@ model ClinicModuleInstallation {
 
 
 model GroomingSettings {
+  testClientMaxId String?
   installationId String @id
   installation ClinicModuleInstallation @relation(fields: [installationId], references: [id], onDelete: Restrict)
   selfBookingEnabled Boolean @default(false)
