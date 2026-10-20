@@ -150,7 +150,7 @@
       "webAssetSha256": "8c8ca43c2c294a7fd3e3cea4639b8bd8305d20319bb68c3d4d71edc7e3abf863"
     }
   ],
-  "revision": 5,
+  "revision": 6,
   "policy": "Latest owner direction: keep two staged hotel hero scenes, reject the synthetic grooming bichon scene; restore six supplied Avito-photo screenshots conservatively, preserve sources and identify AI processing. Latest owner request: remove rear storage bags from room photo and rags/canisters/loose clutter from salon photo. Preserve premises and originals; do not add subjects or redesign. Owner subsequently rejected bath-based salon angles and explicitly requested a photorealistic generated workstation based on the actual salon. Only that staged workstation is used in the salon slots, with a visualization caption. Final correction: owner supplied IMG_4806 and chose its real-photo retouch, removing only the white wire floor cage and enhancing colors. Earlier generated workstation rejected and removed from public assets.",
   "rejected": [
     {
@@ -194,5 +194,5 @@
       "reason": "Owner explicitly rejected generated workstation composition and supplied the exact real IMG_4806. Excluded from both public directories; preserved privately."
     }
   ],
-  "groomingUsage": "Original process hero, catalogue and booking code retained. Chapter 03 and hotel teaser use real IMG_4806 retouch, labeled as such. Bath-based angles, the generated workstation and synthetic bichon scene are excluded from active references."
+  "groomingUsage": "Latest owner correction: retouched IMG_4806 appears only in the pet-hotel page grooming teaser. Standalone grooming chapter 03 is restored to accepted process-meet.jpg; its IMG_4806 copy was removed and preserved privately."
 }
