@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
 const require = createRequire(import.meta.url);
-const { AvitoCrmKnowledgeService } = require('../apps/api/dist/modules/avito/avito-crm-knowledge.service.js');
+const { AvitoCrmKnowledgeService, crmQuestions } = require('../apps/api/dist/modules/avito/avito-crm-knowledge.service.js');
 const { defaultAvitoSettings } = require('../apps/api/dist/modules/avito/avito.settings.js');
 const { decideAvitoReply } = require('../apps/api/dist/modules/avito/avito.policy.js');
 const tariff = (title, price, min = null, max = null) => ({ title, priceType: min === null ? 'FIXED' : 'FLOATING', price, minimumPrice:min, maximumPrice:max });
@@ -47,4 +48,27 @@ test('an incomplete model plan cannot drop an elliptical visit-price question af
  const c=new AvitoCrmKnowledgeService({service:{findMany:async()=>rows},clinicOffice:{findMany:async()=>[{address:'Тестовый адрес'}]}});
  const result=await c.answer('org','А адрес какой и приём сколько?',undefined,'УЗИ',undefined,[]);
  assert.match(result.text,/Тестовый адрес/);assert.match(result.text,/600/);assert.ok(!/1.?035/.test(result.text));
+});
+test('a service price without стоит stays present beside another question without model assistance',async()=>{
+ const c=new AvitoCrmKnowledgeService({service:{findMany:async()=>rows},clinicOffice:{findMany:async()=>[{address:'Тестовый адрес'}]}});
+ for(const query of ['Сколько УЗИ кошке и какой адрес?','Подскажите, сколько у вас УЗИ кошке и где вы находитесь?']){
+  const result=await c.answer('org',query,undefined,'УЗИ',undefined,[]);
+  assert.match(result.text,/1.?035/);assert.match(result.text,/Тестовый адрес/);
+ }
+ const plan=crmQuestions('Сколько стандартная диспансеризация кошки в клинике и какой адрес?');
+ assert.ok(plan.some(q=>q.kind==='PRICE'));assert.ok(plan.some(q=>q.kind==='ADDRESS'));
+});
+test('time, duration and quantity questions about a service are not elliptical prices',()=>{
+ for(const query of ['Во сколько начинается приём?','УЗИ во сколько?','Сколько длится УЗИ?','Сколько диспансеризация обычно длится?','Сколько показателей в диспансеризации?','Сколько снимков нужно при рентгене?','Через сколько после вакцинации можно гулять?']){
+  assert.ok(!crmQuestions(query).some(q=>q.kind==='PRICE'),query);
+ }
+});
+test('a no-model checkup price and address answer uses the owner table without CRM price linkage',async()=>{
+ const table=JSON.parse(readFileSync(new URL('../docs/plans/2026-10-19-avito-clinic-pilot.json',import.meta.url),'utf8')).settings.clinicProgrammeTable;
+ let priceReads=0;
+ const c=new AvitoCrmKnowledgeService({service:{findMany:async()=>{priceReads++;throw Error('No checkup CRM price linkage');}},clinicOffice:{findMany:async()=>[{address:'Тестовый адрес'}]}});
+ const result=await c.answer('org','Сколько стандартная диспансеризация кошки в клинике и какой адрес?',undefined,'Диспансеризация',undefined,[],{note:'',programmeTable:table});
+ const reply=result.text.replace(/\s/g,' ');
+ assert.match(reply,/5 300/);assert.match(reply,/4 700/);assert.match(reply,/Тестовый адрес/);
+ assert.equal(priceReads,0);assert.equal(result.reason,'CRM_MULTIPLE_QUESTIONS');
 });
