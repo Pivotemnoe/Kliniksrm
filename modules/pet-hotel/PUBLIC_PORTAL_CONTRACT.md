@@ -2,6 +2,14 @@
 
 Coordination: website and gateway are owned by this chat in `pet-hotel-site-20261020`; clinic API, CRM, rates and delivery outbox are owned by the authorized CRM redesign chat. No production changes. The old 4291/4292 and accepted 4261–4264 stands stay untouched.
 
+## Integration baseline — CRM handoff on 20.10.2026
+
+The authorized CRM chat reports grooming release `crm-grooming-independent-20261020-r1` on API/Web and RU owner gateway, full revision `908cbbdd0aae9e302fc9b7ed5cc56de00804436d`, branch `codex/grooming-production-20261020`. Its base is the current Avito revision `ccaea00f1de24eafeb86fb6df8f735714c95c6e5`. The commit and workplace-aware grooming source were verified locally; this document is not an independent live deployment acceptance report.
+
+Continue hotel integration from that baseline (or a newly verified later revision). Do not deploy this older hotel checkout over it. Local hotel implementation `19c04ea0bb4661ffc0c3660789815a2f40c5969e` is an integration candidate; merge/cherry-pick its additions while preserving current Avito, grooming and shared MAX behavior. In particular, retain public grooming `shift.workplaceId` and availability matching the assigned workplace, including the legacy null fallback. Resolve shared AppModule/MAX webhook/Prisma changes as additions, never by replacing the newer files wholesale.
+
+The grooming release freeze is lifted, but hotel deployment remains unauthorized. The CRM chat will resume the actual hotel processor connection separately after the human reviews grooming. The local read-only hotel fixture stays unchanged and is not evidence of a saved clinical booking or MAX delivery.
+
 ## Gateway internal endpoints
 
 All use `x-owner-gateway-secret: OWNER_GATEWAY_SYNC_SECRET`, no employee token.
