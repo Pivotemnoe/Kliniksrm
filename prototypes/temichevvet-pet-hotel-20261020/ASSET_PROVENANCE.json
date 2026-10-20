@@ -1,0 +1,49 @@
+{
+  "originals": "User HEIC files in Downloads preserved; 12 source hashes recorded privately in grooming-public-site/.artifacts/pet-hotel-photos-20261020/source-manifest.json",
+  "assets": [
+    {
+      "source": "IMG_4808.jpg",
+      "asset": "salon-real-4808.jpg",
+      "png": "exec-51072b59-f3d8-4731-95f8-91c10e694cea.png",
+      "prompt": "Use case: lighting-weather. Asset type: real grooming salon website photograph. Edit target: the attached photograph IMG_4808, a real gray-walled grooming room with the pale bathing unit on the left, metal washing bath and small white bath, wood door, and black grooming table on the right. Perform only restrained professional photographic correction: neutral daylight white balance, slightly lift deep shadows, balance window highlights, natural clean whites, modest local contrast and clarity. Preserve exactly the original room geometry, surfaces, room size, all equipment, table/door/tiles, materials, positions, labels and physical wear. Do not renovate, replace furniture, invent amenities, add animals/people, remove equipment, or fabricate a grooming result. Keep the existing horizontal 4:3 composition and realistic photographic texture. No added text, graphics, logos or watermark. This is documentary source photography, not a redesign of the interior.",
+      "tool": "built-in image_gen; JPEG format conversion by sips",
+      "review": "Original architecture, room divisions, equipment and labels compared visually; no animals or amenities added.",
+      "originalFilename": "IMG_4808.HEIC",
+      "sourceSha256": "b4c81e756eefcdfdd7b08fa140bae919e81e6e7c752c372c6f819944f2da2f12",
+      "webAssetSha256": "0ba52f5ea2c865d7dee3d215189bff672b81d76edaf07cb9d857b9323c7b94fc"
+    },
+    {
+      "source": "IMG_4812.jpg",
+      "asset": "hotel-glass-4812.jpg",
+      "png": "exec-04cf363e-25a0-49bb-bfb1-a54a57c48f1b.png",
+      "prompt": "Use case: lighting-weather. Asset type: real pet-hotel website photograph. Edit target: the attached photograph IMG_4812, the real two-level row of glass-fronted animal enclosures in a peach-painted room. Correct only photographic exposure and white balance: soften the orange cast while retaining the actual peach walls and OSB wood colors, reveal shadow detail, reduce harsh glare only slightly, keep natural daytime light. Preserve exactly every glass wall, two-level divisions and shelf heights, all locks, hinges, holes and numbered labels including 1/2/3/4/5/6/8, mesh ceiling, room dimensions and contents. Do not add bedding, pets, decor, new room features or greenery. Do not enlarge or redesign enclosures or polish materials into something else. Keep original horizontal 4:3 framing and photo realism. No added text or watermark.",
+      "tool": "built-in image_gen; JPEG format conversion by sips",
+      "review": "Original architecture, room divisions, equipment and labels compared visually; no animals or amenities added.",
+      "originalFilename": "IMG_4812.HEIC",
+      "sourceSha256": "f0d62a2700e4cfc5bc8f8abb57f6b3e673b00b7e0a1b7b4991012a7fef206293",
+      "webAssetSha256": "93d847a101c4f900cee79b2824ffae3e07d43493374574bcbf0251a67adce4aa"
+    },
+    {
+      "source": "IMG_4814.jpg",
+      "asset": "hotel-rooms-4814.jpg",
+      "png": "exec-31897a3c-c601-4ea2-8cf9-0ee506077201.png",
+      "prompt": "Use case: lighting-weather. Asset type: documentary pet-hotel website photograph. Edit target: the attached real photograph IMG_4814 showing a perspective row of wood OSB-fronted animal rooms with tall glazed doors. Apply restrained professional color and exposure correction only: lift dark areas, neutralize cold fluorescent cast, balance warm wood and gray flooring, keep realistic texture and daylight. Preserve all original room architecture, partitions and heights, door count, exact openings, handles/locks, glass, mesh roof, floor tiles, wood OSB material and reflection details. Do not renovate or smooth wood into luxury timber; do not add bedding, animals, people, plants, decor or any features. Keep the original horizontal 4:3 photographic composition. No text or watermark. The image must truthfully show the existing premises.",
+      "tool": "built-in image_gen; JPEG format conversion by sips",
+      "review": "Original architecture, room divisions, equipment and labels compared visually; no animals or amenities added.",
+      "originalFilename": "IMG_4814.HEIC",
+      "sourceSha256": "51aa91ab22db8edf9fe39a28547fe257043577e033b31dd5f1000c1c3adca680",
+      "webAssetSha256": "cd66406f074299ba91b6a639c007c06585217b8747d5e6309d9560fe87b5c566"
+    },
+    {
+      "source": "IMG_4817.jpg",
+      "asset": "hotel-inside-4817.jpg",
+      "png": "exec-9bac6197-d3e1-43d2-9a89-aa871d0c3db5.png",
+      "prompt": "Use case: lighting-weather. Asset type: real pet-hotel room detail photograph. Edit target: the attached real vertical photograph IMG_4817, looking through the open wood-and-glass door into animal room number 9 with the simple existing raised shelter at the back. Change only photographic white balance, exposure and modest clarity: reduce the orange cast slightly, reveal natural detail in the room while preserving light direction and texture. Keep exact original vertical 3:4 framing, walls, floor covering, ceiling mesh, all glass panes, door angle, latches and handles, all labels (especially room number 9), the existing shelter and room dimensions. Do not add animals, bedding or decorative objects, do not remove any objects and do not enlarge or redesign the room. No added graphics, logos or watermark.",
+      "tool": "built-in image_gen; JPEG format conversion by sips",
+      "review": "Original architecture, room divisions, equipment and labels compared visually; no animals or amenities added.",
+      "originalFilename": "IMG_4817.HEIC",
+      "sourceSha256": "cbd655bc2d33b0eb036872412cf2baad499051bd0657ae29d7e2f5a9f113924e",
+      "webAssetSha256": "bebf9e4b40a2827a2d0515456abe1c26d9cc37970717e094cfc11185bd7a78b9"
+    }
+  ]
+}

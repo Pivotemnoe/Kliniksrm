@@ -1,0 +1,8 @@
+# Local pet-hotel section — 20.10.2026
+
+- User authorizes preparing the pet-hotel website after completing the grooming booking integration. Use actual supplied photos, preserve originals, and keep optional references clearly distinct from real salon work.
+- Exact operational facts supplied by the user: cats and dogs; dogs up to 10 kg; check-in 09:00–18:00; minimum two days; accommodation 700 RUB/day; dog walking 150 RUB per walk. Food and bowls must be brought; toys, beds, toilet and litter may be brought as needed. Do not invent checkout hours, room capacity, vaccination rules, service guarantees or animal welfare claims.
+- Use the clinic's address and phone. Current accepted clinic source content.js supplies Armavir, Kasparova 27/2, +7 928 421-45-42. Preserve provenance and clarify contradictions rather than changing it to an inferred branch.
+- Target is the same pet.temichevvet.ru, proposed /pet-hotel/ path. Current user restriction is local-only. Do not publish, change production, or touch the frozen grooming device runtime on 4261–4264. This independent checkout previews at 4274.
+- First hotel page supports real photos, prices, preliminary trip calculation, preparation checklist and a real phone inquiry. No hotel CRM booking/capacity subsystem is implemented or implied by this page. Do not post hotel requests to grooming or medical endpoints. Do not send MAX messages from this preview.
+- Keep the accepted photographic style, brand, purposeful reveals/parallax, keyboard access and reduced-motion controls. Never turn hotel photos into fictional interiors or add animals/amenities when retouching.

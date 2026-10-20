@@ -1,0 +1,65 @@
+{
+  "source": "Twelve HEIC files supplied by the owner; originals kept in Downloads",
+  "photos": [
+    {
+      "filename": "IMG_4815.HEIC",
+      "sha256": "675df74f4374f272d31459f34a90dbb16a6fcdc4ca30aade8788df893620f7d8",
+      "originalUnchanged": true
+    },
+    {
+      "filename": "IMG_4816.HEIC",
+      "sha256": "64fb0d3424098171a326469d9b10550c7ee1019700f0eef25f742d236245064d",
+      "originalUnchanged": true
+    },
+    {
+      "filename": "IMG_4812.HEIC",
+      "sha256": "f0d62a2700e4cfc5bc8f8abb57f6b3e673b00b7e0a1b7b4991012a7fef206293",
+      "originalUnchanged": true
+    },
+    {
+      "filename": "IMG_4810.HEIC",
+      "sha256": "91736da9d7340c349e45a823a35bf69dafe6592e8543edf3de8f1867e3403a40",
+      "originalUnchanged": true
+    },
+    {
+      "filename": "IMG_4814.HEIC",
+      "sha256": "51aa91ab22db8edf9fe39a28547fe257043577e033b31dd5f1000c1c3adca680",
+      "originalUnchanged": true
+    },
+    {
+      "filename": "IMG_4809.HEIC",
+      "sha256": "74b8af2e7e95f779df6ceb187f183291cc12606df81331ba6e5a5cb3a4bedeb9",
+      "originalUnchanged": true
+    },
+    {
+      "filename": "IMG_4811.HEIC",
+      "sha256": "749d1b57b9e259fe88493148e057874704a4b7bee1a9192c8dc1a4ffad1c879e",
+      "originalUnchanged": true
+    },
+    {
+      "filename": "IMG_4817.HEIC",
+      "sha256": "cbd655bc2d33b0eb036872412cf2baad499051bd0657ae29d7e2f5a9f113924e",
+      "originalUnchanged": true
+    },
+    {
+      "filename": "IMG_4813.HEIC",
+      "sha256": "dd83a88a85d9736f19e1d477857844196e231984a73a694afb367bca0ca8cca3",
+      "originalUnchanged": true
+    },
+    {
+      "filename": "IMG_4808.HEIC",
+      "sha256": "b4c81e756eefcdfdd7b08fa140bae919e81e6e7c752c372c6f819944f2da2f12",
+      "originalUnchanged": true
+    },
+    {
+      "filename": "IMG_4805.HEIC",
+      "sha256": "6c355fb1517311859e3095d1faa85ef0854b55fcab2def9543e7dea772eca197",
+      "originalUnchanged": true
+    },
+    {
+      "filename": "IMG_4807.HEIC",
+      "sha256": "9cd322425a80cc46b12a0ff563f821b4afeb249b32bec2525de8adb9ea7f0161",
+      "originalUnchanged": true
+    }
+  ]
+}
