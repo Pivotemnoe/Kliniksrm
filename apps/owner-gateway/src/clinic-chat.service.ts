@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { Prisma } from './generated/client';
 import { PrismaService } from './prisma.service';
 import { hashToken } from './security';
-import { clinicChatReply, clinicSafetyIntent } from './clinic-chat-policy';
+import { clinicChatReply, clinicContactRequiredReply, clinicSafetyIntent, hasClinicReplyContact, isClinicOffersQuestion } from './clinic-chat-policy';
 import { autoBookingReply, bookingDraft, fallbackBookingHints, nextBookingDraft } from './clinic-booking-dialog';
 import { ClinicChatBookingDto, ClinicChatCommandDto, ClinicChatContactDto, ClinicChatMessageDto } from './dto/clinic-chat.dto';
 
@@ -11,6 +11,7 @@ import { BoundedRateLimiter } from './abuse-protection';
 import { contactPhone, snapshotContact, introduction } from './clinic-contact';
 import { PublicClinicCatalogService } from './public-clinic-catalog.service';
 import { clinicPriceReply, isClinicPriceQuestion } from './clinic-price-reply';
+import { checkupDialogue, checkupSafetyText, checkupSummary } from './clinic-checkup';
 
 type Db = Prisma.TransactionClient;
 @Injectable()
@@ -33,8 +34,8 @@ export class ClinicChatService {
     const conversation = await this.prisma.$transaction(async tx => {
       const owner = ownerId ? await tx.ownerSnapshot.findUnique({ where: { ownerId }, select: { displayName: true, payload: true } }) : null;
       const phone = snapshotContact(owner?.payload);
-      const row = await tx.clinicConversation.create({ data: { sessionHash: hashToken(token), sessionExpiresAt: new Date(Date.now() + 7 * 86400_000), ownerId, contactName: owner?.displayName || null, phone, introductionComplete: Boolean(owner && phone) } });
-      const welcome = owner ? `Здравствуйте, ${owner.displayName}! Чем можем помочь?${phone ? '' : ' Для записи на приём понадобится номер телефона.'}` : introduction;
+      const row = await tx.clinicConversation.create({ data: { sessionHash: hashToken(token), sessionExpiresAt: new Date(Date.now() + 7 * 86400_000), ownerId, contactName: owner?.displayName || null, phone, introductionComplete: true } });
+      const welcome = owner ? `Здравствуйте, ${owner.displayName}! Расскажите, чем помочь питомцу.` : introduction;
       await this.append(tx, row.id, 'ASSISTANT', 'SITE_CHAT', welcome, 'welcome');
       return row;
     });
@@ -72,17 +73,25 @@ export class ClinicChatService {
       const cleaned = text.trim();
       if (!cleaned || cleaned.length > 4000) throw new BadRequestException('Сообщение должно содержать от 1 до 4000 символов');
       const message = await this.append(tx, row.id, 'OWNER', channel, cleaned, clientKey);
+      // Ordinary website questions are not a contact-registration form: a
+      // number typed in chat must never silently become a CRM lead.
       let suppliedPhone: string | undefined;
-      try { if (/^\+?[0-9 ()-]{10,32}$/.test(cleaned)) suppliedPhone = contactPhone(cleaned); } catch {}
-      if (suppliedPhone) await tx.clinicConversation.update({ where: { id: row.id }, data: { phone: suppliedPhone } });
+      if (channel === 'MAX') {
+        try { if (/^\+?[0-9 ()-]{10,32}$/.test(cleaned)) suppliedPhone = contactPhone(cleaned); } catch {}
+        if (suppliedPhone) await tx.clinicConversation.update({ where: { id: row.id }, data: { phone: suppliedPhone } });
+      }
       if (row.mode !== 'ASSISTANT') {
-        await tx.clinicConversation.update({ where: { id: row.id }, data: { needsAttention: true, mode: 'HUMAN' } });
+        if (hasClinicReplyContact(row)) await tx.clinicConversation.update({ where: { id: row.id }, data: { needsAttention: true, mode: 'HUMAN' } });
+        else {
+          await tx.clinicConversation.update({ where: { id: row.id }, data: { needsAttention: false, mode: 'ASSISTANT' } });
+          await this.append(tx, row.id, 'ASSISTANT', channel, clinicContactRequiredReply(clinicSafetyIntent(cleaned)), `reply:${clientKey}`);
+        }
         return;
       }
       if (suppliedPhone && row.introductionComplete) {
         await this.append(tx, row.id, 'ASSISTANT', channel, 'Спасибо! Телефон для связи сохранён. Чем можем помочь?', `reply:${clientKey}`); return;
       }
-      if (!row.introductionComplete && !clinicSafetyIntent(cleaned)) {
+      if (channel === 'MAX' && !row.introductionComplete && !clinicSafetyIntent(cleaned)) {
         const phoneText = cleaned.match(/\+?[0-9][0-9 ()-]{8,30}[0-9]/)?.[0];
         let phone: string | undefined;
         try { if (phoneText) phone = contactPhone(phoneText); } catch {}
@@ -97,12 +106,24 @@ export class ClinicChatService {
         // A visitor can ask their question immediately without completing intake.
         await tx.clinicConversation.update({ where: { id: row.id }, data: { introductionComplete: true } });
       }
+      const checkup = !clinicSafetyIntent(checkupSafetyText(cleaned)) ? checkupDialogue(cleaned, row.bookingDraft, message.sequence) : null;
+      if (checkup) {
+        const handoff = checkup.wantsBooking && hasClinicReplyContact(row);
+        await tx.clinicConversation.update({ where: { id: row.id }, data: { bookingDraft: checkup.draft, ...(handoff ? { mode: 'HUMAN', needsAttention: true } : {}) } });
+        await this.append(tx, row.id, 'ASSISTANT', channel, checkup.text + (handoff ? '\n\nПередал выбранную программу администратору. Ответ появится здесь.' : ''), `reply:${clientKey}`);
+        return;
+      }
+      if (isClinicOffersQuestion(cleaned)) {
+        await this.append(tx, row.id, 'ASSISTANT', channel, clinicChatReply(cleaned).text, `reply:${clientKey}`);
+        return;
+      }
       if (isClinicPriceQuestion(cleaned)) {
         let snapshot: unknown;
         try { snapshot = await this.catalog.get(); } catch {}
         const reply = clinicPriceReply(cleaned, snapshot);
-        await this.append(tx, row.id, 'ASSISTANT', channel, reply.text, `reply:${clientKey}`);
-        if (reply.human) await tx.clinicConversation.update({ where: { id: row.id }, data: { needsAttention: true, mode: 'HUMAN' } });
+        const handoff = reply.human && hasClinicReplyContact(row);
+        await this.append(tx, row.id, 'ASSISTANT', channel, reply.human && !handoff ? clinicContactRequiredReply() : reply.text, `reply:${clientKey}`);
+        if (handoff) await tx.clinicConversation.update({ where: { id: row.id }, data: { needsAttention: true, mode: 'HUMAN' } });
         return;
       }
       if (process.env.CLINIC_ASSISTANT_MODEL_ENABLED === 'true') {
@@ -121,8 +142,9 @@ export class ClinicChatService {
         await tx.clinicConversation.update({ where: { id: row.id }, data: { bookingDraft: nextBookingDraft(row.bookingDraft, message.sequence, cleaned, hints) } });
         if (row.ownerId) reply = autoBookingReply();
       }
-      await this.append(tx, row.id, 'ASSISTANT', channel, reply.text, `reply:${clientKey}`);
-      if (reply.human) await tx.clinicConversation.update({ where: { id: row.id }, data: { needsAttention: true, mode: 'HUMAN' } });
+      const handoff = reply.human && hasClinicReplyContact(row);
+      await this.append(tx, row.id, 'ASSISTANT', channel, reply.human && !handoff ? clinicContactRequiredReply(clinicSafetyIntent(cleaned)) : reply.text, `reply:${clientKey}`);
+      if (handoff) await tx.clinicConversation.update({ where: { id: row.id }, data: { needsAttention: true, mode: 'HUMAN' } });
     });
   }
   async booking(token: string | undefined, dto: ClinicChatBookingDto) {
@@ -151,17 +173,38 @@ export class ClinicChatService {
   async contact(token: string | undefined, dto: ClinicChatContactDto) {
     const row = await this.resolve(token);
     if (dto.website?.trim()) throw new BadRequestException('Не удалось отправить сообщение');
-    const phone = !dto.declined && dto.phone?.trim() ? contactPhone(dto.phone) : undefined;
-    const name = dto.contactName?.trim();
-    if (!dto.declined && !name && !phone) throw new BadRequestException('Напишите, как к вам обращаться, или продолжите без телефона');
+    if (dto.declined) {
+      if (dto.phone?.trim() || dto.contactName?.trim() || dto.surname?.trim() || dto.patronymic?.trim() || dto.contactConsent || dto.preferredReplyChannel) throw new BadRequestException('Выберите одно действие');
+      await this.prisma.$transaction(async tx => {
+        await this.lock(tx, row.id);
+        if (await tx.clinicChatMessage.findUnique({ where: { conversationId_clientKey: { conversationId: row.id, clientKey: dto.clientKey } } })) return;
+        await this.ownerMessageQuota(tx, row.id);
+        await this.append(tx, row.id, 'OWNER', 'SITE_CHAT', 'Продолжить без контакта', dto.clientKey);
+      });
+      return this.view(row.id);
+    }
+    const privacy = clinicLeadPolicy();
+    if (dto.contactConsent !== true) throw new BadRequestException('Подтвердите согласие на связь по этому обращению');
+    if (!dto.phone?.trim()) throw new BadRequestException('Укажите телефон для обратной связи');
+    const phone = contactPhone(dto.phone);
+    const firstName = dto.contactName?.trim();
+    if (!firstName) throw new BadRequestException('Укажите имя для обращения');
+    const name = [dto.surname?.trim(), firstName, dto.patronymic?.trim()].filter(Boolean).join(' ');
     await this.prisma.$transaction(async tx => {
-      const current = await this.lock(tx, row.id);
+      const locked = await this.lock(tx, row.id);
       if (await tx.clinicChatMessage.findUnique({ where: { conversationId_clientKey: { conversationId: row.id, clientKey: dto.clientKey } } })) return;
       await this.ownerMessageQuota(tx, row.id);
-      await tx.clinicConversation.update({ where: { id: row.id }, data: { ...(name ? { contactName: name } : {}), ...(phone ? { phone } : {}), introductionComplete: Boolean(dto.declined || (name || current.contactName) && (phone || current.phone)), introductionReminded: true } });
-      // A supplied phone is contact information, never proof of account ownership.
-      await this.append(tx, row.id, 'OWNER', 'SITE_CHAT', dto.declined ? 'Продолжить без телефона' : 'Контактные данные для связи предоставлены.', dto.clientKey);
-      if (current.mode === 'ASSISTANT') await this.append(tx, row.id, 'ASSISTANT', 'SITE_CHAT', dto.declined ? 'Можно продолжить без телефона. Если удобно, напишите, как к вам обращаться. Для записи на приём нужен номер для связи. Чем можем помочь?' : phone && !name && !current.contactName ? 'Спасибо! Напишите, пожалуйста, ваше имя или как к вам обращаться.' : `Спасибо${name ? ', ' + name : ''}! Чем можем помочь?${phone ? '' : ' Для записи на приём понадобится телефон.'}`, `reply:${dto.clientKey}`);
+      if (dto.preferredReplyChannel === 'MAX' && (!locked.maxUserId || !locked.maxConsent)) throw new BadRequestException('Сначала подключите свой MAX к этому чату');
+      const replyChannel = dto.preferredReplyChannel === 'MAX' ? 'MAX' : dto.preferredReplyChannel === 'SITE_CHAT' ? 'чат сайта' : 'телефон';
+      await tx.clinicConversation.update({ where: { id: row.id }, data: {
+        contactName: name, phone, contactConsent: true,
+        introductionComplete: true, mode: 'HUMAN', needsAttention: true,
+      } });
+      // The chat receipt is timestamped and synced to CRM. Neither a phone
+      // number nor contact consent grants promotional messaging permission.
+      const program = checkupSummary(locked.bookingDraft);
+      await this.append(tx, row.id, 'OWNER', 'SITE_CHAT', `${program ? program + ' ' : ''}Прошу связаться со мной по обращению. Предпочтительный способ ответа: ${replyChannel}.`, dto.clientKey);
+      await this.append(tx, row.id, 'SYSTEM', 'SITE_CHAT', `Согласие на обратную связь по обращению подтверждено. Документ: ${privacy.url}; редакция: ${privacy.version}. Рекламная рассылка не подключена.`, `consent:${dto.clientKey}`);
     });
     return this.view(row.id);
   }
@@ -237,6 +280,7 @@ export class ClinicChatService {
       const row = await this.lock(tx, id);
       if (await tx.clinicChatMessage.findUnique({ where: { conversationId_clientKey: { conversationId: id, clientKey: dto.clientKey } } })) return { ok: true };
       if (dto.crmRequestId && row.crmRequestId && dto.crmRequestId !== row.crmRequestId) throw new ConflictException('Заявка не соответствует переписке');
+      if (dto.action === 'REPLY' && !hasClinicReplyContact(row)) throw new ConflictException('Для ответа администратора посетитель должен оставить контакт');
       const mode = dto.action === 'RESUME' || (dto.action === 'CONFIRM' && dto.returnToAssistant && row.mode === 'ASSISTANT') ? 'ASSISTANT' : dto.action === 'RESOLVE' ? 'RESOLVED' : 'HUMAN';
       await tx.clinicConversation.update({ where: { id }, data: { mode, needsAttention: false } });
       const text = dto.text?.trim() || (dto.action === 'RESUME' ? 'Администратор вернул диалог ассистенту.' : 'Обращение обработано. Если возникнет новый вопрос, напишите здесь.');
@@ -278,4 +322,14 @@ export class ClinicChatService {
 }
 function configuredFacts() {
   return { address: process.env.CLINIC_ASSISTANT_APPROVED_ADDRESS, hours: process.env.CLINIC_ASSISTANT_APPROVED_HOURS, phone: process.env.CLINIC_ASSISTANT_APPROVED_PHONE };
+}
+function clinicLeadPolicy() {
+  const url = process.env.CLINIC_CHAT_PRIVACY_URL?.trim();
+  const version = process.env.CLINIC_CHAT_PRIVACY_VERSION?.trim();
+  if (process.env.CLINIC_CHAT_LEADS_ENABLED !== 'true' || !url || !version) throw new ServiceUnavailableException('Форма обратной связи пока не включена');
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:' || parsed.hostname !== 'clinic.temichevvet.ru' || !/^[-\w.]{1,64}$/.test(version)) throw new Error('Invalid policy');
+  } catch { throw new ServiceUnavailableException('Документ обратной связи не настроен'); }
+  return { url, version };
 }

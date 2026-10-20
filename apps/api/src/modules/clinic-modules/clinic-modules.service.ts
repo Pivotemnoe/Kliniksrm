@@ -2,8 +2,10 @@ import { ConflictException, ForbiddenException, Injectable, NotFoundException } 
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { SupportService } from '../support/support.service';
+import { AVITO_MODULE_KEY, AVITO_CAPABILITIES } from '../avito/avito.settings';
 
 export const CLINIC_MODULE_CATALOG = [
+  { key: AVITO_MODULE_KEY, title: 'Администратор Авито', description: 'Обращения и объявления Авито. Отдельные правила клиники, груминга и зоогостиницы.', licenseFeature: AVITO_MODULE_KEY, commercialType: 'ADD_ON', route: '/avito', capabilities: AVITO_CAPABILITIES },
   { key: 'GROOMING', title: 'Груминг', description: 'Графики грумеров, самостоятельная запись, кабинет владельца и уведомления MAX.', licenseFeature: 'GROOMING', commercialType: 'ADD_ON', route: '/grooming', capabilities: ['calendar', 'self-booking', 'client-portal', 'max-notifications'] },
 ] as const;
 
@@ -48,6 +50,10 @@ export class ClinicModulesService {
       const changed = await tx.clinicModuleInstallation.updateMany({ where: { id: current.id, version }, data: { enabled, enabledAt: enabled && !current.enabled ? new Date() : current.enabledAt, version: { increment: 1 }, updatedById: actorId } });
       if (!changed.count) throw new ConflictException('Настройки модуля уже изменены. Обновите страницу.');
 
+      if (moduleKey === AVITO_MODULE_KEY && !enabled) {
+        const integration = await tx.avitoIntegration.findUnique({ where: { installationId: current.id } });
+        if (integration) await tx.avitoOutgoingOperation.updateMany({ where: { conversation: { integrationId: integration.id }, status: { in: ['DRAFT', 'PENDING'] } }, data: { status: 'CANCELLED', error: 'Модуль отключён' } });
+      }
       await this.audit.log({ actorId, action: enabled ? 'clinic_module.enable' : 'clinic_module.disable', entityType: 'ClinicModuleInstallation', entityId: current.id, metadata: { moduleKey } }, tx);
       return tx.clinicModuleInstallation.findUniqueOrThrow({ where: { id: current.id } });
     });

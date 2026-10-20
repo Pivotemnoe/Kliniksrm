@@ -12,6 +12,9 @@ const DEFAULT_ORGANIZATION_ID = '11111111-1111-4111-8111-000000000001';
 const DEFAULT_OFFICE_ID = '11111111-1111-4111-8111-000000000101';
 
 const permissions = [
+  ['avito.read', 'Просмотр обращений Авито'],
+  ['avito.operate', 'Обработка обращений Авито'],
+  ['avito.manage', 'Подключение и настройки Авито'],
   ['modules.manage', 'Подключение дополнений CRM'],
   ['grooming.read', 'Просмотр записей груминга'],
   ['grooming.operate', 'Ведение записей груминга'],
@@ -82,6 +85,8 @@ const roles = [
     'administrator',
     'Администратор клиники',
     [
+      'avito.read',
+      'avito.operate',
       'grooming.read',
       'grooming.operate',
       'grooming.schedule',

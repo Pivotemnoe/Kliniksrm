@@ -26,11 +26,18 @@ export class ClinicConversationSyncService implements OnApplicationBootstrap, On
     try {
       await this.flush();
       const result = await this.gateway<{ items: Conversation[] }>('/pending');
+      let imported = 0, failed = 0;
       for (const item of result.items) {
-        const request = await this.importConversation(item);
-        await this.gateway(`/${encodeURIComponent(item.id)}/ack`, { sequence: item.sequence, crmRequestId: request.id });
+        try {
+          const request = await this.importConversation(item);
+          await this.gateway(`/${encodeURIComponent(item.id)}/ack`, { sequence: item.sequence, crmRequestId: request.id });
+          imported++;
+        } catch {
+          failed++;
+          this.logger.warn('Одно обращение пока не синхронизировано; остальные обрабатываются, повтор сохранён');
+        }
       }
-      return { status: 'synced', count: result.items.length };
+      return { status: failed ? 'partial' : 'synced', count: imported, ...(failed ? { failed } : {}) };
     } catch { this.logger.warn('Переписка пока не синхронизирована; очередь сохранена'); return { status: 'unavailable' }; }
     finally { this.running = false; }
   }

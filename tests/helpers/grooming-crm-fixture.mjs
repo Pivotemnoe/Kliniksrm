@@ -12,8 +12,8 @@ const { GroomingPortalService } = require('../../apps/owner-gateway/dist/groomin
 const { OwnerNotificationService } = require('../../apps/owner-gateway/dist/owner-notification.service.js');
 const { PasswordService } = require('../../apps/api/dist/modules/auth/password.service.js');
 const { hashToken } = require('../../apps/owner-gateway/dist/security.js');
-export const crmUrl = 'postgresql://grooming_module_qa:synthetic-grooming-only@127.0.0.1:55440/grooming_crm_integration_qa';
-export const portalUrl = 'postgresql://grooming_module_qa:synthetic-grooming-only@127.0.0.1:55440/grooming_portal_integration_qa';
+export const crmUrl = 'postgresql://grooming_module_qa:synthetic-grooming-only@127.0.0.1:55440/avito_merge_grooming_crm_20261020';
+export const portalUrl = 'postgresql://grooming_module_qa:synthetic-grooming-only@127.0.0.1:55440/avito_merge_grooming_portal_20261020';
 export const qaSecret = 'grooming-local-isolated-qa-secret-20261019';
 export const qaPassword = 'LocalGrooming2026!';
 export function assertGroomingDatabase(value, name) { const u = new URL(value); if (u.hostname !== '127.0.0.1' || u.port !== '55440' || u.pathname !== `/${name}` || u.username !== 'grooming_module_qa') throw new Error('Only the dedicated grooming module QA database is allowed'); }
@@ -24,10 +24,10 @@ export class FakeCurrentMax {
   async sendPortalButton() { throw new Error('Unexpected live invitation transport'); }
 }
 export async function groomingFixture({ fixed = false, preview = false, device = false } = {}) {
-  const crmName = device ? 'grooming_crm_device_qa' : preview ? 'grooming_crm_integration_preview' : 'grooming_crm_integration_qa';
-  const portalName = device ? 'grooming_portal_device_qa' : preview ? 'grooming_portal_integration_preview' : 'grooming_portal_integration_qa';
-  const activeCrmUrl = crmUrl.replace('grooming_crm_integration_qa', crmName);
-  const activePortalUrl = portalUrl.replace('grooming_portal_integration_qa', portalName);
+  const crmName = device ? 'grooming_crm_device_qa' : preview ? 'grooming_crm_integration_preview' : 'avito_merge_grooming_crm_20261020';
+  const portalName = device ? 'grooming_portal_device_qa' : preview ? 'grooming_portal_integration_preview' : 'avito_merge_grooming_portal_20261020';
+  const activeCrmUrl = crmUrl.replace('avito_merge_grooming_crm_20261020', crmName);
+  const activePortalUrl = portalUrl.replace('avito_merge_grooming_portal_20261020', portalName);
   assertGroomingDatabase(activeCrmUrl, crmName); assertGroomingDatabase(activePortalUrl, portalName);
   const prisma = new PrismaClient({ datasources: { db: { url: activeCrmUrl } } });
   const gateway = new GatewayPrismaClient({ datasources: { db: { url: activePortalUrl } } });

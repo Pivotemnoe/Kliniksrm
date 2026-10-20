@@ -1,0 +1,13 @@
+ARG AVITO_BASE_IMAGE
+FROM ${AVITO_BASE_IMAGE}
+ARG AVITO_SOURCE_REVISION
+LABEL org.opencontainers.image.revision=$AVITO_SOURCE_REVISION
+ENV TEMICHEVVET_GIT_COMMIT=$AVITO_SOURCE_REVISION
+COPY apps/owner-gateway/prisma /app/apps/owner-gateway/prisma
+COPY engines/schema-engine-linux-musl-openssl-3.0.x /app/node_modules/@prisma/engines/schema-engine-linux-musl-openssl-3.0.x
+RUN mkdir -p /tmp/avito-engine \
+ && cp /app/apps/owner-gateway/dist/generated/client/libquery_engine-linux-musl-openssl-3.0.x.so.node /tmp/avito-engine/ \
+ && chmod 755 /app/node_modules/@prisma/engines/schema-engine-linux-musl-openssl-3.0.x \
+ && PRISMA_SCHEMA_ENGINE_BINARY=/app/node_modules/@prisma/engines/schema-engine-linux-musl-openssl-3.0.x PRISMA_QUERY_ENGINE_LIBRARY=/tmp/avito-engine/libquery_engine-linux-musl-openssl-3.0.x.so.node /app/node_modules/.bin/prisma generate --schema /app/apps/owner-gateway/prisma/schema.prisma \
+ && cp -R /app/apps/owner-gateway/src/generated/client/. /app/apps/owner-gateway/dist/generated/client/
+COPY apps/owner-gateway/dist/avito-assistant.controller.js apps/owner-gateway/dist/avito-assistant.model.js apps/owner-gateway/dist/avito-assistant.service.js apps/owner-gateway/dist/avito-copy.contract.js apps/owner-gateway/dist/app.module.js apps/owner-gateway/dist/clinic-assistant-openai.client.js /app/apps/owner-gateway/dist/

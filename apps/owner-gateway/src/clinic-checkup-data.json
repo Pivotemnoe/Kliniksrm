@@ -1,0 +1,45 @@
+{
+  "version": "2026-10-19",
+  "species": { "cat": "Кошки", "dog": "Собаки" },
+  "labs": { "clinic": "В клинике", "invitro": "В Инвитро" },
+  "standardItems": [
+    "Общий анализ крови — 19 показателей",
+    "Биохимический анализ крови — 16 показателей",
+    "Рентгенографическое исследование",
+    "УЗИ органов брюшной полости"
+  ],
+  "profiles": {
+    "cat": {
+      "title": "Хронические вирусные инфекции",
+      "items": [
+        "Вирус иммунодефицита кошек (FIV) — обнаружение провирусной ДНК",
+        "Вирус лейкемии кошек (FeLV) — обнаружение провирусной ДНК"
+      ],
+      "regular": 2100, "price": 1750
+    },
+    "dog": {
+      "title": "Кровепаразитарный расширенный профиль",
+      "items": [
+        "Анаплазма — Anaplasma phagocytophilum и Anaplasma platys, дифференциальная диагностика",
+        "Бабезия — Babesia spp.",
+        "Бабезия Гибсона — Babesia gibsoni",
+        "Эрлихия — Ehrlichia canis",
+        "Гемоплазма — Haemobartonella canis / Mycoplasma haemocanis",
+        "Гепатозоон — Hepatozoon canis",
+        "Лейшмания — Leishmania spp.",
+        "Дирофилярии — Dirofilaria immitis и Dirofilaria repens"
+      ],
+      "regular": 10000, "price": 9200
+    }
+  },
+  "prices": {
+    "cat": {
+      "clinic": { "standard": [5300, 4700], "expanded": [7400, 6450] },
+      "invitro": { "standard": [6100, 5750], "expanded": [8200, 7500] }
+    },
+    "dog": {
+      "clinic": { "standard": [5550, 4700], "expanded": [15550, 13900] },
+      "invitro": { "standard": [6350, 5750], "expanded": [16350, 14950] }
+    }
+  }
+}

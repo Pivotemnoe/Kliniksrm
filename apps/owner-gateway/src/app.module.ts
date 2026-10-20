@@ -1,3 +1,6 @@
+import { AvitoAssistantController } from './avito-assistant.controller';
+import { AvitoAssistantService } from './avito-assistant.service';
+import { AvitoAssistantModel } from './avito-assistant.model';
 import { GroomingModule } from './grooming/grooming.module';
 import { ClinicChatController, ClinicChatInternalController } from './clinic-chat.controller';
 import { OwnerNotificationController, OwnerNotificationInternalController } from './owner-notification.controller';
@@ -30,6 +33,7 @@ import { PublicClinicCatalogService } from './public-clinic-catalog.service';
 @Module({
   imports: [GroomingModule],
   controllers: [
+    AvitoAssistantController,
     HealthController,
     OwnerNotificationController, OwnerNotificationInternalController,
     ClinicChatController, ClinicChatInternalController,
@@ -42,6 +46,7 @@ import { PublicClinicCatalogService } from './public-clinic-catalog.service';
     PublicClinicCatalogController,
   ],
   providers: [
+    AvitoAssistantService, AvitoAssistantModel,
     PrismaService,
     OwnerNotificationService,
     ClinicChatService, ClinicChatBookingService, ClinicChatDeliveryService, ClinicAssistantOpenAiClient, ClinicAssistantRunnerService,

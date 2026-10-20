@@ -1,0 +1,15 @@
+ARG AVITO_BASE_IMAGE
+FROM ${AVITO_BASE_IMAGE}
+ARG AVITO_SOURCE_REVISION
+LABEL org.opencontainers.image.revision=$AVITO_SOURCE_REVISION
+ENV TEMICHEVVET_GIT_COMMIT=$AVITO_SOURCE_REVISION
+COPY prisma /app/prisma
+COPY engines/schema-engine-linux-musl-openssl-3.0.x /app/node_modules/@prisma/engines/schema-engine-linux-musl-openssl-3.0.x
+RUN mkdir -p /tmp/avito-engine \
+ && cp /app/node_modules/.prisma/client/libquery_engine-linux-musl-openssl-3.0.x.so.node /tmp/avito-engine/ \
+ && chmod 755 /app/node_modules/@prisma/engines/schema-engine-linux-musl-openssl-3.0.x \
+ && PRISMA_SCHEMA_ENGINE_BINARY=/app/node_modules/@prisma/engines/schema-engine-linux-musl-openssl-3.0.x PRISMA_QUERY_ENGINE_LIBRARY=/tmp/avito-engine/libquery_engine-linux-musl-openssl-3.0.x.so.node /app/node_modules/.bin/prisma generate --schema /app/prisma/schema.prisma
+COPY apps/api/dist/modules/avito /app/apps/api/dist/modules/avito
+COPY apps/api/dist/modules/clinic-modules/clinic-modules.service.js apps/api/dist/modules/clinic-modules/clinic-modules.controller.js /app/apps/api/dist/modules/clinic-modules/
+COPY apps/api/dist/app.module.js /app/apps/api/dist/app.module.js
+COPY apps/api/dist/modules/meta/meta.controller.js /app/apps/api/dist/modules/meta/meta.controller.js

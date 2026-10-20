@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 
-export const clinicIntents = ['GREETING', 'ADDRESS', 'HOURS', 'PHONE', 'PRICE', 'BOOKING', 'HUMAN', 'CLINICAL', 'OTHER'] as const;
+export const clinicIntents = ['GREETING', 'ADDRESS', 'HOURS', 'PHONE', 'PRICE', 'OFFERS', 'BOOKING', 'HUMAN', 'CLINICAL', 'OTHER'] as const;
 export type ClinicIntent = typeof clinicIntents[number];
 export type ClinicAssistantTurn = { role: 'user' | 'assistant'; text: string };
 export type ClinicIntentResult = { intent: ClinicIntent; serviceQuery: string | null; preferredTimeText: string | null };
@@ -14,12 +14,12 @@ export class ClinicAssistantModelError extends Error {
 // its bridge token; neither credential belongs in a browser or model prompt.
 @Injectable()
 export class ClinicAssistantOpenAiClient {
-  prepare(turns: ClinicAssistantTurn[]) {
-    if (process.env.CLINIC_ASSISTANT_MODEL_ENABLED !== 'true') throw new ClinicAssistantModelError('DISABLED');
+  prepare(turns: ClinicAssistantTurn[], channel: 'CLINIC' | 'AVITO' = 'CLINIC') {
+    if (process.env[channel === 'AVITO' ? 'AVITO_ASSISTANT_MODEL_ENABLED' : 'CLINIC_ASSISTANT_MODEL_ENABLED'] !== 'true') throw new ClinicAssistantModelError('DISABLED');
     const base = process.env.CLINIC_ASSISTANT_OPENAI_BASE_URL?.trim().replace(/\/+$/, '');
     const token = process.env.CLINIC_ASSISTANT_OPENAI_GATEWAY_TOKEN?.trim();
-    const model = process.env.CLINIC_ASSISTANT_OPENAI_MODEL?.trim() || 'gpt-4o-mini';
-    if (!base || !token || token.length < 16 || !['gpt-4o-mini', 'gpt-4o-mini-2024-07-18', 'gpt-4.1-mini', 'gpt-4.1-mini-2025-04-14'].includes(model)) throw new ClinicAssistantModelError('CONFIGURATION');
+    const model = channel === 'AVITO' ? process.env.AVITO_ASSISTANT_OPENAI_MODEL?.trim() || 'gpt-6-luna' : process.env.CLINIC_ASSISTANT_OPENAI_MODEL?.trim() || 'gpt-4o-mini';
+    if (!base || !token || token.length < 16 || !['gpt-6-luna', 'gpt-4o-mini', 'gpt-4o-mini-2024-07-18', 'gpt-4.1-mini', 'gpt-4.1-mini-2025-04-14'].includes(model)) throw new ClinicAssistantModelError('CONFIGURATION');
     let url: URL;
     try { url = new URL(`${base}/chat/completions`); } catch { throw new ClinicAssistantModelError('CONFIGURATION'); }
     const loopback = ['127.0.0.1', '[::1]', 'localhost'].includes(url.hostname);
@@ -27,7 +27,7 @@ export class ClinicAssistantOpenAiClient {
     if (!turns.length || turns.length > 6 || !turns.every(x => ['user', 'assistant'].includes(x.role) && typeof x.text === 'string' && x.text.trim() && x.text.length <= 4000) || turns.at(-1)?.role !== 'user') throw new ClinicAssistantModelError('INPUT');
     const messages = [{ role: 'system', content: systemPrompt }, ...turns.map(x => ({ role: x.role, content: redactContactDetails(x.text) }))];
     const body = {
-      model, messages, store: false, stream: false, temperature: 0, max_completion_tokens: 180,
+      model, messages, store: false, stream: false, ...(model === 'gpt-6-luna' ? { reasoning_effort: 'none' } : { temperature: 0 }), max_completion_tokens: 180,
       response_format: { type: 'json_schema', json_schema: { name: 'clinic_intent', strict: true, schema: {
         type: 'object', additionalProperties: false,
         properties: { intent: { type: 'string', enum: clinicIntents }, serviceQuery: { type: ['string', 'null'] }, preferredTimeText: { type: ['string', 'null'] } },
@@ -37,7 +37,7 @@ export class ClinicAssistantOpenAiClient {
     const serialized = JSON.stringify(body);
     if (Buffer.byteLength(serialized) > 20_000) throw new ClinicAssistantModelError('INPUT');
     const inputUpperBound = Buffer.byteLength(serialized) + 512;
-    const rates = model.startsWith('gpt-4.1-mini') ? { input: 0.4, output: 1.6 } : { input: 0.15, output: 0.6 };
+    const rates = model === 'gpt-6-luna' ? { input: 0.1, output: 0.5 } : model.startsWith('gpt-4.1-mini') ? { input: 0.4, output: 1.6 } : { input: 0.15, output: 0.6 };
     // Conservative reserve in micro-USD: at most one token per UTF-8 byte,
     // with formatting overhead. The durable worker must reserve it before I/O.
     const reservedMicroUsd = Math.ceil(inputUpperBound * rates.input + body.max_completion_tokens * rates.output);
@@ -89,6 +89,7 @@ const systemPrompt = `Ты разбираешь обращения в текст
 Верни только JSON заданной схемы. Классифицируй последнее намерение с учётом короткой истории.
 GREETING — приветствие. ADDRESS — адрес/как добраться. HOURS — часы работы. PHONE — телефон клиники.
 PRICE — стоимость услуги или прейскурант без медицинских жалоб. Не сообщай чисел: сервер сам прочитает опубликованный прайс.
+OFFERS — акции клиники без медицинских жалоб. Условия сообщит сервер из утверждённого текста.
 BOOKING — новая запись/свободное время/прививка без жалоб. HUMAN — просьба человека, перенос, отмена, жалоба на обслуживание.
 Короткий ответ с услугой или датой после предложения подобрать запись — тоже BOOKING. Не выдумывай фрагмент услуги из прошлых сообщений: сервер уже хранит предыдущий выбор.
 CLINICAL — симптомы, диагнозы, лекарства, дозировки или осложнения вакцинации; при сочетании с записью выбирай CLINICAL.

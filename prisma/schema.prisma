@@ -1129,6 +1129,8 @@ model Appointment {
 }
 
 model OnlineAppointmentRequest {
+  avitoConversations AvitoConversation[]
+  avitoInquiry AvitoInquiry?
   id                String              @id @default(uuid())
   status            OnlineRequestStatus @default(NEW)
   source            String              @default("PUBLIC_FORM")
@@ -2818,6 +2820,7 @@ model ConsumableUsageSnapshot {
 
 
 model ClinicModuleInstallation {
+  avito AvitoIntegration?
   groomingLocations GroomingLocation[]
   groomingServices GroomingService[]
   groomingSettings GroomingSettings?
@@ -3094,4 +3097,210 @@ model GroomingWorkPeriod {
   updatedAt DateTime @updatedAt
   @@index([specialistId, startsAt])
   @@index([locationId, startsAt])
+}
+
+
+model AvitoIntegration {
+  id                String @id @default(uuid())
+  installationId    String @unique
+  installation      ClinicModuleInstallation @relation(fields: [installationId], references: [id], onDelete: Restrict)
+  accountId         String? @unique
+  accountName       String?
+  checkedAt         DateTime?
+  lastSyncAt        DateTime?
+  connectionError   String?
+  settings          Json
+  settingsVersion   Int @default(1)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  revisions         AvitoSettingsRevision[]
+  conversations     AvitoConversation[]
+  calls             AvitoCall[]
+  events            AvitoIncomingEvent[]
+  publishingCheck   Json?
+  listingDrafts     AvitoListingDraft[]
+}
+
+
+model AvitoListingDraft {
+  id              String @id @default(uuid())
+  integrationId   String
+  clientKey       String
+  integration     AvitoIntegration @relation(fields: [integrationId], references: [id], onDelete: Restrict)
+  sourceListingId String?
+  direction       String @default("CLINIC")
+  title           String
+  content         Json
+  version         Int @default(1)
+  status          String @default("DRAFT")
+  approvedFactsHash String?
+  createdBy       String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  revisions       AvitoListingDraftRevision[]
+  media           AvitoListingMedia[]
+  @@index([integrationId, updatedAt])
+  @@unique([integrationId, clientKey])
+}
+
+
+model AvitoListingDraftRevision {
+  id         String @id @default(uuid())
+  draftId    String
+  draft      AvitoListingDraft @relation(fields: [draftId], references: [id], onDelete: Restrict)
+  version    Int
+  snapshot   Json
+  actorId    String
+  createdAt  DateTime @default(now())
+  @@unique([draftId, version])
+}
+
+
+model AvitoListingMedia {
+  id           String @id @default(uuid())
+  draftId      String
+  draft        AvitoListingDraft @relation(fields: [draftId], references: [id], onDelete: Restrict)
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  sha256       String
+  bytes        Bytes
+  createdBy    String
+  createdAt    DateTime @default(now())
+  @@unique([draftId, sha256])
+}
+
+
+model AvitoSettingsRevision {
+  id            String @id @default(uuid())
+  integrationId String
+  integration   AvitoIntegration @relation(fields: [integrationId], references: [id], onDelete: Restrict)
+  version       Int
+  settings      Json
+  actorId       String?
+  createdAt     DateTime @default(now())
+  @@unique([integrationId, version])
+}
+
+
+model AvitoConversation {
+  id                 String @id @default(uuid())
+  integrationId      String
+  integration        AvitoIntegration @relation(fields: [integrationId], references: [id], onDelete: Restrict)
+  externalChatId     String
+  listingId          String?
+  listingTitle       String?
+  customerName       String?
+  direction          String @default("UNASSIGNED")
+  mode               String @default("BOT")
+  stage              String @default("NEW")
+  needsAttention     Boolean @default(false)
+  version            Int @default(0)
+  contact            Json
+  intakeCycle        Int @default(1)
+  requestId          String?
+  request            OnlineAppointmentRequest? @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  lastMessageAt      DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  messages           AvitoMessage[]
+  outbox             AvitoOutgoingOperation[]
+  inquiries          AvitoInquiry[]
+  @@unique([integrationId, externalChatId])
+  @@index([integrationId, needsAttention, lastMessageAt])
+}
+
+
+model AvitoMessage {
+  id             String @id @default(uuid())
+  conversationId String
+  conversation   AvitoConversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  externalId     String
+  direction      String
+  type           String
+  text           String
+  authorId       String?
+  occurredAt     DateTime
+  createdAt      DateTime @default(now())
+  @@unique([conversationId, externalId])
+  @@index([conversationId, occurredAt])
+}
+
+
+model AvitoOutgoingOperation {
+  id                String @id @default(uuid())
+  conversationId    String
+  conversation      AvitoConversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  clientKey         String @unique
+  triggerMessageId  String?
+  crmQuery          String?
+  replyContext      Json?
+  text              String
+  purpose           String @default("REPLY")
+  consentFingerprint String?
+  status            String @default("DRAFT")
+  actorId           String?
+  conversationVersion Int
+  settingsVersion   Int
+  externalMessageId String?
+  error             String?
+  startedAt         DateTime?
+  sentAt            DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  @@index([status, createdAt])
+  @@index([conversationId, externalMessageId])
+}
+
+
+model AvitoIncomingEvent {
+  id             String @id @default(uuid())
+  integrationId  String
+  integration    AvitoIntegration @relation(fields: [integrationId], references: [id], onDelete: Restrict)
+  eventKey       String @unique
+  externalChatId String
+  externalMessageId String
+  status         String @default("PENDING")
+  attempts       Int @default(0)
+  error          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  @@index([status, createdAt])
+}
+
+
+model AvitoCall {
+  id            String @id @default(uuid())
+  integrationId String
+  integration   AvitoIntegration @relation(fields: [integrationId], references: [id], onDelete: Restrict)
+  clientKey     String
+  occurredAt    DateTime
+  missed        Boolean @default(false)
+  direction     String @default("CLINIC")
+  note          String?
+  actorId       String
+  createdAt     DateTime @default(now())
+  @@unique([integrationId, clientKey])
+  @@index([integrationId, occurredAt])
+}
+
+
+model AvitoInquiry {
+  id             String @id @default(uuid())
+  conversationId String
+  conversation   AvitoConversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  clientKey      String @unique
+  requestId      String? @unique
+  request        OnlineAppointmentRequest? @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  direction      String
+  contactName    String
+  phone          String
+  summary        String
+  contactRecordedAt DateTime @map("consentAt")
+  contactMessageId String @map("consentMessageId")
+  contactBasis   String @default("EXPLICIT_CONFIRMATION")
+  status         String @default("NEW")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  @@index([direction, status, createdAt])
 }
