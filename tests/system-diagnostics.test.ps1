@@ -40,4 +40,18 @@ $s.resolved.web=$s.containers.web.image; $s.remote.web=$s.containers.web.image
 Assert (@(Get-DiagnosticIssues $s $splitConfig $now).Count -eq 0) 'Web-only release rejected'
 $s.containers.web.revision=$revision
 Assert ((Get-DiagnosticIssues $s $splitConfig $now).code -contains 'version.web') 'Web-only rollback missed'
-Write-Output 'DIAGNOSTICS_TESTS_OK: 15 assertions; no production changes'
+$localConfig=[PSCustomObject]@{expectedRevision=$revision;expectedApiImage='temichevvet-crm-api:confirmed-release';expectedWebImage='temichevvet-crm-web:confirmed-release'}
+$s=New-Snapshot
+foreach($name in @('api','web')) {
+  $image=if($name -eq 'web'){$localConfig.expectedWebImage}else{$localConfig.expectedApiImage}
+  $s.containers[$name].image=$image; $s.resolved[$name]=$image; $s.remote[$name]=$image
+}
+Assert (@(Get-DiagnosticIssues $s $localConfig $now).Count -eq 0) 'Explicit local release rejected'
+$s.remote.web='temichevvet-crm-web:other'; Assert ((Get-DiagnosticIssues $s $localConfig $now).code -contains 'update.web') 'Local update drift missed'
+$s.remote.web=$localConfig.expectedWebImage; $s.resolved.api='temichevvet-crm-api:other'
+Assert ((Get-DiagnosticIssues $s $localConfig $now).code -contains 'launch.api') 'Local launch drift missed'
+$s.resolved.api=$localConfig.expectedApiImage; $s.containers.api.revision='old'
+Assert ((Get-DiagnosticIssues $s $localConfig $now).code -contains 'version.api') 'Local revision drift missed'
+$s.containers.api.revision=$revision; $s.containers.web.image='temichevvet-crm-web:other'
+Assert ((Get-DiagnosticIssues $s $localConfig $now).code -contains 'version.web') 'Local image drift missed'
+Write-Output 'DIAGNOSTICS_TESTS_OK: legacy, split and explicit image baselines verified; no production changes'

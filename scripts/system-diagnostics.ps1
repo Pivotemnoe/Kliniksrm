@@ -46,14 +46,16 @@ function Get-DiagnosticIssues($Snapshot, $Config, [DateTimeOffset]$Now = [DateTi
   }
   foreach ($name in @('api','web')) {
     $expectedRevision = if ($name -eq 'web' -and $Config.expectedWebRevision) { $Config.expectedWebRevision } else { $Config.expectedRevision }
+    $configuredImage = if ($name -eq 'web') { $Config.expectedWebImage } else { $Config.expectedApiImage }
+    $expectedImage = if ($configuredImage) { [string]$configuredImage } else { "ghcr.io/pivotemnoe/kliniksrm-${name}:$expectedRevision" }
     $container=$Snapshot.containers.$name
-    if (!$container -or $container.revision -ne $expectedRevision -or $container.image -ne "ghcr.io/pivotemnoe/kliniksrm-${name}:$expectedRevision") {
+    if (!$container -or $container.revision -ne $expectedRevision -or $container.image -ne $expectedImage) {
       Add-Issue "version.$name" "Версия $name отличается от подтверждённой версии $($expectedRevision.Substring(0,7))."
     }
-    if ($Snapshot.resolved.$name -ne "ghcr.io/pivotemnoe/kliniksrm-${name}:$expectedRevision") {
+    if ($Snapshot.resolved.$name -ne $expectedImage) {
       Add-Issue "launch.$name" "Настройки запуска $name указывают не на подтверждённую версию."
     }
-    if ($Snapshot.remote.$name -ne "ghcr.io/pivotemnoe/kliniksrm-${name}:$expectedRevision") {
+    if ($Snapshot.remote.$name -ne $expectedImage) {
       Add-Issue "update.$name" "Автообновление $name указывает не на подтверждённую версию."
     }
   }
