@@ -110,6 +110,45 @@ test('hotel delivery HTTP uses durable receipts, shared owner policy and an inde
     assert.equal(attempts.length, count + 1);
   });
 
+  await t.test('one delivery ID cannot switch OWNER and STAFF after SENT or UNKNOWN', async () => {
+    for (const first of ['OWNER', 'STAFF']) for (const uncertain of [false, true]) {
+      const id = randomUUID(), count = attempts.length;
+      failOwner = first === 'OWNER' && uncertain; failStaff = first === 'STAFF' && uncertain;
+      const body = first === 'OWNER' ? owner : staff, changed = first === 'OWNER' ? staff : owner;
+      assert.equal((await request(id, body)).data.status, uncertain ? 'UNKNOWN' : 'SENT');
+      failOwner = false; failStaff = false;
+      assert.equal((await request(id, changed)).status, 409);
+      assert.equal((await request(id, body)).data.status, uncertain ? 'UNKNOWN' : 'SENT');
+      assert.equal(attempts.length, count + 1);
+    }
+  });
+
+  await t.test('concurrent cross-role claims and a role change during transport send only once', async () => {
+    const id = randomUUID(), count = attempts.length;
+    const results = await Promise.all([request(id, owner), request(id, staff)]);
+    assert.deepEqual(results.map(x => x.status).sort(), [201, 409]);
+    assert.equal(attempts.length, count + 1);
+    let release, started;
+    const active = new Promise(resolve => { started = resolve; });
+    held = {started, promise: new Promise(resolve => { release = resolve; })};
+    const activeId = randomUUID(), first = request(activeId, staff);
+    try { await active; assert.equal((await request(activeId, owner)).status, 409); }
+    finally { release(); }
+    assert.equal((await first).data.status, 'SENT'); held = undefined;
+    assert.equal(attempts.length, count + 2);
+  });
+
+  await t.test('pre-registry transport receipts preserve role and payload on first intent claim', async () => {
+    const count = attempts.length;
+    for (const [id, body, changed] of [[ownerId, owner, staff], [staffId, staff, owner]]) {
+      await f.prisma.petHotelDeliveryIntent.delete({where: {id}});
+      assert.equal((await request(id, changed)).status, 409);
+      assert.equal((await request(id, {...body, text: 'Изменённая старая доставка'})).status, 409);
+      assert.equal((await request(id, body)).data.status, 'SENT');
+    }
+    assert.equal(attempts.length, count);
+  });
+
   await t.test('concurrent replay while transport is active returns SENDING without a second call', async () => {
     let release, started;
     const active = new Promise(resolve => { started = resolve; });

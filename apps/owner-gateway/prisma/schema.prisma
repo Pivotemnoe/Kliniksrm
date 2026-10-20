@@ -532,6 +532,12 @@ model PetHotelRegistration {
   @@index([status, createdAt])
 }
 
+model PetHotelDeliveryIntent {
+  id String @id
+  fingerprint String
+  createdAt DateTime @default(now())
+}
+
 model PetHotelStaffDelivery {
   id String @id
   fingerprint String
