@@ -30,6 +30,17 @@ test('HTTPS keeps the native operation key generator', () => {
   assert.equal(createOperationKey(), 'native-operation-key');
 });
 
+test('legacy administrator with all clinic roles gets the administrator workspace without changing access roles', () => {
+  const { resolveDashboardMode } = load('apps/web/src/features/dashboard/workspaceMode.ts');
+  const roles = ['director', 'administrator', 'doctor', 'assistant', 'cashier', 'stock'];
+  const employee = { position: 'Администратор', roles: [...roles] };
+  assert.equal(resolveDashboardMode(employee, 'director'), 'administrator');
+  assert.deepEqual(employee.roles, roles);
+  assert.equal(resolveDashboardMode({ position: 'Директор', roles: ['director'] }, 'director'), 'director');
+  assert.equal(resolveDashboardMode({ position: 'Администратор', roles: ['director'] }, 'director'), 'director');
+  assert.equal(resolveDashboardMode({ position: null, roles: ['doctor'] }, 'doctor'), 'doctor');
+});
+
 test('switching employees removes director data and ignores a late director response', async () => {
   const { clearStaffSessionCache } = load('apps/web/src/auth/sessionCache.ts');
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });

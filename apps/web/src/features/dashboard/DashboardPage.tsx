@@ -29,6 +29,7 @@ import { getTaskTypeLabel } from '../tasks/types';
 import { visitStatusColors, visitStatusLabels } from '../visits/types';
 import { getDashboardToday, getDirectorPortalStatistics, getDirectorSiteAnalytics } from './dashboard.api';
 import { DashboardQueueItem, DashboardSummary, DirectorPortalOwnerItem, DirectorPortalStatistics, DirectorSiteAnalytics } from './types';
+import { resolveDashboardMode } from './workspaceMode';
 
 const hospitalStatusLabels = { ACTIVE: 'В стационаре', DISCHARGED: 'Выписан', CANCELLED: 'Отменён' } as const;
 const hospitalStatusColors = { ACTIVE: 'blue', DISCHARGED: 'green', CANCELLED: 'default' } as const;
@@ -78,7 +79,9 @@ export function DashboardPage() {
     enabled: Boolean(employee?.id),
     refetchInterval: 10_000,
   });
-  const summary = dashboardQuery.data;
+  const response = dashboardQuery.data;
+  const workspaceMode = resolveDashboardMode(employee, response?.workspace.mode);
+  const summary = response && workspaceMode ? { ...response, workspace: { ...response.workspace, mode: workspaceMode } } : undefined;
   const portalStatisticsQuery = useQuery({
     queryKey: ['dashboard', employee?.id, 'portal-statistics'],
     queryFn: getDirectorPortalStatistics,
