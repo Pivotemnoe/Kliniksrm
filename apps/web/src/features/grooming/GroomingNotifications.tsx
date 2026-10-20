@@ -39,7 +39,7 @@ export function GroomingPhoneButton({ actorId }: { actorId: string }) {
 }
 
 export function GroomingPhoneDrawer({ actorId, open, onClose, canManage = false, selectedId }: { actorId: string; open: boolean; onClose: () => void; canManage?: boolean; selectedId?: string }) {
-  return <Drawer title={canManage ? 'Подключение телефона грумера' : 'Приложение грумера'} width="min(720px, 100vw)" open={open} onClose={onClose}>{canManage ? <GroomingPhones actorId={actorId} selectedId={selectedId} /> : <GroomingDeviceCard actorId={actorId} />}</Drawer>;
+  return <Drawer title={canManage ? 'Подключение телефона грумера' : 'Приложение грумера'} width={canManage ? 'min(920px, 100vw)' : 'min(720px, 100vw)'} open={open} onClose={onClose}>{canManage ? <GroomingPhones actorId={actorId} selectedId={selectedId} /> : <GroomingDeviceCard actorId={actorId} />}</Drawer>;
 }
 
 export function GroomingDeviceCard({ actorId }: { actorId: string }) {
