@@ -1,1 +1,1 @@
-{"name":"temichevvet-pet-hotel-local","version":"0.1.0","private":true,"type":"module","scripts":{"dev":"node serve.mjs","check":"node --check serve.mjs && node --check public/pet-hotel/app.js && node --check public/pet-hotel/booking.js"}}
+{"name":"temichevvet-pet-hotel-local","version":"0.1.0","private":true,"type":"module","scripts":{"dev":"node serve.mjs","build":"node scripts/build-release.mjs","check":"node --check serve.mjs && node --check public/pet-hotel/app.js && node --check public/pet-hotel/booking.js && node --check scripts/build-release.mjs"}}

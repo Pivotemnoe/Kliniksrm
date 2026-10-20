@@ -1,5 +1,13 @@
 # Local pet-hotel section — 20.10.2026
 
+## Latest human authorization — joint production release
+
+- On 20.10.2026 the human explicitly instructed: «Ну, делай, проверяй совместно и надо уже на CRM её запускать и сайт боевой запускать, всё уже». This supersedes prior local-only restrictions for this coordinated hotel release; do not ask again for permission merely because older paragraphs say publication is not authorized.
+- The authorized CRM chat owns building and switching the shared clinical API/Web/owner gateway. This chat owns the hotel website, owner-portal frontend and coordinated static publication to `https://pet.temichevvet.ru/pet-hotel/`. Do not independently switch the shared gateway or overwrite the current grooming site.
+- Latest confirmed integration base: `534c22a247b6bcd17c4ab748e2a010f8a8b14186` (operational diagnostics/report), while the deployed application revision is `908cbbdd0aae9e302fc9b7ed5cc56de00804436d`. Preserve newer Avito, MAX and workplace-aware grooming behavior.
+- Replace the read-only fixture with the real clinical processor for joint acceptance before opening real reservations. Verify persisted records, booking conflicts, replay recovery, saved room tariffs, role isolation and delivery to the human's already connected MAX. Mark test reservations explicitly and cancel them after verification; never delete history or message other clients.
+- Preserve originals, backups, stateful services and existing client records. Capture the exact candidate/revision and rollback path, migrate additively, then verify the public site and clinical workflow after the coordinated switch.
+
 ## Current authorized parallel implementation — website, gateway and owner portal
 
 - The human explicitly authorized coordinating and implementing in parallel with chat «Редизайн интерфейса CRM — вариант 2» (01a15291-15d7-7f90-8546-cd22d3e0fee9). This chat owns the public hotel website, hotel-only owner-gateway models/queue/controllers/migration, and owner portal UI. The CRM chat owns clinical APIs/schema, room-rate editing, booking processor, permissions, CRM UI and MAX delivery outbox. Do not edit that chat's clinical source or stands 4291/4292.
