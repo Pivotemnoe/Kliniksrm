@@ -1,0 +1,29 @@
+{
+  "date": "2026-10-20",
+  "tool": "built-in image_gen",
+  "ownerDirection": "Generate a photorealistic image based on our salon; no baths. Red hanging decoration references the earlier clarification.",
+  "attempts": [
+    {
+      "source": "/Users/konstantin/.codex/worktrees/grooming-public-site/CRM/.artifacts/pet-hotel-photos-20261020/previews/IMG_4809.jpg",
+      "prompt": "Use case: precise-object-edit. Asset type: real grooming salon workspace photograph for the website. Edit target: the attached actual photograph IMG_4809, with a black grooming table in front of a large wall mirror on the left, grey walls, glazed room partitions behind, a black office chair and a black sofa on the right. Keep this actual camera position, landscape 4:3 composition, room geometry, mirror size and reflections, grooming table and its arm, chair, sofa and real materials. Apply restrained professional photographic exposure, neutral daylight color and clarity so the working table and large mirror are the visual focus. Remove the loose pole/cable lying across the sofa seat and the visible loose cleaning bottle/storage clutter behind the glazed partition; retouch the small peeling patch on the sofa seat to match its existing black upholstery. Do not change furniture design, reflections or room layout. No baths should be added. No new animals, people, decorations, flowers, frames, mirrors, accessories, luxury finishes or text. This must remain a credible cleaned photograph of the real workspace, not an AI architectural visualization.",
+      "generatedPng": "exec-6e6a4f0b-a6b3-441d-aa55-2742d6f87431.png",
+      "status": "not-selected; owner clarified red pendant photo"
+    },
+    {
+      "source": "/Users/konstantin/.codex/worktrees/grooming-public-site/CRM/.artifacts/pet-hotel-photos-20261020/previews/IMG_4807.jpg",
+      "prompt": "Use case: precise-object-edit. Edit the attached ACTUAL photograph IMG_4807. It is the owner's selected real grooming salon photograph with red hanging heart/bead strands in the back right corner, framed wall photos above, grey walls, an existing black sofa and a plant at left, a blue cabinet in the center-left, and baths in the foreground. The red hanging strands are the distinctive subject: preserve them exactly and keep them clearly visible. Produce a clean, tasteful professional photograph of the SAME premises, preserving all actual room geometry, fixed equipment, framing, mirror/reflective surfaces and red hanging decoration. Remove the pink and green hanging cloths on the steel bath, loose bottles and accessories on the bath edge, and plastic canisters beneath the bath. Clean up the corresponding surfaces naturally. Apply modest daylight white balance, exposure and clarity, retaining real materials and imperfections. Retain the existing plant, blue cabinet, sofa, framed photos and the red hanging decoration. No new animals, people, decorations, furniture, text, dramatic lighting or invented luxury room. Keep landscape 4:3 composition. Do not replace the red strands with anything else. The final image must obviously be this same selected photograph, not a different angle of the salon.",
+      "generatedPng": "exec-9d9d6d0f-486f-4a24-ac3c-7eb76169235d.png",
+      "status": "rejected; bath remains in this source angle"
+    },
+    {
+      "sourceReferences": [
+        "/Users/konstantin/.codex/worktrees/grooming-public-site/CRM/.artifacts/pet-hotel-photos-20261020/previews/IMG_4809.jpg",
+        "/Users/konstantin/.codex/worktrees/grooming-public-site/CRM/.artifacts/pet-hotel-photos-20261020/previews/IMG_4807.jpg"
+      ],
+      "prompt": "Use case: photorealistic-natural, interior photographic visualization based on actual premises. Input image 1 (IMG_4809): primary architectural and furniture reference for the owner's real grooming salon: dark grey painted walls, large plain wall mirror, real black rubber grooming table with black overhead safety arm, beige tile floor, black chair and waiting sofa, glazed partition and warm OSB wood visible behind. Input image 2 (IMG_4807): supporting reference ONLY for the salon's real red hanging heart/bead decoration; do not copy its baths. Create a convincing real-estate/editorial photograph, not a render, of the grooming WORKSTATION based on image 1, with the red hanging decoration from image 2 tastefully visible at the top/right edge of the large mirror. Bring the camera a little closer to the actual table and mirror so the workstation is the focal point and looks welcoming; keep the actual grey walls, practical table design, beige tile and recognizable salon setting. The table and mirror should occupy the central/right part of the horizontal frame with some quieter wall at left for website type. Use ordinary soft daylight from the existing left window, neutral natural exposure and realistic reflections. Tidy loose clutter and repair only small worn upholstery patches. Keep photographic imperfections, believable surface texture, coherent mirror reflections and physically correct equipment. No baths, washing tubs, sinks, canisters or laundry anywhere in frame or reflections. No people or animals, no invented fancy amenities, luxury marble, flowers or lush decor, no glossy synthetic surfaces, plastic textures, oversharpening, dramatic spotlights, haze, text or watermarks. Landscape 4:3 photo, high-end photography through careful composition, entirely plausible in this actual modest salon.",
+      "generatedPng": "exec-a8fe01a5-840e-48e3-ac09-b3ff8c13cb50.png",
+      "status": "rejected by owner; exact real IMG_4806 supplied and selected instead",
+      "wasSelectedForPreview": true
+    }
+  ]
+}

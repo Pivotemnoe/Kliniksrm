@@ -1,0 +1,17 @@
+{
+  "date": "2026-10-20",
+  "tool": "built-in image_gen",
+  "useCase": "precise-object-edit",
+  "jobs": [
+    {
+      "key": "hotel_room_cleanup_20261020",
+      "source": "/Users/konstantin/.codex/worktrees/pet-hotel-site-20261020/CRM/prototypes/temichevvet-pet-hotel-20261020/public/pet-hotel/assets/hotel-inside-4817.jpg",
+      "prompt": "Use case: precise-object-edit. Edit target: the attached real photograph of a pet hotel room. Remove the black plastic storage bags visible through the two rear window openings, and the loose blue storage/crate item behind the right opening. Reconstruct only the now-visible ordinary background wall and floor, with lighting and perspective matching the photograph. Keep the exact existing OSB wood room, open wood-and-glass door, glass edges and reflections, hardware, grey floor, raised wooden shelter, ceiling mesh, camera position and portrait framing unchanged. Keep the room number labels № 8 and № 9 as shown. This is a conservative photographic cleanup of a real premises, not an architectural redesign. No animals, people, furniture, decoration, greenery, new amenities, stylization, text overlays or dramatic lighting. Natural existing textures and colors; only mild clarity restoration."
+    },
+    {
+      "key": "grooming_salon_cleanup_20261020",
+      "source": "/Users/konstantin/.codex/worktrees/pet-hotel-site-20261020/CRM/prototypes/temichevvet-pet-hotel-20261020/public/pet-hotel/assets/salon-real-4808.jpg",
+      "prompt": "Use case: precise-object-edit. Edit target: the attached real photograph of the grooming salon. Remove only the loose visual clutter: pink and green cloths hanging behind the stainless steel bath, the loose cleaning bottles, spray bottles and grooming accessories resting around that bath, all white plastic canisters and loose containers underneath the baths and their stand, and the loose turquoise blower at the lower-right edge. Reconstruct the corresponding surfaces, empty stand shelving, floor and wall naturally. Preserve the exact room geometry, grey walls, pale tiled floor and grout, ceiling tiles, wooden door, framed pet photos, cream bathing unit at left, stainless steel bath, taps and shower hardware, white bath, steel stand and the black grooming table including its upright arm and blue safety loop. Preserve existing plumbing. Keep the same landscape framing, perspective, natural light and realistic material imperfections. Do not add animals, people, decor, furniture, luxury finishes, logos or text. Conservative professional photo cleanup, no glossy AI scene or architectural redesign."
+    }
+  ]
+}

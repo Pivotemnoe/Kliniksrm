@@ -1,5 +1,6 @@
 ## Current visual revision — 2026-10-20
 
+- Final correction: the owner found and supplied the exact missing IMG_4806, showing the round grooming table, mirror with red hanging hearts and blue cabinet. Use this real photo in chapter 03; remove only the white wire floor cage and improve light/color saturation. Preserve all other objects and architecture. The bath-angle photo, generated workstation composition and synthetic bichon/groomer scene were rejected and must stay excluded from active references. Current asset: salon-real-4806-retouched.jpg, with an AI-retouch caption.
 - Keep this photographic design, motion, catalogue, pricing and booking code. The user asks only to replace suitable process photographs with stronger edited own salon pictures, retaining generated references where useful. Main redesign effort belongs to the hotel prototype.
 - Strong staged editing, removing clutter and adding animals is explicitly authorized. Preserve originals, disclose compositions as visualizations, and do not call them real salon results. Preview on a separate loopback port; never change the accepted 4261–4264 runtime, backend, databases or production.
 

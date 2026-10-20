@@ -122,16 +122,77 @@
       "promptFile": "real-photo-prompts.json",
       "webAssetSha256": "cb9db905773799f2bd06db0cc17ca7f151db362cfc8a9ac1c5cfaade2723fa52",
       "review": "Compared with supplied screenshot: same animals, main pose, room layout and objects. Screenshot UI removed; moderate color, exposure and sharpness restoration. Not a pixel-preserving documentary original."
+    },
+    {
+      "asset": "hotel-inside-4817-clean.jpg",
+      "source": "hotel-inside-4817.jpg",
+      "sourceAssetSha256": "bebf9e4b40a2827a2d0515456abe1c26d9cc37970717e094cfc11185bd7a78b9",
+      "originalFilename": "IMG_4817.HEIC",
+      "sourceSha256": "cbd655bc2d33b0eb036872412cf2baad499051bd0657ae29d7e2f5a9f113924e",
+      "generatedPng": "exec-8cc83879-4ced-4e66-8ab0-002b0fd2d52e.png",
+      "classification": "targeted clutter removal from owner-supplied real premises photograph; AI retouch disclosed",
+      "promptFile": "photo-cleanup-prompts.json",
+      "promptKey": "hotel_room_cleanup_20261020",
+      "tool": "built-in image_gen; JPEG format conversion by sips",
+      "review": "Black bags and loose blue storage item behind rear openings removed; existing room geometry, glazing, door and labels retained.",
+      "webAssetSha256": "34762b28cdf0c6fafcc17d254a00962a2cb2b3f7f4011b0773d5e6c7e9609322"
+    },
+    {
+      "asset": "salon-real-4806-retouched.jpg",
+      "originalFilename": "IMG_4806.HEIC",
+      "sourceSha256": "a7928daff9e9a73b414e2885d9e0aa39862b6c679ae342683acc800c085744bd",
+      "sourcePreview": "IMG_4806-preview.jpg",
+      "generatedPng": "exec-b36b3fba-6698-4a2f-a12d-ca2c243f2583.png",
+      "classification": "retouched owner photograph; only freestanding white wire floor cage removed, color saturation and light enhanced; no added people/animals/room features",
+      "promptFile": "salon-4806-retouch-prompt.json",
+      "tool": "built-in image_gen; JPEG format conversion by sips",
+      "review": "Compared with supplied IMG_4806: same round grooming table, mirror with red hanging hearts, blue cabinet, plants and wall frames; floor cage removed; no bath in frame. Caption states photo retouch.",
+      "webAssetSha256": "8c8ca43c2c294a7fd3e3cea4639b8bd8305d20319bb68c3d4d71edc7e3abf863"
     }
   ],
-  "revision": 2,
-  "policy": "Latest owner direction: keep two staged hotel hero scenes, reject the synthetic grooming bichon scene; restore six supplied Avito-photo screenshots conservatively, preserve sources and identify AI processing.",
+  "revision": 5,
+  "policy": "Latest owner direction: keep two staged hotel hero scenes, reject the synthetic grooming bichon scene; restore six supplied Avito-photo screenshots conservatively, preserve sources and identify AI processing. Latest owner request: remove rear storage bags from room photo and rags/canisters/loose clutter from salon photo. Preserve premises and originals; do not add subjects or redesign. Owner subsequently rejected bath-based salon angles and explicitly requested a photorealistic generated workstation based on the actual salon. Only that staged workstation is used in the salon slots, with a visualization caption. Final correction: owner supplied IMG_4806 and chose its real-photo retouch, removing only the white wire floor cage and enhancing colors. Earlier generated workstation rejected and removed from public assets.",
   "rejected": [
     {
       "generatedPng": "exec-60b5bdf2-01ef-4373-b69c-b91136b33800.png",
       "key": "grooming-salon-premium",
       "reason": "Owner rejected as too AI-looking. Excluded from both public asset directories. Original generated file preserved outside the website."
+    },
+    {
+      "asset": "salon-real-4808-clean.jpg",
+      "source": "salon-real-4808.jpg",
+      "sourceAssetSha256": "0ba52f5ea2c865d7dee3d215189bff672b81d76edaf07cb9d857b9323c7b94fc",
+      "originalFilename": "IMG_4808.HEIC",
+      "sourceSha256": "b4c81e756eefcdfdd7b08fa140bae919e81e6e7c752c372c6f819944f2da2f12",
+      "generatedPng": "exec-3e4b691a-c300-4003-a38d-fb2eed41a61a.png",
+      "classification": "targeted clutter removal from owner-supplied real premises photograph; AI retouch disclosed",
+      "promptFile": "photo-cleanup-prompts.json",
+      "promptKey": "grooming_salon_cleanup_20261020",
+      "tool": "built-in image_gen; JPEG format conversion by sips",
+      "review": "Hanging cloths, loose bottles/accessories, canisters beneath baths and floor blower removed; baths, table, fittings, plumbing, door and existing finishes retained.",
+      "webAssetSha256": "4a570117bb1ae4c604d23cf4be1cf93bef79a5e72bf2f5fc0221c5adbfe71cc6",
+      "reason": "Owner changed direction: use a workstation photo without baths. Cleaned bath angle removed from public assets; preserved privately."
+    },
+    {
+      "asset": "salon-workstation-visual.jpg",
+      "sources": [
+        {
+          "file": "IMG_4809.HEIC",
+          "sha256": "74b8af2e7e95f779df6ceb187f183291cc12606df81331ba6e5a5cb3a4bedeb9"
+        },
+        {
+          "file": "IMG_4807.HEIC",
+          "sha256": "9cd322425a80cc46b12a0ff563f821b4afeb249b32bec2525de8adb9ea7f0161"
+        }
+      ],
+      "generatedPng": "exec-a8fe01a5-840e-48e3-ac09-b3ff8c13cb50.png",
+      "classification": "photorealistic staged visualization based on actual salon references; red hanging decoration relocated to mirror area, camera framing adapted, no baths/animals/people",
+      "promptFile": "workstation-image-prompts.json",
+      "tool": "built-in image_gen; JPEG format conversion by sips",
+      "review": "Workstation, large mirror, grey wall, beige floor and red hanging decoration present. No bath or canisters in frame. This is labeled visualization, not an untouched documentary photo.",
+      "webAssetSha256": "5849b20134e9689cabd13267219255f27ebeed1c7065f82b869142fff5f29fa2",
+      "reason": "Owner explicitly rejected generated workstation composition and supplied the exact real IMG_4806. Excluded from both public directories; preserved privately."
     }
   ],
-  "groomingUsage": "The original process hero and catalogue references are retained. Real salon IMG_4808 light/color treatment is copied into grooming chapter 03, with matching caption. No real guest hotel image is presented as a grooming result."
+  "groomingUsage": "Original process hero, catalogue and booking code retained. Chapter 03 and hotel teaser use real IMG_4806 retouch, labeled as such. Bath-based angles, the generated workstation and synthetic bichon scene are excluded from active references."
 }

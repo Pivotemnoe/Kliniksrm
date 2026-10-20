@@ -1,5 +1,5 @@
 {
-  "source": "Twelve HEIC files supplied by the owner; originals kept in Downloads",
+  "source": "Thirteen HEIC files supplied by the owner; originals kept in Downloads. IMG_4806 added after the owner found the missing salon shot on 20.10.2026.",
   "photos": [
     {
       "filename": "IMG_4815.HEIC",
@@ -59,6 +59,11 @@
     {
       "filename": "IMG_4807.HEIC",
       "sha256": "9cd322425a80cc46b12a0ff563f821b4afeb249b32bec2525de8adb9ea7f0161",
+      "originalUnchanged": true
+    },
+    {
+      "filename": "IMG_4806.HEIC",
+      "sha256": "a7928daff9e9a73b414e2885d9e0aa39862b6c679ae342683acc800c085744bd",
       "originalUnchanged": true
     }
   ]

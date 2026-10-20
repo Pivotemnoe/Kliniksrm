@@ -61,8 +61,8 @@ function updatePacking(){const count=checks.filter(c=>c.checked).length;$('#chec
 checks.forEach(c=>c.addEventListener('change',()=>{try{localStorage.setItem(packingKey,JSON.stringify(checks.filter(c=>c.checked).map(c=>c.value)));}catch{}updatePacking();}));updatePacking();
 const roomPhotos=[
  {src:'assets/hotel-rooms-4814.jpg',title:'С порога.',alt:'Ряд номеров с остеклёнными дверцами',description:'Общий вид номеров с деревянными перегородками и остеклёнными дверцами.',detailTitle:'Остеклённые дверцы',detail:'Можно рассмотреть помещение через стекло. Подходящий номер обсудим при согласовании размещения.',x:'56%',y:'55%'},
- {src:'assets/hotel-glass-4812.jpg',title:'За стеклом.',alt:'Стеклянные секции зоогостиницы',description:'Другой ракурс: стеклянные дверцы, перегородки и полочки внутри.',detailTitle:'Детали изнутри',detail:'На фотографии видны стеклянные перегородки и полочки. Обсудите, какое размещение подойдёт вашему питомцу.',x:'47%',y:'48%'},
- {src:'assets/hotel-inside-4817.jpg',title:'Внутри.',alt:'Вид через открытую дверцу внутрь номера',description:'Открытая дверца и обстановка внутри одного из помещений.',detailTitle:'Свои привычные вещи',detail:'Корм и миски нужно привезти с собой. Лежанку, игрушку, туалет и наполнитель можно взять по необходимости.',x:'68%',y:'56%'}
+ {src:'assets/hotel-glass-4812.jpg',title:'За стеклом.',alt:'Номера зоогостиницы со стеклянными дверцами',description:'Другой ракурс: стеклянные дверцы, перегородки и полочки внутри.',detailTitle:'Детали изнутри',detail:'На фотографии видны стеклянные перегородки и полочки. Обсудите, какое размещение подойдёт вашему питомцу.',x:'47%',y:'48%'},
+ {src:'assets/hotel-inside-4817-clean.jpg',title:'Внутри.',alt:'Вид через открытую дверцу внутрь номера',description:'Открытая дверца и обстановка внутри одного из помещений.',detailTitle:'Свои привычные вещи',detail:'Корм и миски нужно привезти с собой. Лежанку, игрушку, туалет и наполнитель можно взять по необходимости.',x:'68%',y:'56%'}
 ];
 const guestPhotos=[
  {src:'assets/guest-1.jpg',alt:'Мопс в помещении зоогостиницы',species:'DOG'},
@@ -82,10 +82,10 @@ $$('[data-angle]').forEach(button=>button.addEventListener('click',()=>{
  $$('[data-angle]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));
 }));
 $('#room-hotspot').onclick=()=>{const open=$('#room-detail').hidden;$('#room-detail').hidden=!open;$('#room-hotspot').setAttribute('aria-expanded',String(open));};
-const dialog=$('#photo-dialog');let photoIndex=0,photoSet=roomPhotos,opener=null,captionNote='Наши помещения · обработка света и цвета с AI';
+const dialog=$('#photo-dialog');let photoIndex=0,photoSet=roomPhotos,opener=null,captionNote='Наши помещения · ретушь с AI';
 function showPhoto(index){photoIndex=(index+photoSet.length)%photoSet.length;$('#photo-full').src=photoSet[photoIndex].src;$('#photo-full').alt=photoSet[photoIndex].alt;$('#photo-caption').textContent=`${photoSet[photoIndex].alt}. ${captionNote}`;$('#photo-number').textContent=`${photoIndex+1} / ${photoSet.length}`;}
 function openPhoto(set,index,trigger,note){photoSet=set;opener=trigger;captionNote=note;showPhoto(index);dialog.showModal();}
-$('#room-expand').onclick=event=>openPhoto(roomPhotos,angle,event.currentTarget,'Наши помещения · обработка света и цвета с AI');
+$('#room-expand').onclick=event=>openPhoto(roomPhotos,angle,event.currentTarget,'Наши помещения · ретушь с AI');
 $('#photo-close').onclick=()=>dialog.close();$('#photo-previous').onclick=()=>showPhoto(photoIndex-1);$('#photo-next').onclick=()=>showPhoto(photoIndex+1);
 dialog.addEventListener('keydown',event=>{if(event.key==='ArrowLeft'){event.preventDefault();showPhoto(photoIndex-1);}if(event.key==='ArrowRight'){event.preventDefault();showPhoto(photoIndex+1);}});dialog.addEventListener('close',()=>opener?.focus({preventScroll:true}));
 $$('[data-guest-photo]').forEach(button=>button.addEventListener('click',()=>{const active=$('[data-guest-filter][aria-pressed="true"]').dataset.guestFilter;const photos=guestPhotos.filter(photo=>active==='ALL'||photo.species===active);openPhoto(photos,photos.indexOf(guestPhotos[Number(button.dataset.guestPhoto)]),button,'Фото из нашего объявления · обработка качества с AI');}));
