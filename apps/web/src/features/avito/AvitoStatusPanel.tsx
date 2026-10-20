@@ -31,8 +31,8 @@ export function AvitoStatusPanel({ overview, modeLabel, director, onOpen }: { ov
       {overview.connection.accountName && <Typography.Text type="secondary">{overview.connection.accountName}</Typography.Text>}
     </div>
     {overview.installation.enabled && overview.mode === 'MANUAL' && <div className="avito-working-mode">
-      <Typography.Text strong>Можно работать с объявлениями и проверять ответы</Typography.Text>
-      <Typography.Paragraph type="secondary">В ручном режиме тексты и фотографии сохраняются в CRM. Объявление размещается на Авито вручную. Новые сообщения не появляются автоматически, автоответы не отправляются.</Typography.Paragraph>
+      <Typography.Text strong>{director ? 'Можно работать с объявлениями и проверять ответы' : 'Переписка и заявки для администратора'}</Typography.Text>
+      <Typography.Paragraph type="secondary">{director ? 'В ручном режиме тексты и фотографии сохраняются в CRM. Объявление размещается на Авито вручную. Новые сообщения не появляются автоматически, автоответы не отправляются.' : 'Открывайте загруженные диалоги и обрабатывайте готовые заявки. Новую переписку загружает директор через «Подключение и возможности». Отправка ответов из CRM пока выключена; отвечайте клиентам в Авито.'}</Typography.Paragraph>
       <Space wrap>
         {director ? <><Button type="primary" onClick={() => onOpen('editor')}>Подготовить объявление</Button><Button onClick={() => onOpen('test')}>Проверить ответ помощника</Button><Button onClick={() => onOpen('connection')}>Загрузить переписку и проверить доступ</Button></> : <Button type="primary" onClick={() => onOpen('inbox')}>Открыть загруженную переписку</Button>}
       </Space>
