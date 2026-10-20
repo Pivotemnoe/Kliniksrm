@@ -89,7 +89,7 @@ elif args.mode=='backup':
         run(['docker','exec',PG,'pg_dump','-U',pgenv['POSTGRES_USER'],'-d',database,'-Fc','--file',dump]);run(['docker','cp',PG+':'+dump,str(BACKUP/'database.dump')]);(BACKUP/'database.dump').chmod(0o600)
         run(['docker','run','-d','--network','none','--pull','never','--name',temporary,'-e','POSTGRES_USER=restore_test','-e','POSTGRES_DB=restore_test','-e','POSTGRES_PASSWORD=isolated-restore-only',inspect(PG)['Image']]);started=True
         for _ in range(60):
-            if subprocess.run(['docker','exec',temporary,'pg_isready','-U','restore_test','-d','restore_test'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==0:break
+            if subprocess.run(['docker','exec',temporary,'pg_isready','-h','127.0.0.1','-U','restore_test','-d','restore_test'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==0:break
             time.sleep(.5)
         run(['docker','cp',str(BACKUP/'database.dump'),temporary+':/tmp/database.dump']);run(['docker','exec',temporary,'pg_restore','-U','restore_test','-d','restore_test','--no-owner','--no-privileges','--exit-on-error','/tmp/database.dump'])
         query='SELECT (SELECT count(*) FROM "OwnerSnapshot"),(SELECT count(*) FROM "MessengerBinding"),(SELECT count(*) FROM "PortalSession");'
