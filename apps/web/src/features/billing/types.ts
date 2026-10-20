@@ -219,3 +219,10 @@ export const paymentTypeLabels: Record<PaymentType, string> = {
   DEPOSIT: 'Депозит',
   OTHER: 'Другое',
 };
+
+export type SplitPaymentInput = {
+  operationId: string;
+  parts: Array<{ paymentMethodId: string; cashboxId: string; amount: number }>;
+  paidAt?: string;
+  comment?: string;
+};

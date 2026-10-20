@@ -11,6 +11,7 @@ import {
   BulkPayBillsInput,
   CreateBillInput,
   CreatePaymentInput,
+  SplitPaymentInput,
   ListBillsQuery,
   Payment,
   RefundPaymentInput,
@@ -79,4 +80,8 @@ export function createPayment(billId: string, input: CreatePaymentInput) {
 
 export function refundPayment(billId: string, paymentId: string, input: RefundPaymentInput) {
   return apiRequest<Payment>(`/v1/bills/${billId}/payments/${paymentId}/refund`, { method: 'POST', body: input });
+}
+
+export function createSplitPayment(billId: string, input: SplitPaymentInput) {
+  return apiRequest<Payment[]>(`/v1/bills/${billId}/payments/split`, { method: 'POST', body: input });
 }
