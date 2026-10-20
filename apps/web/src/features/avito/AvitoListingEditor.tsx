@@ -5,28 +5,31 @@ import { App, Alert, Button, Card, Col, Collapse, Descriptions, Empty, Form, Inp
 import { ArrowDownOutlined, ArrowUpOutlined, DownloadOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons';
 import { getErrorMessage } from '../../api/errors';
 import { formatDateTime } from '../../shared/utils/date';
-import { avitoApi, Direction, directionLabels } from './avito.api';
+import { AvitoOverview, Direction, directionLabels } from './avito.api';
 import { avitoEditorApi, EditorCatalog, ListingContent, ListingDraft } from './avito-editor.api';
 import { ModuleActions } from '../../shared/ui/ModuleActions';
+import { AvitoAccountListings, useAvitoAccountListings } from './AvitoAccountListings';
 
 const directions = ['CLINIC','GROOMING','HOTEL'].map(value => ({ value, label: directionLabels[value] }));
 const draftKey = (id: string) => ['avito','editor','draft',id];
 
-export function AvitoListingEditor() {
+export function AvitoListingEditor({ overview }: { overview: AvitoOverview }) {
   const { message, modal } = App.useApp(); const client = useQueryClient();
   const [selected, setSelected] = useState<string>(); const [dirty, setDirty] = useState(false);
   const [direction, setDirection] = useState<Direction>('CLINIC'); const [sourceId, setSourceId] = useState<string>();
-  const [listingItems, setListingItems] = useState<{ id: string; title: string }[]>([]); const [nextPage, setNextPage] = useState<number | null>(null);
+  const inventory = useAvitoAccountListings();
+  const listingItems = [...new Map((inventory.data?.pages ?? []).flatMap(page => page.items).map(item => [item.id, item])).values()];
   const catalog = useQuery({ queryKey: ['avito','editor','catalog'], queryFn: avitoEditorApi.catalog });
   const drafts = useQuery({ queryKey: ['avito','editor','list'], queryFn: avitoEditorApi.list });
   const draft = useQuery({ queryKey: draftKey(selected || ''), queryFn: () => avitoEditorApi.get(selected!), enabled: Boolean(selected), refetchOnWindowFocus: false, staleTime: Infinity });
-  const listings = useMutation({ mutationFn: (page: number) => avitoApi.listings('all', page), onSuccess: (result, page) => { setListingItems(previous => [...new Map([...(page === 1 ? [] : previous), ...result.items].map(item => [item.id, item])).values()]); setNextPage(result.nextPage); }, onError: e => message.error(getErrorMessage(e)) });
   const create = useMutation({ mutationFn: () => avitoEditorApi.create(direction, sourceId), onSuccess: async value => { client.setQueryData(draftKey(value.id), value); setSelected(value.id); setDirty(false); await client.invalidateQueries({ queryKey: ['avito','editor','list'] }); message.success('Черновик сохранён в CRM. На Авито ничего не отправлено.'); }, onError: e => message.error(getErrorMessage(e)) });
   const check = useMutation({ mutationFn: avitoEditorApi.check, onSuccess: async () => { await client.invalidateQueries({ queryKey: ['avito','editor','catalog'] }); message.success('Выполнена проверка на чтение. Публикации не выполнялись.'); }, onError: e => message.error(getErrorMessage(e)) });
   const choose = (id: string) => { if (id === selected) return; if (dirty) modal.confirm({ title: 'Есть несохранённые изменения', content: 'Открыть другой черновик и отбросить изменения формы?', okText: 'Открыть', cancelText: 'Остаться', onOk: () => { setSelected(id); setDirty(false); } }); else setSelected(id); };
   const saved = (value: ListingDraft) => { client.setQueryData(draftKey(value.id), value); void client.invalidateQueries({ queryKey: ['avito','editor','list'] }); setDirty(false); };
+  useEffect(() => { if (selected && draft.data?.id === selected) document.getElementById('avito-selected-draft')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, [selected, draft.data?.id]);
   const access = catalog.data?.publishingCheck;
   return <Space direction="vertical" size={16} className="full-width">
+    <AvitoAccountListings settings={overview.settings} selectedId={sourceId} drafts={drafts.data} onOpenDraft={choose} onChoose={listing => { setSourceId(listing.id); const mapping = overview.settings?.listings.find(row => row.id === listing.id); if (mapping) setDirection(mapping.direction); document.getElementById('avito-new-draft')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }} />
     <Alert type="info" showIcon message="Подготовка объявлений для ручного размещения" description="Подготовьте текст и фотографии, проверьте черновик, затем скопируйте заголовок и описание и добавьте фотографии на Авито вручную. Изменения сохраняются в модуле; публикация через API отложена." />
     {(catalog.isError || drafts.isError || draft.isError) && <Alert type="error" showIcon message={getErrorMessage(catalog.error || drafts.error || draft.error)} />}
     <Collapse items={[{ key: 'access', label: access ? `Доступ к автозагрузке · ${access.profileHttpStatus === 403 ? 'Авито вернул HTTP 403' : 'нужна проверка права на запись'}` : 'Доступ к публикации, редактированию и фотографиям', children: <Space direction="vertical" className="full-width">
@@ -34,8 +37,8 @@ export function AvitoListingEditor() {
       <Button loading={check.isPending} onClick={() => check.mutate()}>Проверить доступ по ключам</Button>
       {access ? <><Typography.Text type="secondary">Профиль {access.accountId} · {formatDateTime(access.checkedAt)} · схема: HTTP {access.fieldsHttpStatus ?? 'нет ответа'}</Typography.Text><Table rowKey="key" size="small" pagination={false} dataSource={access.operations} scroll={{ x: 500 }} columns={[{ title: 'Операция', dataIndex: 'key', render: k => ({ publication: 'Публикация', editing: 'Редактирование', photos: 'Фотографии' } as Record<string,string>)[k] || k }, { title: 'В схеме категории', dataIndex: 'schemaSupported', render: v => v ? 'Предусмотрена' : 'Не подтверждена' }, { title: 'Доступ аккаунта', dataIndex: 'access', render: v => v === 'BLOCKED' ? 'Отказ HTTP 403' : 'Запись не проверена' }]} /><Alert type={access.profileHttpStatus === 403 ? 'warning' : 'info'} showIcon message={access.operations[0]?.note} /></> : <Typography.Text type="secondary">В этой установке проверка ещё не выполнялась.</Typography.Text>}
     </Space> }]} />
-    <Card title="Новый черновик">
-      <Space wrap><Select aria-label="Направление нового объявления" value={direction} onChange={setDirection} options={directions} style={{ width: 200 }} /><Select aria-label="Исходное объявление Авито" allowClear showSearch optionFilterProp="label" placeholder="Новое объявление или выбрать существующее" style={{ width: 'min(100%, 420px)', minWidth: 220 }} value={sourceId} onChange={setSourceId} options={listingItems.map(item => ({ value: item.id, label: `${item.title} · ${item.id}` }))} /><Button loading={listings.isPending} onClick={() => listings.mutate(1)}>Получить объявления</Button>{nextPage && <Button loading={listings.isPending} onClick={() => listings.mutate(nextPage)}>Ещё объявления</Button>}<Button type="primary" icon={<PlusOutlined />} disabled={dirty} loading={create.isPending} onClick={() => create.mutate()}>Создать черновик</Button></Space>
+    <Card title="Новый черновик" id="avito-new-draft" style={{ scrollMarginTop: 90 }}>
+      <Space wrap><Select aria-label="Направление нового объявления" value={direction} onChange={setDirection} options={directions} style={{ width: 200 }} /><Select aria-label="Исходное объявление Авито" allowClear showSearch optionFilterProp="label" placeholder="Новое объявление или выбрать существующее" style={{ width: 'min(100%, 420px)', minWidth: 220 }} value={sourceId} onChange={setSourceId} options={listingItems.map(item => ({ value: item.id, label: `${item.title} · ${item.id}` }))} /><Button type="primary" icon={<PlusOutlined />} disabled={dirty} loading={create.isPending} onClick={() => create.mutate()}>Создать черновик</Button></Space>
       <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>Для существующего объявления сохраняются его ID и название. Полный текст и фотографии этот метод Авито не возвращает — добавьте их в черновик перед проверкой.</Typography.Paragraph>
     </Card>
     <Card title="Сохранённые черновики" size="small"><Table rowKey="id" loading={drafts.isLoading} dataSource={drafts.data} pagination={{ pageSize: 5 }} scroll={{ x: 600 }} columns={[
@@ -44,7 +47,7 @@ export function AvitoListingEditor() {
       { title: 'Состояние', dataIndex: 'status', render: v => <Tag color={v === 'READY' ? 'green' : 'default'}>{v === 'READY' ? 'Проверено директором' : 'Черновик'}</Tag> },
       { title: 'Изменён', dataIndex: 'updatedAt', render: formatDateTime },
     ]} /></Card>
-    {draft.data && catalog.data ? <DraftForm key={`${draft.data.id}:${draft.data.version}`} draft={draft.data} catalog={catalog.data} onSaved={saved} onDirty={setDirty} /> : <Empty description={draft.isLoading ? 'Загружаем черновик…' : 'Создайте или откройте черновик объявления'} />}
+    <div id="avito-selected-draft" style={{ scrollMarginTop: 90 }}>{draft.data && catalog.data ? <DraftForm key={`${draft.data.id}:${draft.data.version}`} draft={draft.data} catalog={catalog.data} onSaved={saved} onDirty={setDirty} /> : <Empty description={draft.isLoading ? 'Загружаем черновик…' : 'Создайте или откройте черновик объявления'} />}</div>
   </Space>;
 }
 

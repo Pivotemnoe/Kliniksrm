@@ -33,6 +33,7 @@ export class AvitoController {
   @Post('connection/check') @RequireRoles('director') @RequirePermissions('avito.manage') check(@CurrentEmployee() actor: AuthEmployee) { return this.service.checkConnection(actor.id); }
   @Post('sync') @RequireRoles('director') @RequirePermissions('avito.manage') sync(@Body() dto: AvitoSyncDto) { return this.service.sync(dto.offset); }
   @Get('listings') @RequireRoles('director') @RequirePermissions('avito.manage') listings(@Query() query: AvitoListingsDto) { return this.service.ownListings(Math.floor((query.offset ?? 0) / 50) + 1, query.status ?? 'all'); }
+  @Get('listings/saved') @RequireRoles('director') @RequirePermissions('avito.manage') savedListings(@Query() query: AvitoListingsDto) { return this.service.savedListings(Math.floor((query.offset ?? 0) / 50) + 1, query.status ?? 'all'); }
 }
 
 // A different controller keeps staff role metadata out of the public event route.

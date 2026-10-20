@@ -14,6 +14,7 @@ import { AvitoListingEditor } from './AvitoListingEditor';
 import { AvitoStatusPanel } from './AvitoStatusPanel';
 import { ModuleActions } from '../../shared/ui/ModuleActions';
 import { createOperationKey } from '../../shared/utils/operationKey';
+import { AvitoAccountListings } from './AvitoAccountListings';
 
 const directions = Object.entries(directionLabels).filter(([value]) => value !== 'UNASSIGNED').map(([value, label]) => ({ value, label }));
 const allDirections = [{ value: '', label: 'Все направления' }, ...directions, { value: 'UNASSIGNED', label: 'Без направления' }];
@@ -43,7 +44,7 @@ export function AvitoPage() {
         { key: 'inbox', label: <Space><MessageOutlined />Переписка</Space>, children: <Inbox overview={overview} canOperate={hasPermission(auth?.employee, 'avito.operate')} /> },
         { key: 'metrics', label: <Space><PhoneOutlined />Звонки и эффективность</Space>, children: <CallMetrics overview={overview} canOperate={hasPermission(auth?.employee, 'avito.operate')} /> },
         ...(director && overview.settings ? [
-          { key: 'editor', label: 'Редактор объявлений', children: <AvitoListingEditor /> },
+          { key: 'editor', label: 'Объявления и черновики', children: <AvitoListingEditor overview={overview} /> },
           { key: 'rules', label: 'Направления и ответы', children: <RulesEditor overview={overview} /> },
           { key: 'test', label: 'Проверка сценариев', children: <Simulator overview={overview} /> },
           { key: 'connection', label: 'Подключение и возможности', children: <Connection overview={overview} /> },
@@ -233,9 +234,6 @@ function Connection({ overview }: { overview: AvitoOverview }) {
   const { message } = App.useApp(); const client = useQueryClient(); const [nextOffset, setNextOffset] = useState<number | null>(0);
   const check = useMutation({ mutationFn: avitoApi.check, onSuccess: async () => { await client.invalidateQueries({ queryKey: ['avito'] }); message.success('Профиль и чтение чатов проверены'); }, onError: e => message.error(getErrorMessage(e)) });
   const sync = useMutation({ mutationFn: () => avitoApi.sync(nextOffset ?? 0), onSuccess: async r => { setNextOffset(r.nextOffset); await client.invalidateQueries({ queryKey: ['avito'] }); message.success(`Проверено диалогов: ${r.chats}. Новых сообщений: ${r.imported}.`); }, onError: e => message.error(getErrorMessage(e)) });
-  const [listingItems, setListingItems] = useState<{ id: string; title: string; status: string; url: string | null }[]>([]);
-  const [listingNextPage, setListingNextPage] = useState<number | null>(null);
-  const listings = useMutation({ mutationFn: (page: number) => avitoApi.listings('all', page), onSuccess: (result, page) => { setListingItems(previous => [...new Map([...(page === 1 ? [] : previous), ...result.items].map(item => [item.id, item])).values()]); setListingNextPage(result.nextPage); }, onError: e => message.error(getErrorMessage(e)) });
   const c = overview.connection;
   return <Space direction="vertical" size={16} className="full-width"><Card title="Доступ к Авито"><Descriptions column={1}><Descriptions.Item label="Серверное хранилище ключей">{c.credentialsConfigured ? 'Подключено' : 'Ещё не подключено'}</Descriptions.Item><Descriptions.Item label="Профиль">{c.accountName || 'Не проверен'}{c.accountId ? ` · ID ${c.accountId}` : ''}</Descriptions.Item><Descriptions.Item label="Последняя проверка">{c.checkedAt ? formatDateTime(c.checkedAt) : 'Не выполнялась'}</Descriptions.Item><Descriptions.Item label="Получение событий">{overview.runtime.ingestionEnabled ? 'Разрешено на сервере' : 'Не включено'}</Descriptions.Item><Descriptions.Item label="Реальная отправка">{overview.runtime.liveSendEnabled ? 'Разрешена на сервере' : 'Не включена'}</Descriptions.Item></Descriptions>
       {c.error && <Alert type="error" showIcon message={c.error} />}
@@ -243,12 +241,7 @@ function Connection({ overview }: { overview: AvitoOverview }) {
       {c.lastSyncAt && <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>Последняя загрузка переписки: {formatDateTime(c.lastSyncAt)}</Typography.Paragraph>}
       <Typography.Paragraph type="secondary" style={{ marginTop: 12 }}>Ключи вводятся и хранятся на сервере. Их значения не доступны в браузере. Старые диалоги загружаются для сотрудника и не запускают ответы задним числом.</Typography.Paragraph>
     </Card>
-    <Card title="Объявления Авито: опубликованные и неактивные" extra={<Button loading={listings.isPending} disabled={!overview.installation.enabled || !c.accountId} onClick={() => listings.mutate(1)}>Получить из Авито</Button>}>
-      {listings.isError && <Alert type="error" message={getErrorMessage(listings.error)} />}
-      <Table rowKey="id" dataSource={listingItems} pagination={false} columns={[{ title: 'ID', dataIndex: 'id', render: v => <Typography.Text copyable>{v}</Typography.Text> }, { title: 'Объявление', dataIndex: 'title' }, { title: 'Статус', dataIndex: 'status', render: value => ({ active: 'Опубликовано', old: 'Истёк срок размещения', removed: 'Снято с размещения', blocked: 'Заблокировано', rejected: 'Отклонено' } as Record<string, string>)[value] || value }]} />
-      {listingNextPage && <Button loading={listings.isPending} onClick={() => listings.mutate(listingNextPage)}>Загрузить следующие объявления</Button>}
-      <Typography.Paragraph type="secondary">Показаны состояния, доступные официальному API. Черновики могут отсутствовать. Привязка к направлению и подготовка ответов не публикуют объявление; размещением пока управляет владелец.</Typography.Paragraph>
-    </Card>
+    <AvitoAccountListings settings={overview.settings} />
     <Card title="Функции модуля и расширения"><Table rowKey="key" dataSource={overview.capabilities} pagination={false} scroll={{ x: 650 }} columns={[{ title: 'Функция', dataIndex: 'title' }, { title: 'Готовность', dataIndex: 'status', render: s => <Tag color={s === 'IMPLEMENTED' ? 'green' : 'default'}>{s === 'IMPLEMENTED' ? 'В этом блоке' : 'Следующее расширение'}</Tag> }, { title: 'Условие', dataIndex: 'activation' }]} /></Card>
   </Space>;
 }

@@ -3112,6 +3112,21 @@ model AvitoIntegration {
   events            AvitoIncomingEvent[]
   publishingCheck   Json?
   listingDrafts     AvitoListingDraft[]
+  listingSnapshots  AvitoListingSnapshot[]
+}
+
+
+model AvitoListingSnapshot {
+  id            String @id @default(uuid())
+  integrationId String
+  integration   AvitoIntegration @relation(fields: [integrationId], references: [id], onDelete: Restrict)
+  accountId     String
+  status        String
+  page          Int
+  items         Json
+  nextPage      Int?
+  capturedAt    DateTime
+  @@unique([integrationId, status, page])
 }
 
 

@@ -113,7 +113,55 @@ export class AvitoService {
       throw error;
     }
   }
-  async ownListings(page = 1, status = 'all') { await this.requireConnected(); return this.api.ownListings(page, status); }
+  /** Reading the saved inventory never calls Avito, including after a CRM restart. */
+  async savedListings(page = 1, status = 'all') {
+    this.validateListingPage(page, status);
+    const integration = await this.requireConnected();
+    return this.listingSnapshot(integration.id, integration.accountId!, page, status);
+  }
+  async ownListings(page = 1, status = 'all') {
+    this.validateListingPage(page, status);
+    const integration = await this.requireConnected();
+    let result: Awaited<ReturnType<AvitoApiClient['ownListings']>>;
+    try {
+      const profile = await this.api.self();
+      if (String(profile.id) !== integration.accountId) throw new ConflictException('Ключи относятся к другому профилю Авито');
+      result = await this.api.ownListings(page, status);
+    }
+    catch (error) {
+      if (error instanceof ConflictException) throw error;
+      const saved = await this.listingSnapshot(integration.id, integration.accountId!, page, status);
+      if (saved.capturedAt) return { ...saved, refreshError: safeError(error) };
+      throw error;
+    }
+    const capturedAt = new Date();
+    await this.prisma.$transaction(async tx => {
+      // An account switch cannot write old-account advertisements into the current inventory.
+      await tx.$queryRaw`SELECT "id" FROM "AvitoIntegration" WHERE "id" = ${integration.id} FOR UPDATE`;
+      const current = await tx.avitoIntegration.findUniqueOrThrow({ where: { id: integration.id } });
+      if (current.accountId !== integration.accountId) throw new ConflictException('Профиль Авито изменился. Обновите список заново.');
+      await tx.avitoListingSnapshot.upsert({
+        where: { integrationId_status_page: { integrationId: integration.id, status, page } },
+        create: { integrationId: integration.id, accountId: integration.accountId!, status, page, items: json(result.items), nextPage: result.nextPage, capturedAt },
+        update: { accountId: integration.accountId!, items: json(result.items), nextPage: result.nextPage, capturedAt },
+      });
+    });
+    return { ...result, capturedAt, source: 'AVITO' as const, refreshError: null };
+  }
+  private validateListingPage(page: number, status: string) {
+    if (!Number.isSafeInteger(page) || page < 1 || page > 201 || !['all', 'active', 'old', 'removed', 'blocked', 'rejected'].includes(status)) throw new BadRequestException('Некорректный фильтр объявлений');
+  }
+  private async listingSnapshot(integrationId: string, accountId: string, page: number, status: string) {
+    const saved = await this.prisma.avitoListingSnapshot.findUnique({ where: { integrationId_status_page: { integrationId, status, page } } });
+    const usable = saved?.accountId === accountId;
+    return {
+      items: usable ? saved.items as unknown as Awaited<ReturnType<AvitoApiClient['ownListings']>>['items'] : [],
+      nextPage: usable ? saved.nextPage : null,
+      capturedAt: usable ? saved.capturedAt : null,
+      source: usable ? 'SAVED' as const : 'EMPTY' as const,
+      refreshError: null as string | null,
+    };
+  }
   private async requireConnected() {
     await this.modules.assertEnabled('avito-administrator');
     const integration = await this.integration();

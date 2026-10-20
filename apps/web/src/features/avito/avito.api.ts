@@ -36,6 +36,8 @@ export type AvitoConversation = {
 };
 export type Call = { id: string; direction: string; occurredAt: string; missed: boolean; note: string | null };
 export type Metrics = { conversations: number; calls: number; inquiries: number; confirmedClinicAppointments: number; attention: number; recentCalls: Call[]; note: string };
+export type AvitoListing = { id: string; title: string; status: string; url: string | null };
+export type AvitoListingInventory = { items: AvitoListing[]; nextPage: number | null; capturedAt: string | null; source: 'AVITO' | 'SAVED' | 'EMPTY'; refreshError: string | null };
 export const avitoApi = {
   overview: () => apiRequest<AvitoOverview>('/v1/avito'),
   settings: (version: number, settings: AvitoSettings) => apiRequest('/v1/avito/settings', { method: 'PATCH', body: { version, settings } }),
@@ -54,5 +56,6 @@ export const avitoApi = {
   simulate: (body: { listingId: string; text: string; contact?: Record<string, unknown>; at?: string; useAi?: boolean; clientKey?: string }) => apiRequest<{ kind: string; persisted: boolean; modelStatus?: string; decision: { text: string | null; reason: string; direction: string | null; handoff: boolean; createInquiry: boolean; contact: Record<string, unknown>; prompt?: string } }>('/v1/avito/simulate', { method: 'POST', body }),
   check: () => apiRequest('/v1/avito/connection/check', { method: 'POST' }),
   sync: (offset = 0) => apiRequest<{ chats: number; imported: number; nextOffset: number | null }>('/v1/avito/sync', { method: 'POST', body: { offset } }),
-  listings: (status = 'all', page = 1) => apiRequest<{ items: { id: string; title: string; status: string; url: string | null }[]; nextPage: number | null }>(`/v1/avito/listings?${new URLSearchParams({ status, offset: String((page - 1) * 50) })}`),
+  listings: (status = 'all', page = 1) => apiRequest<AvitoListingInventory>(`/v1/avito/listings?${new URLSearchParams({ status, offset: String((page - 1) * 50) })}`),
+  savedListings: (page = 1) => apiRequest<AvitoListingInventory>(`/v1/avito/listings/saved?${new URLSearchParams({ status: 'all', offset: String((page - 1) * 50) })}`),
 };

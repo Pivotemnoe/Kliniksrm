@@ -66,13 +66,22 @@ export class AvitoEditorService {
     if (dto.sourceListingId) {
       if (!/^\d{1,20}$/.test(dto.sourceListingId)) throw new BadRequestException('Некорректный номер объявления');
       if (!integration.accountId) throw new BadRequestException('Сначала проверьте профиль Авито');
-      const self = await this.api.self();
-      if (String(self.id) !== integration.accountId) throw new ConflictException('Ключи относятся к другому профилю Авито');
       let found = false;
+      // An inventory verified for this account is enough for a local draft, even offline.
       for (let page = 1; page <= 201; page++) {
-        const items = await this.api.ownListings(page, 'all'); const item = items.items.find(value => value.id === dto.sourceListingId);
+        const saved = await this.avito.savedListings(page, 'all');
+        const item = saved.items.find(value => value.id === dto.sourceListingId);
         if (item) { title = item.title.slice(0, 100); found = true; break; }
-        if (!items.nextPage) break;
+        if (!saved.nextPage) break;
+      }
+      if (!found) {
+        const self = await this.api.self();
+        if (String(self.id) !== integration.accountId) throw new ConflictException('Ключи относятся к другому профилю Авито');
+        for (let page = 1; page <= 201; page++) {
+          const items = await this.api.ownListings(page, 'all'); const item = items.items.find(value => value.id === dto.sourceListingId);
+          if (item) { title = item.title.slice(0, 100); found = true; break; }
+          if (!items.nextPage) break;
+        }
       }
       if (!found) throw new BadRequestException('Объявление не найдено среди объявлений подключённого профиля');
     }
