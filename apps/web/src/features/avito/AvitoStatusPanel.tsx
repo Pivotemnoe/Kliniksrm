@@ -5,6 +5,8 @@ import type { AvitoOverview } from './avito.api';
 import '../../shared/ui/module-ui.css';
 
 export function AvitoStatusPanel({ overview, modeLabel, director, onOpen }: { overview: AvitoOverview; modeLabel: string; director: boolean; onOpen: (tab: string) => void }) {
+  const automatic = overview.mode === 'AUTO' && overview.runtime.ingestionEnabled && overview.runtime.liveSendEnabled;
+  const activeDirections = overview.profiles.filter(profile => profile.enabled).map(profile => profile.title).join(', ');
   const warnings = [
     ...(overview.referenceData?.stale ? ['Прайс CRM нужно обновить'] : []),
     ...(overview.referenceData?.inventoryStale ? ['Наличие вакцин нужно обновить'] : []),
@@ -27,6 +29,8 @@ export function AvitoStatusPanel({ overview, modeLabel, director, onOpen }: { ov
       <Tag color={overview.installation.enabled ? 'green' : 'default'}>{overview.installation.enabled ? 'Модуль подключён' : 'Модуль отключён'}</Tag>
       <Tag color="blue">{modeLabel}</Tag>
       <Tag color={overview.runtime.liveSendEnabled ? 'gold' : 'default'}>{overview.runtime.liveSendEnabled ? 'Отправка клиентам включена' : 'Отправка клиентам выключена'}</Tag>
+      {overview.runtime.ingestionEnabled && <Tag color="green">Новые сообщения получаются автоматически</Tag>}
+      {overview.runtime.languageModelConfigured && <Tag color="green">ИИ подключён</Tag>}
       {overview.runtime.pilotRestricted && <Tag color="gold">Только тестовый диалог</Tag>}
       {overview.connection.accountName && <Typography.Text type="secondary">{overview.connection.accountName}</Typography.Text>}
     </div>
@@ -36,6 +40,11 @@ export function AvitoStatusPanel({ overview, modeLabel, director, onOpen }: { ov
       <Space wrap>
         {director ? <><Button type="primary" onClick={() => onOpen('editor')}>Подготовить объявление</Button><Button onClick={() => onOpen('test')}>Проверить ответ помощника</Button><Button onClick={() => onOpen('connection')}>Загрузить переписку и проверить доступ</Button></> : <Button type="primary" onClick={() => onOpen('inbox')}>Открыть загруженную переписку</Button>}
       </Space>
+    </div>}
+    {overview.installation.enabled && overview.mode !== 'MANUAL' && <div className="avito-working-mode">
+      <Typography.Text strong>{automatic ? 'Ассистент отвечает на новые сообщения' : overview.mode === 'SUGGEST' ? 'Помощник готовит подсказки для сотрудника' : 'Для автоответов требуется завершить подключение'}</Typography.Text>
+      <Typography.Paragraph type="secondary">{automatic ? `Работают направления: ${activeDirections || 'не выбраны'}. Переписка и готовые заявки доступны ниже. Чтобы отвечать самостоятельно, откройте диалог и нажмите «Взять диалог».` : overview.mode === 'SUGGEST' ? 'Проверьте подготовленный ответ в переписке. В режиме подсказок окончательный ответ выбирает сотрудник.' : 'Режим выбран в правилах, но автоматическое получение или отправка сообщений на сервере ещё не включены. Тексты объявлений и проверка сценариев доступны.'}</Typography.Paragraph>
+      <Space wrap><Button type="primary" onClick={() => onOpen('inbox')}>Открыть переписку</Button><Button onClick={() => onOpen('inquiries')}>Заявки администратору</Button>{director && <><Button onClick={() => onOpen('editor')}>Объявления</Button><Button onClick={() => onOpen('test')}>Проверить ответ помощника</Button></>}</Space>
     </div>}
     {warnings.length > 0 && <Alert type="warning" showIcon message="Требует внимания" description={<Space direction="vertical" size={2}>{warnings.map(text => <span key={text}>{text}</span>)}</Space>} />}
     {details.length > 0 && <Collapse ghost className="module-status-details" items={[{

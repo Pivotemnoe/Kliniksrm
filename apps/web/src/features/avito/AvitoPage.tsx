@@ -29,7 +29,7 @@ export function AvitoPage() {
   const query = useQuery({ queryKey: ['avito', 'overview'], queryFn: avitoApi.overview, retry: (attempt, error) => !(error instanceof ApiError && error.status === 404) && attempt < 2 });
   const overview = query.data;
   const unavailable = query.error instanceof ApiError && query.error.status === 404;
-  const defaultTab = director ? 'editor' : 'inbox';
+  const defaultTab = director && overview?.mode === 'MANUAL' ? 'editor' : 'inbox';
   const requestedTab = tabParams.get('tab') || defaultTab;
   const activeTab = !director && ['editor', 'rules', 'test', 'connection'].includes(requestedTab) ? defaultTab : requestedTab;
   const selectTab = (tab: string) => setTabParams(previous => { previous.set('tab', tab); previous.delete('conversation'); return previous; }, { replace: true });
