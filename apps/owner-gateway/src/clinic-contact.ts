@@ -10,4 +10,4 @@ export function snapshotContact(payload: unknown) {
   const owner = (payload as { owner?: { phone?: unknown } } | null)?.owner;
   try { return typeof owner?.phone === 'string' ? contactPhone(owner.phone) : null; } catch { return null; }
 }
-export const introduction = 'Здравствуйте! Как к вам обращаться? Напишите, пожалуйста, ваше имя и номер телефона для связи. Можно продолжить без телефона; для записи на приём он понадобится.';
+export const introduction = 'Здравствуйте! Расскажите, чем помочь питомцу. На простые вопросы ответим здесь, а если понадобится сотрудник — передадим ему обращение.';

@@ -1,0 +1,20 @@
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { mkdir, cp, readFile, writeFile, copyFile } from 'node:fs/promises';
+import { resolve, join } from 'node:path';
+const root = resolve(import.meta.dirname, '../..');
+const destination = resolve(process.argv[2] || join(root, '.artifacts/avito-clinic-release/context'));
+const revision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+const paths = ['prisma', 'apps/api/dist/modules/avito', 'apps/api/dist/modules/clinic-modules/clinic-modules.service.js', 'apps/api/dist/modules/clinic-modules/clinic-modules.controller.js', 'apps/api/dist/app.module.js', 'apps/api/dist/modules/meta/meta.controller.js', 'apps/owner-gateway/prisma', ...['avito-assistant.controller', 'avito-assistant.model', 'avito-assistant.service', 'avito-copy.contract', 'app.module', 'clinic-assistant-openai.client'].map(name => `apps/owner-gateway/dist/${name}.js`)];
+await mkdir(destination, { recursive: true });
+for (const path of paths) { await mkdir(resolve(destination, path, '..'), { recursive: true }); await cp(resolve(root, path), resolve(destination, path), { recursive: true }); }
+const enginePath = process.env.AVITO_SCHEMA_ENGINE_FILE;
+if (!enginePath) throw Error('Set AVITO_SCHEMA_ENGINE_FILE to the verified Prisma 6.19.3 Linux musl schema engine');
+const bytes = await readFile(enginePath);
+if (createHash('sha256').update(bytes).digest('hex') !== '955e3bff1be23248a0922a219f7c4e200acc8fdd1fc72479557c0a9d782bd64a') throw Error('Schema engine checksum differs');
+await mkdir(join(destination, 'engines'), { recursive: true });
+await writeFile(join(destination, 'engines/schema-engine-linux-musl-openssl-3.0.x'), bytes, { mode: 0o755 });
+for (const file of ['Dockerfile.api', 'Dockerfile.gateway', 'backup-database.ps1', 'release-clinic.ps1', 'release-gateway.py', 'initialize-module.cjs']) await copyFile(join(root, 'deploy/avito', file), join(destination, file));
+await copyFile(join(root, 'docs/plans/2026-10-19-avito-clinic-pilot.json'), join(destination, 'clinic-settings.json'));
+await writeFile(join(destination, 'source.json'), JSON.stringify({ releaseId: 'crm-avito-clinic-20261020-r1', revision, scope: 'Separate Avito clinic module. Existing grooming, checkup, invoice and Web runtimes retained.', initialMode: 'MANUAL', externalWorkersEnabled: false, migration: '20261020090000_avito_clinic_module', gatewayMigration: '20261020090000_avito_clinic_assistant' }, null, 2));
+console.log(JSON.stringify({ destination, revision, paths: paths.length }));

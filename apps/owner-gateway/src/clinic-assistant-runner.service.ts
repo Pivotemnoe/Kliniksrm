@@ -1,7 +1,7 @@
 import { Injectable, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
 import { ClinicAssistantOpenAiClient, ClinicAssistantTurn } from './clinic-assistant-openai.client';
-import { clinicIntentReply, clinicSafetyIntent } from './clinic-chat-policy';
+import { clinicContactRequiredReply, clinicIntentReply, clinicSafetyIntent, hasClinicReplyContact } from './clinic-chat-policy';
 import { autoBookingReply, nextBookingDraft } from './clinic-booking-dialog';
 import { PublicClinicCatalogService } from './public-clinic-catalog.service';
 import { clinicPriceReply } from './clinic-price-reply';
@@ -97,9 +97,10 @@ export class ClinicAssistantRunnerService implements OnApplicationBootstrap, OnM
         ? nextBookingDraft(row.bookingDraft, run.message.sequence, run.message.text, response!.result) : null;
       if (draft && row.ownerId) reply = autoBookingReply();
       else if (draft && /повторн/i.test(draft.serviceQuery || '')) reply = { human: false, intake: true, text: 'Этот питомец был на приёме у нас в течение последнего месяца? Укажите ответ в заявке ниже. Если прошло больше месяца, приём считается первичным. Время подтвердит администратор.' };
-      const updated = await tx.clinicConversation.update({ where: { id: row.id }, data: { sequence: { increment: 1 }, ...(draft ? { bookingDraft: draft } : {}), ...(reply.human ? { mode: 'HUMAN', needsAttention: true } : {}) } });
+      const handoff = reply.human && hasClinicReplyContact(row);
+      const updated = await tx.clinicConversation.update({ where: { id: row.id }, data: { sequence: { increment: 1 }, ...(draft ? { bookingDraft: draft } : {}), ...(handoff ? { mode: 'HUMAN', needsAttention: true } : {}) } });
       const channel = row.maxUserId && row.maxConsent ? 'MAX' : 'SITE_CHAT';
-      await tx.clinicChatMessage.create({ data: { conversationId: row.id, sequence: updated.sequence, author: 'ASSISTANT', channel, clientKey: `reply:${run.message.clientKey}`, text: reply.text, deliveryStatus: channel === 'MAX' ? 'PENDING' : 'AVAILABLE' } });
+      await tx.clinicChatMessage.create({ data: { conversationId: row.id, sequence: updated.sequence, author: 'ASSISTANT', channel, clientKey: `reply:${run.message.clientKey}`, text: reply.human && !handoff ? clinicContactRequiredReply(intent === 'CLINICAL' ? 'CLINICAL' : intent === 'HUMAN' ? 'HUMAN' : 'OTHER') : reply.text, deliveryStatus: channel === 'MAX' ? 'PENDING' : 'AVAILABLE' } });
     });
   }
 }

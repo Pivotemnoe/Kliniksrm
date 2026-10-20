@@ -2,6 +2,9 @@ import { Controller, Get } from '@nestjs/common';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 
 const modules = [
+  'clinic-modules',
+  'grooming',
+  'avito-administrator',
   'news',
   'auth',
   'employees',

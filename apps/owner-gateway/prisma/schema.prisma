@@ -455,3 +455,20 @@ model GroomingBookingDraft {
   @@index([ipHash, createdAt])
   @@index([expiresAt])
 }
+
+
+model AvitoAssistantRun {
+  id String @id @default(uuid())
+  clientKey String @unique
+  inputHash String
+  direction String
+  status String
+  model String
+  reservedMicroUsd Int
+  chargedMicroUsd Int?
+  result Json?
+  errorCode String?
+  createdAt DateTime @default(now())
+  finishedAt DateTime?
+  @@index([createdAt])
+}

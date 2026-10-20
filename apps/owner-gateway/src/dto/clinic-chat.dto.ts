@@ -5,8 +5,12 @@ export class ClinicChatMessageDto {
 }
 export class ClinicChatContactDto {
   @IsString() @Matches(/^[A-Za-z0-9_-]{16,100}$/) clientKey!: string;
-  @IsOptional() @IsString() @MaxLength(120) contactName?: string;
+  @IsOptional() @IsString() @MaxLength(60) contactName?: string;
+  @IsOptional() @IsString() @MaxLength(60) surname?: string;
+  @IsOptional() @IsString() @MaxLength(60) patronymic?: string;
   @IsOptional() @IsString() @MaxLength(32) phone?: string;
+  @IsOptional() @IsBoolean() contactConsent?: boolean;
+  @IsOptional() @IsIn(['PHONE', 'SITE_CHAT', 'MAX']) preferredReplyChannel?: 'PHONE' | 'SITE_CHAT' | 'MAX';
   @IsOptional() @IsBoolean() declined?: boolean;
   @IsOptional() @IsString() @MaxLength(200) website?: string;
 }
