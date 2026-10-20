@@ -19,6 +19,7 @@ COPY packages/shared/package.json packages/shared/package.json
 RUN npm ci
 
 COPY apps/web apps/web
+COPY apps/owner-gateway/src/grooming/catalog.ts apps/owner-gateway/src/grooming/catalog.ts
 
 RUN npm --workspace @clinic-crm/web run build
 
