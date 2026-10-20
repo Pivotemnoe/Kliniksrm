@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { ArrowRight, ArrowDown, ArrowsHorizontal, BookmarkSimple, Check, CheckCircle, ChatCircleDots, List, MagnifyingGlass, PaperPlaneTilt, X, Pause, Play } from "@phosphor-icons/react";
 import { GROOMING_BREEDS as BREEDS, GROOMING_SERVICES as SERVICES, GROOMING_LOOK_COUNT, groomingLook } from "../../../apps/owner-gateway/src/grooming/catalog";
 import { useGroomingMotion } from "./motion";
+import { PriceList } from "./PriceList";
 
 const STORE = "temichevvet-grooming-wishes-v1";
 const DEVICE_QA = import.meta.env.VITE_GROOMING_QA_TRANSPORT === "device";
@@ -55,7 +56,7 @@ export function App() {
  return <>
   <a className="skip-link" href="#catalogue">К каталогу образов</a>
   <header className="header"><a className="brand" href="#" aria-label="TemichevVET — груминг"><img src="/assets/temichevvet-logo.jpg" alt="TemichevVET"/><span>ГРУМИНГ</span></a>
-   <nav aria-label="Основное меню" className={menu?"nav is-open":"nav"}><a href="#services" onClick={()=>setMenu(false)}>Услуги</a><a href="#catalogue" onClick={()=>setMenu(false)}>Образы</a><a href="#visit" onClick={()=>setMenu(false)}>О визите</a>{config.bookingPortalUrl&&<a className="mobile-cabinet" href={config.bookingPortalUrl}>Мой кабинет</a>}</nav>
+   <nav aria-label="Основное меню" className={menu?"nav is-open":"nav"}><a href="#services" onClick={()=>setMenu(false)}>Услуги и цены</a><a href="#catalogue" onClick={()=>setMenu(false)}>Образы</a><a href="#visit" onClick={()=>setMenu(false)}>О визите</a>{config.bookingPortalUrl&&<a className="mobile-cabinet" href={config.bookingPortalUrl}>Мой кабинет</a>}</nav>
    <button className="header-saved icon-button" onClick={openSaved} aria-label={"Сохранённые образы: "+saved.ids.length}><BookmarkSimple size={22}/>{saved.ids.length>0&&<span>{saved.ids.length}</span>}</button>
    {config.bookingPortalUrl&&<a className="text-link cabinet-link" href={config.bookingPortalUrl}>Мой кабинет</a>}<button className="button header-book" onClick={openBooking}>Записаться <ArrowRight size={22}/></button>
    <button className="mobile-menu icon-button" aria-label="Открыть меню" aria-expanded={menu} onClick={()=>setMenu(!menu)}>{menu?<X size={24}/>:<List size={24}/>}</button>
@@ -96,7 +97,7 @@ export function App() {
     </div><div className="comparison-captions"><span>{breed.styles.find(v=>v.id===a).name}</span><span>{breed.styles.find(v=>v.id===b).name}</span></div></div>
    </section>
    <section className="wish-section section"><BookmarkSimple size={35} weight="light"/><div><p className="eyebrow">КАРТОЧКА ПОЖЕЛАНИЙ</p><h2>Образ — с собой.</h2><p>Сохранено: {saved.ids.length}. Выбор хранится на этом устройстве.</p><label htmlFor="wishes">Что особенно нравится в образе?</label><textarea id="wishes" value={saved.notes} maxLength={1500} rows={3} placeholder="Например: оставить объём на ушах, обсудить длину корпуса" onChange={e=>setSaved(v=>({...v,notes:e.target.value}))}/></div><button className="button" onClick={openBooking}>Обсудить и записаться <ArrowRight size={22}/></button></section>
-   <section className="services section" id="services"><p className="eyebrow">УХОД И СТРИЖКИ</p><h2>Что нужно питомцу?</h2>{SERVICES.map((s,i)=><button key={s.id} className="service-row" onClick={()=>setOverlay("booking:"+s.id)}><span className="service-no">0{i+1}</span><span><strong>{s.name}</strong><small>{s.description}</small></span><ArrowRight size={27}/></button>)}<p className="catalogue-note">{config.bookingPortalUrl?"Доступные услуги, стоимость и длительность покажем при выборе времени. Запись и напоминания — в вашем кабинете и MAX.":"Состав ухода, стоимость и длительность уточнит администратор. Желаемое время согласуем перед визитом."}</p></section>
+   <PriceList breed={breed} bookingPortalUrl={config.bookingPortalUrl} onShowLooks={id=>{chooseBreed(id);go("looks");}} onBook={id=>{chooseBreed(id);openBooking();}}/>
    <section className="closing section reveal"><p className="eyebrow">НАЧНЁМ СО ЗНАКОМСТВА</p><h2>У вашего питомца<br/>свой характер.<br/><span>Расскажите о нём.</span></h2><button className="button" onClick={openBooking}>{config.bookingPortalUrl?"Выбрать время":"Оставить заявку"} <ArrowRight size={23}/></button></section>
   </main>
   <footer className="footer"><a href="#" className="footer-brand">TemichevVET · груминг</a><p>Фото: Goochie Poochie Grooming / Pexels; главный кадр адаптирован с AI.<br/>Каталог: иллюстративные референсы для обсуждения с грумером.</p><button className="motion-button" onClick={()=>setMotion(!motion)} aria-pressed={motion}>{motion?<Pause size={17}/>:<Play size={17}/>}Движение {motion?"включено":"выключено"}</button>{config.mode==="qa"&&<p className="qa-note">{DEVICE_QA ? "Проверка на телефоне: вымышленные данные и тестовые сообщения MAX." : "Локальная проверка: заявки сохраняются в тестовой базе. Сообщения MAX перехватываются тестовым получателем."}</p>}</footer>
