@@ -55,7 +55,7 @@ def migrations():
     if pending!=manifest['gateway']['pendingMigrations']:raise RuntimeError('Unexpected pending gateway migrations')
     return pgenv,database
 def preserve_runtime(image):
-    source="const fs=require('fs'),p=require('path'),c=require('crypto'),out={};function walk(d){for(const e of fs.readdirSync(d,{withFileTypes:true})){const f=p.join(d,e.name);if(e.isDirectory())walk(f);else if(e.isFile())out[f]=c.createHash('sha256').update(fs.readFileSync(f)).digest('hex');}}walk('/app/apps/owner-gateway/dist');walk('/app/apps/owner-gateway/public');console.log(JSON.stringify(out));"
+    source="const fs=require('fs'),p=require('path'),c=require('crypto'),out={};function walk(d){for(const e of fs.readdirSync(d,{withFileTypes:true})){const f=p.join(d,e.name);if(e.isDirectory())walk(f);else if(e.isFile())out[f]=c.createHash('sha256').update(fs.readFileSync(f)).digest('hex');}}walk('/app/apps/owner-gateway/dist');console.log(JSON.stringify(out));"
     get=lambda value:json.loads(run(['docker','run','--rm','--network','none','--entrypoint','node',value,'-e',source]))
     old,new=get(previous['id']),get(image)
     public_files=manifest['gateway']['publicFiles']
