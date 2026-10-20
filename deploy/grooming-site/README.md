@@ -12,6 +12,11 @@ images are not rebuilt by this website deployment.
   `/var/backups/temichevvet-grooming/grooming-site-20261020-r1`.
 - `release.py` scopes staging, HTTPS verification and rollback to this hostname.
   Stage is intentionally one-shot. Inspect its receipt before repeating a run.
+- Subsequent static updates use `update-static.py`. It validates the archive and
+  its file manifest, requires the expected prior release, backs up the pointer,
+  preserves old hashed entry assets and atomically switches `current`. It does
+  not edit Nginx, certificates, gateway settings or containers. Its `rollback`
+  mode refuses to overwrite a later release. Keep each previous release on disk.
 - The existing Certbot timer renews the certificate. The deploy hook
   `/etc/letsencrypt/renewal-hooks/deploy/40-pet-temichevvet-nginx` validates and
   reloads Nginx only when this hostname's certificate is renewed.

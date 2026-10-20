@@ -1,7 +1,8 @@
 ## Grooming prices supplied — 2026-10-20
 
 - User supplied five photographs of a service/price list and authorized putting approximate services and prices on the public site. Prepare a readable dog/cat price section within the accepted photographic design.
-- Keep ranges, hourly rates, percentage supplements and conditions separate. Do not publish crossed-out prices or invent replacements for illegible/covered cells. A question about the handwriting precedence and the margin note "+300" is pending; prepare and verify independently, but resolve this price rule before publishing the new numerical list.
+- User resolved the price rule: "Брать исправленные и добавить 300 ₽ ко всему". Handwritten corrections take precedence; add 300 RUB once to every monetary amount, both range bounds, hourly rates and monetary supplements. Keep the 30% supplement as a percentage. Publish the updated site under this authorization.
+- Keep ranges, hourly rates, percentage supplements and conditions separate. Do not publish crossed-out prices or invent replacements for illegible/covered cells; display "Уточним перед записью" for these cells.
 - Preserve source provenance privately; never upload the supplied full photographs, the other clinic's name, or incidental documents visible around their edges to the public website.
 - This task changes the website. It does not authorize enabling self-booking or seeding the production CRM with assumed services, durations or work periods.
 

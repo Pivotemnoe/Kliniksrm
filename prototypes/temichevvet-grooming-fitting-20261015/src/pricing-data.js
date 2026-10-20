@@ -1,8 +1,12 @@
 // Transcribed from the owner's five photographs, 20 October 2026.
+// Handwritten corrections take precedence, as confirmed by the owner.
+// The owner approved +300 RUB to every monetary price, including both bounds,
+// hourly rates and supplements. Percentage supplements remain percentages.
 // Null means the source is blank, crossed out without a clear replacement,
 // or ambiguous. These cells must not fall back to an old printed amount.
-const rub = (min, max = min) => ({ min, max });
-const upTo = max => ({ max, kind: 'upTo' });
+export const PRICE_INCREASE_RUB = 300;
+const rub = (min, max = min) => ({ min:min+PRICE_INCREASE_RUB, max:max+PRICE_INCREASE_RUB });
+const upTo = max => ({ max:max+PRICE_INCREASE_RUB, kind: 'upTo' });
 const dog = (id, name, group, source, dry, hygiene, full, extra = {}) =>
  ({ id, name, group, source, dry, hygiene, full, ...extra });
 
