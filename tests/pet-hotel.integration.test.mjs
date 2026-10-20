@@ -12,7 +12,7 @@ test('independent pet hotel: persisted bookings, money, races, module boundaries
   const moduleBefore = await f.prisma.clinicModuleInstallation.findMany({where:{moduleKey:{in:['GROOMING','avito-administrator']}},orderBy:{moduleKey:'asc'}});
   const clinicalBefore = await Promise.all([f.prisma.appointment.count(), f.prisma.groomingReservation.count()]);
   const cat1 = f.rooms.find(r => r.code === 'CAT-1'), cat2 = f.rooms.find(r => r.code === 'CAT-2'), dog1 = f.rooms.find(r => r.code === 'DOG-1');
-  let saved;
+  let saved, originalInput;
   await t.test('explicit 8+4 setup is repeatable and preserves edited names', async () => {
     assert.equal(f.rooms.filter(r => r.species === 'CAT').length, 8); assert.equal(f.rooms.filter(r => r.species === 'DOG').length, 4);
     await f.service.saveRoom({ ...cat2, name:'Кошачий бокс №2 · проверено' }, f.director, cat2.id);
@@ -20,7 +20,7 @@ test('independent pet hotel: persisted bookings, money, races, module boundaries
     assert.equal(await f.prisma.petHotelRoom.count(),12); assert.equal((await f.prisma.petHotelRoom.findUniqueOrThrow({where:{id:cat2.id}})).name,'Кошачий бокс №2 · проверено');
   });
   await t.test('2 days plus 3 hours costs 3 days; idempotent save persists exact cents', async () => {
-    const input=f.booking(); const preview=await f.service.availability(input,f.now);
+    const input=f.booking(); originalInput=input; const preview=await f.service.availability(input,f.now);
     assert.equal(preview.quote.billableDays,3); assert.equal(preview.quote.totalPrice,'2100.00');
     saved=await f.service.book(input,f.administrator,undefined,f.now);
     assert.equal(String(saved.totalPrice),'2100'); assert.equal(saved.billableDays,3);
@@ -58,10 +58,13 @@ test('independent pet hotel: persisted bookings, money, races, module boundaries
   });
   await t.test('check-in/out, overdue occupancy and disabled module retain history safely', async () => {
     await rejectsStatus(f.service.status(saved.id,{clientKey:randomUUID(),version:saved.version,status:'IN_HOUSE'},f.administrator,f.now),400);
-    saved=await f.service.status(saved.id,{clientKey:randomUUID(),version:saved.version,status:'IN_HOUSE'},f.administrator,new Date(f.start.getTime()+3600000));
+    const checkInInput={clientKey:randomUUID(),version:saved.version,status:'IN_HOUSE'};
+    saved=await f.service.status(saved.id,checkInInput,f.administrator,new Date(f.start.getTime()+3600000));
     const late=new Date(f.start.getTime()+6*86400000); const occupied=await f.service.availability(f.booking({ownerId:f.otherOwner.id,animalId:f.otherAnimal.id,startsAt:late.toISOString(),endsAt:new Date(+late+2*86400000).toISOString()}),late);
     assert.ok(!occupied.rooms.some(r=>r.id===cat1.id));
     const installation=await f.modules.installation('PET_HOTEL'); await f.modules.setEnabled('PET_HOTEL',false,installation.version,f.director.id);
+    assert.equal((await f.service.book(originalInput,f.administrator,undefined,f.now)).id,saved.id);
+    assert.equal((await f.service.status(saved.id,checkInInput,f.administrator,f.start)).id,saved.id);
     assert.equal((await f.service.overview(f.administrator)).limited,true); assert.equal((await f.service.booking(saved.id)).status,'IN_HOUSE');
     await rejectsStatus(f.service.book(f.booking(),f.administrator,undefined,f.now),403);
     const reserved=await f.prisma.petHotelReservation.findFirstOrThrow({where:{status:'RESERVED'}});

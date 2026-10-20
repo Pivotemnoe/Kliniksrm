@@ -89,10 +89,11 @@ export class PetHotelService {
   async book(input: PetHotelBookingDto | PetHotelChangeDto, actor: AuthEmployee, id?: string, now = new Date()) {
     return this.prisma.$transaction(async tx => {
       await lockPetHotel(tx);
-      const { installation, settings } = await this.context(tx, true);
+      const { installation, settings, limited } = await this.context(tx);
       const receiptId = `${installation.id}:${actor.id}:booking:${input.clientKey}`, fingerprint = hash({ id, input });
       const oldReceipt = await tx.petHotelCommandReceipt.findUnique({ where: { id: receiptId } });
       if (oldReceipt) { if (oldReceipt.fingerprint !== fingerprint) throw new ConflictException('Ключ сохранения уже использован с другими данными'); return oldReceipt.result; }
+      if (limited) throw new ForbiddenException('Зоогостиница отключена. Новые брони и заезды недоступны');
       const previous = id ? await tx.petHotelReservation.findFirst({ where: { id, installationId: installation.id } }) : null;
       if (id && !previous) throw new NotFoundException('Бронь не найдена');
       if (previous && (previous.version !== (input as PetHotelChangeDto).version || !active.includes(previous.status))) throw new ConflictException('Бронь уже изменилась. Откройте её заново');
@@ -113,10 +114,11 @@ export class PetHotelService {
   async status(id: string, input: PetHotelStatusDto, actor: AuthEmployee, now = new Date()) {
     return this.prisma.$transaction(async tx => {
       await lockPetHotel(tx);
-      const { installation, settings } = await this.context(tx, input.status === 'IN_HOUSE');
+      const { installation, settings, limited } = await this.context(tx);
       const receiptId = `${installation.id}:${actor.id}:status:${input.clientKey}`, fingerprint = hash({ id, input });
       const receipt = await tx.petHotelCommandReceipt.findUnique({ where: { id: receiptId } });
       if (receipt) { if (receipt.fingerprint !== fingerprint) throw new ConflictException('Ключ статуса уже использован'); return receipt.result; }
+      if (input.status === 'IN_HOUSE' && limited) throw new ForbiddenException('Зоогостиница отключена. Новые брони и заезды недоступны');
       const row = await tx.petHotelReservation.findFirst({ where: { id, installationId: installation.id } });
       if (!row) throw new NotFoundException('Бронь не найдена');
       if (row.version !== input.version) throw new ConflictException('Бронь уже изменилась. Обновите карточку');
