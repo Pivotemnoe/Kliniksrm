@@ -10,7 +10,7 @@ import shutil
 import socket
 import subprocess
 import tarfile
-import urllib.request
+import time
 
 DOMAIN = 'pet.temichevvet.ru'
 RELEASE = 'grooming-site-20261020-r1'
@@ -118,17 +118,40 @@ def put_configuration(text):
     run('systemctl', 'reload', 'nginx')
 
 
+def ensure_tls_reload_hook():
+    hook = Path('/etc/letsencrypt/renewal-hooks/deploy/40-pet-temichevvet-nginx')
+    content = '''#!/bin/sh
+set -eu
+if [ "${RENEWED_LINEAGE:-}" = "/etc/letsencrypt/live/pet.temichevvet.ru" ]; then
+    /usr/sbin/nginx -t
+    /usr/bin/systemctl reload nginx
+fi
+'''
+    if hook.exists() and hook.read_text() != content:
+        raise RuntimeError('Existing grooming certificate hook differs')
+    hook.parent.mkdir(parents=True, exist_ok=True)
+    hook.write_text(content)
+    hook.chmod(0o755)
+    receipt = {'hook': str(hook), 'lineage': '/etc/letsencrypt/live/' + DOMAIN,
+               'sha256': digest(hook), 'existingCertbotTimer': True}
+    save('tls-renewal.json', receipt)
+    return receipt
+
+
 def verify_local():
-    request = urllib.request.Request('http://127.0.0.1/release.json', headers={'Host': DOMAIN})
-    # In HTTPS mode, use curl's verified certificate resolution to loopback.
-    if 'listen 443' in CONF.read_text():
-        release = json.loads(run('curl', '--fail', '--silent', '--show-error', '--resolve', DOMAIN + ':443:127.0.0.1', 'https://' + DOMAIN + '/release.json'))
-    else:
-        with urllib.request.urlopen(request, timeout=10) as response:
-            release = json.load(response)
-    if release['releaseId'] != RELEASE:
-        raise RuntimeError('Wrong public grooming release')
-    return release
+    tls = 'listen 443' in CONF.read_text()
+    port, scheme = ('443', 'https') if tls else ('80', 'http')
+    # Nginx reload starts new workers asynchronously; allow them to take over.
+    for attempt in range(5):
+        try:
+            release = json.loads(run('curl', '--fail', '--silent', '--show-error', '--max-time', '5', '--noproxy', '*', '--resolve', DOMAIN + ':' + port + ':127.0.0.1', scheme + '://' + DOMAIN + '/release.json'))
+            if release['releaseId'] != RELEASE:
+                raise RuntimeError('Wrong public grooming release')
+            return release
+        except Exception:
+            if attempt == 4:
+                raise
+            time.sleep(0.5)
 
 
 def main():
@@ -176,12 +199,15 @@ def main():
     elif args.mode == 'https':
         if not (Path('/etc/letsencrypt/live') / DOMAIN / 'fullchain.pem').is_file():
             run('certbot', 'certonly', '--webroot', '-w', '/var/www/certbot', '-d', DOMAIN, '--non-interactive', '--keep-until-expiring')
+        ensure_tls_reload_hook()
         put_configuration(configuration(True))
         release = verify_local()
         save('published.json', {'at': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'url': 'https://' + DOMAIN, 'release': release})
         print('PUBLISHED_HTTPS_OK')
     elif args.mode == 'verify':
-        print(json.dumps(verify_local(), ensure_ascii=False))
+        release = verify_local()
+        save('last-verified.json', {'at': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'release': release})
+        print(json.dumps(release, ensure_ascii=False))
     else:
         before = json.loads((BACKUP / 'before.json').read_text())
         if before['previousCurrent']:
