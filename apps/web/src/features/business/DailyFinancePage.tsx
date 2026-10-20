@@ -1,6 +1,6 @@
 import { CheckOutlined, CloseCircleOutlined, EditOutlined, PlusOutlined, ReloadOutlined, SaveOutlined, SendOutlined, SettingOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Card, DatePicker, Input, Select, Space, Statistic, Table, Tag, Typography } from 'antd';
+import { Alert, App, Button, Card, DatePicker, Input, Select, Space, Table, Tag, Typography } from 'antd';
 import { InputNumber } from '../../shared/ui/DecimalInputNumber';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
@@ -10,7 +10,8 @@ import { hasPermission } from '../../auth/permissions';
 import { useCurrentEmployee } from '../../auth/useAuth';
 import { PageHeader } from '../../shared/ui/PageHeader';
 import { formatDateTime } from '../../shared/utils/date';
-import { formatMoney } from '../../shared/utils/money';
+import { formatMoney, roundMoney, subtractMoney, sumMoney } from '../../shared/utils/money';
+import { MoneyStatistic } from '../../shared/ui/MoneyStatistic';
 import { BusinessEntryModal } from './BusinessEntryModal';
 import { BusinessEntryCorrectionModal } from './BusinessEntryCorrectionModal';
 import { BusinessCategoriesModal } from './BusinessCategoriesModal';
@@ -165,9 +166,9 @@ export function DailyFinancePage() {
     });
   }
 
-  const actualTotal = close?.lines.reduce((total, line) => total + (actualAmounts[line.lineKey] ?? 0), 0) ?? 0;
-  const expectedTotal = Number(close?.expectedAmount ?? 0);
-  const currentDifference = actualTotal - expectedTotal;
+  const actualTotal = sumMoney(close?.lines.map((line) => actualAmounts[line.lineKey] ?? line.actualAmount) ?? []);
+  const expectedTotal = roundMoney(close?.expectedAmount);
+  const currentDifference = subtractMoney(actualTotal, expectedTotal);
   const lineColumns = useMemo<ColumnsType<BusinessDailyCloseLine>>(() => [
     { title: 'Способ оплаты и касса', key: 'titleSnapshot', width: 230, render: (_, line) => formatDailyLineTitle(line) },
     { title: 'Расчёт CRM', key: 'systemAmount', width: 235, align: 'right', render: (_, line) => {
@@ -185,7 +186,7 @@ export function DailyFinancePage() {
     } },
     { title: 'Фактическое чистое движение', key: 'actualAmount', width: 210, render: (_, line) => editable ? <InputNumber value={actualAmounts[line.lineKey] ?? 0} precision={2} addonAfter="₽" onChange={(value) => setActualAmounts((current) => ({ ...current, [line.lineKey]: Number(value ?? 0) }))} /> : formatSignedMoney(Number(line.actualAmount)) },
     { title: 'Отклонение', key: 'difference', align: 'right', width: 140, render: (_, line) => {
-      const value = (actualAmounts[line.lineKey] ?? Number(line.actualAmount)) - Number(line.systemAmount);
+      const value = subtractMoney(actualAmounts[line.lineKey] ?? line.actualAmount, line.systemAmount);
       return <Typography.Text type={value === 0 ? 'secondary' : 'danger'}>{formatMoney(value)}</Typography.Text>;
     } },
     { title: 'Пояснение', key: 'comment', width: 260, render: (_, line) => editable ? <Input value={lineComments[line.lineKey] ?? ''} placeholder="Если есть расхождение" onChange={(event) => setLineComments((current) => ({ ...current, [line.lineKey]: event.target.value }))} /> : line.comment || '—' },
@@ -207,11 +208,11 @@ export function DailyFinancePage() {
       {!close && !closeQuery.isLoading ? <Card><Typography.Title level={4}>Сверка ещё не сформирована</Typography.Title><Typography.Paragraph type="secondary">CRM соберёт оплаты, возвраты, расходы поставщикам и внесённые вручную операции за выбранный день.</Typography.Paragraph>{canManage ? <Button type="primary" icon={<ReloadOutlined />} loading={saveMutation.isPending} disabled={!officeId} onClick={() => saveMutation.mutate()}>Сформировать сверку</Button> : null}</Card> : null}
       {close ? <>
         <div className="report-metrics-grid">
-          <Card><Statistic title="Всего поступило" value={Number(close.systemIncome) + Number(close.manualIncome)} precision={2} suffix="₽" /></Card>
-          <Card><Statistic title="Всего выбыло" value={Number(close.systemRefunds) + Number(close.systemExpense) + Number(close.manualExpense)} precision={2} suffix="₽" /></Card>
-          <Card><Statistic title="Чистое движение CRM" value={expectedTotal} precision={2} suffix="₽" /></Card>
-          <Card><Statistic title="Фактическое движение" value={actualTotal} precision={2} suffix="₽" /></Card>
-          <Card><Statistic title="Отклонение" value={currentDifference} precision={2} suffix="₽" valueStyle={{ color: currentDifference === 0 ? '#237804' : '#cf1322' }} /></Card>
+          <Card><MoneyStatistic title="Всего поступило" value={sumMoney([close.systemIncome, close.manualIncome])} suffix="₽" /></Card>
+          <Card><MoneyStatistic title="Всего выбыло" value={sumMoney([close.systemRefunds, close.systemExpense, close.manualExpense])} suffix="₽" /></Card>
+          <Card><MoneyStatistic title="Чистое движение CRM" value={expectedTotal} suffix="₽" /></Card>
+          <Card><MoneyStatistic title="Фактическое движение" value={actualTotal} suffix="₽" /></Card>
+          <Card><MoneyStatistic title="Отклонение" value={currentDifference} suffix="₽" valueStyle={{ color: currentDifference === 0 ? '#237804' : '#cf1322' }} /></Card>
         </div>
         <div className="list-panel">
           <div className="list-panel-header"><div><Typography.Title level={4}>Сверка касс</Typography.Title><Space wrap><Tag color={statusMeta[close.status].color}>{statusMeta[close.status].label}</Tag>{close.submittedBy ? <Typography.Text type="secondary">Отправил: {close.submittedBy.fullName}</Typography.Text> : null}{close.approvedBy ? <Typography.Text type="secondary">Утвердил: {close.approvedBy.fullName}</Typography.Text> : null}</Space></div><Space wrap>{editable ? <><Button onClick={acceptSystemAmounts}>Заполнить фактическое по CRM</Button><Button icon={<SaveOutlined />} loading={saveMutation.isPending} onClick={() => saveMutation.mutate()}>Сохранить</Button></> : null}{close.status === 'DRAFT' && canSubmit ? <Button type="primary" icon={<SendOutlined />} loading={submitMutation.isPending} onClick={() => submitMutation.mutate()}>Отправить директору</Button> : null}{close.status === 'SUBMITTED' && canApprove ? <><Button onClick={askReturn}>Вернуть</Button><Button type="primary" icon={<CheckOutlined />} loading={approveMutation.isPending} onClick={() => modal.confirm({ title: 'Утвердить закрытие дня?', content: currentDifference === 0 ? 'Сверка с CRM совпадает.' : `Отклонение: ${formatMoney(currentDifference)}. Пояснение останется в журнале.`, okText: 'Утвердить', cancelText: 'Отмена', onOk: () => approveMutation.mutateAsync(close.id) })}>Утвердить</Button></> : null}</Space></div>
@@ -260,7 +261,8 @@ function paymentTypeLabel(type: string) {
   } as Record<string, string>)[type] ?? 'Способ не указан';
 }
 
-function formatSignedMoney(value: number) {
+function formatSignedMoney(input: number) {
+  const value = roundMoney(input);
   if (value === 0) return formatMoney(0);
   return `${value > 0 ? '+' : '−'}${formatMoney(Math.abs(value))}`;
 }

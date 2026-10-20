@@ -1,3 +1,4 @@
+import { addReportMoney, sumReportMoney, subtractReportMoney, multiplyReportMoney } from '../reports/report-money';
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import {
@@ -479,7 +480,7 @@ export class BusinessService {
       this.loadSupplierDebt(),
       this.prisma.businessEntry.count({ where: { status: BusinessEntryStatus.ACTIVE, requiresResolution: true, ...(query.officeId ? { officeId: query.officeId } : {}) } }),
     ]);
-    const debtorsAmount = debtBills.reduce((total, bill) => total + Math.max(number(bill.totalAmount) - number(bill.paidAmount), 0), 0);
+    const debtorsAmount = total(debtBills, (bill) => Math.max(subtractReportMoney(bill.totalAmount, bill.paidAmount), 0));
     return {
       generatedAt: new Date().toISOString(),
       range: { from: range.from, to: range.to },
@@ -492,7 +493,7 @@ export class BusinessService {
         draftDays: closes.filter((item) => item.status === BusinessDailyCloseStatus.DRAFT).length,
         submittedDays: closes.filter((item) => item.status === BusinessDailyCloseStatus.SUBMITTED).length,
         approvedDays: closes.filter((item) => item.status === BusinessDailyCloseStatus.APPROVED).length,
-        totalDifference: closes.reduce((total, item) => total + number(item.difference), 0),
+        totalDifference: total(closes, (item) => item.difference),
       },
       closes,
     };
@@ -624,29 +625,29 @@ export class BusinessService {
     const accruedSystemRevenue = total(bills, (item) => item.totalAmount);
     const cashIncome = total(payments.filter((item) => number(item.amount) > 0), (item) => item.amount);
     const refunds = -total(payments.filter((item) => number(item.amount) < 0), (item) => item.amount);
-    const manualIncome = entries.filter((item) => item.type === BusinessCategoryType.INCOME).reduce((value, item) => value + number(item.amount), 0);
+    const manualIncome = entries.filter((item) => item.type === BusinessCategoryType.INCOME).reduce((value, item) => addReportMoney(value, item.amount), 0);
     const unrecordedRevenue = entries
       .filter((item) => item.type === BusinessCategoryType.INCOME && (item.source === BusinessEntrySource.UNRECORDED_REVENUE || item.category.code === 'unrecorded_revenue'))
-      .reduce((value, item) => value + number(item.amount), 0);
-    const otherManualIncome = manualIncome - unrecordedRevenue;
-    const manualExpense = entries.filter((item) => item.type === BusinessCategoryType.EXPENSE).reduce((value, item) => value + number(item.amount), 0);
-    const profitIncome = entries.filter((item) => item.type === BusinessCategoryType.INCOME && item.category.affectsProfit).reduce((value, item) => value + number(item.amount), 0);
+      .reduce((value, item) => addReportMoney(value, item.amount), 0);
+    const otherManualIncome = subtractReportMoney(manualIncome, unrecordedRevenue);
+    const manualExpense = entries.filter((item) => item.type === BusinessCategoryType.EXPENSE).reduce((value, item) => addReportMoney(value, item.amount), 0);
+    const profitIncome = entries.filter((item) => item.type === BusinessCategoryType.INCOME && item.category.affectsProfit).reduce((value, item) => addReportMoney(value, item.amount), 0);
     const unrecordedProfitRevenue = entries
       .filter((item) => item.type === BusinessCategoryType.INCOME && item.category.affectsProfit && (item.source === BusinessEntrySource.UNRECORDED_REVENUE || item.category.code === 'unrecorded_revenue'))
-      .reduce((value, item) => value + number(item.amount), 0);
-    const otherProfitIncome = profitIncome - unrecordedProfitRevenue;
+      .reduce((value, item) => addReportMoney(value, item.amount), 0);
+    const otherProfitIncome = subtractReportMoney(profitIncome, unrecordedProfitRevenue);
     const dailySalaryExpense = entries
       .filter((item) => item.type === BusinessCategoryType.EXPENSE && item.category.code === 'daily_salary')
-      .reduce((value, item) => value + number(item.amount), 0);
+      .reduce((value, item) => addReportMoney(value, item.amount), 0);
     const operatingExpenses = entries
       .filter((item) => item.type === BusinessCategoryType.EXPENSE && item.category.affectsProfit && item.category.code !== 'daily_salary')
-      .reduce((value, item) => value + number(item.amount), 0);
+      .reduce((value, item) => addReportMoney(value, item.amount), 0);
     const supplierOutflow = total(supplierPayments, (item) => item.amount);
     const payrollExpense = total(payroll, (item) => item.totalAmount);
     const costOfGoods = Math.max(movements.reduce((value, movement) => {
       const documentedCorrection = movement.type === StockMovementType.CORRECTION && Boolean(movement.billItemId || movement.visitId || movement.saleId);
       if (movement.type === StockMovementType.CORRECTION && !documentedCorrection) return value;
-      return value - number(movement.quantity) * number(movement.unitCost ?? movement.stockBatch?.purchasePrice);
+      return subtractReportMoney(value, multiplyReportMoney(movement.quantity, movement.unitCost ?? movement.stockBatch?.purchasePrice));
     }, 0), 0);
     const result = calculateManagementResult({
       accruedSystemRevenue, profitIncome, costOfGoods, payrollExpense, dailySalaryExpense, operatingExpenses,
@@ -674,8 +675,8 @@ export class BusinessService {
       this.prisma.supplierPayment.aggregate({ _sum: { amount: true } }),
       this.prisma.stockDocument.findMany({ where: { type: StockDocumentType.SUPPLIER_RETURN, status: StockDocumentStatus.POSTED }, select: { items: { select: { quantity: true, unitCost: true } } } }),
     ]);
-    const returned = returns.reduce((value, document) => value + document.items.reduce((subtotal, item) => subtotal + number(item.quantity) * number(item.unitCost), 0), 0);
-    return Math.max(number(supplies._sum.totalAmount) - number(payments._sum.amount) - returned, 0);
+    const returned = total(returns, (document) => total(document.items, (item) => multiplyReportMoney(item.quantity, item.unitCost)));
+    return Math.max(subtractReportMoney(supplies._sum.totalAmount, payments._sum.amount, returned), 0);
   }
 
   private async validateEntryLinks(dto: Pick<CreateBusinessEntryDto, 'officeId' | 'cashboxId' | 'paymentMethodId' | 'payrollPeriodId'>) {
@@ -785,20 +786,20 @@ export function aggregateBusinessDaily(
     rows.set(key, value);
     return value;
   };
-  input.bills.forEach((item) => { const value = number(item.totalAmount); row(item.createdAt).systemRevenue += value; row(item.createdAt).accruedRevenue += value; });
-  input.payments.forEach((item) => { const value = number(item.amount); if (value >= 0) row(item.paidAt).cashIncome += value; else row(item.paidAt).cashExpense += -value; });
-  input.supplierPayments.forEach((item) => { row(item.paidAt).cashExpense += number(item.amount); });
+  input.bills.forEach((item) => { const value = number(item.totalAmount); row(item.createdAt).systemRevenue = addReportMoney(row(item.createdAt).systemRevenue, value); row(item.createdAt).accruedRevenue = addReportMoney(row(item.createdAt).accruedRevenue, value); });
+  input.payments.forEach((item) => { const value = number(item.amount); if (value >= 0) row(item.paidAt).cashIncome = addReportMoney(row(item.paidAt).cashIncome, value); else row(item.paidAt).cashExpense = addReportMoney(row(item.paidAt).cashExpense, -value); });
+  input.supplierPayments.forEach((item) => { row(item.paidAt).cashExpense = addReportMoney(row(item.paidAt).cashExpense, number(item.amount)); });
   input.entries.forEach((item) => {
     const value = number(item.amount);
     if (item.type === BusinessCategoryType.INCOME) {
-      row(item.occurredAt).cashIncome += value;
-      if (item.source === BusinessEntrySource.UNRECORDED_REVENUE || item.category.code === 'unrecorded_revenue') row(item.occurredAt).unrecordedRevenue += value;
-      else row(item.occurredAt).otherIncome += value;
-      if (item.category.affectsProfit) row(item.occurredAt).accruedRevenue += value;
+      row(item.occurredAt).cashIncome = addReportMoney(row(item.occurredAt).cashIncome, value);
+      if (item.source === BusinessEntrySource.UNRECORDED_REVENUE || item.category.code === 'unrecorded_revenue') row(item.occurredAt).unrecordedRevenue = addReportMoney(row(item.occurredAt).unrecordedRevenue, value);
+      else row(item.occurredAt).otherIncome = addReportMoney(row(item.occurredAt).otherIncome, value);
+      if (item.category.affectsProfit) row(item.occurredAt).accruedRevenue = addReportMoney(row(item.occurredAt).accruedRevenue, value);
     } else {
-      row(item.occurredAt).cashExpense += value;
-      if (item.category.code === 'daily_salary') row(item.occurredAt).salaryExpense += value;
-      else if (item.category.affectsProfit) row(item.occurredAt).profitExpense += value;
+      row(item.occurredAt).cashExpense = addReportMoney(row(item.occurredAt).cashExpense, value);
+      if (item.category.code === 'daily_salary') row(item.occurredAt).salaryExpense = addReportMoney(row(item.occurredAt).salaryExpense, value);
+      else if (item.category.affectsProfit) row(item.occurredAt).profitExpense = addReportMoney(row(item.occurredAt).profitExpense, value);
     }
   });
   input.movements.forEach((item) => {
@@ -806,12 +807,12 @@ export function aggregateBusinessDaily(
     if (item.type === StockMovementType.CORRECTION && !documentedCorrection) return;
     // Keep returns and documented corrections signed. This makes the sum of
     // daily cost of goods reconcile with the monthly management total.
-    row(item.createdAt).costOfGoods += -number(item.quantity) * number(item.unitCost ?? item.stockBatch?.purchasePrice);
+    row(item.createdAt).costOfGoods = subtractReportMoney(row(item.createdAt).costOfGoods, multiplyReportMoney(item.quantity, item.unitCost ?? item.stockBatch?.purchasePrice));
   });
   return [...rows.values()].sort((left, right) => left.date.localeCompare(right.date)).map((item) => ({
     ...item,
-    operatingProfitAfterManualExpenses: item.accruedRevenue - item.costOfGoods - item.profitExpense - item.salaryExpense,
-    cashNet: item.cashIncome - item.cashExpense,
+    operatingProfitAfterManualExpenses: subtractReportMoney(item.accruedRevenue, item.costOfGoods, item.profitExpense, item.salaryExpense),
+    cashNet: subtractReportMoney(item.cashIncome, item.cashExpense),
   }));
 }
 
@@ -819,7 +820,7 @@ function aggregateCategories(entries: Array<{ categoryId: string; amount: Prisma
   const rows = new Map<string, { categoryId: string; title: string; groupCode: string; affectsProfit: boolean; amount: number }>();
   for (const entry of entries) {
     const row = rows.get(entry.categoryId) ?? { categoryId: entry.categoryId, title: entry.category.title, groupCode: entry.category.groupCode, affectsProfit: entry.category.affectsProfit, amount: 0 };
-    row.amount += number(entry.amount);
+    row.amount = addReportMoney(row.amount, entry.amount);
     rows.set(entry.categoryId, row);
   }
   return [...rows.values()].sort((left, right) => right.amount - left.amount);
@@ -866,7 +867,7 @@ function sum(values: Prisma.Decimal.Value[]) {
 }
 
 function total<T>(values: T[], resolve: (item: T) => Prisma.Decimal.Value) {
-  return values.reduce((result, item) => result + number(resolve(item)), 0);
+  return sumReportMoney(values.map(resolve));
 }
 
 function dateOnly(value: string) {
@@ -893,10 +894,10 @@ export function calculateManagementResult(input: {
   manualExpense: number;
   supplierOutflow: number;
 }) {
-  const accruedRevenue = input.accruedSystemRevenue + input.profitIncome;
-  const grossProfit = accruedRevenue - input.costOfGoods;
-  const operatingProfit = grossProfit - input.payrollExpense - input.dailySalaryExpense - input.operatingExpenses;
-  const cashNet = input.cashIncome - input.refunds + input.manualIncome - input.manualExpense - input.supplierOutflow;
+  const accruedRevenue = addReportMoney(input.accruedSystemRevenue, input.profitIncome);
+  const grossProfit = subtractReportMoney(accruedRevenue, input.costOfGoods);
+  const operatingProfit = subtractReportMoney(grossProfit, input.payrollExpense, input.dailySalaryExpense, input.operatingExpenses);
+  const cashNet = subtractReportMoney(addReportMoney(input.cashIncome, input.manualIncome), input.refunds, input.manualExpense, input.supplierOutflow);
   return {
     accruedRevenue,
     grossProfit,
