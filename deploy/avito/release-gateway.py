@@ -131,7 +131,7 @@ else:
             migrate('deploy')
             put_env(dict(OWNER_GATEWAY_IMAGE=CANDIDATE))
             config=json.loads(compose('config','--format','json'))['services']['gateway']
-            for key in ['OWNER_GATEWAY_DATABASE_URL','OWNER_GATEWAY_SYNC_SECRET','MAX_BOT_TOKEN','MAX_WEBHOOK_SECRET','OWNER_GATEWAY_PUBLIC_URL','GROOMING_CRM_SYNC_ENABLED','GROOMING_CLIENT_NOTIFICATIONS_ENABLED','GROOMING_SITE_ORIGINS','CLINIC_ASSISTANT_ENABLED','CLINIC_ASSISTANT_MODEL_ENABLED','CLINIC_ASSISTANT_OPENAI_BASE_URL','CLINIC_ASSISTANT_OPENAI_GATEWAY_TOKEN']:
+            for key in ['OWNER_GATEWAY_DATABASE_URL','OWNER_GATEWAY_SYNC_SECRET','MAX_BOT_TOKEN','MAX_WEBHOOK_SECRET','OWNER_GATEWAY_PUBLIC_URL','OWNER_GATEWAY_PUBLIC_SITE_ORIGINS','GROOMING_CRM_SYNC_ENABLED','GROOMING_CLIENT_NOTIFICATIONS_ENABLED','GROOMING_SITE_ORIGINS','CLINIC_ASSISTANT_ENABLED','CLINIC_ASSISTANT_MODEL_ENABLED','CLINIC_ASSISTANT_OPENAI_BASE_URL','CLINIC_ASSISTANT_OPENAI_GATEWAY_TOKEN']:
                 if config['environment'].get(key,'') != critical.get(key,''): raise RuntimeError('Protected gateway setting changed: '+key)
             if config['image'] != CANDIDATE: raise RuntimeError('Wrong candidate image')
             compose('up','-d','--no-deps','--no-build','--pull','never','gateway');wait_healthy(candidate['id']);protected(state['protected'])

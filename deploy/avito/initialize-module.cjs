@@ -54,6 +54,7 @@ async function main() {
   const installation = await modules.installation('avito-administrator');
   if (!installation.enabled) await modules.setEnabled('avito-administrator', true, installation.version, actor.id);
   const connection = await avito.checkConnection(actor.id);
+  const publishingAccess = await editor.check(actor.id);
   const adsFile = path.join(directory, 'reviewed/ads.json');
   const ads = JSON.parse(await readFile(adsFile, 'utf8')).ads;
   const drafts = [];
@@ -72,7 +73,7 @@ async function main() {
     drafts.push({ id: saved.id, slug: ad.slug, status: saved.status, photos: saved.content.photoIds.length, approvalCurrent: saved.approvalCurrent, warnings: saved.issues });
   }
   integration = await avito.integration();
-  const receipt = { at: new Date().toISOString(), actorId: actor.id, module: integration.installation.moduleKey, enabled: integration.installation.enabled, mode: integration.settings.mode, enabledDirections: integration.settings.profiles.filter(x => x.enabled).map(x => x.direction), programmeVariants: integration.settings.clinicProgrammeTable.prices.length, connection, drafts, outgoingCreated: false, appointmentsCreated: false, externalWorkersEnabled: false };
+  const receipt = { at: new Date().toISOString(), actorId: actor.id, module: integration.installation.moduleKey, enabled: integration.installation.enabled, mode: integration.settings.mode, enabledDirections: integration.settings.profiles.filter(x => x.enabled).map(x => x.direction), programmeVariants: integration.settings.clinicProgrammeTable.prices.length, connection, publishingProfileHttpStatus: publishingAccess.profileHttpStatus, drafts, outgoingCreated: false, appointmentsCreated: false, externalWorkersEnabled: false };
   await writeFile(path.join(directory, 'initialization-receipt.json'), JSON.stringify(receipt, null, 2));
   console.log(JSON.stringify(receipt));
 }
