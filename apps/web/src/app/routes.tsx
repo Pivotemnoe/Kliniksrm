@@ -73,6 +73,7 @@ const SalesPage = lazyPage(() => import('../features/sales/SalesPage'), 'SalesPa
 const ClinicResourcesPage = lazyPage(() => import('../features/scheduling/ClinicResourcesPage'), 'ClinicResourcesPage');
 const AvitoPage = lazyPage(() => import('../features/avito/AvitoPage'), 'AvitoPage');
 const GroomingPage = lazyPage(() => import('../features/grooming/GroomingPage'), 'GroomingPage');
+const PetHotelPage = lazyPage(() => import('../features/petHotel/PetHotelPage'), 'PetHotelPage');
 const ClinicModulesPage = lazyPage(() => import('../features/clinicModules/ClinicModulesPage'), 'ClinicModulesPage');
 const SettingsOverviewPage = lazyPage(() => import('../features/settings/SettingsOverviewPage'), 'SettingsOverviewPage');
 const AssistantBookingSettingsPage = lazyPage(() => import('../features/clinicAssistant/AssistantBookingSettingsPage'), 'AssistantBookingSettingsPage');
@@ -163,6 +164,7 @@ export const routes: RouteObject[] = [
           { path: '/store/labels', element: <StorePage /> },
           { path: '/employees', element: <EmployeesPage /> },
           { path: '/grooming/*', element: <GroomingPage /> },
+          { path: '/pet-hotel/*', element: <PetHotelPage /> },
           { path: '/avito', element: <AvitoPage /> },
           { path: '/settings/modules', element: <ClinicModulesPage /> },
           { path: '/settings', element: <SettingsOverviewPage /> },

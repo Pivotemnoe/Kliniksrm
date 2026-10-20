@@ -13,6 +13,7 @@ import './avito.css';
 import { AvitoListingEditor } from './AvitoListingEditor';
 import { AvitoStatusPanel } from './AvitoStatusPanel';
 import { ModuleActions } from '../../shared/ui/ModuleActions';
+import { ModulePublicLink, avitoPublicUrl } from '../../shared/ui/ModulePublicLink';
 import { createOperationKey } from '../../shared/utils/operationKey';
 import { AvitoAccountListings } from './AvitoAccountListings';
 
@@ -36,6 +37,7 @@ export function AvitoPage() {
   const selectTab = (tab: string) => setTabParams(previous => { previous.set('tab', tab); previous.delete('conversation'); return previous; }, { replace: true });
   return <div className="page avito-page">
     <PageHeader title="Авито" description="Объявления и обращения клиентов. Для каждого направления — свои тексты и правила." extra={<ModuleActions actions={[{ key: 'refresh', label: 'Обновить', icon: <ReloadOutlined />, onClick: () => query.refetch(), loading: query.isFetching }, ...(director && !unavailable ? [{ key: 'module', label: 'Подключение модуля', icon: <SettingOutlined />, onClick: () => navigate('/settings/modules') }] : [])]} />} />
+    <ModulePublicLink label="Наше объявление на Авито" href={avitoPublicUrl} />
     {unavailable ? <Card><Empty description={<Space direction="vertical"><Typography.Text strong>Модуль Авито пока не подключён</Typography.Text><Typography.Text type="secondary">После подключения серверного модуля здесь появятся переписка, заявки и объявления.</Typography.Text></Space>} /></Card> : query.isError && <Alert type="error" showIcon message={getErrorMessage(query.error)} />}
     {overview && <>
       <AvitoStatusPanel overview={overview} modeLabel={modeLabels[overview.mode]} director={director} onOpen={selectTab} />

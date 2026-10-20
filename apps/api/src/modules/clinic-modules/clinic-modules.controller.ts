@@ -11,7 +11,7 @@ class UpdateModuleDto { @IsBoolean() enabled: boolean; @IsInt() @Min(0) version:
 @RequireAnyPermissions('modules.manage', 'avito.manage')
 export class ClinicModulesController {
   constructor(private readonly modules: ClinicModulesService) {}
-  @Get('availability') @RequireRoles() @RequirePermissions() @RequireAnyPermissions('grooming.read', 'modules.manage', 'avito.read', 'avito.manage')
+  @Get('availability') @RequireRoles() @RequirePermissions() @RequireAnyPermissions('grooming.read', 'pet_hotel.read', 'modules.manage', 'avito.read', 'avito.manage')
   availability() { return this.modules.availability(); }
   @Get() catalog() { return this.modules.catalog(); }
   @Patch(':key') update(@Param('key') key: string, @Body() dto: UpdateModuleDto, @CurrentEmployee() actor: { id: string; permissions: string[] }) {

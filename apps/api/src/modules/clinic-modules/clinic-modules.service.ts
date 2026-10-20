@@ -7,6 +7,7 @@ import { AVITO_MODULE_KEY, AVITO_CAPABILITIES } from '../avito/avito.settings';
 export const CLINIC_MODULE_CATALOG = [
   { key: AVITO_MODULE_KEY, title: 'Администратор Авито', description: 'Обращения и объявления Авито. Отдельные правила клиники, груминга и зоогостиницы.', licenseFeature: AVITO_MODULE_KEY, commercialType: 'ADD_ON', route: '/avito', capabilities: AVITO_CAPABILITIES },
   { key: 'GROOMING', title: 'Груминг', description: 'Графики грумеров, самостоятельная запись, кабинет владельца и уведомления MAX.', licenseFeature: 'GROOMING', commercialType: 'ADD_ON', route: '/grooming', capabilities: ['calendar', 'self-booking', 'client-portal', 'max-notifications'] },
+  { key: 'PET_HOTEL', title: 'Зоогостиница', description: 'Боксы для кошек и собак, календарь занятости, брони, заезд и выезд, расчёт проживания.', licenseFeature: 'PET_HOTEL', commercialType: 'ADD_ON', route: '/pet-hotel', capabilities: ['rooms', 'occupancy-calendar', 'reservations', 'check-in-out', 'stay-pricing'] },
 ] as const;
 
 @Injectable()
@@ -36,7 +37,12 @@ export class ClinicModulesService {
     return installation;
   }
   async catalog() {
-    return Promise.all(CLINIC_MODULE_CATALOG.map(async item => ({ ...item, installation: await this.installation(item.key), entitled: await this.entitlement(item.key), futureBookings: item.key === 'GROOMING' ? await this.prisma.groomingReservation.count({ where: { status: { in: ['CONFIRMED', 'ARRIVED', 'IN_PROGRESS'] }, startsAt: { gt: new Date() } } }) : 0 })));
+    return Promise.all(CLINIC_MODULE_CATALOG.map(async item => {
+      const installation = await this.installation(item.key);
+      const futureBookings = item.key === 'GROOMING' ? await this.prisma.groomingReservation.count({ where: { status: { in: ['CONFIRMED', 'ARRIVED', 'IN_PROGRESS'] }, startsAt: { gt: new Date() } } })
+        : item.key === 'PET_HOTEL' ? await this.prisma.petHotelReservation.count({ where: { installationId: installation.id, status: { in: ['RESERVED', 'IN_HOUSE'] } } }) : 0;
+      return { ...item, installation, entitled: await this.entitlement(item.key), futureBookings };
+    }));
   }
   async availability() {
     return Promise.all(CLINIC_MODULE_CATALOG.map(async item => { const installation = await this.installation(item.key); const entitled = await this.entitlement(item.key); return { key: item.key, enabled: installation.enabled, entitled, available: installation.enabled && entitled }; }));
@@ -47,6 +53,7 @@ export class ClinicModulesService {
     return this.prisma.$transaction(async tx => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(20261008, 1)`;
       if (moduleKey === 'GROOMING') await tx.$executeRaw`SELECT pg_advisory_xact_lock(20261019, 2)`;
+      if (moduleKey === 'PET_HOTEL') await tx.$executeRaw`SELECT pg_advisory_xact_lock(20261020, 3)`;
       const changed = await tx.clinicModuleInstallation.updateMany({ where: { id: current.id, version }, data: { enabled, enabledAt: enabled && !current.enabled ? new Date() : current.enabledAt, version: { increment: 1 }, updatedById: actorId } });
       if (!changed.count) throw new ConflictException('Настройки модуля уже изменены. Обновите страницу.');
 

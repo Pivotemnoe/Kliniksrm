@@ -7,6 +7,7 @@ import {
   CalculatorOutlined,
   CalendarOutlined,
   RobotOutlined,
+  KeyOutlined,
   CustomerServiceOutlined,
   DashboardOutlined,
   DatabaseOutlined,
@@ -117,6 +118,7 @@ export const menuItems: MenuProps['items'] = [
     ],
   },
   { key: '/grooming', icon: <ScissorOutlined />, label: 'Груминг' },
+  { key: '/pet-hotel', icon: <KeyOutlined />, label: 'Зоогостиница' },
   { key: '/avito', icon: <RobotOutlined />, label: 'Авито' },
   { key: '/help', icon: <ReadOutlined />, label: 'Инструкция' },
 ];
@@ -126,6 +128,7 @@ export function getAccessibleMenuItems(employee: Employee | undefined): MenuProp
 }
 
 export const pageTitles: Record<string, string> = {
+  'pet-hotel': 'Зоогостиница',
   news: 'Новости',
   dashboard: 'Сводка',
   reports: 'Отчёты',
