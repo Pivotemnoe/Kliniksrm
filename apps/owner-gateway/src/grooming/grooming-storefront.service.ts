@@ -29,7 +29,7 @@ export class GroomingStorefrontService {
       try { new Intl.DateTimeFormat('ru', { timeZone: r.timezone }); } catch { throw new BadRequestException('Некорректный часовой пояс'); }
       return Object.fromEntries(['id', 'specialistId', 'employeeId', 'serviceId', 'locationId', 'workplaceId', 'species', 'size', 'coat', 'durationMinutes', 'bufferMinutes', 'stepMinutes', 'minimumLeadMinutes', 'maximumDaysAhead', 'timezone', 'locationName'].map(k => [k, typeof r[k] === 'number' ? r[k] : text(r[k], 120)]));
     });
-    const shifts = (payload.shifts as Item[]).map(s => ({ specialistId: text(s.specialistId, 100), locationId: text(s.locationId, 100), kind: s.kind === 'WORK' ? 'WORK' : 'BLOCK', startsAt: instant(s.startsAt), endsAt: instant(s.endsAt) }));
+    const shifts = (payload.shifts as Item[]).map(s => ({ specialistId: text(s.specialistId, 100), locationId: text(s.locationId, 100), workplaceId: s.workplaceId ? text(s.workplaceId, 100) : null, kind: s.kind === 'WORK' ? 'WORK' : 'BLOCK', startsAt: instant(s.startsAt), endsAt: instant(s.endsAt) }));
     const busy = (payload.busy as Item[]).map(s => ({ employeeId: text(s.employeeId, 100), workplaceId: text(s.workplaceId, 100), startsAt: instant(s.startsAt), endsAt: instant(s.endsAt) }));
     const safe: Snapshot = { testMode: payload.testMode === true, capturedAt, enabled: payload.enabled === true, selfBookingEnabled: payload.selfBookingEnabled === true, services, specialists, rules, shifts, busy };
     const fingerprint = createHash('sha256').update(JSON.stringify(safe)).digest('hex');
@@ -62,7 +62,7 @@ export class GroomingStorefrontService {
       const specialist = data.specialists.find(s => s.id === r.specialistId);
       if (!specialist) continue;
       const from = Math.max(center - 26 * 3600000, now.getTime() + r.minimumLeadMinutes * minute), to = Math.min(center + 26 * 3600000, now.getTime() + r.maximumDaysAhead * day);
-      for (const shift of data.shifts.filter(s => s.kind === 'WORK' && s.specialistId === r.specialistId && s.locationId === r.locationId)) {
+      for (const shift of data.shifts.filter(s => s.kind === 'WORK' && s.specialistId === r.specialistId && s.locationId === r.locationId && (!s.workplaceId || s.workplaceId === r.workplaceId))) {
         const start = Date.parse(shift.startsAt), end = Math.min(Date.parse(shift.endsAt), to), step = r.stepMinutes * minute;
         for (let t = start + Math.max(0, Math.ceil((from - start) / step)) * step; t + (r.durationMinutes + r.bufferMinutes) * minute <= end; t += step) {
           const finish = t + (r.durationMinutes + r.bufferMinutes) * minute;

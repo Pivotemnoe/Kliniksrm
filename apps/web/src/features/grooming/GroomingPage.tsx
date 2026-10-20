@@ -17,7 +17,6 @@ import { GroomingPhones } from './GroomingPhones';
 import { GroomingWorkplaces } from './GroomingWorkplaces';
 import { GroomingTeam } from './GroomingTeam';
 import { ModulePublicLink, groomingPublicUrl } from '../../shared/ui/ModulePublicLink';
-import { ModulePublicLink, groomingPublicUrl } from '../../shared/ui/ModulePublicLink';
 import { GroomingDeviceCard, GroomingInbox, GroomingPhoneDrawer, useGroomingInbox, useGroomingManifest } from './GroomingNotifications';
 
 const GroomingActorContext = createContext('');

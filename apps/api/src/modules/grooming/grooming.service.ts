@@ -177,7 +177,7 @@ export class GroomingCrmService {
       services: services.map(s => ({ id: s.id, title: s.title, price: String(s.price), priceType: s.priceType, maximumPrice: s.maximumPrice == null ? null : String(s.maximumPrice), priceLabel: groomingPriceLabel(s), catalogKey: s.catalogKey, catalogData: s.catalogData, bookable: groomingServiceBookable(s) && rules.some(r => r.serviceId === s.id), version: s.version })),
       specialists: [...new Map(rules.map(r => [r.specialistId, { id: r.specialistId, employeeId: r.specialist.employeeId, displayName: r.specialist.displayName, species: r.specialist.species }])).values()],
       rules: rules.map(r => ({ id: r.id, specialistId: r.specialistId, employeeId: r.specialist.employeeId, serviceId: r.serviceId, locationId: r.locationId, workplaceId: r.workplaceId, species: r.species, size: r.size, coat: r.coat, durationMinutes: r.durationMinutes, bufferMinutes: r.bufferMinutes, stepMinutes: r.stepMinutes, minimumLeadMinutes: r.minimumLeadMinutes, maximumDaysAhead: r.maximumDaysAhead, timezone: r.location.timezone, locationName: r.location.name })),
-      shifts: shifts.map(s => ({ specialistId: s.specialistId, locationId: s.locationId, kind: s.kind, startsAt: s.startsAt.toISOString(), endsAt: s.endsAt.toISOString() })),
+      shifts: shifts.map(s => ({ specialistId: s.specialistId, locationId: s.locationId, workplaceId: s.workplaceId, kind: s.kind, startsAt: s.startsAt.toISOString(), endsAt: s.endsAt.toISOString() })),
       busy: busy.map(b => ({ employeeId: b.employeeId, workplaceId: b.workplaceId, startsAt: b.startsAt.toISOString(), endsAt: b.blockedUntil.toISOString() })) };
   }
   async shifts(actor: AuthEmployee, from?: string, to?: string) {
