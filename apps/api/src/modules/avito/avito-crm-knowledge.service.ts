@@ -24,12 +24,21 @@ export function crmQuestions(text: string): AvitoCrmQuestion[] {
     if (isAdmissionQuestion(value)) kinds.push('ADMISSION');
     if (/(?:ваш|клиники|контактный) (?:номер|телефон)|как (?:вам|в клинику) позвонить/u.test(value) || /номер телефона/u.test(value) && !/\d[\d\s().-]{8,}\d/u.test(value)) kinds.push('PHONE');
     if (/цен[аыуе]|стоимост|сколько.{0,25}сто|почем|прейскурант|прайс/u.test(value)) kinds.push('PRICE');
-    if (!kinds.includes('PRICE') && clinicServiceFamily(fragment) && /сколько\s*$/u.test(value)) kinds.push('PRICE');
+    if (!kinds.includes('PRICE') && ellipticalServicePrice(value)) kinds.push('PRICE');
     if (/ночн.{0,15}тариф|какой.{0,20}тариф/u.test(value)) kinds.push('PRICE');
     if (!kinds.includes('VACCINES') && !kinds.includes('PRICE') && /делаете|проводите|оказываете|можно (?:сделать|пройти)|(?:есть|имеется|доступен|доступна).{0,40}(?:рентген|узи|вакцинац|прививк|стерилизац|кастрац|санаци|чистк|диспансер)|(?:рентген|узи|вакцинац|прививк).{0,30}(?:есть|делаете|делают)/u.test(value)) kinds.push('SERVICE');
     for (const kind of kinds) questions.push({ kind, text: fragment, serviceQuery: kind === 'HOURS' ? fragment.match(/рентген[а-яё]*|УЗИ|вакцинац[а-яё]*|стерилизац[а-яё]*|кастрац[а-яё]*/iu)?.[0] ?? null : null });
   }
   return questions.slice(0, 8);
+}
+function ellipticalServicePrice(value: string) {
+  if (!clinicServiceFamily(value) || /(?:^|\s)(?:во|в|до|со|через|на)\s+сколько/u.test(value)) return false;
+  // Bare service-price questions omit "стоит". Quantity and duration questions
+  // must not become prices just because the same clause names a service.
+  if (/(?:^|\s)(?:длит[а-я]*|занима[а-я]*|времени|минут[а-я]*|час[а-я]*|дней|суток|недел[а-я]*|раз(?:а)?|показател[а-я]*|снимк[а-я]*|проекци[а-я]*|исследовани[а-я]*|анализов|входит|включен[а-я]*|нужно|ждать)(?=$|[\s,.])/u.test(value)) return false;
+  if (/сколько\s*$/u.test(value)) return true;
+  const start = value.match(/^(?:(?:а|и|ну|подскажите|скажите|пожалуйста)\s*[,—:-]?\s*)*сколько\s+(?:примерно\s+)?(?:у вас\s+)?(.+)$/u);
+  return Boolean(start && clinicServiceFamily(start[1].split(/\s+/u).slice(0, 2).join(' ')));
 }
 export function avitoNeedsQuestionPlan(text: string, preliminaryReason: string) {
   if (['URGENT', 'MEDICAL', 'DIRECT_HUMAN_REQUEST', 'CONTACT_DECLINED', 'HUMAN_CONTROL', 'UNSUPPORTED_MEDIA', 'ASSISTANT_IDENTITY', 'GREETING'].includes(preliminaryReason)) return false;
