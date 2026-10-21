@@ -1,3 +1,10 @@
+## First screen and Jobs to be Done correction — 2026-10-21
+
+- Owner rejected the portfolio slideshow on the first screen: oversized photos, scroll/timer changes and an abstract slogan displaced a clear client action. Show ONE supplied photo with the real groomer and poodle, without automatic or scroll-driven photo changes. Preserve the existing brand/design language, edited portfolio, catalogue, prices and hotel referral.
+- Give immediate paths to «Записаться на груминг», «Подобрать образ» and actual works. Use a plain service headline, visible clinic location and contact. Keep the first screen compact enough for its actions to be visible.
+- Use Jobs to be Done to structure the client journey: establish trust in the actual groomer/results, choose and discuss an appropriate look, understand cost and arrange a visit. External sources inform these hypotheses; do not claim interviews, conversion uplift or measured local pain frequency.
+- When self-booking is closed, offer the clinic's verified phone contact immediately instead of an empty time selector and permanently disabled MAX button. Do not enable self-booking, invent specialists/shifts or change API/CRM data. When self-booking is open, retain actual specialist/time/MAX handoff. Prefer the requested full/hygiene service over an arbitrary decorative add-on.
+
 ## Real portfolio and reciprocal hotel promotion — 2026-10-21
 
 - Owner supplied 17 actual grooming photographs and before/after collages. Retouch source backgrounds and clutter, preserving actual animal/person identity, pose, coat length and real haircut results. Use them on the homepage and a new «Наши работы» gallery; keep real portfolio separate from illustrative breed catalogue looks.

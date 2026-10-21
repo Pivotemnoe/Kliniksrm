@@ -57,3 +57,42 @@
 }
 @media(max-width:380px){.work-photo{height:390px}.works-filters{gap:16px}.hero h1{font-size:clamp(44px,14.2vw,54px)}.hero .hero-copy{padding-top:45px}.header .brand span{display:none}.hero-photography{top:300px}}
 @media(prefers-reduced-motion:reduce){.work-photo>img{animation:none}.hotel-teaser-image>img{transition:none}.hero-pause{display:none}}
+
+/* A single real groomer photo and an immediate task entry, without slide timing. */
+.hero.hero-start{height:auto;min-height:600px;max-height:none;display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr);align-items:center;gap:5%;padding:34px max(5.35vw,calc((100vw - 1286px)/2));background:#1b2d3b;overflow:visible}
+.hero-start .hero-copy{padding:0;max-width:none;min-width:0}
+.hero-start .eyebrow{font-size:11px;letter-spacing:.15em;margin-bottom:25px}
+.hero-start h1{font-size:clamp(44px,4.65vw,67px);line-height:1.08;font-weight:600;letter-spacing:-.045em;margin-bottom:26px}
+.hero-start .hero-description{font-size:19px;line-height:1.6;max-width:520px;margin-bottom:29px;color:#e2e8eb}
+.hero-start .hero-actions{gap:22px;flex-wrap:wrap}
+.hero-start .hero-actions .button{font-size:15px;gap:17px;padding:14px 20px}
+.hero-start .hero-actions .text-link{font-size:15px;gap:15px}
+.hero-location{font-size:12px;color:#c5d0d8;line-height:1.8;margin:22px 0 12px}
+.hero-location a{white-space:nowrap;border-bottom:1px solid #8192a0}
+.hero-price-link{font-size:12px;display:inline-flex;align-items:center;gap:13px;min-height:36px;border-bottom:1px solid #7e8e9a}
+.hero-portrait{margin:0;justify-self:end;width:min(100%,365px)}
+.hero-groomer-crop{display:block;position:relative;aspect-ratio:684/962;overflow:hidden;background:#51545a}
+/* Display only the measured lower-left photo of the supplied 1388 x 1800 collage. */
+.hero-groomer-crop .hero-groomer-photo{position:absolute;left:0;bottom:0;width:202.924%;height:187.11%;max-width:none}
+.hero-groomer-crop .hero-photo-brand{position:absolute;right:12px;bottom:12px;width:53px;height:53px;object-fit:contain;background:white;padding:3px}
+.hero-portrait figcaption{display:flex;align-items:flex-start;flex-direction:column;font-size:10px;line-height:1.7;color:#c5d0d8;padding-top:9px}
+.hero-portrait figcaption span{display:none}
+.hero-portrait figcaption a{display:inline-flex;align-items:center;gap:10px;min-height:35px;color:white;white-space:nowrap}
+.booking-pet{display:flex;flex-direction:column;gap:8px;font-size:13px;margin:0 0 20px}.booking-pet select{width:100%}
+.booking-contact{padding:20px;background:#e8edf2;border-left:3px solid var(--blue);margin:0 0 24px}
+.booking-contact h3{font-size:21px;margin:0 0 9px}.booking-contact p{font-size:14px;margin:0 0 16px}
+.booking-contact .button{font-size:15px;gap:18px}.booking-contact .contact-number{font-size:13px;margin:12px 0 0}.booking-contact .contact-number a{color:var(--blue);border-bottom:1px solid}
+.site-booking .booking-grid{margin-bottom:18px}.site-booking .booking-quote-note{font-size:12px;color:#596573;line-height:1.7;margin:12px 0 0}
+.site-booking .booking-grid-single{grid-template-columns:1fr}
+.our-works .work-stage{min-height:450px}.our-works .work-photo{height:450px}
+@media(max-width:1100px) and (min-width:761px){.hero.hero-start{min-height:560px;gap:4%;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);padding-block:30px}.hero-start h1{font-size:45px}.hero-start .hero-description{font-size:17px}.hero-start .hero-actions{gap:16px}.hero-portrait{width:min(100%,330px)}}
+@media(max-width:760px){
+ .hero.hero-start{display:flex;flex-direction:column;min-height:0;padding:30px 22px 28px;gap:24px}
+ .hero-start .hero-copy{padding:0;width:100%}.hero-start .eyebrow{font-size:9px;letter-spacing:.12em;margin-bottom:17px}.hero-start h1{font-size:clamp(33px,8.8vw,48px);line-height:1.1;margin-bottom:18px}
+ .hero-start .hero-description{font-size:15px;line-height:1.6;max-width:none;margin-bottom:22px}.hero-start .hero-actions{gap:12px 18px;align-items:center}.hero-start .hero-actions .button{font-size:14px;min-height:49px;padding:12px 17px;gap:15px}.hero-start .hero-actions .text-link{font-size:14px;min-height:44px;gap:13px}
+ .hero-location{font-size:10px;margin:14px 0 4px}.hero-price-link{font-size:11px;min-height:33px}
+ .hero-portrait{width:214px;max-width:100%;align-self:center}.hero-portrait figcaption{font-size:9px;align-items:center;gap:0;padding-top:6px}.hero-portrait figcaption a{min-height:32px}.hero-groomer-crop .hero-photo-brand{width:42px;height:42px;right:8px;bottom:8px}
+ .booking-contact{padding:16px}.booking-contact h3{font-size:19px}.booking-contact .button{width:100%;font-size:14px;padding:13px}.booking-pet{margin-bottom:16px}
+ .our-works .work-stage{min-height:0}.our-works .work-photo{height:370px}
+}
+@media(max-width:380px){.hero-start h1{font-size:32px}.hero.hero-start{padding-top:26px;gap:20px}.hero-start .hero-description{font-size:14px}.hero-portrait{width:186px}.hero-start .hero-actions{gap:8px 15px}.hero-location{max-width:250px}}
