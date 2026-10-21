@@ -18,26 +18,36 @@ export class PetHotelSyncService implements OnApplicationBootstrap, OnModuleDest
     if (this.running) return;
     this.running = true;
     try {
-      if (Date.now() - this.storefrontPublishedAt >= 15000) { await this.gateway('/storefront', { payload: await this.owner.storefrontSnapshot() }); this.storefrontPublishedAt = Date.now(); }
-      const registrations = await this.gateway<{ items: Array<{ id: string; maxUserId: string; input: { knownOwnerId?: string; fullName?: string; phone?: string } }> }>('/registrations');
-      for (const item of registrations.items) {
-        try { await this.gateway(`/registrations/${item.id}/result`, { result: await this.owner.register(item.id, item.maxUserId, item.input) }); }
-        catch (error) { if (!(error instanceof HttpException) || error.getStatus() >= 500) throw error; await this.gateway(`/registrations/${item.id}/result`, { error: error.message.slice(0, 300) }); }
-      }
-      const operations = await this.gateway<{ items: HotelOperation[] }>('/operations');
-      for (const item of operations.items) {
-        let result: unknown;
-        try { result = await this.owner.execute(item); }
-        catch (error) {
-          if (!(error instanceof HttpException) || error.getStatus() >= 500 || error.getStatus() === 429) throw error;
-          await this.gateway(`/operations/${item.id}/result`, { status: 'FAILED', error: error.message.slice(0, 300) }); continue;
+      await this.syncStep('каталог', async () => {
+        if (Date.now() - this.storefrontPublishedAt >= 15000) { await this.gateway('/storefront', { payload: await this.owner.storefrontSnapshot() }); this.storefrontPublishedAt = Date.now(); }
+      });
+      await this.syncStep('вход в кабинет', async () => {
+        const registrations = await this.gateway<{ items: Array<{ id: string; maxUserId: string; input: { knownOwnerId?: string; fullName?: string; phone?: string } }> }>('/registrations');
+        for (const item of registrations.items) {
+          try { await this.gateway(`/registrations/${item.id}/result`, { result: await this.owner.register(item.id, item.maxUserId, item.input) }); }
+          catch (error) { if (!(error instanceof HttpException) || error.getStatus() >= 500) throw error; await this.gateway(`/registrations/${item.id}/result`, { error: error.message.slice(0, 300) }); }
         }
-        await this.gateway(`/operations/${item.id}/result`, { status: 'DONE', result });
-        if (!['STATE', 'OPTIONS'].includes(item.kind)) this.live.publish('pet-hotel', null);
-      }
-      await this.dispatch();
-    } catch { this.logger.warn('Синхронизация зоогостиницы отложена; сохранённые команды будут повторены'); }
+      });
+      await this.syncStep('запросы кабинета', async () => {
+        const operations = await this.gateway<{ items: HotelOperation[] }>('/operations');
+        for (const item of operations.items) {
+          let result: unknown;
+          try { result = await this.owner.execute(item); }
+          catch (error) {
+            if (!(error instanceof HttpException) || error.getStatus() >= 500 || error.getStatus() === 429) throw error;
+            await this.gateway(`/operations/${item.id}/result`, { status: 'FAILED', error: error.message.slice(0, 300) }); continue;
+          }
+          await this.gateway(`/operations/${item.id}/result`, { status: 'DONE', result });
+          if (!['STATE', 'OPTIONS'].includes(item.kind)) this.live.publish('pet-hotel', null);
+        }
+      });
+      await this.syncStep('оповещения', () => this.dispatch());
+    }
     finally { this.running = false; }
+  }
+  private async syncStep(stage: string, task: () => Promise<void>) {
+    try { await task(); }
+    catch { this.logger.warn(`Синхронизация зоогостиницы отложена; сохранённые команды будут повторены (${stage})`); }
   }
   async dispatch(now = new Date()) {
     await this.prisma.petHotelNotification.updateMany({ where: { status: 'SENDING', attemptedAt: { lt: new Date(+now - 60000) } }, data: { status: 'QUEUED', lastError: 'Проверяется прежняя отправка' } });
