@@ -578,7 +578,7 @@ export function HelpPage() {
     <div className="page help-page">
       <PageHeader
         title="Инструкция"
-        description="Обновлено 29.09.2026. Пошаговая работа в TemichevVet: от входа и приёма до склада, финансов, резервных копий и обновления."
+        description="Обновлено 21.10.2026. Пошаговая работа в TemichevVet: приёмы, склад, финансы, груминг, зоогостиница, Авито, резервные копии и обновление."
         extra={
           <Space wrap className="help-print-actions">
             <Button icon={<PrinterOutlined />} onClick={() => window.print()}>

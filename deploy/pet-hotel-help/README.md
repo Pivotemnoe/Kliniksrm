@@ -10,8 +10,13 @@
 
 Откат только инструкции: `run-web.ps1 -Mode Rollback -PackageRoot <пакет>`. Возвращаются предыдущий Web и сохранённые байты конфигурации. API и данные сохраняются.
 
-Для полного отката гостиницы сначала откатить этот Web-only выпуск, затем основной `deploy/pet-hotel-integrated/release-clinic.ps1 -Mode Rollback`; отдельные gateway/site вернуть по их процедурам. Это сохраняет проверки принадлежности конфигурации и не затирает более поздний выпуск.
+21.10.2026 опубликован первый Web-only пакет `crm-pet-hotel-help-20261020-r1`, Web revision `76c12e26d712a4fad3be57115b3b0d3ae1e31b0c`, image `sha256:ffa72e482217c98c30d93880627c46dfb4eaacbbd803c0b70f4f54ff066dc4c7`. Исправление даты и описания инструкции выпускается отдельным пакетом r2. API revision остаётся `8c51960999eb49485c8853ef01e3678cd9877b3f`, предыдущая Web revision указывается отдельно.
+
+На проверенном запуске Task Scheduler используется `-EncodedCommand` с внешним `try/catch`, вызовом `run-web.ps1` с явными `-Root` и `-PackageRoot` и перенаправлением в `launch-output.log`. Ошибка до запуска transcript сохраняется отдельно в `launch-error.txt`. Прямой запуск задания с `-File` завершился кодом 1 без transcript; повтор через внешний bootstrap выполнил публикацию и оставил COMPLETE/код 0. Перед повтором проверены отсутствие результата/backup и исходная версия; контейнеры до успешного bootstrap не переключались.
+
+Для полного отката гостиницы сначала откатить r2, затем r1 из их сохранённых пакетов, затем основной `deploy/pet-hotel-integrated/release-clinic.ps1 -Mode Rollback`; отдельные gateway/site вернуть по их процедурам. Это сохраняет проверки принадлежности конфигурации и не затирает более поздний выпуск.
 
 Пути:
-- пакет: `C:/Users/TemichevVet/TemichevVet/releases/crm-pet-hotel-help-20261020-r1/packet`
-- backup: `C:/Users/TemichevVet/TemichevVet/backups/manual-releases/crm-pet-hotel-help-20261020-r1`
+- текущий пакет: `C:/Users/TemichevVet/TemichevVet/releases/crm-pet-hotel-help-20261021-r2/packet`
+- текущий backup: `C:/Users/TemichevVet/TemichevVet/backups/manual-releases/crm-pet-hotel-help-20261021-r2`
+- пакет/backup r1 сохранены с суффиксом `crm-pet-hotel-help-20261020-r1`; оба Web-образа нужны для последовательного отката.
