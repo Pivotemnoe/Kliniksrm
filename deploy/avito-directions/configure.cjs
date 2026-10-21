@@ -19,6 +19,7 @@ const preserve=s=>({...s,profiles:s.profiles.filter(p=>p.direction==='CLINIC'),l
  const service=new AvitoService(db,{installation:async key=>{if(key!=='avito-administrator')throw Error('Unexpected module');return i.installation}},api,audit,new AvitoCrmKnowledgeService(db),new AvitoModelGatewayClient());
  if(mode==='plan'){console.log(JSON.stringify({at:new Date(),mode,version:i.settingsVersion,directions:i.settings.profiles.map(p=>({direction:p.direction,enabled:p.enabled})),clinicHash:hash(preserve(i.settings)),...(process.argv.includes('--snapshot')?{beforeSettings:i.settings}:{}),hotelListing:'4322482374',groomingListing:null}));return}
  if(!process.argv.includes('--execute')||i.settingsVersion!==Number(process.env.AVITO_DIRECTION_EXPECTED_VERSION))throw Error('Explicit execution and exact settings version required');
+ if(await db.avitoOutgoingOperation.count({where:{status:{in:['PENDING','SENDING','UNCERTAIN']}}}))throw Error('Wait for current live deliveries to settle before changing settings');
  let next;
  if(mode==='rollback'){
   const saved=JSON.parse(fs.readFileSync('/tmp/avito-directions-settings-snapshot.json','utf8'));
