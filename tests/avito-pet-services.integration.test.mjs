@@ -28,6 +28,27 @@ test('pet-service conversations use isolated PostgreSQL, module facts and separa
         assert.equal(await prisma.groomingReservation.count(), groomingBookingsBefore); assert.equal(await prisma.petHotelReservation.count(), hotelBookingsBefore);
       }
     });
+    await t.test('a short Avito choice persists through reload and creates one grooming callback from the actual contact message', async () => {
+      const id=chat('groom-choice'); api.add(id,'choice-1','Хочу записаться на стрижку'); let c=await load(id);
+      assert.equal(c.contact.bookingChoiceOffered,true); assert.equal(c.inquiries.length,0);
+      api.add(id,'choice-2','Здесь'); c=await load(id);
+      assert.equal(c.contact.bookingChannel,'CALLBACK'); assert.equal(c.contact.name,undefined); assert.equal(c.inquiries.length,0);
+      api.add(id,'choice-3','Анна'); c=await load(id); assert.equal(c.contact.name,'Анна');
+      api.add(id,'choice-4','Мой номер +7 900 111-22-33'); c=await load(id);
+      assert.equal(c.inquiries.length,1); assert.equal(c.inquiries[0].direction,'GROOMING'); assert.equal(c.inquiries[0].contactMessageId,'choice-4');
+      assert.equal(c.requestId,null); assert.equal(await prisma.onlineAppointmentRequest.count(),clinicalBefore);
+      await load(id); assert.equal((await service.getConversation(c.id)).inquiries.length,1);
+      assert.equal(await prisma.groomingReservation.count(),groomingBookingsBefore);
+    });
+    await t.test('a website choice is replayable for delivery and does not collect callback contacts', async () => {
+      const id=chat('groom-website-choice'); api.add(id,'web-choice-1','Хочу записаться'); let c=await load(id);
+      api.add(id,'web-choice-2','Самостоятельно'); c=await load(id);
+      assert.equal(c.contact.bookingChannel,'WEBSITE'); assert.equal(c.contact.collecting,undefined); assert.equal(c.inquiries.length,0);
+      const draft=c.outbox.find(x=>x.status==='DRAFT'); assert.match(draft.text,/пока закрыта/); assert.match(draft.text,/pet.temichevvet.ru/);
+      assert.deepEqual(draft.replyContext,{petService:true,bookingIntent:true,bookingChannel:'WEBSITE'});
+      const op=await approve(c); await service.deliver(op.operationId);
+      assert.equal((await service.getConversation(c.id)).outbox.find(x=>x.id===op.operationId).status,'SENT');
+    });
     await t.test('a price change after drafting cancels the stale outgoing reply before delivery', async () => {
       const id = chat('hotel-stale'); api.add(id, 'stale-1', 'Сколько стоит номер?'); const c = await load(id); const operation = await approve(c);
       const sent = api.sent.length; await prisma.petHotelRoom.update({ where: { id: room.id }, data: { dailyRate: 750 } });
@@ -50,7 +71,7 @@ test('pet-service conversations use isolated PostgreSQL, module facts and separa
       for (const prefix of ['groom-callback', 'hotel-callback']) {
         const id = chat(prefix); api.add(id, 'callback-1', 'Перезвоните, меня зовут Анна, +7 900 111-22-33'); const c = await load(id);
         assert.equal(c.inquiries.length, 1); assert.equal(c.inquiries[0].direction, prefix.startsWith('groom') ? 'GROOMING' : 'HOTEL'); assert.equal(c.requestId, null);
-        assert.match(c.outbox.find(x => x.status === 'DRAFT').text, prefix.startsWith('groom') ? /сотруднику груминга/ : /сотруднику зоогостиницы/);
+        assert.match(c.outbox.find(x => x.status === 'DRAFT').text, prefix.startsWith('groom') ? /администратору груминга/ : /сотруднику зоогостиницы/);
         await load(id); assert.equal((await service.getConversation(c.id)).inquiries.length, 1);
       }
       assert.equal(await prisma.onlineAppointmentRequest.count(), clinicalBefore);
