@@ -8,7 +8,7 @@ import { petSpecies } from './avito-service-query';
 import { petServiceAnswer, PetServiceContext } from './avito-pet-services';
 
 export type ContactState = { name?: string; phone?: string; callbackAt?: string; callbackMessageId?: string; collecting?: boolean; reason?: string; summary?: string; serviceQuestionAsked?: boolean; awaitingServiceDetails?: boolean; serviceDetails?: string; petSpecies?: 'CAT' | 'DOG'; petAge?: string; petSexKnown?: boolean; referralKnown?: boolean };
-export type AdminDecision = { text: string | null; purpose: 'REPLY' | 'CRM_REPLY' | 'CONTACT' | 'SUBMITTED'; handoff: boolean; needsAttention?: boolean; createInquiry: boolean; direction: Direction | null; reason: string; contact: ContactState; prompt?: string };
+export type AdminDecision = { text: string | null; purpose: 'REPLY' | 'CRM_REPLY' | 'CONTACT' | 'SUBMITTED'; handoff: boolean; needsAttention?: boolean; createInquiry: boolean; direction: Direction | null; reason: string; contact: ContactState; prompt?: string; petServiceBooking?: boolean };
 type DecisionInput = { settings: AvitoSettings; listingId: string | null; text: string; messageId: string; contact?: ContactState; mode?: string; mediaType?: string; now?: Date; crmAnswer?: CrmAnswer | null; intent?: AvitoModelIntent | null; clinicPhone?: string | null; nightNoticeDelivered?: boolean; skipAvailability?: boolean; petService?: PetServiceContext };
 export function decideAvitoReply(input: DecisionInput): AdminDecision {
   let decision = decideCore(input);
@@ -56,17 +56,17 @@ function decideCore(input: DecisionInput): AdminDecision {
   const vaccineAdvice = /вакцин|прививк/u.test(normalized) && /какую.{0,80}(?:выбрать|лучше)|(?:лучше|подойдет|подходит|выбрать|посоветуйте|посоветуете)|(?:можно|стоит)\s+ли\s+(?:сейчас\s+)?(?:вакцинировать|делать\s+(?:вакцин|прививк))/u.test(normalized);
   const medical = input.intent?.action === 'MEDICAL' || vaccineAdvice || /(?:диагноз|чем\s+лечить|как\s+лечить|что\s+дать|дозиров|сколько\s+(?:дать|таблет)|расшифр|назначь|нужна\s+ли\s+(?:озоновая|ванна)|показани|анализ\S*\s+(?:означ|плох)|(?:болит|рвет|рвота|понос|отравил|не\s+ест|не\s+пьет|хромает|вялый|вялая))/u.test(currentMedicalText(text));
   const askHuman = input.intent?.action === 'HUMAN' || /(?:оператор|живой\s+(?:человек|администратор)|соедините|сотрудник|позвоните|перезвоните|жалоб)/u.test(normalized);
+  const booking = input.intent?.action === 'BOOKING' || /(?:запис|запиш|заявк|хочу\s+(?:на|к|подстричь|заселить)|забронировать|нужен\s+прием)/u.test(normalized);
   if (/(?:оператор|живой\s+(?:человек|администратор)|соедините|сотрудник)/u.test(normalized)) return { ...base, handoff: true, reason: 'DIRECT_HUMAN_REQUEST', text: offHours ? dutyDoctorReply(input.clinicPhone) : 'Передам диалог администратору. Продолжить общение можно здесь, в Авито.' };
   if (offHours && (medical || askHuman && !/(?:перезвоните|позвоните\s+мне|обратн\S*\s+звон)/u.test(normalized))) return { ...base, reason: medical ? 'MEDICAL' : 'HUMAN_REQUEST', text: `С этим вопросом поможет врач. ${dutyDoctorReply(input.clinicPhone)}` };
   if (input.petService?.direction === profile.direction && !medical && !askHuman && !providedCallbackPhone(text) && (!contact.collecting || contact.reason === 'BOOKING')) {
-    const answer = petServiceAnswer(input.petService, text);
+    const answer = petServiceAnswer(input.petService, text, booking);
     if (answer) {
       // An old unfinished intake must not keep collecting contacts for a site booking.
       if (contact.reason === 'BOOKING') { delete contact.collecting; delete contact.reason; delete contact.awaitingServiceDetails; }
-      return { ...base, text: answer, reason: 'PET_SERVICE_INFO' };
+      return { ...base, text: answer, reason: 'PET_SERVICE_INFO', petServiceBooking: booking && petServiceAnswer(input.petService, text) === null };
     }
   }
-  const booking = input.intent?.action === 'BOOKING' || /(?:запис|запиш|заявк|хочу\s+(?:на|к|подстричь|заселить)|забронировать|нужен\s+прием)/u.test(normalized);
   if (medical || askHuman || booking) { contact.collecting = true; contact.reason = medical ? 'MEDICAL' : askHuman ? 'HUMAN_REQUEST' : 'BOOKING'; contact.summary ??= text.slice(0, 2000); }
   const phoneMatch = text.match(/(?:\+?7|8)?[\s(.-]*\d{3}[\s).-]*\d{3}[\s.-]*\d{2}[\s.-]*\d{2}(?!\d)/u)?.[0];
   const provided = providedCallbackPhone(text);

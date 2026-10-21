@@ -40,10 +40,10 @@ export async function loadPetServiceContext(db: Prisma.TransactionClient, organi
 }
 
 /** An enquiry in Avito is never a confirmed reservation or an invitation to collect payment. */
-export function petServiceAnswer(context: PetServiceContext, text: string): string | null {
+export function petServiceAnswer(context: PetServiceContext, text: string, bookingIntent = false): string | null {
   const input = text.toLocaleLowerCase('ru-RU').replace(/ё/g, 'е');
   const price = /цен|стоим|сколько|почем|прайс|тариф/u.test(input);
-  const booking = /запис|запиш|брон|засели|свобод|места|сайт|ссылк|онлайн|оставить\s+(?:кот|кош|собак|питом)|хочу\s+(?:подстричь|груминг)/u.test(input);
+  const booking = bookingIntent || /запис|запиш|брон|засели|свобод|места|сайт|ссылк|онлайн|оставить\s+(?:кот|кош|собак|питом)|хочу\s+(?:подстричь|груминг)/u.test(input);
   const address = /адрес|где\s+(?:вы|наход)|как\s+(?:к вам\s+)?добраться/u.test(input);
   const conditions = /услови|правил|кош|кот|собак|вес|килограмм|кг|сут|дней|выгул|заезд|выезд|время|час|принимаете/u.test(input);
   if (!price && !booking && !address && !conditions) return null;

@@ -347,7 +347,7 @@ export class AvitoService {
       if (decision.createInquiry) requestId = await this.createInquiry(tx, current, decision.contact);
       const stop = decision.createInquiry || decision.handoff && (!decision.contact.collecting || ['URGENT', 'CONTACT_DECLINED', 'UNSUPPORTED_MEDIA', 'DIRECT_HUMAN_REQUEST', 'UNMAPPED_LISTING', 'CLINIC_PHONE_UNAVAILABLE'].includes(decision.reason));
       await tx.avitoConversation.update({ where: { id: current.id }, data: { contact: json(decision.contact), requestId, needsAttention: Boolean(decision.needsAttention || decision.handoff || decision.createInquiry), stage: decision.createInquiry ? 'TRANSFERRED' : decision.contact.collecting ? 'COLLECTING_CONTACT' : decision.reason, ...(stop ? { mode: 'HUMAN' } : {}) } });
-      if (decision.text) await tx.avitoOutgoingOperation.create({ data: { conversationId: current.id, triggerMessageId: latest.id, crmQuery: decision.purpose === 'CRM_REPLY' ? resolvedCrmQuery : null, replyContext: decision.reason === 'PET_SERVICE_INFO' ? json({ petService: true }) : clinic ? json({ administratorWorking: administratorWorking(settings, now), clinicPhone: clinic.phone, crmSuffix: decision.purpose === 'CRM_REPLY' && crmAnswer ? decision.text.slice(crmAnswer.text.length) : '', crmQuestions: intent?.questions ?? [] }) : undefined, clientKey: `bot:${current.id}:${latest.id}`, text: decision.text, purpose: decision.purpose, conversationVersion: current.version, settingsVersion: integration.settingsVersion, status: settings.mode === 'AUTO' ? 'PENDING' : 'DRAFT' } });
+      if (decision.text) await tx.avitoOutgoingOperation.create({ data: { conversationId: current.id, triggerMessageId: latest.id, crmQuery: decision.purpose === 'CRM_REPLY' ? resolvedCrmQuery : null, replyContext: decision.reason === 'PET_SERVICE_INFO' ? json({ petService: true, bookingIntent: decision.petServiceBooking || undefined }) : clinic ? json({ administratorWorking: administratorWorking(settings, now), clinicPhone: clinic.phone, crmSuffix: decision.purpose === 'CRM_REPLY' && crmAnswer ? decision.text.slice(crmAnswer.text.length) : '', crmQuestions: intent?.questions ?? [] }) : undefined, clientKey: `bot:${current.id}:${latest.id}`, text: decision.text, purpose: decision.purpose, conversationVersion: current.version, settingsVersion: integration.settingsVersion, status: settings.mode === 'AUTO' ? 'PENDING' : 'DRAFT' } });
       return newCount;
     }, { timeout: 20000 });
   }
@@ -417,12 +417,12 @@ export class AvitoService {
       if (!avitoPilotAllowsChat(c.externalChatId) || op.purpose === 'CONSENT' || !live.installation.enabled || c.version !== op.conversationVersion || (!op.actorId && (live.settingsVersion !== op.settingsVersion || settings.mode !== 'AUTO' || (c.mode !== 'BOT' && !allowedFinal)))) {
         await tx.avitoOutgoingOperation.update({ where: { id: op.id }, data: { status: 'CANCELLED', error: 'Диалог, режим или правила изменены' } }); return null;
       }
-      const context = op.replyContext as { petService?: boolean; administratorWorking: boolean; clinicPhone: string | null; crmSuffix: string; crmQuestions?: AvitoCrmQuestion[] } | null;
+      const context = op.replyContext as { petService?: boolean; bookingIntent?: boolean; administratorWorking: boolean; clinicPhone: string | null; crmSuffix: string; crmQuestions?: AvitoCrmQuestion[] } | null;
       if (context?.petService) {
         const trigger = op.triggerMessageId ? await tx.avitoMessage.findUnique({ where: { conversationId_externalId: { conversationId: c.id, externalId: op.triggerMessageId } } }) : null;
         const mapping = settings.listings.find(listing => listing.id === c.listingId && listing.enabled && listing.direction === c.direction);
         const source = mapping && settings.profiles.some(p => p.enabled && p.direction === mapping.direction) ? await loadPetServiceContext(tx, live.installation.organizationId, mapping.direction) : undefined;
-        if (!source || !trigger || petServiceAnswer(source, trigger.text) !== op.text) {
+        if (!source || !trigger || petServiceAnswer(source, trigger.text, context.bookingIntent === true) !== op.text) {
           await tx.avitoOutgoingOperation.update({ where: { id: op.id }, data: { status: 'CANCELLED', error: 'Условия или доступность записи изменились. Нужен актуальный ответ.' } });
           await tx.avitoConversation.update({ where: { id: c.id }, data: { needsAttention: true } }); return null;
         }

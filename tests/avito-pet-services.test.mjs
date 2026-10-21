@@ -52,6 +52,13 @@ test('unfinished old site-booking intake is cleared; existing explicit callback 
   assert.equal(callback.reason, 'CALLBACK'); assert.match(callback.text, /номер телефона/);
   assert.match(reply('Вы бот?', hotel).text, /помощник зоогостиницы/);
 });
+test('a model-recognized booking in free wording goes to its website, never into callback collection', () => {
+  for (const context of [grooming, hotel]) {
+    const d = reply('Можно оформить визит?', context, { intent: { action: 'BOOKING' } });
+    assert.equal(d.reason, 'PET_SERVICE_INFO'); assert.equal(d.petServiceBooking, true);
+    assert.equal(d.createInquiry, false); assert.equal(d.contact.collecting, undefined); assert.ok(d.text.includes(context.siteUrl));
+  }
+});
 test('the source reads only its own organization and module, and an unavailable source closes online booking', async () => {
   let selection;
   const db = { clinicModuleInstallation: { findUnique: async q => { selection = q; return { enabled: true, groomingSettings: { selfBookingEnabled: true, testClientMaxId: null }, groomingLocations: [{ address: 'Адрес салона' }], groomingRules: [] }; } } };

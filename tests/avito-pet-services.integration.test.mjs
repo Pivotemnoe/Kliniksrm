@@ -35,6 +35,17 @@ test('pet-service conversations use isolated PostgreSQL, module facts and separa
       assert.equal((await service.getConversation(c.id)).outbox.find(x => x.id === operation.operationId).status, 'CANCELLED'); assert.equal(api.sent.length, sent);
       await prisma.petHotelRoom.update({ where: { id: room.id }, data: { dailyRate: 700 } });
     });
+    await t.test('free wording recognized as booking retains its site referral through delivery validation', async () => {
+      const configured = f.model.configured, classify = f.model.classify;
+      f.model.configured = () => true; f.model.classify = async () => ({ action: 'BOOKING' });
+      try {
+        const id = chat('hotel-free-wording'); api.add(id, 'free-1', 'Можно оформить визит?'); const c = await load(id);
+        assert.equal(c.stage, 'PET_SERVICE_INFO'); assert.equal(c.contact.collecting, undefined); assert.equal(c.inquiries.length, 0);
+        assert.deepEqual(c.outbox.find(x => x.status === 'DRAFT').replyContext, { petService: true, bookingIntent: true });
+        const operation = await approve(c); await service.deliver(operation.operationId);
+        assert.equal((await service.getConversation(c.id)).outbox.find(x => x.id === operation.operationId).status, 'SENT');
+      } finally { f.model.configured = configured; f.model.classify = classify; }
+    });
     await t.test('explicit callback requests stay in the proper pet-service queue and never become clinical appointment requests', async () => {
       for (const prefix of ['groom-callback', 'hotel-callback']) {
         const id = chat(prefix); api.add(id, 'callback-1', 'Перезвоните, меня зовут Анна, +7 900 111-22-33'); const c = await load(id);
