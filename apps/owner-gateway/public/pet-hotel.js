@@ -1,5 +1,5 @@
 const app=document.querySelector('#hotel-owner-app');
-const base='/v1/portal/pet-hotel',pendingKey='hotel-owner-pending-v1',draftKey='hotel-site-draft-v1';
+const base='/v1/portal/pet-hotel',pendingKey='hotel-owner-pending-v1',statePendingKey='hotel-owner-state-pending-v1',draftKey='hotel-site-draft-v1';
 const statusLabel={CONFIRMED:'Забронирован',IN_HOUSE:'Питомец у нас',CHECKED_OUT:'Проживание завершено',CANCELLED:'Бронь отменена',NO_SHOW:'Не состоялось'};
 let state=null,ownerKey='',draft={},offers=[],moving=null,busy=false,timer=null,polling=false;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -17,10 +17,34 @@ async function api(path,body){
   const data=await r.json().catch(()=>null);
   if(!r.ok){const e=new Error(Array.isArray(data?.message)?data.message.join('. '):data?.message||'Нет связи с кабинетом. Повторите проверку.');e.status=r.status;throw e;}return data;
 }
-async function wait(operation){
-  for(let i=0;i<25&&operation.status==='PENDING';i++){await sleep(800);operation=await api(base+'/operations/'+encodeURIComponent(operation.id));}
-  if(operation.status==='PENDING')throw new Error('CRM ещё проверяет запрос. Нажмите «Обновить»: сохраним тот же запрос, повторной брони не будет.');
+async function wait(operation,{timeoutMs,pendingMessage}={}){
+  const deadline=timeoutMs===undefined?null:Date.now()+timeoutMs;
+  for(let i=0;operation.status==='PENDING'&&(deadline===null?i<25:Date.now()<deadline);i++){await sleep(800);operation=await api(base+'/operations/'+encodeURIComponent(operation.id));}
+  if(operation.status==='PENDING')throw new Error(pendingMessage||'CRM ещё проверяет запрос. Нажмите «Обновить»: сохраним тот же запрос, повторной брони не будет.');
   if(operation.status!=='DONE'){const e=new Error(operation.error||'Не удалось выполнить действие');e.terminal=true;throw e;}return operation.result;
+}
+function clearPendingState(pending){
+  const current=read(statePendingKey);
+  if(current?.ownerKey===pending.ownerKey&&current?.clientKey===pending.clientKey)save(statePendingKey,null);
+}
+function invalidateState(){if(read(statePendingKey)?.ownerKey===ownerKey)save(statePendingKey,null);}
+async function loadState(){
+  const context=ownerKey;
+  let pending=read(statePendingKey);
+  if(pending&&(pending.ownerKey!==context||typeof pending.clientKey!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pending.clientKey))){save(statePendingKey,null);pending=null;}
+  const retry=Boolean(pending);
+  if(!pending){pending={ownerKey:context,clientKey:crypto.randomUUID()};save(statePendingKey,pending);}
+  const body={kind:'STATE',input:{},clientKey:pending.clientKey};
+  try{
+    let operation;
+    if(retry){
+      try{operation=await api(base+'/operations/by-key/'+encodeURIComponent(pending.clientKey));}
+      catch(e){if(e.status!==404)throw e;operation=await api(base+'/operations',body);}
+    }else operation=await api(base+'/operations',body);
+    const result=await wait(operation,{timeoutMs:90000,pendingMessage:'Данные кабинета ещё загружаются. Нажмите «Обновить», чтобы продолжить проверку.'});
+    if(ownerKey!==context){const e=new Error('Войдите в кабинет заново.');e.status=401;throw e;}
+    clearPendingState(pending);return result;
+  }catch(e){if(e.terminal||[400,409,422].includes(e.status))clearPendingState(pending);throw e;}
 }
 async function recover(){
   const pending=read(pendingKey);if(!pending)return;
@@ -29,20 +53,22 @@ async function recover(){
     let operation;
     try{operation=await api(base+'/operations/by-key/'+encodeURIComponent(pending.clientKey));}
     catch(e){if(e.status!==404)throw e;operation=await api(base+'/operations',pending.command);}
-    await wait(operation);save(pendingKey,null);
+    await wait(operation);save(pendingKey,null);invalidateState();
   }catch(e){if(e.terminal)save(pendingKey,null);throw e;}
 }
 async function command(kind,input={}){
+  if(kind==='STATE')return loadState();
   const mutate=['BOOK','RESCHEDULE','CANCEL','PET_CREATE'].includes(kind);
   if(mutate)await recover();
   const body={kind,input,clientKey:crypto.randomUUID()};
   if(mutate)save(pendingKey,{ownerKey,clientKey:body.clientKey,command:body});
-  try{const result=await wait(await api(base+'/operations',body));if(mutate)save(pendingKey,null);return result;}
+  try{const result=await wait(await api(base+'/operations',body));if(mutate){save(pendingKey,null);invalidateState();}return result;}
   catch(e){if(mutate&&(e.terminal||[400,409,422].includes(e.status)))save(pendingKey,null);throw e;}
 }
 async function start(){
   try{
     const session=await api(base+'/session');ownerKey=session.ownerKey;
+    app.innerHTML='<section class="state" role="status"><h1>Вход подтверждён.</h1><p>Загружаем данные кабинета. Это может занять немного времени.</p></section>';
     await recover();state=await command('STATE');
     const token=read(draftKey);if(token){try{draft={...draft,...await api(base+'/draft',{token})};save(draftKey,null);}catch(e){if(e.status===404)save(draftKey,null);else throw e;}}
     document.querySelector('#logout').hidden=false;render();
@@ -105,5 +131,5 @@ async function guarded(action,errorSelector='#action-error'){
   try{await action();}catch(e){if(e.status===401||e.status===403&&/Войдите/.test(e.message))login();else{const target=document.querySelector(errorSelector);if(target)target.textContent=e.message;else failure(e.message);}}
   finally{busy=false;controls.forEach(([e,disabled])=>{if(e.isConnected)e.disabled=disabled;});}
 }
-document.querySelector('#logout').onclick=async()=>{clearInterval(timer);await api('/v1/portal/logout',{});save(pendingKey,null);ownerKey='';location.assign('/portal/pet-hotel');};
+document.querySelector('#logout').onclick=async()=>{clearInterval(timer);await api('/v1/portal/logout',{});save(pendingKey,null);save(statePendingKey,null);ownerKey='';location.assign('/portal/pet-hotel');};
 void start();
