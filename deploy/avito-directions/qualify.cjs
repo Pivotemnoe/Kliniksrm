@@ -1,0 +1,16 @@
+require('/app/node_modules/reflect-metadata');
+const assert=require('node:assert/strict'),fs=require('node:fs'),crypto=require('node:crypto');
+const manifest=require('/tmp/avito-directions-release.json');
+for(const file of manifest.compiled) assert.equal(crypto.createHash('sha256').update(fs.readFileSync('/app/apps/api/dist/modules/avito/'+file.name)).digest('hex'),file.sha256);
+const {defaultAvitoSettings}=require('/app/apps/api/dist/modules/avito/avito.settings.js');
+const {decideAvitoReply}=require('/app/apps/api/dist/modules/avito/avito.policy.js');
+const {AvitoService}=require('/app/apps/api/dist/modules/avito/avito.service.js');assert.equal(typeof AvitoService.prototype.simulate,'function');
+const settings=defaultAvitoSettings();settings.profiles.forEach(p=>p.enabled=true);settings.listings=[{id:'200',title:'Grooming QA',enabled:true,direction:'GROOMING'},{id:'300',title:'Hotel QA',enabled:true,direction:'HOTEL'}];
+const grooming={direction:'GROOMING',available:true,selfBookingEnabled:false,siteUrl:'https://pet.temichevvet.ru/',address:null};
+const hotel={direction:'HOTEL',available:true,selfBookingEnabled:true,siteUrl:'https://pet.temichevvet.ru/pet-hotel/',address:null,hotel:{minimumDays:2,maximumDogWeightKg:10,walkRate:150,checkInFrom:'09:00',checkInTo:'18:00',catRates:[700],dogRates:[700]}};
+const call=(text,ctx,id)=>decideAvitoReply({settings,listingId:id,messageId:'synthetic',text,petService:ctx});
+const g=call('Хочу записаться',grooming,'200');assert.match(g.text,/пока закрыта/);assert.equal(g.createInquiry,false);assert.equal(g.contact.collecting,undefined);
+const h=call('Сколько стоит и как забронировать?',hotel,'300');assert.match(h.text,/700 ₽/);assert.match(h.text,/pet-hotel/);assert.equal(h.createInquiry,false);
+assert.equal(call('Соедините с сотрудником',hotel,'300').reason,'DIRECT_HUMAN_REQUEST');
+assert.equal(call('Чем лечить собаку?',grooming,'200').reason,'MEDICAL');
+console.log(JSON.stringify({passed:true,compiledHashesVerified:manifest.compiled.length,syntheticScenarios:4,databaseAccess:false,externalNetwork:false}));

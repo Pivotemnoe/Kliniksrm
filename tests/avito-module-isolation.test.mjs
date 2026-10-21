@@ -40,7 +40,7 @@ test('Avito and grooming have independent installations, switches, settings and 
     assert.deepEqual(await f.modules.installation('GROOMING'), disabled);
     assert.deepEqual(await f.prisma.groomingSettings.findUniqueOrThrow({ where: { installationId: grooming.id } }), settings);
     const availability = await f.modules.availability();
-    assert.deepEqual(new Set(availability.map(item => item.key)), new Set(['GROOMING', 'avito-administrator']));
+    assert.deepEqual(new Set(availability.map(item => item.key)), new Set(['GROOMING', 'PET_HOTEL', 'avito-administrator']));
     assert.equal(f.api.sent.length, 0);
   } finally { await f.prisma.$disconnect(); }
 });

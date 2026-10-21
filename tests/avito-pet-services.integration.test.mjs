@@ -1,0 +1,69 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { randomUUID } from 'node:crypto';
+import { avitoFixture } from './helpers/avito-fixture.mjs';
+
+test('pet-service conversations use isolated PostgreSQL, module facts and separate administrator queues', { skip: !process.env.AVITO_QA_DATABASE_URL }, async t => {
+  const f = await avitoFixture(); const { prisma, service, api, actorId } = f;
+  const suffix = randomUUID().slice(0, 8), own = new Set();
+  const chat = prefix => { const id = `${prefix}-pet-directions-${suffix}`; own.add(id); return id; };
+  const load = async id => { await service.syncChat(id); const row = await prisma.avitoConversation.findUniqueOrThrow({ where: { integrationId_externalChatId: { integrationId: f.integration.id, externalChatId: id } } }); return service.getConversation(row.id); };
+  const approve = c => service.reply(c.id, { clientKey: randomUUID(), text: c.outbox.find(x => x.status === 'DRAFT').text, draftId: c.outbox.find(x => x.status === 'DRAFT').id, version: c.version }, actorId);
+  const org = (await prisma.clinicModuleInstallation.findUniqueOrThrow({ where: { id: f.integration.installationId } })).organizationId;
+  const grooming = await prisma.clinicModuleInstallation.upsert({ where: { organizationId_moduleKey: { organizationId: org, moduleKey: 'GROOMING' } }, create: { organizationId: org, moduleKey: 'GROOMING', enabled: true }, update: { enabled: true } });
+  await prisma.groomingSettings.upsert({ where: { installationId: grooming.id }, create: { installationId: grooming.id, selfBookingEnabled: false }, update: { selfBookingEnabled: false } });
+  const hotel = await prisma.clinicModuleInstallation.upsert({ where: { organizationId_moduleKey: { organizationId: org, moduleKey: 'PET_HOTEL' } }, create: { organizationId: org, moduleKey: 'PET_HOTEL', enabled: true }, update: { enabled: true } });
+  await prisma.petHotelSettings.upsert({ where: { installationId: hotel.id }, create: { installationId: hotel.id, selfBookingEnabled: true }, update: { selfBookingEnabled: true } });
+  const room = await prisma.petHotelRoom.upsert({ where: { installationId_code: { installationId: hotel.id, code: 'AVITO-PET-QA' } }, create: { installationId: hotel.id, code: 'AVITO-PET-QA', name: 'Синтетический номер', species: 'CAT', dailyRate: 700 }, update: { dailyRate: 700, isActive: true } });
+  const clinicalBefore = await prisma.onlineAppointmentRequest.count();
+  const groomingBookingsBefore = await prisma.groomingReservation.count(), hotelBookingsBefore = await prisma.petHotelReservation.count();
+  try {
+    await t.test('site referrals persist without collecting callback contacts or creating bookings', async () => {
+      for (const [prefix, request, expected] of [['groom', 'Хочу записаться на стрижку', /пока закрыта/], ['hotel', 'Сколько стоит и как забронировать?', /700 ₽/]]) {
+        const id = chat(prefix); api.add(id, 'site-1', request); const c = await load(id);
+        assert.equal(c.stage, 'PET_SERVICE_INFO'); assert.equal(c.contact.collecting, undefined); assert.equal(c.inquiries.length, 0);
+        const draft = c.outbox.find(x => x.status === 'DRAFT'); assert.match(draft.text, expected); assert.deepEqual(draft.replyContext, { petService: true });
+        const operation = await approve(c); await service.deliver(operation.operationId);
+        assert.equal((await service.getConversation(c.id)).outbox.find(x => x.id === operation.operationId).status, 'SENT');
+        assert.equal(await prisma.groomingReservation.count(), groomingBookingsBefore); assert.equal(await prisma.petHotelReservation.count(), hotelBookingsBefore);
+      }
+    });
+    await t.test('a price change after drafting cancels the stale outgoing reply before delivery', async () => {
+      const id = chat('hotel-stale'); api.add(id, 'stale-1', 'Сколько стоит номер?'); const c = await load(id); const operation = await approve(c);
+      const sent = api.sent.length; await prisma.petHotelRoom.update({ where: { id: room.id }, data: { dailyRate: 750 } });
+      await service.deliver(operation.operationId);
+      assert.equal((await service.getConversation(c.id)).outbox.find(x => x.id === operation.operationId).status, 'CANCELLED'); assert.equal(api.sent.length, sent);
+      await prisma.petHotelRoom.update({ where: { id: room.id }, data: { dailyRate: 700 } });
+    });
+    await t.test('explicit callback requests stay in the proper pet-service queue and never become clinical appointment requests', async () => {
+      for (const prefix of ['groom-callback', 'hotel-callback']) {
+        const id = chat(prefix); api.add(id, 'callback-1', 'Перезвоните, меня зовут Анна, +7 900 111-22-33'); const c = await load(id);
+        assert.equal(c.inquiries.length, 1); assert.equal(c.inquiries[0].direction, prefix.startsWith('groom') ? 'GROOMING' : 'HOTEL'); assert.equal(c.requestId, null);
+        assert.match(c.outbox.find(x => x.status === 'DRAFT').text, prefix.startsWith('groom') ? /сотруднику груминга/ : /сотруднику зоогостиницы/);
+        await load(id); assert.equal((await service.getConversation(c.id)).inquiries.length, 1);
+      }
+      assert.equal(await prisma.onlineAppointmentRequest.count(), clinicalBefore);
+    });
+    await t.test('all direction filters and a reopened persisted conversation keep each business separate', async () => {
+      for (const direction of ['CLINIC', 'GROOMING', 'HOTEL']) {
+        const chats = await service.listConversations({ direction }); assert.ok(chats.items.every(x => x.direction === direction));
+        const inquiries = await service.listInquiries({ direction }); assert.ok(inquiries.items.every(x => x.direction === direction));
+        if (direction !== 'CLINIC') { assert.ok(chats.items.some(x => own.has(x.externalChatId))); assert.ok(inquiries.items.some(x => x.conversation.externalChatId?.includes(suffix) || x.summary.includes('Перезвоните'))); }
+      }
+      const c = await prisma.avitoConversation.findFirstOrThrow({ where: { externalChatId: { in: [...own] }, direction: 'HOTEL', stage: 'PET_SERVICE_INFO' } });
+      assert.equal((await service.getConversation(c.id)).direction, 'HOTEL');
+    });
+    await t.test('binding an advertisement classifies its old unassigned history without restarting the bot', async () => {
+      const before = await service.integration();
+      await service.updateSettings({ version: before.settingsVersion, settings: { ...before.settings, listings: before.settings.listings.filter(x => x.id !== '303') } }, actorId);
+      const id = chat('hotel-history'); api.add(id, 'old-1', 'Здравствуйте'); const old = await load(id);
+      assert.equal(old.direction, 'UNASSIGNED'); assert.equal(old.mode, 'HUMAN'); assert.equal(old.outbox.length, 0);
+      const current = await service.integration(), sent = api.sent.length;
+      await service.updateSettings({ version: current.settingsVersion, settings: before.settings }, actorId);
+      const classified = await service.getConversation(old.id);
+      assert.equal(classified.direction, 'HOTEL'); assert.equal(classified.mode, 'HUMAN'); assert.equal(classified.outbox.length, 0); assert.equal(api.sent.length, sent);
+      assert.ok((await service.listConversations({ direction: 'HOTEL' })).items.some(x => x.id === old.id));
+      assert.ok(!(await service.listConversations({ direction: 'CLINIC' })).items.some(x => x.id === old.id));
+    });
+  } finally { await prisma.$disconnect(); }
+});

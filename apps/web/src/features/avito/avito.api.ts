@@ -19,7 +19,7 @@ export type AvitoOverview = {
   runtime: { ingestionEnabled: boolean; liveSendEnabled: boolean; languageModelConfigured: boolean; localReadOnly?: boolean; pilotRestricted?: boolean };
   referenceData?: { kind: 'LOCAL_SNAPSHOT'; capturedAt: string; services: number; offices: number; vaccineProducts?: number; stale: boolean; inventoryStale?: boolean };
   health: { pending: number; uncertain: number; failedEvents: number };
-  settingsVersion: number; mode: AvitoSettings['mode']; profiles: { direction: Direction; title: string; enabled: boolean }[];
+  settingsVersion: number; mode: AvitoSettings['mode']; profiles: { direction: Direction; title: string; enabled: boolean; listingIds?: string[] }[];
   intake: { recipientRole: 'administrator'; clinicKnowledgeSource: 'CRM' | 'CRM_AND_OWNER_PROGRAMME_TABLE'; doctorSelection: false; automaticBooking: false };
   nightContact?: { phone: string | null; offices: { id: string; name: string; phone: string | null }[] };
   settings?: AvitoSettings; capabilities?: { key: string; title: string; status: string; activation: string }[];

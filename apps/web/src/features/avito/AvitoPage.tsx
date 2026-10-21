@@ -13,12 +13,14 @@ import './avito.css';
 import { AvitoListingEditor } from './AvitoListingEditor';
 import { AvitoStatusPanel } from './AvitoStatusPanel';
 import { ModuleActions } from '../../shared/ui/ModuleActions';
-import { ModulePublicLink, avitoPublicUrl } from '../../shared/ui/ModulePublicLink';
+import { ModulePublicLink, groomingPublicUrl } from '../../shared/ui/ModulePublicLink';
 import { createOperationKey } from '../../shared/utils/operationKey';
 import { AvitoAccountListings } from './AvitoAccountListings';
 
 const directions = Object.entries(directionLabels).filter(([value]) => value !== 'UNASSIGNED').map(([value, label]) => ({ value, label }));
-const allDirections = [{ value: '', label: 'Все направления' }, ...directions, { value: 'UNASSIGNED', label: 'Без направления' }];
+type InboxDirection = Direction | 'UNASSIGNED';
+const inboxDirections: InboxDirection[] = ['CLINIC', 'HOTEL', 'GROOMING', 'UNASSIGNED'];
+const recordRoutes = { CLINIC: '/online-requests', HOTEL: '/pet-hotel', GROOMING: '/grooming' };
 const modeLabels: Record<string, string> = { MANUAL: 'Ручной', SUGGEST: 'Подсказки', AUTO: 'Автоматический', BOT: 'Помощник', HUMAN: 'Сотрудник', PAUSED: 'Пауза' };
 const statusLabels: Record<string, string> = { DRAFT: 'Черновик', PENDING: 'В очереди', SENDING: 'Отправляется', SENT: 'Отправлено', UNCERTAIN: 'Нужна сверка', CANCELLED: 'Отменено', FAILED: 'Ошибка' };
 const purposeLabels: Record<string, string> = { CONTACT: 'Запрос контактов', SUBMITTED: 'Передача заявки', REPLY: 'Ответ', CRM_REPLY: 'Ответ по справочникам CRM' };
@@ -30,21 +32,34 @@ export function AvitoPage() {
   const director = Boolean(auth?.employee.roles.includes('director') && hasPermission(auth.employee, 'avito.manage'));
   const query = useQuery({ queryKey: ['avito', 'overview'], queryFn: avitoApi.overview, retry: (attempt, error) => !(error instanceof ApiError && error.status === 404) && attempt < 2 });
   const overview = query.data;
+  const requestedDirection = tabParams.get('direction');
+  const direction: InboxDirection = inboxDirections.includes(requestedDirection as InboxDirection) ? requestedDirection as InboxDirection : 'CLINIC';
+  const profile = overview?.profiles.find(p => p.direction === direction);
   const unavailable = query.error instanceof ApiError && query.error.status === 404;
   const defaultTab = director && overview?.mode === 'MANUAL' ? 'editor' : 'inbox';
   const requestedTab = tabParams.get('tab') || defaultTab;
   const activeTab = !director && ['editor', 'rules', 'test', 'connection'].includes(requestedTab) ? defaultTab : requestedTab;
   const selectTab = (tab: string) => setTabParams(previous => { previous.set('tab', tab); previous.delete('conversation'); return previous; }, { replace: true });
+  const selectDirection = (value: string) => setTabParams(previous => { previous.set('direction', value); previous.delete('conversation'); return previous; });
   return <div className="page avito-page">
     <PageHeader title="Авито" description="Объявления и обращения клиентов. Для каждого направления — свои тексты и правила." extra={<ModuleActions actions={[{ key: 'refresh', label: 'Обновить', icon: <ReloadOutlined />, onClick: () => query.refetch(), loading: query.isFetching }, ...(director && !unavailable ? [{ key: 'module', label: 'Подключение модуля', icon: <SettingOutlined />, onClick: () => navigate('/settings/modules') }] : [])]} />} />
-    <ModulePublicLink label="Наше объявление на Авито" href={avitoPublicUrl} />
     {unavailable ? <Card><Empty description={<Space direction="vertical"><Typography.Text strong>Модуль Авито пока не подключён</Typography.Text><Typography.Text type="secondary">После подключения серверного модуля здесь появятся переписка, заявки и объявления.</Typography.Text></Space>} /></Card> : query.isError && <Alert type="error" showIcon message={getErrorMessage(query.error)} />}
     {overview && <>
-      <AvitoStatusPanel overview={overview} modeLabel={modeLabels[overview.mode]} director={director} onOpen={selectTab} />
+      <Collapse className="avito-connection-summary" defaultActiveKey={overview.connection.error || !overview.installation.enabled || overview.health.uncertain ? ['connection'] : []} items={[{ key: 'connection', label: <Space wrap><Tag color={overview.connection.error ? 'error' : overview.installation.enabled ? 'green' : 'default'}>{overview.connection.error ? 'Ошибка подключения' : overview.installation.enabled ? 'Авито подключено' : 'Авито отключено'}</Tag><span>{modeLabels[overview.mode]}</span><span>Состояние подключения</span></Space>, children: <AvitoStatusPanel overview={overview} modeLabel={modeLabels[overview.mode]} director={director} onOpen={selectTab} /> }]} />
+      <Tabs className="avito-direction-tabs" type="card" activeKey={direction} onChange={selectDirection} items={inboxDirections.map(value => ({ key: value, label: value === 'UNASSIGNED' ? 'Без направления' : directionLabels[value] }))} />
+      <div className="avito-direction-context">
+        <div><Typography.Text strong>{directionLabels[direction]}</Typography.Text><Typography.Paragraph type="secondary">{direction === 'UNASSIGNED' ? 'Объявления без привязки. Автоматические ответы остановлены до выбора направления.' : `Переписка и заявки только по объявлениям направления «${directionLabels[direction]}».`}</Typography.Paragraph></div>
+        {direction !== 'UNASSIGNED' && <Button onClick={() => navigate(recordRoutes[direction])}>{direction === 'CLINIC' ? 'Заявки и запись в клинику' : direction === 'HOTEL' ? 'Брони зоогостиницы' : 'Записи груминга'}</Button>}
+      </div>
+      {direction === 'GROOMING' && <ModulePublicLink label="Сайт груминга" href={groomingPublicUrl} />}
+      {direction === 'HOTEL' && <ModulePublicLink label="Сайт зоогостиницы" href="https://pet.temichevvet.ru/pet-hotel/" />}
+      {profile?.listingIds?.[0] && /^\d{1,20}$/.test(profile.listingIds[0]) && <ModulePublicLink label="Привязанное объявление Авито" href={`https://www.avito.ru/${profile.listingIds[0]}`} />}
+      {profile?.listingIds?.length === 0 && <Alert className="avito-notice" type="info" showIcon message="Объявление ещё не привязано" description="Обращения начнут поступать в эту вкладку после размещения объявления и привязки его к направлению. Существующая переписка сохранена." />}
+      {profile && !profile.enabled && <Alert className="avito-notice" type="info" showIcon message="Автоматические ответы этого направления выключены. Сотрудник может продолжать переписку вручную." />}
       <Tabs activeKey={activeTab} onChange={selectTab} items={[
-        { key: 'inquiries', label: 'Готовые заявки', children: <ReadyInquiries overview={overview} canOperate={hasPermission(auth?.employee, 'avito.operate')} /> },
-        { key: 'inbox', label: <Space><MessageOutlined />Переписка</Space>, children: <Inbox overview={overview} canOperate={hasPermission(auth?.employee, 'avito.operate')} /> },
-        { key: 'metrics', label: <Space><PhoneOutlined />Звонки и эффективность</Space>, children: <CallMetrics overview={overview} canOperate={hasPermission(auth?.employee, 'avito.operate')} /> },
+        { key: 'inquiries', label: 'Заявки', children: <ReadyInquiries key={direction} direction={direction} overview={overview} canOperate={hasPermission(auth?.employee, 'avito.operate')} /> },
+        { key: 'inbox', label: <Space><MessageOutlined />Переписка</Space>, children: <Inbox key={direction} direction={direction} overview={overview} canOperate={hasPermission(auth?.employee, 'avito.operate')} /> },
+        { key: 'metrics', label: <Space><PhoneOutlined />Звонки и эффективность</Space>, children: <CallMetrics key={direction} direction={direction} overview={overview} canOperate={hasPermission(auth?.employee, 'avito.operate')} /> },
         ...(director && overview.settings ? [
           { key: 'editor', label: 'Объявления и черновики', children: <AvitoListingEditor overview={overview} /> },
           { key: 'rules', label: 'Направления и ответы', children: <RulesEditor overview={overview} /> },
@@ -56,14 +71,14 @@ export function AvitoPage() {
   </div>;
 }
 
-function ReadyInquiries({ overview, canOperate }: { overview: AvitoOverview; canOperate: boolean }) {
-  const [direction, setDirection] = useState(''); const [cursor, setCursor] = useState<string>(); const [params, setParams] = useSearchParams();
+function ReadyInquiries({ overview, canOperate, direction }: { overview: AvitoOverview; canOperate: boolean; direction: InboxDirection }) {
+  const [cursor, setCursor] = useState<string>(); const [params, setParams] = useSearchParams();
   const selected = params.get('conversation') ?? undefined;
   const query = useQuery({ queryKey: ['avito', 'inquiries', direction, cursor], queryFn: () => avitoApi.inquiries(direction, cursor), refetchInterval: 15000 });
   const select = (id?: string) => setParams(previous => { if (id) previous.set('conversation', id); else previous.delete('conversation'); return previous; }, { replace: true });
   return <Space direction="vertical" size={16} className="full-width">
-    <Alert type="info" showIcon message="Заявки для администратора" description="Здесь только сохранённые заявки с именем владельца, телефоном, сутью обращения и номером, оставленным клиентом для связи. Врач и время не назначены. Неполные обращения и вопросы, требующие человека, доступны в переписке." />
-    <Space wrap><Select aria-label="Направление готовых заявок" options={[{ value: '', label: 'Все направления' }, ...directions]} value={direction} style={{ width: 230 }} onChange={value => { setDirection(value); setCursor(undefined); }} /><Button icon={<ReloadOutlined />} onClick={() => query.refetch()}>Обновить</Button></Space>
+    <Alert type="info" showIcon message={`Заявки · ${directionLabels[direction]}`} description="Здесь сохранённые обращения с именем, телефоном и запросом клиента. Это ещё не подтверждённая запись. Вопросы и неполные обращения доступны в переписке этого направления." />
+    <Button icon={<ReloadOutlined />} onClick={() => query.refetch()}>Обновить</Button>
     {query.isError && <Alert type="error" message={getErrorMessage(query.error)} />}
     <Table<ReadyInquiry> rowKey="id" dataSource={query.data?.items} loading={query.isLoading} pagination={false} scroll={{ x: 1050 }} locale={{ emptyText: <Empty description="Готовых заявок пока нет" /> }} columns={[
       { title: 'Владелец и контакт', key: 'owner', render: (_, row) => <Space direction="vertical" size={2}><Button type="link" className="avito-row-link" onClick={() => select(row.conversationId)}><strong>{row.contactName}</strong></Button><Typography.Text copyable>{row.phone}</Typography.Text></Space> },
@@ -78,12 +93,12 @@ function ReadyInquiries({ overview, canOperate }: { overview: AvitoOverview; can
   </Space>;
 }
 
-function Inbox({ overview, canOperate }: { overview: AvitoOverview; canOperate: boolean }) {
-  const [direction, setDirection] = useState(''); const [cursor, setCursor] = useState<string>(); const [params, setParams] = useSearchParams(); const selected = params.get('conversation') ?? undefined;
+function Inbox({ overview, canOperate, direction }: { overview: AvitoOverview; canOperate: boolean; direction: InboxDirection }) {
+  const [cursor, setCursor] = useState<string>(); const [params, setParams] = useSearchParams(); const selected = params.get('conversation') ?? undefined;
   const setSelected = (id: string | undefined) => setParams(previous => { if (id) previous.set('conversation', id); else previous.delete('conversation'); return previous; }, { replace: true });
   const query = useQuery({ queryKey: ['avito', 'conversations', direction, cursor], queryFn: () => avitoApi.conversations(direction, cursor), refetchInterval: 15000 });
   return <>
-    <Space wrap className="avito-toolbar"><Select aria-label="Направление обращений" options={allDirections} value={direction} style={{ width: 230 }} onChange={v => { setDirection(v); setCursor(undefined); }} /><Button icon={<ReloadOutlined />} onClick={() => query.refetch()}>Обновить</Button></Space>
+    <Space wrap className="avito-toolbar"><Typography.Text strong>Переписка · {directionLabels[direction]}</Typography.Text><Button icon={<ReloadOutlined />} onClick={() => query.refetch()}>Обновить</Button></Space>
     {query.isError && <Alert type="error" message={getErrorMessage(query.error)} />}
     <Table<AvitoConversation> rowKey="id" dataSource={query.data?.items} loading={query.isLoading} pagination={false} scroll={{ x: 850 }} locale={{ emptyText: <Empty description="Обращения появятся после подключения Авито и загрузки переписки" /> }} columns={[
       { title: 'Клиент и объявление', key: 'client', render: (_, c) => <Button type="link" className="avito-row-link" onClick={() => setSelected(c.id)}><strong>{c.customerName || 'Клиент Авито'}</strong><span>{c.listingTitle || `Объявление ${c.listingId || 'не определено'}`}</span></Button> },
@@ -101,6 +116,10 @@ function Conversation({ id, overview, canOperate }: { id: string; overview: Avit
   const { message } = App.useApp(); const client = useQueryClient(); const navigate = useNavigate();
   const [text, setText] = useState(''); const [draft, setDraft] = useState<Outgoing>(); const [requestKey, setRequestKey] = useState(key);
   const query = useQuery({ queryKey: ['avito', 'conversation', id], queryFn: () => avitoApi.conversation(id), refetchInterval: 10000 }); const c = query.data;
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    if (c && inboxDirections.includes(c.direction as InboxDirection) && params.get('direction') !== c.direction) setParams(previous => { previous.set('direction', c.direction); return previous; }, { replace: true });
+  }, [c?.direction, params, setParams]);
   const refresh = async () => { await client.invalidateQueries({ queryKey: ['avito'] }); };
   const mode = useMutation({ mutationFn: (value: string) => avitoApi.mode(id, c!.version, value), onSuccess: refresh, onError: e => message.error(getErrorMessage(e)) });
   const send = useMutation({ mutationFn: () => avitoApi.reply(id, { clientKey: requestKey, text, version: c!.version, ...(draft ? { draftId: draft.id } : {}) }), onSuccess: async () => { setText(''); setDraft(undefined); setRequestKey(key()); await refresh(); message.success('Ответ поставлен в очередь. Результат доставки появится ниже.'); }, onError: e => message.error(getErrorMessage(e)) });
@@ -122,20 +141,19 @@ function Conversation({ id, overview, canOperate }: { id: string; overview: Avit
   </Space>;
 }
 
-function CallMetrics({ overview, canOperate }: { overview: AvitoOverview; canOperate: boolean }) {
-  const { message } = App.useApp(); const client = useQueryClient(); const [direction, setDirection] = useState(''); const [form] = Form.useForm(); const [requestKey, setRequestKey] = useState(key);
+function CallMetrics({ overview, canOperate, direction }: { overview: AvitoOverview; canOperate: boolean; direction: InboxDirection }) {
+  const { message } = App.useApp(); const client = useQueryClient(); const [form] = Form.useForm(); const [requestKey, setRequestKey] = useState(key);
   const query = useQuery({ queryKey: ['avito', 'metrics', direction], queryFn: () => avitoApi.metrics(direction), refetchInterval: 30000 });
   const call = useMutation({ mutationFn: (v: { direction: Direction; occurredAt: string; missed: boolean; note?: string }) => avitoApi.call({ ...v, clientKey: requestKey, occurredAt: new Date(v.occurredAt).toISOString() }), onSuccess: async () => { setRequestKey(key()); form.resetFields(); await client.invalidateQueries({ queryKey: ['avito', 'metrics'] }); message.success('Звонок учтён как отдельное обращение'); }, onError: e => message.error(getErrorMessage(e)) });
   const m = query.data;
   return <Space direction="vertical" size={16} className="full-width">
-    <Select aria-label="Направление статистики" options={allDirections.filter(o => o.value !== 'UNASSIGNED')} value={direction} onChange={setDirection} style={{ width: 230 }} />
     {query.isError && <Alert type="error" message={getErrorMessage(query.error)} />}
-    <Row gutter={[16, 16]}>{[['Диалоги', m?.conversations], ['Звонки', m?.calls], ['Заявки', m?.inquiries], ['Подтверждённые записи клиники', m?.confirmedClinicAppointments], ['Ожидают сотрудника', m?.attention]].map(([title, value]) => <Col xs={24} sm={12} lg={8} key={String(title)}><Card><Statistic title={title} value={value ?? '—'} /></Card></Col>)}</Row>
+    <Row gutter={[16, 16]}>{[['Диалоги', m?.conversations], ['Звонки', m?.calls], ['Заявки', m?.inquiries], ...(direction === 'CLINIC' ? [['Подтверждённые записи клиники', m?.confirmedClinicAppointments]] : []), ['Ожидают сотрудника', m?.attention]].map(([title, value]) => <Col xs={24} sm={12} lg={8} key={String(title)}><Card><Statistic title={title} value={value ?? '—'} /></Card></Col>)}</Row>
     <Typography.Paragraph type="secondary">Показатели за всё время. Диалог, звонок, заявка и подтверждённая запись считаются отдельно; сумма диалогов и звонков не означает число уникальных людей.</Typography.Paragraph>
-    <Card title="Был звонок с Авито"><Form form={form} layout="vertical" initialValues={{ direction: 'CLINIC', missed: false }} onFinish={values => call.mutate(values)}>
-      <Row gutter={16}><Col xs={24} md={8}><Form.Item name="direction" label="Направление" rules={[{ required: true }]}><Select options={directions} /></Form.Item></Col><Col xs={24} md={8}><Form.Item name="occurredAt" label="Когда звонили" rules={[{ required: true, message: 'Укажите время звонка' }]}><Input type="datetime-local" /></Form.Item></Col><Col xs={24} md={8}><Form.Item name="missed" label="Пропущенный звонок" valuePropName="checked"><Switch /></Form.Item></Col></Row>
+    {direction !== 'UNASSIGNED' && <Card title="Был звонок с Авито"><Form form={form} layout="vertical" initialValues={{ direction, missed: false }} onFinish={values => call.mutate({ ...values, direction })}>
+      <Row gutter={16}><Col xs={24} md={8}><Form.Item name="direction" label="Направление" rules={[{ required: true }]}><Select options={directions} disabled /></Form.Item></Col><Col xs={24} md={8}><Form.Item name="occurredAt" label="Когда звонили" rules={[{ required: true, message: 'Укажите время звонка' }]}><Input type="datetime-local" /></Form.Item></Col><Col xs={24} md={8}><Form.Item name="missed" label="Пропущенный звонок" valuePropName="checked"><Switch /></Form.Item></Col></Row>
       <Form.Item name="note" label="Примечание"><Input maxLength={1000} placeholder="Например, запрос на первичный приём" /></Form.Item><Button type="primary" htmlType="submit" disabled={!canOperate || !overview.installation.enabled} loading={call.isPending}>Учесть звонок</Button>
-    </Form></Card>
+    </Form></Card>}
     <Table rowKey="id" dataSource={m?.recentCalls} pagination={false} scroll={{ x: 650 }} columns={[{ title: 'Время', dataIndex: 'occurredAt', render: formatDateTime }, { title: 'Направление', dataIndex: 'direction', render: d => directionLabels[d] }, { title: 'Звонок', dataIndex: 'missed', render: v => v ? 'Пропущен' : 'Принят' }, { title: 'Примечание', dataIndex: 'note' }]} />
   </Space>;
 }

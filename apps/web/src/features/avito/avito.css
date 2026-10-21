@@ -1,5 +1,10 @@
 .avito-page .avito-status { margin-bottom: 12px; }
 .avito-page .avito-notice { margin-bottom: 16px; }
+.avito-direction-tabs { margin-top: 20px; }
+.avito-connection-summary { margin-top: 12px; }
+.avito-direction-context { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+.avito-direction-context .ant-typography { margin-bottom: 0; }
+@media (max-width: 700px) { .avito-direction-context { align-items: flex-start; flex-direction: column; } .avito-direction-tabs .ant-tabs-tab { padding: 8px 12px; } }
 .avito-toolbar { margin: 0 0 16px; }
 .avito-row-link { display: flex; align-items: flex-start; flex-direction: column; height: auto; padding: 0; white-space: normal; text-align: left; }
 .avito-row-link span { font-size: 12px; color: var(--crm-muted, #586e8a); }

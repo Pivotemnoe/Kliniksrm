@@ -25,7 +25,7 @@ export class FakeAvitoApi {
 }
 export async function avitoFixture() {
   const url = process.env.AVITO_QA_DATABASE_URL;
-  if (!url || !/^postgresql:\/\/[^@]+@127\.0\.0\.1:55439\/avito_merge_qa_20261020(?:\?|$)/.test(url)) throw Error('Avito fixture requires the isolated avito_merge_qa_20261020 database on 127.0.0.1:55439');
+  if (!url || !/^postgresql:\/\/[^@]+@127\.0\.0\.1:(?:55439\/avito_merge_qa_20261020|55449\/avito_directions_qa_20261021)(?:\?|$)/.test(url)) throw Error('Avito fixture requires an explicitly allowlisted local QA database');
   const prisma = new PrismaClient({ datasources: { db: { url } } });
   await prisma.organization.upsert({ where: { id: 'avito-qa-org' }, update: {}, create: { id: 'avito-qa-org', displayName: 'Тестовая клиника', createdAt: new Date('2020-01-01') } });
   await prisma.employee.upsert({ where: { id: 'avito-qa-director' }, update: {}, create: { id: 'avito-qa-director', fullName: 'Тестовый директор', status: 'ACTIVE' } });
