@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { groomingPriceEntries, groomingPriceLabel, groomingServiceBookable, groomingPriceCatalogVersion } from './price-catalog';
+import { groomingPriceEntries, groomingPriceLabel, groomingServiceBookable, groomingPriceCatalogVersion, groomingRetiredCatalogKeys, groomingServiceRetired } from './price-catalog';
 import { AuditService } from '../audit/audit.service';
 import { AuthEmployee } from '../auth/auth.types';
 import { ClinicModulesService } from '../clinic-modules/clinic-modules.service';
@@ -46,7 +46,7 @@ export class GroomingCrmService {
     const entitled = await this.modules.entitlement('GROOMING');
     if ((!installation.enabled || !entitled) && !actor.roles.includes('director')) throw new ForbiddenException('Модуль груминга не подключён');
     const settings = await this.settings();
-    if (installation.enabled && entitled && actor.permissions.includes('grooming.manage') && await this.prisma.groomingService.count({ where: { installationId: installation.id, catalogKey: { not: null } } }) < groomingPriceEntries().length) await this.importPrices({ clientKey: 'initial-catalog-' + groomingPriceCatalogVersion }, actor);
+    if (installation.enabled && entitled && actor.permissions.includes('grooming.manage') && await this.prisma.groomingService.count({ where: { installationId: installation.id, catalogKey: { in: groomingPriceEntries().map(entry => entry.catalogKey) } } }) < groomingPriceEntries().length) await this.importPrices({ clientKey: 'initial-catalog-' + groomingPriceCatalogVersion }, actor);
     const specialists = await this.prisma.groomingSpecialist.findMany({ where: { installationId: installation.id, ...(this.manager(actor) ? {} : { employeeId: actor.id }) }, include: { employee: { select: { id: true, fullName: true, status: true, accountScope: true } } }, orderBy: { displayName: 'asc' } });
     const rules = await this.prisma.groomingServiceRule.findMany({ where: { installationId: installation.id, ...(this.manager(actor) ? {} : { specialist: { employeeId: actor.id } }) }, include: ruleInclude, orderBy: { createdAt: 'asc' } });
     const canManage = actor.permissions.includes('grooming.manage'), canSchedule = canManage || actor.permissions.includes('grooming.schedule');
@@ -54,7 +54,7 @@ export class GroomingCrmService {
       employees: specialists.map(s => ({ id: s.employeeId, fullName: s.displayName })),
       locations: await this.prisma.groomingLocation.findMany({ where: { installationId: installation.id }, orderBy: { name: 'asc' } }),
       workplaces: await this.prisma.groomingWorkplace.findMany({ where: { location: { installationId: installation.id } }, orderBy: { name: 'asc' } }),
-      services: await this.prisma.groomingService.findMany({ where: { installationId: installation.id }, orderBy: { title: 'asc' } }),
+      services: (await this.prisma.groomingService.findMany({ where: { installationId: installation.id }, orderBy: { title: 'asc' } })).filter(service => !groomingServiceRetired(service)),
     } : null;
     return { installation, entitled, settings: canManage ? settings : { selfBookingEnabled: settings.selfBookingEnabled }, specialists: specialists.map(s => canManage ? { ...s, maxConnected: Boolean(s.maxUserId) } : { ...s, maxConnected: Boolean(s.maxUserId), maxUserId: undefined }), rules, resources, setup: canManage ? { connectedPhones: await this.prisma.remoteAccessDevice.count({ where: { employeeId: { in: specialists.filter(s => s.employee.accountScope === 'GROOMING').map(s => s.employeeId) }, revokedAt: null } }), futureWorkPeriods: await this.prisma.groomingWorkPeriod.count({ where: { specialistId: { in: specialists.map(s => s.id) }, isActive: true, kind: 'WORK', endsAt: { gt: new Date() } } }) } : undefined, canManage, canSchedule, limited: !installation.enabled || !entitled };
   }
@@ -104,6 +104,7 @@ export class GroomingCrmService {
       const maximumPrice = input.maximumPrice === undefined ? previous?.maximumPrice : input.maximumPrice;
       if (['RANGE', 'UP_TO'].includes(type) && (maximumPrice == null || Number(maximumPrice) <= 0 || (type === 'RANGE' && Number(maximumPrice) < input.price))) throw new BadRequestException('Укажите корректную верхнюю границу цены');
       const data = { title: input.title.trim(), price: type === 'UP_TO' || type === 'QUOTE' ? 0 : input.price, priceType: type, maximumPrice: ['RANGE', 'UP_TO'].includes(type) ? maximumPrice : null, isActive: input.isActive ?? previous?.isActive ?? true };
+      if (data.isActive && previous && groomingServiceRetired(previous)) throw new BadRequestException('Стрижка без мытья больше не предлагается. Выберите комплекс с мытьём; гигиена и вычёсывание доступны отдельно');
       const result = id ? await tx.groomingService.update({ where: { id }, data: { ...data, version: { increment: 1 } } }) : await tx.groomingService.create({ data: { ...data, installationId: installation.id } });
       await this.audit.log({ actorId: actor.id, action: 'grooming.service.save', entityType: 'GroomingService', entityId: result.id }, tx); return result;
     });
@@ -115,14 +116,19 @@ export class GroomingCrmService {
       const receiptId = `grooming:price-import:${actor.id}:${input.clientKey}`;
       const fingerprint = digest({ version: groomingPriceCatalogVersion });
       const prior = await tx.groomingCommandReceipt.findUnique({ where: { id: receiptId } });
-      if (prior) return prior.result;
+      if (prior) { if (prior.fingerprint !== fingerprint) throw new ConflictException('Этот запрос импорта относится к другой версии прайса'); return prior.result; }
       let created = 0, preserved = 0;
       for (const entry of groomingPriceEntries()) {
         const previous = await tx.groomingService.findUnique({ where: { installationId_catalogKey: { installationId: installation.id, catalogKey: entry.catalogKey } } });
         if (previous) { preserved++; continue; }
         await tx.groomingService.create({ data: { ...entry, catalogData: json(entry.catalogData), installationId: installation.id } }); created++;
       }
-      const result = { created, preserved, catalogVersion: groomingPriceCatalogVersion, note: 'Цены перенесены без повторной наценки. Для записи задайте длительность, специалиста и смены.' };
+      const retiredServices = await tx.groomingService.findMany({ where: { installationId: installation.id, catalogKey: { in: groomingRetiredCatalogKeys }, isActive: true }, select: { id: true, catalogKey: true } });
+      const retiredRules = await tx.groomingServiceRule.findMany({ where: { installationId: installation.id, service: { catalogKey: { in: groomingRetiredCatalogKeys } }, isActive: true }, select: { id: true } });
+      if (retiredServices.length) await tx.groomingService.updateMany({ where: { id: { in: retiredServices.map(service => service.id) }, isActive: true }, data: { isActive: false, version: { increment: 1 } } });
+      if (retiredRules.length) await tx.groomingServiceRule.updateMany({ where: { id: { in: retiredRules.map(rule => rule.id) }, isActive: true }, data: { isActive: false, version: { increment: 1 } } });
+      if (retiredServices.length || retiredRules.length) await this.audit.log({ actorId: actor.id, action: 'grooming.prices.retire', entityType: 'GroomingSettings', entityId: installation.id, metadata: { catalogVersion: groomingPriceCatalogVersion, services: retiredServices, ruleIds: retiredRules.map(rule => rule.id), historyPreserved: true } }, tx);
+      const result = { created, preserved, retiredServices: retiredServices.length, retiredRules: retiredRules.length, catalogVersion: groomingPriceCatalogVersion, note: 'Цены перенесены без повторной наценки. Стрижки без мытья исключены, история сохранена. Для записи задайте длительность, специалиста и смены.' };
       await this.audit.log({ actorId: actor.id, action: 'grooming.prices.import', entityType: 'GroomingSettings', entityId: installation.id, metadata: result }, tx);
       await tx.groomingCommandReceipt.create({ data: { id: receiptId, fingerprint, result } }); return result;
     }, { timeout: 30000 });
@@ -172,7 +178,7 @@ export class GroomingCrmService {
     const horizon = new Date(now.getTime() + 91 * day);
     const shifts = await this.prisma.groomingWorkPeriod.findMany({ where: { specialist: { installationId: installation.id }, isActive: true, startsAt: { lt: horizon }, endsAt: { gt: now } }, take: 5001 });
     const busy = await this.prisma.groomingReservation.findMany({ where: { installationId: installation.id, status: { in: activeGroomingStatuses }, startsAt: { lt: horizon }, blockedUntil: { gt: now } }, select: { employeeId: true, workplaceId: true, startsAt: true, blockedUntil: true }, take: 5001 });
-    const services = await this.prisma.groomingService.findMany({ where: { installationId: installation.id, isActive: true }, orderBy: { title: 'asc' } });
+    const services = (await this.prisma.groomingService.findMany({ where: { installationId: installation.id, isActive: true }, orderBy: { title: 'asc' } })).filter(service => !groomingServiceRetired(service));
     return { schemaVersion: 1, capturedAt: now.toISOString(), testMode: Boolean(settings.testClientMaxId), enabled: installation.enabled && entitled, selfBookingEnabled: installation.enabled && entitled && settings.selfBookingEnabled && shifts.length <= 5000 && busy.length <= 5000,
       services: services.map(s => ({ id: s.id, title: s.title, price: String(s.price), priceType: s.priceType, maximumPrice: s.maximumPrice == null ? null : String(s.maximumPrice), priceLabel: groomingPriceLabel(s), catalogKey: s.catalogKey, catalogData: s.catalogData, bookable: groomingServiceBookable(s) && rules.some(r => r.serviceId === s.id), version: s.version })),
       specialists: [...new Map(rules.map(r => [r.specialistId, { id: r.specialistId, employeeId: r.specialist.employeeId, displayName: r.specialist.displayName, species: r.specialist.species }])).values()],
@@ -242,6 +248,7 @@ export class GroomingCrmService {
       const service = await tx.groomingService.findUnique({ where: { id: input.serviceId } });
       if (!specialist || !workplace || workplace.location.installationId !== installationId || workplace.locationId !== input.locationId || !service || service.installationId !== installationId || !specialist.species.includes(input.species)) throw new BadRequestException('Проверьте специалиста, вид питомца, услугу и рабочее место');
       if ((service.catalogData as Record<string, unknown> | null)?.species && !['ANY', input.species].includes(String((service.catalogData as Record<string, unknown>).species))) throw new BadRequestException('Услуга предназначена для другого вида питомца');
+      if (input.isActive && groomingServiceRetired(service)) throw new BadRequestException('Стрижка без мытья больше не предлагается');
       if (input.isActive && !groomingServiceBookable(service)) throw new BadRequestException('Сначала уточните цену; доплаты не записываются отдельно');
       if (input.isActive && (!specialist.isActive || specialist.employee.status !== 'ACTIVE' || !service.isActive)) throw new BadRequestException('Для записи нужны действующие специалист и услуга');
       const { version, ...data } = input;

@@ -3,10 +3,12 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 export const qaPassword = 'LocalGroomingOnly2026!';
 export function configureIndependentQa(preview = false) {
+  const isolatedUrl = process.env.GROOMING_INDEPENDENT_QA_DATABASE_URL;
+  if (isolatedUrl && isolatedUrl !== 'postgresql://postgres@127.0.0.1:55449/grooming_catalog_qa_20261021') throw Error('Only the dedicated local catalog QA override is allowed');
   const keep = Object.fromEntries(['PATH','HOME','TMPDIR','LANG','TZ'].filter(key => process.env[key]).map(key => [key, process.env[key]]));
   for (const key of Object.keys(process.env)) delete process.env[key];
   Object.assign(process.env, keep, { NODE_ENV:'test', CLINIC_RUNTIME_MODE:'test', TEMICHEVVET_LICENSE_MODE:'compatibility',
-    DATABASE_URL:`postgresql://grooming_module_qa:synthetic-grooming-only@127.0.0.1:55440/grooming_independent_${preview ? 'preview' : 'tests'}_20261020`,
+    DATABASE_URL:isolatedUrl || `postgresql://grooming_module_qa:synthetic-grooming-only@127.0.0.1:55440/grooming_independent_${preview ? 'preview' : 'tests'}_20261020`,
     SESSION_COOKIE_NAME:'grooming_independent_qa',SESSION_COOKIE_SECURE:'false',GROOMING_QA_MODE:'true',GROOMING_CRM_SYNC_ENABLED:'false',
     GROOMING_CLIENT_NOTIFICATIONS_ENABLED:'false',CLINIC_ASSISTANT_ENABLED:'false',AVITO_WORKER_ENABLED:'false',
     CLINIC_SITE_CATALOG_SYNC_ENABLED:'false',CLINIC_ASSISTANT_REMINDERS_ENABLED:'false',
@@ -20,9 +22,9 @@ export async function independentFixture({reset=false}={}) {
   const {PrismaClient}=require('@prisma/client');
   const {PasswordService}=require('../../apps/api/dist/modules/auth/password.service.js');
   const prisma=new PrismaClient();
-  const parsed=new URL(process.env.DATABASE_URL);if(parsed.hostname!=='127.0.0.1'||parsed.port!=='55440'||!/^\/grooming_independent_(tests|preview)_20261020$/.test(parsed.pathname))throw Error('Dedicated independent QA database required');
+  const parsed=new URL(process.env.DATABASE_URL),catalogQa=parsed.hostname==='127.0.0.1'&&parsed.port==='55449'&&parsed.pathname==='/grooming_catalog_qa_20261021';if(!catalogQa&&(parsed.hostname!=='127.0.0.1'||parsed.port!=='55440'||!/^\/grooming_independent_(tests|preview)_20261020$/.test(parsed.pathname)))throw Error('Dedicated independent QA database required');
   if(reset){
-    if(parsed.pathname!=='/grooming_independent_tests_20261020')throw Error('Only the disposable test database may reset');
+    if(!catalogQa&&parsed.pathname!=='/grooming_independent_tests_20261020')throw Error('Only the disposable test database may reset');
     const tables=await prisma.$queryRaw`SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename <> '_prisma_migrations'`;
     await prisma.$executeRawUnsafe('TRUNCATE '+tables.map(row=>'"'+row.tablename.replaceAll('"','""')+'"').join(',')+' CASCADE');
   }

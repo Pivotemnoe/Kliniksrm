@@ -1,0 +1,74 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import {randomUUID} from 'node:crypto';
+import {execFileSync} from 'node:child_process';
+import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import {configureIndependentQa,independentFixture,independentApp,qaPassword} from './helpers/grooming-independent-qa.mjs';
+configureIndependentQa();
+const require=createRequire(import.meta.url);
+const {groomingPriceEntries,groomingRetiredCatalogKeys,groomingPriceFields}=require('../apps/api/dist/modules/grooming/price-catalog.js');
+const catalog=require('../apps/api/src/modules/grooming/price-catalog.json');
+test('retiring a legacy catalog preserves prices, bookings and linked history and cannot be undone by reimport', {timeout:90000},async t=>{
+  const f=await independentFixture({reset:true}),app=await independentApp();await app.listen(0,'127.0.0.1');
+  t.after(async()=>{app.getHttpServer().closeAllConnections();await app.close();await f.close();});
+  const base=await app.getUrl();let cookie;
+  const request=async(path,body,method=body===undefined?'GET':'POST')=>{const r=await fetch(base+'/api'+path,{method,headers:{...(cookie?{cookie}:{}),...(body===undefined?{}:{'content-type':'application/json'})},...(body===undefined?{}:{body:JSON.stringify(body)})});return{status:r.status,data:await r.json(),headers:r.headers};};
+  const login=await request('/auth/login',{login:f.administrator.email,password:qaPassword});assert.equal(login.status,200);cookie=login.headers.get('set-cookie').split(';')[0];
+  const retired=groomingRetiredCatalogKeys.map(catalogKey=>{
+    const [species,id,kind]=catalogKey.split(':');const source=species==='dog'?catalog.dogs.find(b=>b.id===id)[kind]:catalog.cats[id][kind];
+    return{catalogKey,title:catalogKey+' · Стрижка без мытья',...groomingPriceFields(source),catalogData:{species:species.toUpperCase(),category:'CARE'}};
+  });
+  await f.prisma.groomingService.createMany({data:[...groomingPriceEntries(),...retired].map(s=>({...s,installationId:f.installation.id}))});
+  const legacy=await f.prisma.groomingService.findUniqueOrThrow({where:{installationId_catalogKey:{installationId:f.installation.id,catalogKey:'dog:york:dry'}}});
+  const groomer=await request('/v1/grooming/specialists',{fullName:'Грумер · миграция QA',email:randomUUID()+'@example.local',password:qaPassword,species:['DOG']});assert.equal(groomer.status,201);
+  await request('/v1/grooming/workplaces/setup',{});
+  const workplace=await f.prisma.groomingWorkplace.findFirstOrThrow();
+  const startsAt=new Date(Date.now()+3*86400000),endsAt=new Date(startsAt.getTime()+3600000);
+  const rule=await f.prisma.groomingServiceRule.create({data:{installationId:f.installation.id,specialistId:groomer.data.id,serviceId:legacy.id,locationId:workplace.locationId,workplaceId:workplace.id,species:'DOG',durationMinutes:60,isActive:true}});
+  const owner=await f.prisma.owner.create({data:{fullName:'Владелец · миграция QA',phone:'+79990000123',allowMax:false}});
+  const animal=await f.prisma.animal.create({data:{ownerId:owner.id,nickname:'Питомец · миграция QA',species:'Собака'}});
+  const booking=await f.prisma.groomingReservation.create({data:{installationId:f.installation.id,ruleId:rule.id,ownerId:owner.id,animalId:animal.id,employeeId:groomer.data.employeeId,locationId:workplace.locationId,workplaceId:workplace.id,serviceTitle:legacy.title,price:legacy.price,priceType:legacy.priceType,maximumPrice:legacy.maximumPrice,species:'DOG',size:'SMALL',startsAt,endsAt,blockedUntil:endsAt,status:'CONFIRMED',notes:'Существующая подтверждённая запись, не изменять'}});
+  const before=await f.prisma.groomingService.findMany({orderBy:{catalogKey:'asc'}});
+  const overview=await request('/v1/grooming/overview');assert.equal(overview.status,200);assert.equal(overview.data.resources.services.length,172);
+  const {GroomingCrmService}=require('../apps/api/dist/modules/grooming/grooming.service.js');
+  const snapshot=await app.get(GroomingCrmService).storefrontSnapshot();assert.equal(snapshot.services.length,172);assert.equal(snapshot.rules.length,0,'even active legacy rules are not offered');
+  const first=await request('/v1/grooming/services/import-prices',{clientKey:'retire-legacy-catalog'});assert.equal(first.status,201);assert.equal(first.data.created,0);assert.equal(first.data.preserved,172);assert.equal(first.data.retiredServices,46);assert.equal(first.data.retiredRules,1);
+  assert.equal(await f.prisma.groomingService.count(),218,'no rows deleted');
+  assert.deepEqual(await f.prisma.groomingReservation.findUniqueOrThrow({where:{id:booking.id}}),booking,'booking snapshot and timestamps unchanged');
+  for(const old of before){const after=await f.prisma.groomingService.findUniqueOrThrow({where:{id:old.id}});for(const key of ['title','price','maximumPrice','priceType','catalogData','catalogKey'])assert.deepEqual(after[key],old[key],old.catalogKey+':'+key);assert.equal(after.isActive,!groomingRetiredCatalogKeys.includes(old.catalogKey));}
+  const persistedRule=await f.prisma.groomingServiceRule.findUniqueOrThrow({where:{id:rule.id}});assert.equal(persistedRule.isActive,false);assert.equal(persistedRule.serviceId,legacy.id);
+  const replay=await request('/v1/grooming/services/import-prices',{clientKey:'retire-legacy-catalog'});assert.deepEqual(replay.data,first.data);
+  const repeated=await request('/v1/grooming/services/import-prices',{clientKey:randomUUID()});assert.equal(repeated.data.created,0);assert.equal(repeated.data.retiredServices,0);assert.equal(repeated.data.retiredRules,0);
+  const current=await f.prisma.groomingService.findUniqueOrThrow({where:{id:legacy.id}});
+  const activate=await request('/v1/grooming/services/'+legacy.id,{title:legacy.title,price:1000,priceType:'FIXED',isActive:true,version:current.version},'PATCH');assert.equal(activate.status,400);
+  assert.equal(await f.prisma.groomingService.count({where:{catalogKey:{in:groomingRetiredCatalogKeys},isActive:true}}),0);
+  const afterOverview=await request('/v1/grooming/overview');assert.equal(afterOverview.data.resources.services.length,172);
+  assert.equal(await f.prisma.auditLog.count({where:{action:'grooming.prices.retire'}}),1);
+  // Exercise the actual production data runner on disposable data, including its replay and later-edit guards.
+  await f.prisma.employee.update({where:{id:f.director.id},data:{fullName:'Темичев Константин Валерьевич'}});
+  const avito=await f.prisma.clinicModuleInstallation.create({data:{organizationId:f.installation.organizationId,moduleKey:'avito-administrator',enabled:true}});
+  await f.prisma.avitoIntegration.create({data:{installationId:avito.id,accountId:'367079428',settings:{}}});
+  await f.prisma.groomingService.updateMany({where:{catalogKey:{in:groomingRetiredCatalogKeys}},data:{isActive:true}});
+  await f.prisma.groomingServiceRule.update({where:{id:rule.id},data:{isActive:true}});
+  const temp=await mkdtemp(path.join(os.tmpdir(),'grooming-policy-runner-'));
+  try{
+    const root=path.resolve('.'),revision='a'.repeat(40),manifest={releaseId:'local-grooming-policy-qa',revision,previous:{revision:'b'.repeat(40)},retiredCatalogKeys:groomingRetiredCatalogKeys};
+    await writeFile(path.join(temp,'manifest.json'),JSON.stringify(manifest));
+    let source=await readFile('deploy/grooming-catalog/retire.cjs','utf8');
+    source=source.replaceAll('/app/node_modules/',root+'/node_modules/').replaceAll('/app/apps/api/dist/',root+'/apps/api/dist/').replaceAll('/tmp/grooming-wash-release.json',path.join(temp,'manifest.json')).replaceAll('/tmp/grooming-wash-before.json',path.join(temp,'before.json')).replaceAll('/tmp/grooming-wash-applied.json',path.join(temp,'applied.json'));
+    const runner=path.join(temp,'retire.cjs');await writeFile(runner,source);
+    const run=(mode,...args)=>JSON.parse(execFileSync(process.execPath,[runner,mode,...args],{env:{...process.env,TEMICHEVVET_GIT_COMMIT:revision},encoding:'utf8',stdio:['ignore','pipe','pipe']}));
+    const plan=run('plan');assert.equal(plan.activeRetiredServices,46);assert.equal(plan.productionDatabaseWrites,0);
+    assert.throws(()=>run('apply'),/Command failed/);
+    const applied=run('apply','--execute');assert.equal(applied.retiredServices,46);assert.equal(applied.retiredRules,1);assert.equal(applied.historyPreserved,true);
+    assert.equal(run('apply','--execute').afterHash,applied.afterHash);assert.equal(run('verify').afterHash,applied.afterHash);
+    assert.deepEqual(await f.prisma.groomingReservation.findUniqueOrThrow({where:{id:booking.id}}),booking);
+    const offered=await f.prisma.groomingService.findFirstOrThrow({where:{catalogKey:'dog:york:full'}});
+    await f.prisma.groomingService.update({where:{id:offered.id},data:{price:9999,version:{increment:1}}});
+    assert.throws(()=>run('apply','--execute'),/Command failed/,'a replay must preserve later administrator edits');
+    assert.equal(Number((await f.prisma.groomingService.findUniqueOrThrow({where:{id:offered.id}})).price),9999);
+  }finally{await rm(temp,{recursive:true,force:true});}
+});

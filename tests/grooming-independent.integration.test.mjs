@@ -26,8 +26,8 @@ test('administrator builds an independent grooming module from its own resources
    const duplicate=await request('/v1/grooming/specialists',{fullName:'Повтор QA',email,password:qaPassword,species:['DOG']},admin);assert.equal(duplicate.status,409);
    const attach=await request('/v1/grooming/specialists',{employeeId:f.director.id,displayName:'Нельзя привязать врача',species:['DOG'],isActive:true},admin);assert.equal(attach.status,400);
  });
- await t.test('website catalogue imports all 218 exact prices and preserves edits',async()=>{
-   const overview=await request('/v1/grooming/overview',undefined,admin);assert.equal(overview.data.resources.services.filter(s=>s.catalogKey).length,218);
+ await t.test('website catalogue imports 172 offered services and preserves edits',async()=>{
+   const overview=await request('/v1/grooming/overview',undefined,admin);assert.equal(overview.data.resources.services.filter(s=>s.catalogKey).length,172);
    const services=overview.data.resources.services;
    for(const type of ['FIXED','RANGE','UP_TO','QUOTE','PERCENT'])assert.ok(services.some(s=>s.priceType===type),type);
    const edited=services.find(s=>s.priceType==='FIXED');const price=Number(edited.price)+1;

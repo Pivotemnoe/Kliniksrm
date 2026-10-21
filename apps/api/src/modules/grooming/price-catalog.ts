@@ -2,6 +2,14 @@ import catalog from './price-catalog.json';
 
 type Price = { min?: number; max?: number; kind?: string; percent?: number } | null;
 export const groomingPriceCatalogVersion = catalog.version;
+export const groomingRetiredCatalogKeys = [
+  ...catalog.dogs.filter(breed => !breed.coatCare).map(breed => `dog:${breed.id}:dry`),
+  'cat:clean:dry', 'cat:matted:dry',
+];
+const retiredKeys = new Set(groomingRetiredCatalogKeys);
+export function groomingServiceRetired(service: { catalogKey?: string | null }) {
+  return Boolean(service.catalogKey && retiredKeys.has(service.catalogKey));
+}
 export function groomingPriceFields(price: Price) {
   if (!price) return { price: 0, maximumPrice: null, priceType: 'QUOTE' };
   if (price.percent) return { price: price.percent, maximumPrice: null, priceType: 'PERCENT' };
@@ -12,10 +20,11 @@ const names = { dry: 'Стрижка без мытья', hygiene: 'Гигиен�
 export function groomingPriceEntries() {
   const result: Array<{ catalogKey: string; title: string; price: number; maximumPrice: number | null; priceType: string; catalogData: Record<string, unknown> }> = [];
   for (const breed of catalog.dogs) for (const kind of ['dry', 'hygiene', 'full'] as const) {
+    if (kind === 'dry' && !breed.coatCare) continue;
     const name = breed.coatCare && kind === 'dry' ? 'Вычёсывание без мытья' : breed.coatCare && kind === 'full' ? 'Мытьё и уход за шерстью' : names[kind];
     result.push({ catalogKey: `dog:${breed.id}:${kind}`, title: `${breed.name} · ${name}`, ...groomingPriceFields(breed[kind]), catalogData: { species: 'DOG', breedId: breed.catalogueId || breed.id, breedRowId: breed.id, breedName: breed.name, kind, serviceName: name, category: 'CARE', durationHint: breed.duration || '', note: breed.note || '' } });
   }
-  for (const condition of ['clean', 'matted'] as const) for (const [kind, name] of [['dry', 'Стрижка без мытья'], ['wash', 'Стрижка и мытьё'], ['deshedWash', 'Экспресс-линька и мытьё']] as const) {
+  for (const condition of ['clean', 'matted'] as const) for (const [kind, name] of [['wash', 'Стрижка и мытьё'], ['deshedWash', 'Экспресс-линька и мытьё']] as const) {
     const label = condition === 'clean' ? 'Без колтунов' : 'Есть колтуны';
     result.push({ catalogKey: `cat:${condition}:${kind}`, title: `Кошка · ${name} · ${label.toLowerCase()}`, ...groomingPriceFields(catalog.cats[condition][kind]), catalogData: { species: 'CAT', condition, serviceName: name, kind, category: 'CARE', durationHint: catalog.cats.duration } });
   }
@@ -38,7 +47,7 @@ export function groomingPriceLabel(service: { price: unknown; maximumPrice?: unk
   return `${prefix}${number.format(min)} ₽${suffix}`;
 }
 
-export function groomingServiceBookable(service: { priceType?: string; catalogData?: unknown }) {
+export function groomingServiceBookable(service: { catalogKey?: string | null; priceType?: string; catalogData?: unknown }) {
   const data = (service.catalogData || {}) as Record<string, unknown>;
-  return !['QUOTE', 'PERCENT'].includes(service.priceType || 'FIXED') && data.category !== 'SUPPLEMENT';
+  return !groomingServiceRetired(service) && !['QUOTE', 'PERCENT'].includes(service.priceType || 'FIXED') && data.category !== 'SUPPLEMENT';
 }
