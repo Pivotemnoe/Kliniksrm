@@ -40,7 +40,7 @@ export async function loadPetServiceContext(db: Prisma.TransactionClient, organi
 }
 
 /** An enquiry in Avito is never a confirmed reservation or an invitation to collect payment. */
-export function petServiceAnswer(context: PetServiceContext, text: string, bookingIntent = false): string | null {
+export function petServiceAnswer(context: PetServiceContext, text: string, bookingIntent = false, bookingChannel?: 'WEBSITE'): string | null {
   const input = text.toLocaleLowerCase('ru-RU').replace(/ё/g, 'е');
   const price = /цен|стоим|сколько|почем|прайс|тариф/u.test(input);
   const booking = bookingIntent || /запис|запиш|брон|засели|свобод|места|сайт|ссылк|онлайн|оставить\s+(?:кот|кош|собак|питом)|хочу\s+(?:подстричь|груминг)/u.test(input);
@@ -61,10 +61,23 @@ export function petServiceAnswer(context: PetServiceContext, text: string, booki
     if (conditions || price) parts.push(`Минимальный срок — ${hotel.minimumDays} сут. Неполные сутки считаются полными. Принимаем собак весом до ${hotel.maximumDogWeightKg} кг. Заезд — с ${hotel.checkInFrom} до ${hotel.checkInTo}.`);
   }
   if (context.direction === 'GROOMING') {
-    if (price) parts.push('Услуги и прайс груминга доступны на сайте. Стоимость зависит от выбранной услуги и питомца.');
-    parts.push(context.selfBookingEnabled
-      ? 'Услугу, грумера и доступное время можно выбрать на сайте. Запись оформляется там после входа через MAX и проверки расписания.'
-      : 'Онлайн-запись на груминг пока закрыта: расписание ещё настраивается. На сайте можно посмотреть услуги и прайс. Здесь можно задать вопрос или попросить сотрудника связаться с вами.');
+    if (price) parts.push('Стоимость груминга зависит от выбранной услуги, питомца и состояния шерсти. Администратор поможет уточнить её здесь; прайс также есть на сайте.');
+    const website = bookingChannel === 'WEBSITE' || /сайт|ссылк|онлайн|самостоятельн/u.test(input);
+    if (website) {
+      parts.push(context.selfBookingEnabled
+        ? 'Самостоятельно выбрать услугу и доступное время можно на сайте. Запись оформляется там после входа через MAX и проверки расписания. Если удобнее, можно оставить заявку на звонок администратора здесь, в Авито.'
+        : 'Самостоятельная онлайн-запись пока закрыта: расписание ещё настраивается. На сайте можно посмотреть услуги, прайс и примеры работ. Для записи можно оставить заявку здесь, чтобы администратор связался с вами.');
+      parts.push(context.siteUrl);
+    } else if (booking) {
+      parts.push(context.selfBookingEnabled
+        ? 'Как вам удобнее записаться: самостоятельно на сайте или оставить заявку здесь, чтобы администратор позвонил?'
+        : 'Самостоятельная онлайн-запись пока закрыта: расписание ещё настраивается. Могу оформить заявку здесь, чтобы администратор позвонил и помог с записью. Оставим заявку на звонок?');
+    } else {
+      parts.push(context.selfBookingEnabled
+        ? 'Можем обсудить запись здесь с администратором или выбрать услугу и время на сайте — как вам удобнее?'
+        : 'Можем обсудить запись здесь с администратором. Самостоятельная онлайн-запись пока закрыта; на сайте можно посмотреть услуги, прайс и примеры работ.');
+    }
+    return parts.join('\n');
   } else parts.push(context.selfBookingEnabled
     ? 'Даты и свободный номер можно выбрать на сайте. Бронь оформляется там после входа через MAX и повторной проверки наличия мест.'
     : 'Онлайн-бронирование пока недоступно. Условия можно посмотреть на сайте или уточнить у сотрудника здесь.');

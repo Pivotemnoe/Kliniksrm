@@ -7,8 +7,8 @@ import { clinicPhoneText, clinicUrgency, currentMedicalText } from './avito-clin
 import { petSpecies } from './avito-service-query';
 import { petServiceAnswer, PetServiceContext } from './avito-pet-services';
 
-export type ContactState = { name?: string; phone?: string; callbackAt?: string; callbackMessageId?: string; collecting?: boolean; reason?: string; summary?: string; serviceQuestionAsked?: boolean; awaitingServiceDetails?: boolean; serviceDetails?: string; petSpecies?: 'CAT' | 'DOG'; petAge?: string; petSexKnown?: boolean; referralKnown?: boolean };
-export type AdminDecision = { text: string | null; purpose: 'REPLY' | 'CRM_REPLY' | 'CONTACT' | 'SUBMITTED'; handoff: boolean; needsAttention?: boolean; createInquiry: boolean; direction: Direction | null; reason: string; contact: ContactState; prompt?: string; petServiceBooking?: boolean };
+export type ContactState = { bookingChoiceOffered?: boolean; bookingChannel?: 'WEBSITE' | 'CALLBACK'; name?: string; phone?: string; callbackAt?: string; callbackMessageId?: string; collecting?: boolean; reason?: string; summary?: string; serviceQuestionAsked?: boolean; awaitingServiceDetails?: boolean; serviceDetails?: string; petSpecies?: 'CAT' | 'DOG'; petAge?: string; petSexKnown?: boolean; referralKnown?: boolean };
+export type AdminDecision = { text: string | null; purpose: 'REPLY' | 'CRM_REPLY' | 'CONTACT' | 'SUBMITTED'; handoff: boolean; needsAttention?: boolean; createInquiry: boolean; direction: Direction | null; reason: string; contact: ContactState; prompt?: string; petServiceBooking?: boolean; petServiceChannel?: 'WEBSITE' };
 type DecisionInput = { settings: AvitoSettings; listingId: string | null; text: string; messageId: string; contact?: ContactState; mode?: string; mediaType?: string; now?: Date; crmAnswer?: CrmAnswer | null; intent?: AvitoModelIntent | null; clinicPhone?: string | null; nightNoticeDelivered?: boolean; skipAvailability?: boolean; petService?: PetServiceContext };
 export function decideAvitoReply(input: DecisionInput): AdminDecision {
   let decision = decideCore(input);
@@ -47,7 +47,8 @@ function decideCore(input: DecisionInput): AdminDecision {
   if (/по направлению|(?:направление|направления)\s+(?:есть|нет)|есть\s+направление|без\s+направления/u.test(normalized)) contact.referralKnown = true;
   if (clinicUrgency(normalized)) return { ...base, handoff: true, reason: 'URGENT', text: t.urgent };
   if (input.mediaType && input.mediaType !== 'text') return { ...base, handoff: !offHours, reason: 'UNSUPPORTED_MEDIA', text: offHours ? `Не могу надёжно разобрать это вложение. ${dutyDoctorReply(input.clinicPhone)}` : 'Передам вложение сотруднику. Уточнить детали можно здесь в переписке.' };
-  if (/(?:не\s+(?:хочу|буду|разрешаю|согласен|согласна)\s*(?:передавать|оставлять|давать)?|не\s+звоните|без\s+телефона|только\s+здесь)/u.test(normalized)) {
+  const refusesWebsiteOnly = profile.direction === 'GROOMING' && /не\s+(?:хочу|буду)(?:\s+\S+){0,3}\s+(?:сайт|ссылк|онлайн)|без\s+сайт/u.test(normalized) && !/не\s+звон|без\s+телефон|не\s+хочу\s+(?:оставлять|давать|передавать)\s+(?:номер|телефон)/u.test(normalized);
+  if (!refusesWebsiteOnly && /(?:не\s+(?:хочу|буду|разрешаю|согласен|согласна)\s*(?:передавать|оставлять|давать)?|не\s+звоните|без\s+телефона|только\s+здесь)/u.test(normalized)) {
     delete contact.callbackAt; delete contact.callbackMessageId;
     return { ...base, handoff: true, reason: 'CONTACT_DECLINED', text: input.mode && input.mode !== 'BOT' ? null : offHours ? `Не буду оформлять заявку на звонок. ${dutyDoctorReply(input.clinicPhone)}` : 'Можно продолжить здесь. Передам диалог сотруднику без заявки на обратный звонок.' };
   }
@@ -57,17 +58,35 @@ function decideCore(input: DecisionInput): AdminDecision {
   const medical = input.intent?.action === 'MEDICAL' || vaccineAdvice || /(?:диагноз|чем\s+лечить|как\s+лечить|что\s+дать|дозиров|сколько\s+(?:дать|таблет)|расшифр|назначь|нужна\s+ли\s+(?:озоновая|ванна)|показани|анализ\S*\s+(?:означ|плох)|(?:болит|рвет|рвота|понос|отравил|не\s+ест|не\s+пьет|хромает|вялый|вялая))/u.test(currentMedicalText(text));
   const askHuman = input.intent?.action === 'HUMAN' || /(?:оператор|живой\s+(?:человек|администратор)|соедините|сотрудник|позвоните|перезвоните|жалоб)/u.test(normalized);
   const booking = input.intent?.action === 'BOOKING' || /(?:запис|запиш|заявк|хочу\s+(?:на|к|подстричь|заселить)|забронировать|нужен\s+прием)/u.test(normalized);
-  if (/(?:оператор|живой\s+(?:человек|администратор)|соедините|сотрудник)/u.test(normalized)) return { ...base, handoff: true, reason: 'DIRECT_HUMAN_REQUEST', text: offHours ? dutyDoctorReply(input.clinicPhone) : 'Передам диалог администратору. Продолжить общение можно здесь, в Авито.' };
+  const grooming = profile.direction === 'GROOMING' && input.petService?.direction === 'GROOMING';
+  const callbackChoice = grooming && (refusesWebsiteOnly || /перезвон|позвон(?:ите|ить|ил|ит|ит\s+мне)|обратн\S*\s+звон/u.test(normalized)
+    || (contact.bookingChoiceOffered || contact.bookingChannel) && /^(?:здесь|тут|в\s+авито|через\s+администратора)[.!\s]*$/u.test(normalized)
+    || contact.bookingChoiceOffered && /^(?:да|давайте|оставим|хорошо)[.!\s]*$/u.test(normalized));
+  const websiteChoice = grooming && !callbackChoice && (/сайт|ссылк|онлайн|самостоятельн|(?:сам|сама)\s+(?:запиш|выбер|оформ)/u.test(normalized) || contact.bookingChoiceOffered && /^(?:сам|сама)[.!\s]*$/u.test(normalized));
+  if (grooming && !medical && websiteChoice) {
+    contact.bookingChannel = 'WEBSITE'; delete contact.bookingChoiceOffered;
+    delete contact.collecting; delete contact.reason; delete contact.awaitingServiceDetails;
+    delete contact.callbackAt; delete contact.callbackMessageId;
+    return { ...base, text: petServiceAnswer(input.petService!, text, true, 'WEBSITE'), reason: 'PET_SERVICE_INFO', petServiceBooking: true, petServiceChannel: 'WEBSITE' };
+  }
+  if (grooming && !medical && (callbackChoice || providedCallbackPhone(text))) {
+    contact.bookingChannel = 'CALLBACK'; delete contact.bookingChoiceOffered;
+    contact.collecting = true; contact.reason = 'CALLBACK'; contact.summary ??= text.slice(0, 2000);
+  }
+
+  if (!callbackChoice && /(?:оператор|живой\s+(?:человек|администратор)|соедините|сотрудник)/u.test(normalized)) return { ...base, handoff: true, reason: 'DIRECT_HUMAN_REQUEST', text: offHours ? dutyDoctorReply(input.clinicPhone) : 'Передам диалог администратору. Продолжить общение можно здесь, в Авито.' };
   if (offHours && (medical || askHuman && !/(?:перезвоните|позвоните\s+мне|обратн\S*\s+звон)/u.test(normalized))) return { ...base, reason: medical ? 'MEDICAL' : 'HUMAN_REQUEST', text: `С этим вопросом поможет врач. ${dutyDoctorReply(input.clinicPhone)}` };
   if (input.petService?.direction === profile.direction && !medical && !askHuman && !providedCallbackPhone(text) && (!contact.collecting || contact.reason === 'BOOKING')) {
-    const answer = petServiceAnswer(input.petService, text, booking);
+    const channel = grooming && contact.bookingChannel === 'WEBSITE' ? 'WEBSITE' : undefined;
+    const answer = petServiceAnswer(input.petService, text, booking, channel);
     if (answer) {
       // An old unfinished intake must not keep collecting contacts for a site booking.
       if (contact.reason === 'BOOKING') { delete contact.collecting; delete contact.reason; delete contact.awaitingServiceDetails; }
-      return { ...base, text: answer, reason: 'PET_SERVICE_INFO', petServiceBooking: booking && petServiceAnswer(input.petService, text) === null };
+      if (grooming && !channel && (booking || input.petService.selfBookingEnabled)) contact.bookingChoiceOffered = true;
+      return { ...base, text: answer, reason: 'PET_SERVICE_INFO', petServiceBooking: booking && petServiceAnswer(input.petService, text) === null, petServiceChannel: channel };
     }
   }
-  if (medical || askHuman || booking) { contact.collecting = true; contact.reason = medical ? 'MEDICAL' : askHuman ? 'HUMAN_REQUEST' : 'BOOKING'; contact.summary ??= text.slice(0, 2000); }
+  if (medical || askHuman || booking) { contact.collecting = true; contact.reason = medical ? 'MEDICAL' : contact.bookingChannel === 'CALLBACK' ? 'CALLBACK' : askHuman ? 'HUMAN_REQUEST' : 'BOOKING'; contact.summary ??= text.slice(0, 2000); }
   const phoneMatch = text.match(/(?:\+?7|8)?[\s(.-]*\d{3}[\s).-]*\d{3}[\s.-]*\d{2}[\s.-]*\d{2}(?!\d)/u)?.[0];
   const provided = providedCallbackPhone(text);
   if (provided) {
@@ -76,7 +95,7 @@ function decideCore(input: DecisionInput): AdminDecision {
   }
   const explicitName = text.match(/(?:меня\s+зовут|имя\s*[:—-])\s*([А-ЯЁа-яё][А-ЯЁа-яё-]{1,29}(?:\s+[А-ЯЁа-яё][А-ЯЁа-яё-]{1,29})?)/iu)?.[1];
   const nameOnly = text.replace(phoneMatch ?? '\0', '').replace(/[,;:.]/g, '').trim();
-  const simpleName = contact.collecting && !contact.awaitingServiceDetails && !contact.name && /^[А-ЯЁ][а-яё-]{1,29}(?:\s+[А-ЯЁ][а-яё-]{1,29}){0,2}$/u.test(nameOnly) && !/^(?:Да|Нет|Хочу|Можно|Спасибо|Здравствуйте|Добрый|Перезвоните|Запишите|Согласна|Согласен|Разрешаю|Передавайте|Ладно)(?:\s|$)/u.test(nameOnly) ? nameOnly : undefined;
+  const simpleName = !callbackChoice && contact.collecting && !contact.awaitingServiceDetails && !contact.name && /^[А-ЯЁ][а-яё-]{1,29}(?:\s+[А-ЯЁ][а-яё-]{1,29}){0,2}$/u.test(nameOnly) && !/^(?:Да|Нет|Хочу|Можно|Спасибо|Здравствуйте|Добрый|Перезвоните|Запишите|Согласна|Согласен|Разрешаю|Передавайте|Ладно)(?:\s|$)/u.test(nameOnly) ? nameOnly : undefined;
   const openingName = contact.collecting && !contact.name ? text.match(/^([А-ЯЁ][а-яё-]{1,29})[.,]\s+(?:Мой|мой|Телефон|телефон)/u)?.[1] : undefined;
   const name = explicitName ?? simpleName ?? openingName;
   if (name && contact.collecting) contact.name = name.trim();
@@ -102,7 +121,7 @@ function decideCore(input: DecisionInput): AdminDecision {
     // A clinical question stops clinical answers, while administrative contact
     // collection can continue. An explicit request for a human still takes over.
     if (!contact.name || !contact.phone || !contact.callbackMessageId) return { ...base, text: `${medical ? `${t.medical}\n\n` : ''}${missingContactPrompt(settings, contact, offHours)}`, purpose: 'CONTACT', reason: contact.reason ?? 'CONTACT', handoff: askHuman, needsAttention: contact.reason === 'MEDICAL' || askHuman };
-    return { ...base, text: profile.direction === 'CLINIC' ? submittedReply(settings, input.now) : `Передал ваше обращение сотруднику ${profile.direction === 'GROOMING' ? 'груминга' : 'зоогостиницы'}. Он свяжется с вами по указанному номеру. Запись пока не подтверждена.`, purpose: 'SUBMITTED', createInquiry: true, handoff: true, reason: contact.reason ?? 'BOOKING' };
+    return { ...base, text: profile.direction === 'CLINIC' ? submittedReply(settings, input.now) : profile.direction === 'GROOMING' ? 'Передал заявку администратору груминга. Он свяжется с вами по указанному номеру в рабочее время и согласует запись. Запись пока не подтверждена.' : 'Передал ваше обращение сотруднику зоогостиницы. Он свяжется с вами по указанному номеру. Запись пока не подтверждена.', purpose: 'SUBMITTED', createInquiry: true, handoff: true, reason: contact.reason ?? 'BOOKING' };
   }
   const matched = profile.knowledge.filter(k => input.intent?.action === 'KNOWLEDGE' ? k.id === input.intent.knowledgeId : k.keywords.some(word => normalized.includes(word.toLocaleLowerCase('ru-RU').replace(/ё/g, 'е'))));
   if (matched.length === 1) return { ...base, text: matched[0].answer, reason: `KNOWLEDGE:${matched[0].id}` };
