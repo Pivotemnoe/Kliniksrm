@@ -1,0 +1,7 @@
+ARG BASE_GATEWAY_IMAGE
+FROM ${BASE_GATEWAY_IMAGE}
+ARG RELEASE_REVISION
+ARG OWNER_SCRIPT_SHA256
+LABEL org.opencontainers.image.revision=$RELEASE_REVISION
+COPY candidate/pet-hotel.js /app/apps/owner-gateway/dist/public/pet-hotel.js
+RUN echo "$OWNER_SCRIPT_SHA256  /app/apps/owner-gateway/dist/public/pet-hotel.js" | sha256sum -c -

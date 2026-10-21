@@ -1,0 +1,22 @@
+import {execFileSync} from 'node:child_process';
+import {readFile,writeFile,mkdir,copyFile} from 'node:fs/promises';
+import {resolve,join} from 'node:path';
+import {createHash} from 'node:crypto';
+
+const root=process.cwd(),dest=resolve(process.argv[2]||'output/deployments/pet-hotel-owner-state-20261021-r1/packet');
+const revision=execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
+if(execFileSync('git',['status','--porcelain','--untracked-files=no'],{encoding:'utf8'}).trim())throw Error('Commit the release sources first');
+const script=await readFile(join(root,'apps/owner-gateway/public/pet-hotel.js'));
+const hash=v=>createHash('sha256').update(v).digest('hex');
+if(hash(script)!=='038bc46d3d629ae0d91df9c8f1d94719b1f0b744a44c89511b3907885eb5dd3f')throw Error('Reviewed candidate differs');
+const rollback=execFileSync('git',['show','8c51960999eb49485c8853ef01e3678cd9877b3f:apps/owner-gateway/public/pet-hotel.js']);
+if(hash(rollback)!=='67a0f5110ea2acad75f4ad689bd3fbfee40f3fef9bae57ab849bc30a40bb6caa')throw Error('Rollback differs');
+await mkdir(join(dest,'candidate'),{recursive:true});await mkdir(join(dest,'rollback'),{recursive:true});
+await writeFile(join(dest,'candidate/pet-hotel.js'),script);await writeFile(join(dest,'rollback/pet-hotel.js'),rollback);
+for(const file of ['Dockerfile.gateway','release-owner-static.py'])await copyFile(join(root,'deploy/pet-hotel-owner-state',file),join(dest,file));
+const manifest={releaseId:'pet-hotel-owner-state-20261021-r1',revision,component:'owner-public-pet-hotel-state',hostName:'msk-1-vm-d817',previous:{reference:'temichevvet-owner-gateway:pet-hotel-integrated-8c51960999eb',id:'sha256:9564e1f2b3ef213cc9ba68f2c8b86e6b64eea7b9160ad480f5448a13052a8ec0'},candidate:{reference:'temichevvet-owner-gateway:pet-hotel-owner-state-'+revision.slice(0,12)},file:'/app/apps/owner-gateway/dist/public/pet-hotel.js',previousHash:hash(rollback),candidateHash:hash(script),databaseMigrations:false,maxConfigurationChanges:false,rollbackCommand:'python3 release-owner-static.py rollback'};
+await writeFile(join(dest,'release.json'),JSON.stringify(manifest,null,2)+'\n');
+const files=['Dockerfile.gateway','release-owner-static.py','release.json','candidate/pet-hotel.js','rollback/pet-hotel.js'];
+const checks={};for(const file of files)checks[file]=hash(await readFile(join(dest,file)));
+await writeFile(join(dest,'checksums.json'),JSON.stringify(checks,null,2)+'\n');
+console.log(JSON.stringify({dest,revision,files:files.length,candidate:manifest.candidate.reference}));
