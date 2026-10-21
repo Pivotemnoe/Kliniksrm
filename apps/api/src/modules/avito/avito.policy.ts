@@ -47,8 +47,10 @@ function decideCore(input: DecisionInput): AdminDecision {
   if (/по направлению|(?:направление|направления)\s+(?:есть|нет)|есть\s+направление|без\s+направления/u.test(normalized)) contact.referralKnown = true;
   if (clinicUrgency(normalized)) return { ...base, handoff: true, reason: 'URGENT', text: t.urgent };
   if (input.mediaType && input.mediaType !== 'text') return { ...base, handoff: !offHours, reason: 'UNSUPPORTED_MEDIA', text: offHours ? `Не могу надёжно разобрать это вложение. ${dutyDoctorReply(input.clinicPhone)}` : 'Передам вложение сотруднику. Уточнить детали можно здесь в переписке.' };
-  const refusesWebsiteOnly = profile.direction === 'GROOMING' && /не\s+(?:хочу|буду)(?:\s+\S+){0,3}\s+(?:сайт|ссылк|онлайн)|без\s+сайт/u.test(normalized) && !/не\s+звон|без\s+телефон|не\s+хочу\s+(?:оставлять|давать|передавать)\s+(?:номер|телефон)/u.test(normalized);
-  if (!refusesWebsiteOnly && /(?:не\s+(?:хочу|буду|разрешаю|согласен|согласна)\s*(?:передавать|оставлять|давать)?|не\s+звоните|без\s+телефона|только\s+здесь)/u.test(normalized)) {
+  const callsDeclined = /не\s+звон|без\s+телефон|не\s+хочу\s+(?:оставлять|давать|передавать)\s+(?:номер|телефон)/u.test(normalized);
+  const refusesWebsiteOnly = profile.direction === 'GROOMING' && /не\s+(?:хочу|буду|надо|нужно)(?:\s+\S+){0,4}\s+(?:сайт|ссылк|онлайн)|(?:сайт|ссылк|онлайн)\S*\s+(?:мне\s+)?не\s+(?:нуж|хочу|надо)|без\s+сайт|^не\s+сайт/u.test(normalized) && !callsDeclined;
+  const websiteInsteadOfCalls = profile.direction === 'GROOMING' && callsDeclined && !/сайт\S*\s+не|не\s+(?:хочу|надо|нужно)(?:\s+\S+){0,3}\s+сайт/u.test(normalized) && /сайт|онлайн|самостоятельн/u.test(normalized);
+  if (!refusesWebsiteOnly && !websiteInsteadOfCalls && /(?:не\s+(?:хочу|буду|разрешаю|согласен|согласна)\s*(?:передавать|оставлять|давать)?|не\s+звоните|без\s+телефона|только\s+здесь)/u.test(normalized)) {
     delete contact.callbackAt; delete contact.callbackMessageId;
     return { ...base, handoff: true, reason: 'CONTACT_DECLINED', text: input.mode && input.mode !== 'BOT' ? null : offHours ? `Не буду оформлять заявку на звонок. ${dutyDoctorReply(input.clinicPhone)}` : 'Можно продолжить здесь. Передам диалог сотруднику без заявки на обратный звонок.' };
   }

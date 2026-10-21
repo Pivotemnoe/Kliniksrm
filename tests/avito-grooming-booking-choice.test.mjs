@@ -67,3 +67,13 @@ test('medical urgency, a request for human chat and refusal of calls still take 
  const no=reply('Не звоните, только здесь',{contact:{bookingChoiceOffered:true}});
  assert.equal(no.reason,'CONTACT_DECLINED');assert.equal(no.createInquiry,false);assert.equal(no.contact.callbackMessageId,undefined);
 });
+
+test('natural refusals of either channel do not reverse the customer preference',()=>{
+ for(const text of ['Не надо сайт, пусть администратор позвонит','Не сайт, здесь','Сайт не нужен']){
+  const d=reply(text,{contact:{bookingChoiceOffered:true}});assert.equal(d.contact.bookingChannel,'CALLBACK');assert.equal(d.createInquiry,false);assert.doesNotMatch(d.text,/https:/);
+ }
+ const site=reply('Не звоните, я сама запишусь на сайте',{contact:{bookingChoiceOffered:true,phone:'+79001112233',callbackMessageId:'old',callbackAt:'old'}});
+ assert.equal(site.contact.bookingChannel,'WEBSITE');assert.ok(site.text.includes(petService.siteUrl));assert.equal(site.contact.callbackMessageId,undefined);assert.equal(site.createInquiry,false);
+ const neither=reply('Не звоните и на сайт не хочу, только здесь',{contact:{bookingChoiceOffered:true}});
+ assert.equal(neither.reason,'CONTACT_DECLINED');assert.equal(neither.createInquiry,false);assert.doesNotMatch(neither.text,/https:/);
+});
