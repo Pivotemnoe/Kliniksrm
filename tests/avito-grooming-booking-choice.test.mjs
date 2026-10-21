@@ -9,7 +9,7 @@ const settings=defaultAvitoSettings();
 settings.profiles.find(p=>p.direction==='GROOMING').enabled=true;
 settings.listings=[{id:'groom-choice',title:'Груминг',direction:'GROOMING',enabled:true}];
 const petService={direction:'GROOMING',available:true,selfBookingEnabled:true,siteUrl:'https://pet.temichevvet.ru/',address:null};
-const reply=(text,extra={})=>decideAvitoReply({settings,listingId:'groom-choice',text,messageId:'incoming',petService,...extra});
+const reply=(text,extra={})=>decideAvitoReply({settings,listingId:'groom-choice',text,messageId:'incoming',petService,now:new Date('2026-10-21T09:00:00Z'),...extra});
 
 test('booking starts with a choice without collecting contacts or forcing a website visit',()=>{
  const d=reply('Хочу записать собаку на стрижку');
@@ -37,8 +37,30 @@ test('here means callback after the choice; channel words are never mistaken for
   const named=reply('Анна',{contact:d.contact});assert.equal(named.contact.name,'Анна');assert.equal(named.createInquiry,false);
   const done=reply('Мой номер +7 900 111-22-33',{contact:named.contact,messageId:'real-phone-source'});
   assert.equal(done.createInquiry,true);assert.equal(done.contact.callbackMessageId,'real-phone-source');
-  assert.match(done.text,/администратору груминга/);assert.match(done.text,/в рабочее время/);assert.match(done.text,/пока не подтверждена/);
+  assert.match(done.text,/администратору груминга/);assert.match(done.text,/09:00 до 19:00/);assert.match(done.text,/пока не подтверждена/);
  }
+});
+
+test('grooming callback is saved around 09:00 and 19:00 without promising an immediate administrator',()=>{
+ for(const [at,period] of [['2026-10-21T05:59:59Z','сегодня после 09:00'],['2026-10-21T06:00:00Z',null],['2026-10-21T15:59:59Z',null],['2026-10-21T16:00:00Z','завтра после 09:00'],['2026-10-21T20:59:59Z','завтра после 09:00'],['2026-10-21T21:00:00Z','сегодня после 09:00']]){
+  const now=new Date(at);
+  const d=reply('Перезвоните, меня зовут Анна, +7 900 111-22-33',{now,messageId:'callback-source'});
+  assert.equal(d.createInquiry,true);assert.equal(d.handoff,true);assert.equal(d.direction,'GROOMING');assert.equal(d.contact.callbackMessageId,'callback-source');
+  assert.match(d.text,/09:00 до 19:00/);assert.match(d.text,/Запись пока не подтверждена/);
+  if(period){assert.ok(d.text.includes(period),at);assert.match(d.text,/Заявку сохранил/);assert.doesNotMatch(d.text,/Передал заявку|дежур|ночн|двойн|ровно/);}
+  else {assert.match(d.text,/Передал заявку/);assert.doesNotMatch(d.text,/сейчас.*не работает|завтра после/i);}
+ }
+});
+
+test('the night notice survives short booking choices, contact collection, human requests and refusal of calls',()=>{
+ const now=new Date('2026-10-21T19:00:00Z');
+ const first=reply('Хочу записаться',{now});assert.match(first.text,/не работает/);assert.match(first.text,/завтра после 09:00/);
+ const here=reply('Здесь',{now,contact:first.contact});assert.equal(here.contact.bookingChannel,'CALLBACK');assert.match(here.text,/завтра после 09:00/);
+ const name=reply('Анна',{now,contact:here.contact});assert.equal(name.contact.name,'Анна');assert.match(name.text,/завтра после 09:00/);
+ const human=reply('Соедините с сотрудником',{now});assert.equal(human.handoff,true);assert.match(human.text,/завтра после 09:00/);assert.doesNotMatch(human.text,/Передам диалог администратору\./);
+ const no=reply('Не звоните, только здесь',{now,contact:first.contact});assert.equal(no.createInquiry,false);assert.match(no.text,/оформлять не буду/);assert.match(no.text,/ответит в переписке/);
+ const hours=reply('Когда работает администратор?',{now});assert.match(hours.text,/09:00 до 19:00/);assert.equal(hours.text.split('Сейчас администратор').length,2);
+ const urgent=reply('Собака задыхается',{now});assert.equal(urgent.reason,'URGENT');assert.doesNotMatch(urgent.text,/завтра|09:00/);
 });
 test('refusing a website keeps the administrator callback available',()=>{
  const d=reply('Не хочу на сайт, пусть администратор позвонит');

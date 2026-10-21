@@ -22,7 +22,7 @@ test('pet-service conversations use isolated PostgreSQL, module facts and separa
       for (const [prefix, request, expected] of [['groom', 'Хочу записаться на стрижку', /пока закрыта/], ['hotel', 'Сколько стоит и как забронировать?', /700 ₽/]]) {
         const id = chat(prefix); api.add(id, 'site-1', request); const c = await load(id);
         assert.equal(c.stage, 'PET_SERVICE_INFO'); assert.equal(c.contact.collecting, undefined); assert.equal(c.inquiries.length, 0);
-        const draft = c.outbox.find(x => x.status === 'DRAFT'); assert.match(draft.text, expected); assert.deepEqual(draft.replyContext, { petService: true });
+        const draft = c.outbox.find(x => x.status === 'DRAFT'); assert.match(draft.text, expected); assert.deepEqual(draft.replyContext, prefix === 'groom' ? { petService: true, groomingAdministratorWindow: 'WORKING' } : { petService: true });
         const operation = await approve(c); await service.deliver(operation.operationId);
         assert.equal((await service.getConversation(c.id)).outbox.find(x => x.id === operation.operationId).status, 'SENT');
         assert.equal(await prisma.groomingReservation.count(), groomingBookingsBefore); assert.equal(await prisma.petHotelReservation.count(), hotelBookingsBefore);
@@ -45,7 +45,7 @@ test('pet-service conversations use isolated PostgreSQL, module facts and separa
       api.add(id,'web-choice-2','Самостоятельно'); c=await load(id);
       assert.equal(c.contact.bookingChannel,'WEBSITE'); assert.equal(c.contact.collecting,undefined); assert.equal(c.inquiries.length,0);
       const draft=c.outbox.find(x=>x.status==='DRAFT'); assert.match(draft.text,/пока закрыта/); assert.match(draft.text,/pet.temichevvet.ru/);
-      assert.deepEqual(draft.replyContext,{petService:true,bookingIntent:true,bookingChannel:'WEBSITE'});
+      assert.deepEqual(draft.replyContext,{petService:true,bookingIntent:true,bookingChannel:'WEBSITE',groomingAdministratorWindow:'WORKING'});
       const op=await approve(c); await service.deliver(op.operationId);
       assert.equal((await service.getConversation(c.id)).outbox.find(x=>x.id===op.operationId).status,'SENT');
     });
@@ -55,6 +55,20 @@ test('pet-service conversations use isolated PostgreSQL, module facts and separa
       await service.deliver(operation.operationId);
       assert.equal((await service.getConversation(c.id)).outbox.find(x => x.id === operation.operationId).status, 'CANCELLED'); assert.equal(api.sent.length, sent);
       await prisma.petHotelRoom.update({ where: { id: room.id }, data: { dailyRate: 700 } });
+    });
+    await t.test('night callbacks persist in the grooming queue, and stale working-hour replies are not sent', async () => {
+      const savedNow=service.now;
+      try {
+        service.now=()=>new Date('2026-10-21T15:59:59Z');
+        const id=chat('groom-closing');api.add(id,'closing-1','Хочу записаться');const c=await load(id);const op=await approve(c);
+        service.now=()=>new Date('2026-10-21T16:00:00Z');const sent=api.sent.length;await service.deliver(op.operationId);
+        assert.equal((await service.getConversation(c.id)).outbox.find(x=>x.id===op.operationId).status,'CANCELLED');assert.equal(api.sent.length,sent);
+        const night=chat('groom-night');api.add(night,'night-1','Перезвоните, меня зовут Анна, +7 900 111-22-33');const n=await load(night);
+        assert.equal(n.inquiries.length,1);assert.equal(n.inquiries[0].direction,'GROOMING');assert.equal(n.requestId,null);
+        const draft=n.outbox.find(x=>x.status==='DRAFT');assert.match(draft.text,/Заявку сохранил/);assert.match(draft.text,/завтра после 09:00/);
+        const delivered=await approve(n);await service.deliver(delivered.operationId);assert.equal((await service.getConversation(n.id)).outbox.find(x=>x.id===delivered.operationId).status,'SENT');
+        await load(night);assert.equal((await service.getConversation(n.id)).inquiries.length,1);
+      } finally {service.now=savedNow;}
     });
     await t.test('free wording recognized as booking retains its site referral through delivery validation', async () => {
       const configured = f.model.configured, classify = f.model.classify;

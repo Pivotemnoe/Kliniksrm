@@ -2,7 +2,7 @@ import { normalizePhoneForLookup } from '../../common/phone';
 import { AvitoSettings, Direction, effectivePrompt } from './avito.settings';
 import { CrmAnswer, crmQuestion } from './avito-crm-knowledge.service';
 import type { AvitoModelIntent } from './avito-model-gateway.client';
-import { administratorWorking, dutyDoctorReply, nightNotice, submittedReply } from './avito-availability';
+import { administratorWorking, dutyDoctorReply, groomingAdministratorNotice, groomingAdministratorWindow, groomingReplyWithHours, nightNotice, submittedReply } from './avito-availability';
 import { clinicPhoneText, clinicUrgency, currentMedicalText } from './avito-clinic-guidance';
 import { petSpecies } from './avito-service-query';
 import { petServiceAnswer, PetServiceContext } from './avito-pet-services';
@@ -12,6 +12,16 @@ export type AdminDecision = { text: string | null; purpose: 'REPLY' | 'CRM_REPLY
 type DecisionInput = { settings: AvitoSettings; listingId: string | null; text: string; messageId: string; contact?: ContactState; mode?: string; mediaType?: string; now?: Date; crmAnswer?: CrmAnswer | null; intent?: AvitoModelIntent | null; clinicPhone?: string | null; nightNoticeDelivered?: boolean; skipAvailability?: boolean; petService?: PetServiceContext };
 export function decideAvitoReply(input: DecisionInput): AdminDecision {
   let decision = decideCore(input);
+  if (!input.skipAvailability && decision.text && decision.direction === 'GROOMING' && !['URGENT', 'GROOMING_ADMINISTRATOR_HOURS'].includes(decision.reason)) {
+    const window = groomingAdministratorWindow(input.settings, input.now);
+    if (decision.purpose === 'SUBMITTED') return { ...decision, text: window === 'WORKING'
+      ? `Передал заявку администратору груминга. Он на связи с ${input.settings.administratorSchedule.opensAt} до ${input.settings.administratorSchedule.closesAt}, свяжется с вами и согласует запись. Запись пока не подтверждена.`
+      : `Заявку сохранил для администратора груминга. ${groomingAdministratorNotice(input.settings, input.now)} Он свяжется с вами по указанному номеру и согласует запись. Запись пока не подтверждена.` };
+    if (window !== 'WORKING' && ['DIRECT_HUMAN_REQUEST', 'CONTACT_DECLINED', 'UNSUPPORTED_MEDIA', 'NO_APPROVED_ANSWER', 'AMBIGUOUS_KNOWLEDGE'].includes(decision.reason)) return { ...decision, text: `${groomingAdministratorNotice(input.settings, input.now)}\n\n${decision.reason === 'CONTACT_DECLINED' ? 'Заявку на звонок оформлять не буду. Можно продолжить здесь — администратор ответит в переписке.' : decision.reason === 'UNSUPPORTED_MEDIA' ? 'Не могу надёжно разобрать вложение. Оно сохранено в диалоге для администратора.' : 'Обращение сохранено в диалоге для администратора. Можно написать подробности здесь.'}` };
+    return { ...decision, text: window !== 'WORKING' && decision.purpose === 'CONTACT'
+      ? `${groomingAdministratorNotice(input.settings, input.now)}\n\n${decision.text}`
+      : groomingReplyWithHours(input.settings, decision.text, input.now) };
+  }
   if (input.skipAvailability || !decision.text || decision.direction !== 'CLINIC') return decision;
   const outsideHours = !administratorWorking(input.settings, input.now);
   if (decision.reason === 'URGENT') {
@@ -61,6 +71,7 @@ function decideCore(input: DecisionInput): AdminDecision {
   const askHuman = input.intent?.action === 'HUMAN' || /(?:оператор|живой\s+(?:человек|администратор)|соедините|сотрудник|позвоните|перезвоните|жалоб)/u.test(normalized);
   const booking = input.intent?.action === 'BOOKING' || /(?:запис|запиш|заявк|хочу\s+(?:на|к|подстричь|заселить)|забронировать|нужен\s+прием)/u.test(normalized);
   const grooming = profile.direction === 'GROOMING' && input.petService?.direction === 'GROOMING';
+  if (grooming && !medical && /(?:администратор\S*.{0,35}(?:когда|работ|время|час|ноч)|(?:когда|работ|график|время|час).{0,35}администратор)/u.test(normalized)) return { ...base, text: `${groomingAdministratorNotice(settings, input.now)} Заявку на запись можно оставить здесь в любое время; время визита согласует администратор.`, reason: 'GROOMING_ADMINISTRATOR_HOURS' };
   const callbackChoice = grooming && (refusesWebsiteOnly || /перезвон|позвон(?:ите|ить|ил|ит|ит\s+мне)|обратн\S*\s+звон/u.test(normalized)
     || (contact.bookingChoiceOffered || contact.bookingChannel) && /^(?:здесь|тут|в\s+авито|через\s+администратора)[.!\s]*$/u.test(normalized)
     || contact.bookingChoiceOffered && /^(?:да|давайте|оставим|хорошо)[.!\s]*$/u.test(normalized));
