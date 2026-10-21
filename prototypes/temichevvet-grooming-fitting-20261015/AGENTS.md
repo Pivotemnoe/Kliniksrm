@@ -1,3 +1,12 @@
+## Real portfolio and reciprocal hotel promotion — 2026-10-21
+
+- Owner supplied 17 actual grooming photographs and before/after collages. Retouch source backgrounds and clutter, preserving actual animal/person identity, pose, coat length and real haircut results. Use them on the homepage and a new «Наши работы» gallery; keep real portfolio separate from illustrative breed catalogue looks.
+- Latest correction: replace blue tables (not present in current salon) with the actual black non-slip tables. Match the grey walls and mirror of IMG_4806 / IMG_4809, including subtle recognisable red garland where suitable. Add a small actual TemichevVET logo to each photo. Do not invent a groomer action or change the actual before/after result. Preserve originals and private source-to-edited manifest.
+- Remove obsolete stock/generated-photo source captions for replaced homepage photographs. Illustrative catalogue remains clearly identified as discussion references.
+- Add a prominent photographic pet-hotel teaser on grooming, a menu link and direct transition to https://pet.temichevvet.ru/pet-hotel/. Use «номера», cats and dogs up to 10 kg, minimum 2 days, check-in 09:00–18:00, own food and bowls. Show room rates from the fresh live catalogue rather than duplicating editable CRM prices.
+- The owner has since authorized the public site launch; this scoped reversible grooming static update supersedes earlier local-only release limits. Coordinate with CRM redesign; preserve /pet-hotel/, API, gateway, CRM, databases and device state. Build and verify local responsive UI before static publication.
+- Owner's direct clarification verified in the authorized Avito chat on 21 October: haircuts require washing; hygiene may be without washing; dry brushing remains. Hide discontinued dog/cat dry haircuts on the storefront; coordinate retirement/import with the CRM owner without deleting historical records.
+
 ## Current visual revision — 2026-10-20
 
 - Latest owner correction: IMG_4806 is for the grooming teaser ON THE PET-HOTEL WEBSITE ONLY. Remove it from the standalone grooming frontend. Restore accepted chapter 03 «Детали стрижки» with process-meet.jpg; preserve the rest of the grooming design, catalogue and booking. The selected retouched salon photo stays in the hotel asset directory.

@@ -1,5 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import {ArrowRight,Check} from '@phosphor-icons/react';
+import {groomingServiceOffered} from './pricing-data';
 
 const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Moscow',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 const clock=value=>new Intl.DateTimeFormat('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'}).format(new Date(value));
@@ -12,7 +13,7 @@ export function SiteBooking({config,breed,priceContext,notes,onNotes,lookIds,sel
  const currentRequest=useRef(0);
  const [refreshKey,setRefreshKey]=useState(0);
  const species=breed.species==='cat'?'CAT':'DOG';
- const matching=(storefront?.services||[]).filter(s=>{const d=s.catalogData||{};if(d.category==='SUPPLEMENT')return false;if(d.species&&d.species!=='ANY'&&d.species!==species)return false;if(species==='CAT')return !d.condition||d.condition===(priceContext?.condition||'clean');if(priceContext?.rowId)return d.breedRowId===priceContext.rowId||!d.breedId;return !d.breedId||d.breedId===breed.id;});
+ const matching=(storefront?.services||[]).filter(s=>{const d=s.catalogData||{};if(!groomingServiceOffered(s)||d.category==='SUPPLEMENT')return false;if(d.species&&d.species!=='ANY'&&d.species!==species)return false;if(species==='CAT')return !d.condition||d.condition===(priceContext?.condition||'clean');if(priceContext?.rowId)return d.breedRowId===priceContext.rowId||!d.breedId;return !d.breedId||d.breedId===breed.id;});
  const service=matching.find(s=>s.id===serviceId);
  useEffect(()=>{let live=true;setLoadError('');fetch('/v1/public/grooming/catalog',{cache:'no-store'}).then(async r=>{if(!r.ok)throw Error('Не удалось обновить расписание');return r.json();}).then(data=>{if(live)setStorefront(data.storefront);}).catch(e=>{if(live)setLoadError(e.message);});return()=>{live=false;};},[refreshKey]);
  useEffect(()=>{if(!matching.some(s=>s.id===serviceId)){const preferred=matching.find(s=>s.bookable&&s.catalogData?.kind===(priceContext?.kind||'full'))||matching.find(s=>s.bookable)||matching[0];setService(preferred?.id||'');}},[storefront,breed.id,priceContext?.rowId,priceContext?.condition]);

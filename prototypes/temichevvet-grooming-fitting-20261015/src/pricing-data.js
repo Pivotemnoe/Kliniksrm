@@ -4,10 +4,16 @@ export const PRICE_INCREASE_RUB = catalog.pricePolicy.increaseRub;
 export const DOG_PRICES = catalog.dogs;
 export const CAT_PRICES = catalog.cats;
 export const EXTRA_SERVICES = catalog.extras;
+// Owner policy, 21 Oct: dry brushing remains; haircuts require washing.
+const retiredHaircuts = new Set([
+ ...catalog.dogs.filter(breed => !breed.coatCare).map(breed => `dog:${breed.id}:dry`),
+ 'cat:clean:dry', 'cat:matted:dry',
+]);
+export const groomingServiceOffered = service => !retiredHaircuts.has(service.catalogKey);
 
 export const DOG_SERVICE_DETAILS = [
  {key:'dry',name:'Стрижка без мытья',description:'Для питомца, которого вы вымыли и расчесали дома.',includes:['Чистая шерсть без колтунов','Мытьё дома за день до визита или в день стрижки'],serviceId:'haircut'},
- {key:'hygiene',name:'Гигиенический уход',description:'Мытьё и аккуратные детали.',includes:['Мытьё и сушка феном','Чистка ушей','Окантовка морды, лап и ушей','Уход за зоной гигиены'],serviceId:'hygiene'},
+ {key:'hygiene',name:'Гигиенический уход',description:'Аккуратные детали. Возможен без мытья.',includes:['Мытьё и сушка — по согласованию','Чистка ушей','Окантовка морды, лап и ушей','Уход за зоной гигиены'],serviceId:'hygiene'},
  {key:'full',name:'Полный комплекс',description:'Мытьё, уход и согласованная форма.',includes:['Мытьё и сушка феном','Чистка ушей и подстригание когтей','Стрижка с учётом породы и ваших пожеланий','Тримминг для подходящих пород — по согласованию'],serviceId:'haircut'},
 ];
 

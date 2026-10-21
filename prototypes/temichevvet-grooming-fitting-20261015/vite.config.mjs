@@ -13,7 +13,8 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      "/v1/public/grooming": { target: process.env.GROOMING_DEV_API_URL || "http://127.0.0.1:4194", changeOrigin: false },
+      "/v1/public/grooming": { target: process.env.GROOMING_DEV_API_URL || "http://127.0.0.1:4194", changeOrigin: true },
+      "/v1/public/pet-hotel/catalog": { target: process.env.GROOMING_DEV_API_URL || "http://127.0.0.1:4194", changeOrigin: true },
     },
     host: "0.0.0.0",
     allowedHosts: ["terminal.local"],

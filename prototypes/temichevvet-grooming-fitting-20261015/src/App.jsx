@@ -4,6 +4,8 @@ import { GROOMING_BREEDS as BREEDS, GROOMING_SERVICES as SERVICES, GROOMING_LOOK
 import { useGroomingMotion } from "./motion";
 import { PriceList } from "./PriceList";
 import { SiteBooking } from "./SiteBooking";
+import { OurWorks } from "./OurWorks";
+import { HotelTeaser, HOTEL_URL } from "./HotelTeaser";
 
 const STORE = "temichevvet-grooming-wishes-v1";
 const DEVICE_QA = import.meta.env.VITE_GROOMING_QA_TRANSPORT === "device";
@@ -18,9 +20,9 @@ const initialParams=new URLSearchParams(window.location.search);
 const initialBreed=BREEDS.find(breed=>breed.id===initialParams.get("breed"))||BREEDS[0];
 const initialStyle=initialBreed.styles.find(style=>style.id===initialParams.get("style"))?.id||"shape";
 const chapters = [
- {name:"Знакомство",image:"process-hero.webp",tag:"Характер и привычки",text:"Расскажите, что нравится вашему питомцу."},
- {name:"Уход",image:"process-care.jpg",tag:"Уход за шерстью",text:"Обсудим состав ухода и ваши пожелания."},
- {name:"Детали стрижки",image:"process-meet.jpg",tag:"Форма и силуэт",text:"Выберите детали образа для обсуждения."},
+ {name:"Детали",image:"48887916443.jpg",tag:"Форма и силуэт",text:"Работы нашего салона — в деталях."},
+ {name:"Характер",image:"48887916699.jpg",tag:"У каждого — свой характер",text:"Уход подбираем для вашего питомца."},
+ {name:"Шерсть",image:"48888778139.jpg",tag:"Уход за шерстью",text:"Мягкость, объём и естественный силуэт."},
 ];
 function LookPhoto({breed,frame=0,className="",label}) {
  return <div className={"look-photo "+className} role="img" aria-label={label || breed.name}><img loading="lazy" src={breed.image} alt="" style={{transform:"translateX(-"+(frame*100/3)+"%)"}} /></div>;
@@ -39,10 +41,12 @@ export function App() {
  const [a,setA]=useState(initialStyle),[b,setB]=useState(initialStyle==="everyday"?"shape":"everyday"),[position,setPosition]=useState(50);
  const [savedOnly,setSavedOnly]=useState(false),[overlay,setOverlay]=useState(null),[menu,setMenu]=useState(false);
  const [chapter,setChapter]=useState(0),[motion,setMotion]=useState(true),[toast,setToast]=useState("");
+ const heroManualUntil=useRef(0);
  const [bookingContext,setBookingContext]=useState(null);
  const [config,setConfig]=useState({enabled:false,mode:"unavailable",privacyUrl:null});
  const breed=BREEDS.find(v=>v.id===breedId)||BREEDS[0];
  useGroomingMotion(motion,setChapter);
+ useEffect(()=>{const timer=setInterval(()=>{if(!motion||document.hidden||scrollY>80||Date.now()<heroManualUntil.current||matchMedia("(prefers-reduced-motion: reduce)").matches||document.activeElement?.closest(".hero"))return;setChapter(value=>(value+1)%chapters.length);},6500);return()=>clearInterval(timer);},[motion]);
  useEffect(()=>{if(initialParams.has("breed")&&location.hash==="#looks")requestAnimationFrame(()=>document.getElementById("looks")?.scrollIntoView({behavior:"instant"}));},[]);
  useEffect(()=>{if(VISUAL_PREVIEW){let live=true;fetch("/visual-preview-catalog.json").then(r=>r.json()).then(x=>{if(live)setConfig(x);}).catch(()=>{});return()=>{live=false;};}let live=true;const load=()=>fetch("/v1/public/grooming/catalog",{cache:"no-store"}).then(r=>{if(!r.ok)throw Error();return r.json();}).then(x=>{if(live)setConfig(x);}).catch(()=>{});void load();const timer=setInterval(()=>{if(document.visibilityState==="visible")void load();},30000);return()=>{live=false;clearInterval(timer);};},[]);
  useEffect(()=>{try{localStorage.setItem(STORE,JSON.stringify(saved));setStorageError("");}catch{setStorageError("Браузер не разрешил сохранение. Образы доступны до закрытия страницы.");}},[saved]);
@@ -59,7 +63,7 @@ export function App() {
  return <>
   <a className="skip-link" href="#catalogue">К каталогу образов</a>
   <header className="header"><a className="brand" href="#" aria-label="TemichevVET — груминг"><img src="/assets/temichevvet-logo.jpg" alt="TemichevVET"/><span>ГРУМИНГ</span></a>
-   <nav aria-label="Основное меню" className={menu?"nav is-open":"nav"}><a href="#services" onClick={()=>setMenu(false)}>Услуги и цены</a><a href="#catalogue" onClick={()=>setMenu(false)}>Образы</a><a href="#visit" onClick={()=>setMenu(false)}>О визите</a>{config.bookingPortalUrl&&<a className="mobile-cabinet" href={config.bookingPortalUrl}>Мой кабинет</a>}</nav>
+   <nav aria-label="Основное меню" className={menu?"nav is-open":"nav"}><a href="#works" onClick={()=>setMenu(false)}>Наши работы</a><a href="#services" onClick={()=>setMenu(false)}>Услуги и цены</a><a href="#catalogue" onClick={()=>setMenu(false)}>Образы</a><a className="hotel-menu-link" href={HOTEL_URL}>Зоогостиница ↗</a>{config.bookingPortalUrl&&<a className="mobile-cabinet" href={config.bookingPortalUrl}>Мой кабинет</a>}</nav>
    <button className="header-saved icon-button" onClick={openSaved} aria-label={"Сохранённые образы: "+saved.ids.length}><BookmarkSimple size={22}/>{saved.ids.length>0&&<span>{saved.ids.length}</span>}</button>
    {config.bookingPortalUrl&&<a className="text-link cabinet-link" href={config.bookingPortalUrl}>Мой кабинет</a>}<button className="button header-book" onClick={openBooking}>Записаться <ArrowRight size={22}/></button>
    <button className="mobile-menu icon-button" aria-label="Открыть меню" aria-expanded={menu} onClick={()=>setMenu(!menu)}>{menu?<X size={24}/>:<List size={24}/>}</button>
@@ -67,16 +71,17 @@ export function App() {
   {VISUAL_PREVIEW&&<aside className="visual-preview-note">Просмотр фотографий · <a href="http://127.0.0.1:4264/">Открыть проверенную версию с записью ↗</a><a href="http://127.0.0.1:4274/pet-hotel/">Зоогостиница ↗</a></aside>}
   <main>
    <section className="hero" aria-labelledby="hero-title">
-    <div className="hero-photography" aria-hidden="true">{chapters.map((c,i)=><img key={c.image} className={chapter===i?"active":""} src={"/assets/v1/"+c.image} alt="" fetchPriority={i===0?"high":"auto"}/>)}</div>
+    <div className="hero-photography" aria-hidden="true">{chapters.map((c,i)=><img key={c.image} className={chapter===i?"active":""} src={"/assets/works-20261021/"+c.image} alt="" fetchPriority={i===0?"high":"auto"}/>)}</div>
     <div className="hero-shade" aria-hidden="true"/>
-    <div className="hero-copy"><p className="eyebrow light">TEMICHEVVET · СОБАКИ И КОШКИ</p><h1 id="hero-title">БЛИЖЕ<br/>К ДЕТАЛЯМ.</h1><p className="hero-description">Посмотрите, как устроен уход,<br className="desktop-break"/> и обсудите стрижку с грумером.</p><div className="hero-actions"><button className="button" onClick={()=>go("services")}>Выбрать уход <ArrowRight size={23}/></button><a className="text-link white" href="#catalogue">Каталог образов <ArrowRight size={24}/></a></div></div>
+    <div className="hero-copy"><p className="eyebrow light">TEMICHEVVET · СОБАКИ И КОШКИ</p><h1 id="hero-title">БЛИЖЕ<br/>К ДЕТАЛЯМ.</h1><p className="hero-description">Наши стрижки и уход за шерстью.<br className="desktop-break"/> Найдите образ для своего питомца.</p><div className="hero-actions"><button className="button" onClick={()=>go("works")}>Наши работы <ArrowRight size={23}/></button><a className="text-link white" href="#services">Услуги и цены <ArrowRight size={24}/></a></div></div>
     <div className="hero-detail" key={chapter}><span>{chapters[chapter].tag}</span><p>{chapters[chapter].text}</p></div>
-    <div className="hero-bottom"><div className="chapters" aria-label="Этапы ухода">{chapters.map((c,i)=><button key={c.name} className={chapter===i?"selected":""} aria-pressed={chapter===i} onClick={()=>setChapter(i)}><span>0{i+1} / {c.name}</span><i/></button>)}</div><a href="#intro" className="hero-down" aria-label="Далее"><ArrowDown size={38} weight="thin"/></a><small>Процесс груминга · фото для концепции</small></div>
+    <div className="hero-bottom"><div className="chapters" aria-label="Фотографии наших работ">{chapters.map((c,i)=><button key={c.name} className={chapter===i?"selected":""} aria-pressed={chapter===i} onClick={()=>{heroManualUntil.current=Date.now()+18000;setChapter(i);}}><span>0{i+1} / {c.name}</span><i/></button>)}</div><a href="#intro" className="hero-down" aria-label="Далее"><ArrowDown size={38} weight="thin"/></a><small><button className="hero-pause" aria-label={motion?"Остановить смену фотографий":"Включить смену фотографий"} onClick={()=>setMotion(!motion)}>{motion?<Pause size={17}/>:<Play size={17}/>} {motion?"Пауза":"Показ"}</button><a href="#works">Все работы ↗</a></small></div>
    </section>
    <section className="intro section" id="intro">
     <div className="intro-copy reveal"><h2>ПОНЯТЬ ОБРАЗ.<br/>ОБСУДИТЬ ДЕТАЛИ.</h2><p>Для собак и кошек.<br/>Выберите образ и добавьте<br className="desktop-break"/> его к записи на груминг.</p><a className="text-link" href="#catalogue">Открыть каталог <ArrowRight size={23}/></a></div>
-    <div className="intro-photos">{["york","maine-coon"].map((id,i)=><figure className="reveal" key={id} style={{"--reveal-delay":i*90+"ms"}}><button onClick={()=>{chooseBreed(id);go("looks");}} aria-label={"Посмотреть образы: "+BREEDS.find(v=>v.id===id).name}><LookPhoto breed={BREEDS.find(v=>v.id===id)} frame={1}/></button><figcaption>{BREEDS.find(v=>v.id===id).name} · референс</figcaption></figure>)}<p className="image-note">Образы для обсуждения с грумером.</p></div>
+    <div className="intro-photos">{[{id:"48888338587",title:"Мягкость и объём"},{id:"48887918235",title:"Спокойный момент"}].map((item,i)=><figure className="reveal" key={item.id} style={{"--reveal-delay":i*90+"ms"}}><button onClick={()=>go("works")} aria-label={"Наши работы: "+item.title}><img className="real-intro-photo" src={"/assets/works-20261021/"+item.id+".jpg"} alt={item.title} loading="lazy"/></button><figcaption>{item.title}</figcaption></figure>)}<p className="image-note"><a href="#works">Из альбома нашего салона ↗</a></p></div>
    </section>
+   <OurWorks/>
    <section className="section visit" id="visit"><details><summary>Первый визит: что рассказать о питомце?<ArrowRight size={26}/></summary><p>Расскажите о привычках питомца, предыдущем груминге и пожеланиях к длине и форме. Состав ухода согласуем с вами. {config.bookingPortalUrl?"Грумера, стоимость и свободное время можно выбрать в кабинете. После подтверждения время будет забронировано.":"Стоимость, длительность и желаемое время в заявке подтверждает администратор."}</p></details></section>
    <section className="catalogue section" id="catalogue"><div className="section-heading reveal"><div><p className="eyebrow">КАТАЛОГ ОБРАЗОВ</p><h2>Начнём с породы.</h2></div><p>{DOG_COUNT} пород собак · {CAT_COUNT} разделов для кошек.<br/>{GROOMING_LOOK_COUNT} референсов для обсуждения.</p></div>
     <div className="species-selector" role="group" aria-label="Вид питомца"><button aria-pressed={species==="dog"} onClick={()=>chooseSpecies("dog")}>Собаки <span>{DOG_COUNT}</span></button><button aria-pressed={species==="cat"} onClick={()=>chooseSpecies("cat")}>Кошки <span>{CAT_COUNT}</span></button></div>
@@ -102,9 +107,10 @@ export function App() {
    </section>
    <section className="wish-section section"><BookmarkSimple size={35} weight="light"/><div><p className="eyebrow">КАРТОЧКА ПОЖЕЛАНИЙ</p><h2>Образ — с собой.</h2><p>Сохранено: {saved.ids.length}. Выбор хранится на этом устройстве.</p><label htmlFor="wishes">Что особенно нравится в образе?</label><textarea id="wishes" value={saved.notes} maxLength={1500} rows={3} placeholder="Например: оставить объём на ушах, обсудить длину корпуса" onChange={e=>setSaved(v=>({...v,notes:e.target.value}))}/></div><button className="button" onClick={openBooking}>Обсудить и записаться <ArrowRight size={22}/></button></section>
    <PriceList breed={breed} storefront={config.storefront} bookingPortalUrl={config.bookingPortalUrl} onShowLooks={id=>{chooseBreed(id);go("looks");}} onBook={context=>{const target=BREEDS.find(b=>b.id===context.breedId)||{id:context.breedId,name:context.breedName,species:context.species,size:"",defaultServiceId:"haircut"};if(BREEDS.some(b=>b.id===target.id))chooseBreed(target.id);setBookingContext({...context,breed:target});setOverlay("booking");}}/>
+   <HotelTeaser/>
    <section className="closing section reveal"><p className="eyebrow">НАЧНЁМ СО ЗНАКОМСТВА</p><h2>У вашего питомца<br/>свой характер.<br/><span>Расскажите о нём.</span></h2><button className="button" onClick={openBooking}>{config.bookingPortalUrl?"Выбрать время":"Оставить заявку"} <ArrowRight size={23}/></button></section>
   </main>
-  <footer className="footer"><a href="#" className="footer-brand">TemichevVET · груминг</a><p>Фото: Goochie Poochie Grooming / Pexels; главный кадр адаптирован с AI.<br/>Каталог: иллюстративные референсы для обсуждения с грумером.</p><button className="motion-button" onClick={()=>setMotion(!motion)} aria-pressed={motion}>{motion?<Pause size={17}/>:<Play size={17}/>}Движение {motion?"включено":"выключено"}</button>{config.mode==="qa"&&<p className="qa-note">{DEVICE_QA ? "Проверка на телефоне: вымышленные данные и тестовые сообщения MAX." : "Локальная проверка: заявки сохраняются в тестовой базе. Сообщения MAX перехватываются тестовым получателем."}</p>}</footer>
+  <footer className="footer"><a href="#" className="footer-brand">TemichevVET · груминг</a><p><a href="#works">Наши работы</a> · <a href={HOTEL_URL}>Зоогостиница ↗</a><br/>Каталог: иллюстративные образы для обсуждения с грумером.</p><button className="motion-button" onClick={()=>setMotion(!motion)} aria-pressed={motion}>{motion?<Pause size={17}/>:<Play size={17}/>}Движение {motion?"включено":"выключено"}</button>{config.mode==="qa"&&<p className="qa-note">{DEVICE_QA ? "Проверка на телефоне: вымышленные данные и тестовые сообщения MAX." : "Локальная проверка: заявки сохраняются в тестовой базе. Сообщения MAX перехватываются тестовым получателем."}</p>}</footer>
   <button className="help-button" onClick={()=>setOverlay("help")} aria-label="Помощь с записью"><ChatCircleDots size={26}/><span>Помочь с выбором?</span></button>
   {toast&&<div className="toast" role="status"><Check size={20}/>{toast}</div>}
   {overlay==="help"&&<Dialog title="Поможем с выбором" onClose={()=>setOverlay(null)}><p>Выберите породу, сохраните понравившиеся образы и расскажите о привычках питомца. Помощник соберёт эти пожелания в заявку.</p><div className="help-options"><button onClick={()=>{setOverlay(null);go("catalogue");}}>Хочу выбрать образ <ArrowRight size={21}/></button><button onClick={()=>setOverlay("booking:first")}>Это первый груминг <ArrowRight size={21}/></button><button onClick={openBooking}>Нужна помощь сотрудника <ArrowRight size={21}/></button></div><p className="muted">Стоимость, длительность и время визита согласует администратор.</p></Dialog>}
