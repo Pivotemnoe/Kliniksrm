@@ -27,7 +27,7 @@ export function ReportsPage() {
   const canReadVaccinations = ['reports.prevention.read', 'reports.prevention.generate', 'settings.read', 'settings.manage'].some(permission => hasPermission(employee, permission));
   return <div className="page reports-page">
     <PageHeader title="Отчёты" description={canReadFinance ? 'Финансовая отчётность и вакцинационные отчёты.' : 'Вакцинационные отчёты клиники.'} />
-    <Tabs key={`${canReadFinance}:${params.get('section')}`} defaultActiveKey={canReadFinance && params.get('section') !== 'vaccination' ? 'finance' : 'vaccination'} items={[
+    <Tabs key={`${canReadFinance}:${params.get('section')}`} defaultActiveKey={canReadVaccinations && (params.get('section') === 'vaccination' || !canReadFinance) ? 'vaccination' : 'finance'} items={[
       ...(canReadFinance ? [{ key: 'finance', label: 'Финансовые отчёты', children: <FinancialReports /> }] : []),
       ...(canReadVaccinations ? [{ key: 'vaccination', label: 'Вакцинации', children: <MonthlyPreventionReportPanel /> }] : []),
     ]} />
@@ -50,8 +50,8 @@ function FinancialReports() {
   return (
     <div className="page reports-page">
       <PageHeader
-        title="Отчёты"
-        description="Финансы, посещаемость, услуги, товары, сотрудники, вакцинации и состояние склада."
+        title="Финансовые отчёты"
+        description="Финансы, посещаемость, услуги, товары, сотрудники и состояние склада."
         extra={
           <Space wrap>
             <Button
