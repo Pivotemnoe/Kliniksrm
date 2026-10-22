@@ -171,7 +171,7 @@ export function DashboardPage() {
         />
         <DashboardActionTile
           title="Оплаты"
-          value={formatMoney(summary?.finance.paymentsTodayAmount ?? 0)}
+          value={hasPermission(employee, 'business.read') ? formatMoney(summary?.finance.paymentsTodayAmount ?? 0) : 'Открыть'}
           hint={`Неоплаченных ${summary?.finance.unpaidBills ?? 0}`}
           icon={<WalletOutlined />}
           loading={dashboardQuery.isLoading}
@@ -1000,7 +1000,7 @@ function EmployeeDashboard({
         {hasPermission(employee, 'billing.read') ? (
           <DashboardActionTile
             title="Счета"
-            value={formatMoney(summary.finance.paymentsTodayAmount)}
+            value={hasPermission(employee, 'business.read') ? formatMoney(summary.finance.paymentsTodayAmount) : 'Открыть'}
             hint={`Не оплачено ${summary.finance.unpaidBills}`}
             icon={<WalletOutlined />}
             loading={loading}

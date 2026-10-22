@@ -280,8 +280,8 @@ export class DashboardService {
         billsToday,
         unpaidBills,
         paidBillsToday,
-        paymentsTodayAmount: decimalToNumber(paymentsToday._sum.amount) ?? 0,
-        refundsTodayAmount: Math.abs(decimalToNumber(refundsToday._sum.amount) ?? 0),
+        paymentsTodayAmount: canRead('business.read') ? decimalToNumber(paymentsToday._sum.amount) ?? 0 : 0,
+        refundsTodayAmount: canRead('business.read') ? Math.abs(decimalToNumber(refundsToday._sum.amount) ?? 0) : 0,
       } : { billsToday: 0, unpaidBills: 0, paidBillsToday: 0, paymentsTodayAmount: 0, refundsTodayAmount: 0 },
       hospital: canRead('hospital.read') ? {
         activePatients: activeHospital,

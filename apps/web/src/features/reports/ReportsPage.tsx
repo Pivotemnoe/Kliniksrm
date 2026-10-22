@@ -1,3 +1,6 @@
+import { useCurrentEmployee } from '../../auth/useAuth';
+import { hasPermission } from '../../auth/permissions';
+import { useSearchParams } from 'react-router-dom';
 import { MonthlyPreventionReportPanel } from './MonthlyPreventionReportPanel';
 import {
   DownloadOutlined,
@@ -17,6 +20,21 @@ import { getClinicReport } from './reports.api';
 import { ClinicReport, ReportAdministeredVaccinationItem, ReportIdentifiedAnimal, ReportSalesRow, ReportVaccinationItem } from './types';
 
 export function ReportsPage() {
+  const { data: auth } = useCurrentEmployee();
+  const [params] = useSearchParams();
+  const employee = auth?.employee;
+  const canReadFinance = hasPermission(employee, 'business.read');
+  const canReadVaccinations = ['reports.prevention.read', 'reports.prevention.generate', 'settings.read', 'settings.manage'].some(permission => hasPermission(employee, permission));
+  return <div className="page reports-page">
+    <PageHeader title="Отчёты" description={canReadFinance ? 'Финансовая отчётность и вакцинационные отчёты.' : 'Вакцинационные отчёты клиники.'} />
+    <Tabs key={`${canReadFinance}:${params.get('section')}`} defaultActiveKey={canReadFinance && params.get('section') !== 'vaccination' ? 'finance' : 'vaccination'} items={[
+      ...(canReadFinance ? [{ key: 'finance', label: 'Финансовые отчёты', children: <FinancialReports /> }] : []),
+      ...(canReadVaccinations ? [{ key: 'vaccination', label: 'Вакцинации', children: <MonthlyPreventionReportPanel /> }] : []),
+    ]} />
+  </div>;
+}
+
+function FinancialReports() {
   const initialRange = useMemo(currentMonthRange, []);
   const [from, setFrom] = useState(initialRange.from);
   const [to, setTo] = useState(initialRange.to);
@@ -54,7 +72,6 @@ export function ReportsPage() {
         }
       />
 
-      <MonthlyPreventionReportPanel />
 
       <Card className="report-filter-card">
         <div className="report-filter-row">

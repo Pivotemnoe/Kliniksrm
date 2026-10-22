@@ -1,11 +1,5 @@
-import { PageHeader } from '../../shared/ui/PageHeader';
-import { MonthlyPreventionReportPanel } from './MonthlyPreventionReportPanel';
+import { Navigate } from 'react-router-dom';
 
 export function VaccinationReportsPage() {
-  return (
-    <div className="page reports-page">
-      <PageHeader title="Отчёты по вакцинации" description="Ежемесячный пакет: профилактика, заболевания, реестр вакцинаций и акты по препаратам." />
-      <MonthlyPreventionReportPanel />
-    </div>
-  );
+  return <Navigate to="/reports?section=vaccination" replace />;
 }

@@ -14,7 +14,7 @@ const { StaffAlertsService } = require('../apps/api/dist/modules/staff-alerts/st
 const rights = {
   administrator: ['reports.prevention.read', 'reports.prevention.generate'],
   reader: ['reports.prevention.read'], doctor: ['animals.manage'],
-  director: ['settings.read', 'settings.manage'],
+  director: ['settings.read', 'settings.manage', 'business.read'],
 };
 
 test('actual report routes enforce packet-only administrator access, read-only grants and legacy director rights', async () => {
@@ -78,6 +78,7 @@ test('browser route rules isolate the packet from finance and clinic settings', 
   const exports = {};
   new Function('require', 'exports', compiled)(() => ({ hasPermission: (employee, permission) => employee?.permissions.includes(permission) }), exports);
   for (const role of ['administrator', 'reader', 'director']) assert.equal(exports.canAccessPath({ permissions: rights[role], roles: [role] }, '/vaccination-reports'), true);
-  for (const path of ['/reports', '/reports?from=2026-09-01', '/settings/organization', '/settings/finance']) assert.equal(exports.canAccessPath({ permissions: rights.administrator, roles: ['administrator'] }, path), false);
+  assert.equal(exports.canAccessPath({ permissions: rights.administrator, roles: ['administrator'] }, '/reports'), true);
+  for (const path of ['/business', '/settings/organization', '/settings/finance']) assert.equal(exports.canAccessPath({ permissions: rights.administrator, roles: ['administrator'] }, path), false);
   assert.equal(exports.canAccessPath({ permissions: rights.doctor, roles: ['doctor'] }, '/vaccination-reports'), false);
 });

@@ -40,7 +40,7 @@ export class ReportsController {
   getPreventionReport(@Param('id') id: string) { return this.prevention.get(id); }
 
   @Get('summary')
-  @RequireAnyPermissions('settings.read', 'settings.manage')
+  @RequirePermissions('business.read')
   @ApiOkResponse({ description: 'Управленческий отчёт клиники за выбранный период.' })
   getSummary(@Query() query: ReportQueryDto) {
     return this.reportsService.getSummary(query);

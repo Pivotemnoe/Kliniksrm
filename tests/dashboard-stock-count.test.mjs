@@ -26,3 +26,13 @@ test('doctor dashboard never returns site-request details even with appointment 
  const result = await new DashboardService(repo, {}).getToday({ date: '2026-10-18' }, { id: 'doctor', roles: ['doctor'], permissions: ['*', 'appointments.read'] });
  assert.deepEqual(result.onlineRequests, { newRequests: 0, inReview: 0, items: [] });
 });
+
+test('operational billing access does not expose clinic-wide monetary totals', async () => {
+ const repo = new Proxy({}, {get: () => ({...emptyModel, aggregate: async () => ({_sum:{amount:123456}})})});
+ const service = new DashboardService(repo, {});
+ const administrator = await service.getToday({date:'2026-10-22'}, {id:'qa-admin', roles:['administrator'], permissions:['dashboard.read','billing.read']});
+ assert.equal(administrator.finance.paymentsTodayAmount,0);
+ assert.equal(administrator.finance.refundsTodayAmount,0);
+ const director = await service.getToday({date:'2026-10-22'}, {id:'qa-director', roles:['director'], permissions:['dashboard.read','billing.read','business.read']});
+ assert.equal(director.finance.paymentsTodayAmount,123456);
+});

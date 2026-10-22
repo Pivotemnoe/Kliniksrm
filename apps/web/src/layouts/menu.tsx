@@ -71,7 +71,6 @@ export const menuItems: MenuProps['items'] = [
   { key: '/tasks', icon: <AuditOutlined />, label: 'Задачи' },
   { key: '/owners', icon: <TeamOutlined />, label: 'Владельцы' },
   { key: '/patients', icon: <MedicineBoxOutlined />, label: 'Пациенты' },
-  { key: '/vaccination-reports', icon: <SafetyCertificateOutlined />, label: 'Отчёты по вакцинации' },
   { key: '/visits', icon: <SolutionOutlined />, label: 'Приёмы' },
   { key: '/laboratory', icon: <ExperimentOutlined />, label: 'Лаборатория' },
   { key: '/hospital', icon: <HomeOutlined />, label: 'Стационар' },
