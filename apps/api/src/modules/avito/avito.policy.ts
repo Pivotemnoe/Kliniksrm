@@ -113,11 +113,7 @@ function decideCore(input: DecisionInput): AdminDecision {
 
   if (!callbackChoice && /(?:оператор|живой\s+(?:человек|администратор)|соедините|сотрудник)/u.test(normalized)) return { ...base, handoff: true, reason: 'DIRECT_HUMAN_REQUEST', text: offHours ? dutyDoctorReply(input.clinicPhone) : 'Передам диалог администратору. Продолжить общение можно здесь, в Авито.' };
   if (offHours && (medical || askHuman && !/(?:перезвоните|позвоните\s+мне|обратн\S*\s+звон)/u.test(normalized))) return { ...base, reason: medical ? 'MEDICAL' : 'HUMAN_REQUEST', text: `С этим вопросом поможет врач. ${dutyDoctorReply(input.clinicPhone)}` };
-  if (grooming && !medical && !askHuman && groomingNonPriceQuantityQuestion(text)) {
-    const approved = profile.knowledge.filter(k => k.keywords.some(word => normalized.includes(word.toLocaleLowerCase('ru-RU').replace(/ё/g, 'е'))));
-    if (approved.length === 1) return { ...base, text: approved[0].answer, reason: `KNOWLEDGE:${approved[0].id}` };
-  }
-  if (input.petService?.direction === profile.direction && !medical && !askHuman && !providedCallbackPhone(text) && (!contact.collecting || contact.reason === 'BOOKING')) {
+  if (input.petService?.direction === profile.direction && !medical && !askHuman && !providedCallbackPhone(text) && (!contact.collecting || contact.reason === 'BOOKING') && !(grooming && groomingNonPriceQuantityQuestion(text))) {
     const channel = grooming && contact.bookingChannel === 'WEBSITE' ? 'WEBSITE' : undefined;
     const answer = petServiceAnswer(input.petService, text, booking, channel);
     if (answer) {

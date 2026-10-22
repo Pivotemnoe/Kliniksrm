@@ -74,6 +74,7 @@ test('grooming prices read the current module and validate persisted replies bef
     await service.updateSettings({version:before.settingsVersion,settings:{...before.settings,profiles:before.settings.profiles.map(p=>p.direction==='GROOMING'?{...p,knowledge:[...p.knowledge,{id:'duration-qa',title:'Длительность',keywords:['часов'],answer:text}]}:p)}},actorId);
     const id=chat('duration-price');api.add(id,'duration-price','Скок часов длится стрижка йорка?');const c=await load(id);assert.equal(c.stage,'KNOWLEDGE:duration-qa');assert.equal(draft(c).text,text);assert.equal(c.mode,'BOT');assert.doesNotMatch(draft(c).text,/₽/);
     const op=await approve(c);await service.deliver(op.operationId);assert.equal((await service.getConversation(c.id)).outbox.find(o=>o.id===op.operationId).status,'SENT');
+    const callback=chat('duration-callback');api.add(callback,'duration-contact','Скок часов длится стрижка? Меня зовут Иван, мой телефон +79001234567');const saved=await load(callback);assert.equal(saved.inquiries.length,1);assert.equal(saved.inquiries[0].contactName,'Иван');assert.equal(saved.inquiries[0].phone,'+79001234567');assert.equal(saved.inquiries[0].contactMessageId,'duration-contact');
    }finally{f.model.configured=configured;f.model.classify=classify;const current=await service.integration();await service.updateSettings({version:current.settingsVersion,settings:before.settings},actorId);}
   });
   await t.test('short cat and breed clarifications persist and simulation reads the same saved state',async()=>{

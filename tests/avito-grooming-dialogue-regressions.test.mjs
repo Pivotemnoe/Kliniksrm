@@ -64,4 +64,7 @@ test('colloquial duration and age cannot be forced into prices by a PRICE intent
   assert.equal(d.reason,'KNOWLEDGE:approved-duration');assert.equal(d.text,'Утверждённый тестовый ответ о длительности или возрасте.');assert.doesNotMatch(d.text,/₽/);
  }
  const mixed=reply('Скок времени занимает стрижка йорка и какая цена?');assert.equal(mixed.reason,'GROOMING_PRICE');assert.match(mixed.text,/Йоркширский терьер.*Полный комплекс/);
+ const s=structuredClone(settings);s.profiles.find(p=>p.direction==='GROOMING').knowledge=[{id:'duration',title:'Тестовая длительность',keywords:['времени'],answer:'Утверждённая тестовая длительность.'}];
+ const callback=reply('Скок времени занимает стрижка? Меня зовут Иван, мой телефон +79001234567',{settings:s,intent:{action:'PRICE',knowledgeId:null,serviceQuery:null}});
+ assert.equal(callback.createInquiry,true);assert.equal(callback.purpose,'SUBMITTED');assert.equal(callback.contact.name,'Иван');assert.equal(callback.contact.phone,'+79001234567');assert.equal(callback.contact.callbackMessageId,'incoming');
 });
