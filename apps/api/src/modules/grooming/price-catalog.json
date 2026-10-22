@@ -1,5 +1,5 @@
 {
-  "version": "grooming-prices-20261020-300",
+  "version": "grooming-prices-20261022-york-confirmed",
   "pricePolicy": {
     "increaseRub": 300,
     "alreadyApplied": true,
@@ -129,7 +129,10 @@
         "min": 2100,
         "max": 2100
       },
-      "full": null,
+      "full": {
+        "min": 2500,
+        "max": 2500
+      },
       "catalogueId": "york",
       "duration": "2–2,5 часа"
     },
