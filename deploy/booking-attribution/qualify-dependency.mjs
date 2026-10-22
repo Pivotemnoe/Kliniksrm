@@ -27,4 +27,11 @@ if(process.argv[4]){
  binding.imageIdentificationSha256=sha(bytes);binding.imageQualificationPrepared=true;
  await fs.writeFile(qa+'/clinical-images-identified.json',bytes);
 }
+if(process.argv[5]){
+ const bytes=await fs.readFile(path.resolve(process.argv[5])),proof=JSON.parse(bytes);
+ assert.equal(proof.status,'ACTUAL_IMAGE_QA_PASS');assert.equal(proof.candidate,binding.forwardImageId);assert.equal(proof.rollback,binding.compatImageId);
+ assert.equal(proof.noRealTransport,true);assert.equal(proof.noPublishedPorts,true);assert.equal(proof.runtimeUnchanged,true);assert.equal(proof.productionChanged,false);
+ const count=proof.checks.reduce((n,v)=>n+v.checks.length,0);assert(count>=19);
+ binding.actualImageQaPassed=true;binding.actualImageQaChecks=count;binding.actualImageQaSha256=sha(bytes);await fs.writeFile(qa+'/clinical-actual-image-qa.json',bytes);
+}
 await fs.writeFile(qa+'/clinical-dependency-binding.json',JSON.stringify(binding,null,2)+'\n');await fs.writeFile(qa+'/clinical-qualified-source-manifest.json',sourceBytes);console.log(binding);
