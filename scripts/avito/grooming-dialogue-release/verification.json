@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 1,
+  "functionalSource": "13d85eb26eeced9c44b5ef056ba571ea0faf3d71",
+  "priceSource": "8dbc240",
+  "publicPublisherSha256": "76179c47c6b97e57cd59debe52067ab6ccc236ffea7b0c47f0d0150623875da1",
+  "powershell": "5.1.26100.9711",
+  "nativeIoQa": {
+    "status": "PASS",
+    "caseCount": 16,
+    "cases": [
+      {
+        "name": "replace-after-success-is-recognized",
+        "status": "PASS"
+      },
+      {
+        "name": "replace-before-error-is-recoverable",
+        "status": "PASS"
+      },
+      {
+        "name": "first-pin-failure-restores-exact-bom-and-newlines",
+        "status": "PASS"
+      },
+      {
+        "name": "second-pin-failure-restores-exact-bytes",
+        "status": "PASS"
+      },
+      {
+        "name": "receipt-failure-keeps-healthy-candidate-and-verify-finalizes",
+        "status": "PASS"
+      },
+      {
+        "name": "web-drift-blocks-recovery-before-config-or-up",
+        "status": "PASS"
+      },
+      {
+        "name": "non-api-config-drift-is-preserved-without-recovery-up",
+        "status": "PASS"
+      },
+      {
+        "name": "foreign-api-image-blocks-recovery-before-mutation",
+        "status": "PASS"
+      },
+      {
+        "name": "base-tag-drift-blocks-recovery",
+        "status": "PASS"
+      },
+      {
+        "name": "lost-up-response-and-repeated-verify-use-one-api-up",
+        "status": "PASS"
+      },
+      {
+        "name": "known-rollback-restores-only-reviewed-base",
+        "status": "PASS"
+      },
+      {
+        "name": "known-crashed-candidate-recovers-without-runtime-exec-dependency",
+        "status": "PASS"
+      },
+      {
+        "name": "interrupted-pin-and-restore-phases-resume-idempotently",
+        "status": "PASS"
+      },
+      {
+        "name": "empty-objects-arrays-and-nulls-stay-distinct-under-strict-mode",
+        "status": "PASS"
+      },
+      {
+        "name": "real-sealed-compose-roundtrip-is-read-only",
+        "status": "PASS"
+      },
+      {
+        "name": "canonical-order-and-unknown-phase-guards",
+        "status": "PASS"
+      }
+    ],
+    "productionDockerCalls": 0,
+    "productionConfigMutations": 0
+  },
+  "postPriceCompanionIoQa": {
+    "status": "PASS",
+    "caseCount": 16,
+    "productionDockerCalls": 0,
+    "productionConfigMutations": 0
+  },
+  "priceFollowupQa": {
+    "unit": {
+      "passed": 31,
+      "failed": 0
+    },
+    "isolatedPostgres": {
+      "passed": 15,
+      "failed": 0
+    },
+    "transport": "synthetic only"
+  },
+  "runtime": {
+    "apiHealth": "PASS",
+    "databaseHealth": "PASS",
+    "protectedServicesUnchanged": true,
+    "postPriceFullVerify": "PASS",
+    "liveSourceReplay": "PASS",
+    "freshAvitoPolling": "PASS",
+    "publicYorkPriceRub": 2500,
+    "realCustomerTestMessagesSent": 0
+  },
+  "privateEvidence": "Operator keeps sealed state, manifests, receipts and deployment targets outside Git"
+}
