@@ -770,6 +770,7 @@ model Room {
 }
 
 model QueueWorkstation {
+  isReception Boolean @default(false)
   id         String   @id @default(uuid())
   deviceId   String   @unique
   label      String?

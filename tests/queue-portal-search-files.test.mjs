@@ -27,7 +27,7 @@ test('глобальный поиск без фонового опроса ищ�
   assert.doesNotMatch(search, /setInterval|querySelector\('input'\)/);
 });
 
-test('очередь работает без привязки компьютера, кабинет выбирается вручную и запись можно убрать', async () => {
+test('очередь сохраняет ручной выбор администратора и удаление, а вызов передаёт рабочее место', async () => {
   const [page, card, form, controller, service, queueApi, routes] = await Promise.all([
     read('apps/web/src/features/queue/QueuePage.tsx'),
     read('apps/web/src/features/queue/QueueCardPage.tsx'),
@@ -44,10 +44,11 @@ test('очередь работает без привязки компьютер
   assert.match(form, /label="Кабинет"/);
   assert.doesNotMatch(page, /QueueWorkstationRoomSelect|workstationDeviceId/);
   assert.doesNotMatch(card, /QueueWorkstationRoomSelect|workstationDeviceId/);
-  assert.doesNotMatch(controller, /CallQueueEntryDto|dto\.deviceId/);
-  assert.doesNotMatch(service, /workstationDeviceId|workstationRoom/);
+  assert.match(controller, /CallQueueEntryDto/);
+  assert.match(service, /workstation\.isReception \? \(dto\.roomId \?\? existing\.roomId\) : workstation\.roomId/);
   assert.match(queueApi, /startQueueEntry\(queueEntryId: string\)/);
-  assert.doesNotMatch(routes, /settings\/office\/workstations/);
+  assert.match(routes, /settings\/office\/workstations/);
+  assert.match(queueApi, /deviceId: getQueueWorkstationDeviceId\(\)/);
 });
 
 test('направление из очереди создаёт или повторно открывает один приём без промежуточного состояния', async () => {

@@ -1,3 +1,4 @@
+import { getQueueWorkstationDeviceId } from './workstationDevice';
 import { apiRequest } from '../../api/client';
 import { PaginatedResponse } from '../../shared/types/api';
 import { buildQuery } from '../../shared/utils/query';
@@ -30,7 +31,7 @@ export function updateQueueEntry(queueEntryId: string, input: QueueMutationInput
 }
 
 export function startQueueEntry(queueEntryId: string) {
-  return apiRequest<QueueEntry>(`/v1/queue/${queueEntryId}/start`, { method: 'POST' });
+  return apiRequest<QueueEntry>(`/v1/queue/${queueEntryId}/start`, { method: 'POST', body: { deviceId: getQueueWorkstationDeviceId() } });
 }
 
 export function registerQueueWorkstation(deviceId: string) {
@@ -41,7 +42,7 @@ export function listQueueWorkstations() {
   return apiRequest<QueueWorkstation[]>('/v1/queue/workstations');
 }
 
-export function updateQueueWorkstation(workstationId: string, input: { roomId?: string; label?: string }) {
+export function updateQueueWorkstation(workstationId: string, input: { roomId?: string | null; label?: string; isReception?: boolean; roomName?: string; officeId?: string }) {
   return apiRequest<QueueWorkstation>(`/v1/queue/workstations/${workstationId}`, { method: 'PATCH', body: input });
 }
 

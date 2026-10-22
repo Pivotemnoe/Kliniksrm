@@ -1,7 +1,7 @@
 import { EditOutlined, PlusOutlined, SaveOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Alert, Button, Checkbox, Form, Input, Modal, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
+import { App, Alert, Button, Checkbox, Form, Input, Modal, Popconfirm, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
 import { ColumnsType } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
@@ -90,6 +90,7 @@ export function ClinicResourcesPage() {
   const offices = settingsQuery.data?.offices ?? [];
   const selectedOffice = offices.find((office) => office.id === selectedOfficeId) ?? offices[0];
   const activeTab = getActiveTab(location.pathname);
+  const canManageWorkstations = canManage || hasPermission(auth?.employee, 'queue.manage');
 
   const { control, handleSubmit, reset } = useForm<OfficeFormValues>({
     resolver: zodResolver(officeSchema),
@@ -177,8 +178,9 @@ export function ClinicResourcesPage() {
         </div>
         <Tabs
           activeKey={activeTab}
-          onChange={(key) => navigate(tabRoutes[key] ?? '/settings/office')}
+          onChange={(key) => navigate(key === 'workstations' ? '/settings/office/workstations' : tabRoutes[key] ?? '/settings/office')}
           items={[
+            { key: 'workstations', label: 'Рабочие места', children: <QueueWorkstationsTab offices={offices} canManage={canManageWorkstations} /> },
             {
               key: 'profile',
               label: 'Профиль филиала',
@@ -357,10 +359,11 @@ function QueueWorkstationsTab({ offices, canManage }: { offices: ClinicOfficeSet
   const workstationsQuery = useQuery({
     queryKey: ['queue-workstations'],
     queryFn: listQueueWorkstations,
+    refetchInterval: 15_000,
     enabled: canManage,
   });
   const updateMutation = useMutation({
-    mutationFn: ({ id, input }: { id: string; input: { roomId?: string; label?: string } }) => updateQueueWorkstation(id, input),
+    mutationFn: ({ id, input }: { id: string; input: { roomId?: string | null; label?: string; isReception?: boolean } }) => updateQueueWorkstation(id, input),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['queue-workstations'] });
       await queryClient.invalidateQueries({ queryKey: ['queue-workstation'] });
@@ -396,20 +399,24 @@ function QueueWorkstationsTab({ offices, canManage }: { offices: ClinicOfficeSet
       key: 'room',
       render: (_, item) => (
         <Select
-          value={item.roomId ?? undefined}
+          value={item.isReception ? 'administrator' : item.roomId ?? undefined}
           placeholder="Выберите кабинет"
           style={{ minWidth: 260 }}
-          options={roomOptions}
+          options={[{ value: 'administrator', label: 'Администратор' }, ...roomOptions]}
           loading={updateMutation.isPending}
-          onChange={(roomId) => updateMutation.mutate({ id: item.id, input: { roomId } })}
+          onChange={(roomId) => updateMutation.mutate({ id: item.id, input: { roomId: roomId === 'administrator' ? null : roomId, isReception: roomId === 'administrator' } })}
         />
       ),
     },
+    { title: 'Привязка', key: 'unbind', render: (_, item) => (item.roomId || item.isReception) ?
+      <Popconfirm title="Отвязать рабочее место?" onConfirm={() => updateMutation.mutateAsync({ id: item.id, input: { roomId: null, isReception: false } })}>
+        <Button danger loading={updateMutation.isPending}>Отвязать</Button>
+      </Popconfirm> : <Tag>Не привязано</Tag> },
     { title: 'Последняя связь', dataIndex: 'lastSeenAt', key: 'lastSeenAt', width: 190, render: formatDateTime },
   ];
 
   if (!canManage) {
-    return <Alert type="warning" showIcon message="Настройка рабочих компьютеров доступна руководителю" />;
+    return <Alert type="warning" showIcon message="Настройка рабочих компьютеров доступна администратору или руководителю" />;
   }
 
   return (
@@ -419,7 +426,7 @@ function QueueWorkstationsTab({ offices, canManage }: { offices: ClinicOfficeSet
         showIcon
         className="form-alert"
         message="Кабинет закрепляется за компьютером, а не за сотрудником"
-        description="Компьютер появится здесь после первого открытия очереди. Кабинет можно перепривязать удалённо — новое значение применяется при следующем вызове пациента."
+        description="Компьютер появится здесь после входа сотрудника в CRM. Кабинет можно перепривязать удалённо — новое значение применяется при следующем вызове пациента."
       />
       <Table<QueueWorkstation>
         rowKey="id"
@@ -857,6 +864,7 @@ function validateScheduleRows(rows: OfficeScheduleRow[]) {
 }
 
 function getActiveTab(pathname: string) {
+  if (pathname.endsWith('/workstations')) return 'workstations';
   if (pathname.endsWith('/schedule')) {
     return 'schedule';
   }

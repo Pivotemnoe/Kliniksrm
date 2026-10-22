@@ -10,7 +10,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CreateQueueEntryDto } from './dto/create-queue-entry.dto';
 import { ListQueueQueryDto } from './dto/list-queue-query.dto';
 import { UpdateQueueEntryDto } from './dto/update-queue-entry.dto';
-import { RegisterQueueWorkstationDto, UpdateQueueWorkstationDto } from './dto/register-queue-workstation.dto';
+import { CallQueueEntryDto, RegisterQueueWorkstationDto, UpdateQueueWorkstationDto } from './dto/register-queue-workstation.dto';
 import { QUEUE_ACCEPT_DELAY_MS, resolveQueueAcceptWaitSeconds } from './queue-accept';
 
 export { resolveQueueAcceptWaitSeconds } from './queue-accept';
@@ -149,12 +149,27 @@ export class QueueService {
   async updateWorkstation(workstationId: string, dto: UpdateQueueWorkstationDto, actorId: string) {
     const existing = await this.prisma.queueWorkstation.findUnique({ where: { id: workstationId }, select: { id: true } });
     if (!existing) throw new NotFoundException('Рабочее место не найдено');
-    if (dto.roomId) await this.schedulingService.ensureRoomExists(dto.roomId);
+    if (dto.isReception && (dto.roomId || dto.roomName)) throw new BadRequestException('Выберите кабинет или администратора');
+    let roomId = dto.roomId;
+    if (dto.roomName) {
+      if (!dto.officeId || dto.roomId) throw new BadRequestException('Выберите клинику для рабочего места');
+      const office = await this.prisma.clinicOffice.findUnique({ where: { id: dto.officeId }, select: { id: true } });
+      if (!office) throw new NotFoundException('Клиника не найдена');
+      const rooms = await this.prisma.room.findMany({ where: { officeId: dto.officeId }, select: { id: true, name: true } });
+      const matching = rooms.find((room) => room.name.toLowerCase().replace(/ё/g, 'е').trim() === dto.roomName!.toLowerCase().replace(/ё/g, 'е'));
+      const room = matching ?? await this.prisma.room.upsert({
+        where: { officeId_name: { officeId: dto.officeId, name: dto.roomName } },
+        create: { officeId: dto.officeId, name: dto.roomName }, update: {},
+      });
+      roomId = room.id;
+    }
+    if (roomId) await this.schedulingService.ensureRoomExists(roomId);
 
     const workstation = await this.prisma.queueWorkstation.update({
       where: { id: workstationId },
       data: {
-        ...(dto.roomId !== undefined ? { roomId: dto.roomId } : {}),
+        ...(dto.isReception ? { roomId: null } : roomId !== undefined ? { roomId } : {}),
+        ...(dto.isReception !== undefined ? { isReception: dto.isReception } : roomId !== undefined ? { isReception: false } : {}),
         ...(dto.label !== undefined ? { label: clean(dto.label) } : {}),
       },
       include: queueWorkstationInclude,
@@ -164,7 +179,7 @@ export class QueueService {
       action: 'queue.workstation_update',
       entityType: 'QueueWorkstation',
       entityId: workstation.id,
-      metadata: { roomId: workstation.roomId, label: workstation.label },
+      metadata: { roomId: workstation.roomId, label: workstation.label, isReception: workstation.isReception },
     });
     return workstation;
   }
@@ -232,10 +247,14 @@ export class QueueService {
     return toQueueEntryResponse(queueEntry);
   }
 
-  async startQueueEntry(queueEntryId: string, actorId: string) {
+  async startQueueEntry(queueEntryId: string, actorId: string, dto: CallQueueEntryDto) {
+    const workstation = await this.prisma.queueWorkstation.findUnique({ where: { deviceId: dto.deviceId } });
+    if (!workstation || (!workstation.roomId && !workstation.isReception)) {
+      throw new BadRequestException('Рабочее место не привязано. Выберите кабинет этого компьютера');
+    }
     const existing = await this.prisma.queueEntry.findUnique({
       where: { id: queueEntryId },
-      select: { id: true, status: true, startedAt: true, callCount: true },
+      select: { id: true, status: true, startedAt: true, callCount: true, roomId: true },
     });
 
     if (!existing) {
@@ -246,19 +265,28 @@ export class QueueService {
       throw new BadRequestException('Нельзя вызвать запись: пациент уже направлен на приём или очередь отменена');
     }
 
+    const destination = workstation.isReception ? (dto.roomId ?? existing.roomId) : workstation.roomId;
+    if (!destination) throw new BadRequestException('Укажите кабинет в карточке очереди перед вызовом');
+    const room = await this.schedulingService.ensureRoomExists(destination);
+    if (existing.status === QueueStatus.IN_PROGRESS && existing.roomId !== destination) {
+      throw new BadRequestException('Пациент уже вызван в другой кабинет. Повторите вызов из прежнего кабинета');
+    }
     const calledAt = new Date();
     const action = existing.status === QueueStatus.IN_PROGRESS ? 'queue.call' : 'queue.start';
-    const queueEntry = await this.prisma.queueEntry.update({
-      where: { id: queueEntryId },
+    const changed = await this.prisma.queueEntry.updateMany({
+      where: { id: queueEntryId, status: existing.status, callCount: existing.callCount },
       data: {
+        roomId: destination,
+        officeId: room.officeId,
         status: QueueStatus.IN_PROGRESS,
         startedAt: existing.startedAt ?? calledAt,
         lastCalledAt: calledAt,
         callCount: { increment: 1 },
         completedAt: null,
       },
-      include: queueEntryInclude,
     });
+    if (!changed.count) throw new BadRequestException('Очередь уже изменена другим сотрудником. Обновите список');
+    const queueEntry = await this.prisma.queueEntry.findUniqueOrThrow({ where: { id: queueEntryId }, include: queueEntryInclude });
 
     await this.auditService.log({
       actorId,

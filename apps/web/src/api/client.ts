@@ -1,6 +1,6 @@
 import { ApiError, ApiErrorPayload } from './errors';
 
-const rawBaseUrl = import.meta.env?.VITE_API_BASE_URL ?? 'http://127.0.0.1:4000/api';
+const rawBaseUrl = import.meta.env?.VITE_API_BASE_URL ?? '/api';
 export const apiBaseUrl = rawBaseUrl.replace(/\/$/, '');
 const CLIENT_ID_KEY = 'temichevvet-crm-client-id';
 

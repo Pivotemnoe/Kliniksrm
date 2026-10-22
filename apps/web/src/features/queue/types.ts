@@ -62,6 +62,7 @@ export type QueueScreenResponse = {
 };
 
 export type QueueWorkstation = {
+  isReception: boolean;
   id: string;
   deviceId: string;
   label: string | null;
