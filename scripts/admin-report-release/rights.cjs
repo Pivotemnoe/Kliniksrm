@@ -3,6 +3,9 @@ const fs=require('node:fs'),path=require('node:path'),assert=require('node:asser
 const {PrismaClient}=require('@prisma/client');
 const [mode,dir]=process.argv.slice(2);
 if(!['snapshot','apply','rollback','verify'].includes(mode)||!dir)throw Error('Usage: rights.cjs snapshot|apply|rollback|verify PRIVATE_DIRECTORY');
+require('reflect-metadata');
+const authPath=fs.existsSync('/app/apps/api/dist/modules/auth/auth.service.js')?'/app/apps/api/dist/modules/auth/auth.service.js':path.resolve(__dirname,'../../apps/api/dist/modules/auth/auth.service.js');
+const {AuthService}=require(authPath);
 const db=new PrismaClient();
 const codes=['business.read','stock.read','stock.manage','billing.read','billing.manage','payments.manage','daily_finance.read','daily_finance.manage','daily_finance.submit','payroll.read','payroll.manage','reports.prevention.read','reports.prevention.generate'];
 const names=codes.map(c=>`'${c}'`).join(',');
@@ -18,7 +21,7 @@ const specs={
 const file=n=>path.join(dir,n+'.json');
 function save(n,data){const p=file(n); if(fs.existsSync(p))throw Error('Refuse overwrite '+n);fs.writeFileSync(p,JSON.stringify(data,null,2),{mode:0o600,flag:'wx'});fs.fsyncSync(fs.openSync(p,'r'));}
 const read=n=>JSON.parse(fs.readFileSync(file(n),'utf8'));
-async function snap(tx){const result={};for(const [key,[table,where]]of Object.entries(specs)){result[key]=(await tx.$queryRawUnsafe(`SELECT row_to_json(t)::text AS row FROM "${table}" t WHERE ${where} ORDER BY row_to_json(t)::text`)).map(r=>JSON.parse(r.row));}return result;}
+async function snap(tx){const result={};for(const [key,[table,where]]of Object.entries(specs)){result[key]=(await tx.$queryRawUnsafe(`SELECT row_to_json(t)::text AS row FROM "${table}" t WHERE ${where} ORDER BY row_to_json(t)::text`)).map(r=>JSON.parse(r.row));}const employees=await tx.employee.findMany({where:{roles:{some:{role:{code:{in:['administrator','director']}}}}},include:{roles:{include:{role:{include:{permissions:{include:{permission:true}}}}}},permissionOverrides:{include:{permission:true}}},orderBy:{id:'asc'}});result.effective=employees.map(e=>{const actor=AuthService.prototype.serializeEmployee(e);return {id:e.id,roles:actor.roles,permissions:actor.permissions}});return result;}
 async function lock(tx){await tx.$executeRawUnsafe('SET LOCAL lock_timeout = \'5s\'');await tx.$executeRawUnsafe('LOCK TABLE "Role", "EmployeeRole", "Permission", "RolePermission", "EmployeePermissionOverride" IN SHARE ROW EXCLUSIVE MODE');}
 function equal(a,b){if(JSON.stringify(a)!==JSON.stringify(b))throw Error('Rights or memberships changed; abort without overwriting concurrent edits');}
 async function restore(tx,key,before,after){const [table,,keys]=specs[key];const id=r=>keys.map(k=>r[k]).join('|');const b=new Map(before.map(r=>[id(r),r])),a=new Map(after.map(r=>[id(r),r]));for(const k of new Set([...b.keys(),...a.keys()])){const old=b.get(k),applied=a.get(k);if(JSON.stringify(old)===JSON.stringify(applied))continue;const row=applied||old;const where=keys.map((v,i)=>`"${v}"=$${i+1}`).join(' AND ');if(key==='definitions'){await tx.$executeRawUnsafe(`UPDATE "Permission" SET title=$2 WHERE id=$1`,row.id,old.title);continue;}await tx.$executeRawUnsafe(`DELETE FROM "${table}" WHERE ${where}`,...keys.map(v=>row[v]));if(old)await tx.$executeRawUnsafe(`INSERT INTO "${table}" SELECT * FROM json_populate_record(NULL::"${table}", $1::json)`,JSON.stringify(old));}}
@@ -29,7 +32,7 @@ async function restore(tx,key,before,after){const [table,,keys]=specs[key];const
   await db.$transaction(async tx=>{await lock(tx);equal(await snap(tx),before);
    // No schema migration runner or seed: only the explicitly reviewed rights SQL.
    const sql=fs.readFileSync(path.join(__dirname,'rights.sql'),'utf8');for(const statement of sql.split(';').map(s=>s.trim()).filter(Boolean))await tx.$executeRawUnsafe(statement);
-   const after=await snap(tx);save('applied',after); // Durable expected after-image before commit, enables recovery after interrupted client.
+   const after=await snap(tx);for(const e of after.effective){if(e.roles.includes('administrator')&&!e.roles.includes('director')){if(e.permissions.includes('*')||e.permissions.includes('business.read'))throw Error('Effective financial access remains; abort');if(codes.slice(1).some(c=>!e.permissions.includes(c)))throw Error('Existing individual denial prevents required operational access; abort');}else if(e.roles.includes('director')){const old=before.effective.find(x=>x.id===e.id);if(old.permissions.some(c=>!e.permissions.includes(c)))throw Error('Director permission unexpectedly removed; abort');}}save('applied',after); // Durable expected after-image before commit, enables recovery after interrupted client.
   },{timeout:30000});console.log(JSON.stringify({applied:true}));return;
  }
  const applied=read('applied');
