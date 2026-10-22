@@ -100,11 +100,13 @@ class PacketTests(unittest.TestCase):
             p.write_text(json.dumps({'approved':True,'packetSha256':release.sha(PACKET/'checksums.json')}))
             with self.assertRaisesRegex(RuntimeError,'Root clinical consumer/rollback acceptance missing'):release.reviewed(self.m,p)
             dependency=release.read(PACKET/'qa/clinical-dependency-binding.json')
-            review={'approved':True,'packetSha256':release.sha(PACKET/'checksums.json'),'clinical':{'sourceManifestSha256':dependency['qualifiedManifestSha256'],'forwardReference':dependency['forwardReference'],'compatReference':dependency['compatReference'],'forwardImageId':'sha256:'+'1'*64,'compatImageId':'sha256:'+'2'*64,'compatibleRollbackAccepted':True}}
+            review={'approved':True,'packetSha256':release.sha(PACKET/'checksums.json'),'clinical':{'sourceManifestSha256':dependency['qualifiedManifestSha256'],'forwardReference':dependency['forwardReference'],'compatReference':dependency['compatReference'],'forwardImageId':dependency['forwardImageId'],'compatImageId':dependency['compatImageId'],'compatibleRollbackAccepted':True}}
             p.write_text(json.dumps(review))
             release.reviewed(self.m,p)
             bad=copy.deepcopy(review);bad['clinical']['compatImageId']='a mutable tag';p.write_text(json.dumps(bad))
             with self.assertRaisesRegex(RuntimeError,'exact qualified clinical image IDs'):release.reviewed(self.m,p)
+            bad=copy.deepcopy(review);bad['clinical']['compatImageId']='sha256:'+'1'*64;p.write_text(json.dumps(bad))
+            with self.assertRaisesRegex(RuntimeError,'differ from the qualified images'):release.reviewed(self.m,p)
             p.write_text(json.dumps(review))
             changed=copy.deepcopy(self.m);changed['gateway']['distribution']['compat']['clinic-chat.service.js']='wrong'
             with self.assertRaisesRegex(RuntimeError,'QA used different payload'):release.reviewed(changed,p)

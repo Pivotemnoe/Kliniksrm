@@ -26,6 +26,7 @@ function replaceOnce(text, before, after) {assert.equal(text.split(before).lengt
 function changes(before, after) {return [...new Set([...Object.keys(before), ...Object.keys(after)])].sort().filter(p => before[p] !== after[p]);}
 const root = process.cwd(), input = path.resolve(process.argv[2]), dest = path.resolve(process.argv[3]);
 assert(input && dest && input !== dest);
+assert.equal(execFileSync('git',['status','--porcelain','--untracked-files=no'],{encoding:'utf8'}).trim(),'','Commit the release tooling before preparing an immutable packet');
 const b = await json(input+'/baseline/baseline.json');
 assert.equal(b.previous.id, BASE_IMAGE); assert.equal(b.hostName, 'msk-1-vm-d817'); assert.equal(b.distribution['clinic-chat.service.js'], CLINIC_JS);
 for (const kind of ['grooming', 'pet-hotel']) assert.deepEqual(await manifest(input+'/baseline/'+kind), b.static[kind].files, 'Incomplete live static baseline');
