@@ -57,6 +57,17 @@ test('pet-service conversations use isolated PostgreSQL, module facts and separa
         assert.equal(await prisma.groomingReservation.count(), groomingBookingsBefore); assert.equal(await prisma.petHotelReservation.count(), hotelBookingsBefore);
       }
     });
+    await t.test('website source pairs use their own mapped listing and survive simulation, reload and delivery', async () => {
+      for(const [prefix,listingId,path] of [['groom-source','202','/'],['hotel-source','303','/pet-hotel/']]){
+        const question='Дайте сайт для записи',id=chat(prefix);api.add(id,'source-1',question);const c=await load(id);
+        const draft=c.outbox.find(x=>x.status==='DRAFT'),url=new URL(draft.text.split('\n').find(x=>x.startsWith('https://')));
+        assert.equal(url.pathname,path);assert.deepEqual([...url.searchParams],[['utm_source','avito'],['listing_id',listingId]]);assert.equal(url.hash,'');
+        const sim=await service.simulate(listingId,question);assert.ok(sim.decision.text.includes(url.href));assert.equal(sim.persisted,false);
+        const op=await approve(c);await service.deliver(op.operationId);const reopened=await service.getConversation(c.id);
+        assert.equal(reopened.outbox.find(x=>x.id===op.operationId).status,'SENT');assert.equal(api.sent.filter(x=>x.chatId===id).length,1);assert.equal(reopened.inquiries.length,0);
+      }
+      assert.equal(await prisma.groomingReservation.count(),groomingBookingsBefore);assert.equal(await prisma.petHotelReservation.count(),hotelBookingsBefore);
+    });
     await t.test('a short Avito choice persists through reload and creates one grooming callback from the actual contact message', async () => {
       const id=chat('groom-choice'); api.add(id,'choice-1','Хочу записаться на стрижку'); let c=await load(id);
       assert.equal(c.contact.bookingChoiceOffered,true); assert.equal(c.inquiries.length,0);
