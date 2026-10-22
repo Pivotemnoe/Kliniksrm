@@ -8,7 +8,7 @@ function InvokeReleaseDocker([string[]]$A){$old=$ErrorActionPreference;try{$Erro
 function ReadReleaseJson($p){ConvertFrom-Json -InputObject ([IO.File]::ReadAllText($p))}
 function GetReleaseHash($p){(Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash.ToLowerInvariant()}
 function GetReleaseContainer($n){(ConvertFrom-Json -InputObject (InvokeReleaseDocker @('inspect',$n)))[0]}
-function Save($p,$v){$t=$p+'.new';if(Test-Path $t){throw 'Unresolved temporary state'};[IO.File]::WriteAllText($t,($v|ConvertTo-Json -Depth 64),(New-Object Text.UTF8Encoding($false)));if(Test-Path $p){[IO.File]::Replace($t,$p,$null)}else{[IO.File]::Move($t,$p)}}
+function Save($p,$v){$t=$p+'.new';if(Test-Path $t){throw 'Unresolved temporary state'};[IO.File]::WriteAllText($t,($v|ConvertTo-Json -Depth 64),(New-Object Text.UTF8Encoding($false)));if(Test-Path $p){$replaced=$p+'.replaced';if(Test-Path $replaced){throw 'Unresolved replaced state'};[IO.File]::Replace($t,$p,$replaced);Remove-Item -LiteralPath $replaced -Force}else{[IO.File]::Move($t,$p)}}
 $m=ReadReleaseJson (Join-Path $PackageRoot 'manifest.json');if($m.releaseId -ne 'crm-admin-reports-20261022-r1' -or $m.revision -notmatch '^[a-f0-9]{40}$'){throw 'Unqualified release'}
 foreach($f in $m.files){if($f.name -match '(^|/)\.\.' -or (GetReleaseHash (Join-Path $PackageRoot $f.name)) -ne $f.sha256){throw 'Packet checksum mismatch'}}
 $b=Join-Path $Root ('backups/manual-releases/'+$m.releaseId);$stateFile=Join-Path $b 'state.json';$rights=Join-Path $b 'rights'
@@ -59,10 +59,10 @@ if($Mode -eq 'Verify'){CheckConfig $s 'after';Health $s.apiId $s.webId;$null=Wor
 if($Mode -eq 'Rollback'){
  if($api.Image -notin @($s.apiId,$m.previousApi) -or $web.Image -notin @($s.webId,$m.previousWeb)){throw 'Refuse rollback of unrelated runtime'};foreach($f in $s.config){if((GetReleaseHash (Join-Path $Root $f.name)) -notin @($f.beforeHash,$f.afterHash)){throw 'Concurrent configuration edit'}};$null=Worker 'rights.cjs' $s.apiId 'rollback';foreach($f in $s.config){[IO.File]::WriteAllBytes((Join-Path $Root $f.name),[IO.File]::ReadAllBytes((Join-Path $b ('before-'+$f.saved))))};Compose $s.previousApi $s.previousWeb $s.previousRevision -Switch;Health $m.previousApi $m.previousWeb;CheckProtected $s.protected;$s.phase='ROLLED_BACK';Save $stateFile $s;return
 }
-if($s.phase -ne 'PREPARED' -or $api.Image -ne $m.previousApi -or $web.Image -ne $m.previousWeb -or [DateTime]::Parse($s.at).ToUniversalTime() -lt [DateTime]::UtcNow.AddHours(-2) -or (GetReleaseHash (Join-Path $b 'database.dump')) -ne $s.databaseHash){throw 'Fresh prepared baseline required'}
+if($s.phase -notin @('PREPARED','RIGHTS_APPLIED') -or $api.Image -ne $m.previousApi -or $web.Image -ne $m.previousWeb -or [DateTime]::Parse($s.at).ToUniversalTime() -lt [DateTime]::UtcNow.AddHours(-2) -or (GetReleaseHash (Join-Path $b 'database.dump')) -ne $s.databaseHash){throw 'Fresh prepared baseline required'}
 CheckConfig $s 'before';$null=Worker 'invariants.cjs' $m.previousApi
 if((ConvertFrom-Json -InputObject (InvokeReleaseDocker @('image','inspect',$m.candidateApi)))[0].Id -ne $s.apiId -or (ConvertFrom-Json -InputObject (InvokeReleaseDocker @('image','inspect',$m.candidateWeb)))[0].Id -ne $s.webId){throw 'Candidate tag changed'}
 # The worker holds role/permission table locks, compares exact before rows, then changes rights.
-$null=Worker 'rights.cjs' $s.apiId 'apply';$s.phase='RIGHTS_APPLIED';Save $stateFile $s
+if($s.phase -eq 'PREPARED'){$null=Worker 'rights.cjs' $s.apiId 'apply';$s.phase='RIGHTS_APPLIED';Save $stateFile $s}else{$null=Worker 'rights.cjs' $s.apiId 'verify'}
 ConfigWrite $s 'after';CheckCompose $before (Compose '' '' '');$s.phase='SWITCHING';Save $stateFile $s
 Compose $m.candidateApi $m.candidateWeb $m.revision -Switch;Health $s.apiId $s.webId;$null=Worker 'rights.cjs' $s.apiId 'verify';$null=Worker 'invariants.cjs' $s.apiId;CheckProtected $s.protected;$s.phase='COMPLETE';Save $stateFile $s;@{applied=$true;revision=$m.revision;backup=$b}|ConvertTo-Json
