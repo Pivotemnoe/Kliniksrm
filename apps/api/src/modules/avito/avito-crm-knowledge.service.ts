@@ -42,7 +42,7 @@ function ellipticalServicePrice(value: string) {
 }
 export function avitoNeedsQuestionPlan(text: string, preliminaryReason: string) {
   if (['URGENT', 'MEDICAL', 'DIRECT_HUMAN_REQUEST', 'CONTACT_DECLINED', 'HUMAN_CONTROL', 'UNSUPPORTED_MEDIA', 'ASSISTANT_IDENTITY', 'GREETING'].includes(preliminaryReason)) return false;
-  return ['NO_APPROVED_ANSWER', 'AMBIGUOUS_KNOWLEDGE'].includes(preliminaryReason) || crmQuestions(text).length > 0 || text.includes('?');
+  return ['NO_APPROVED_ANSWER', 'AMBIGUOUS_KNOWLEDGE', 'GROOMING_CLARIFY'].includes(preliminaryReason) || crmQuestions(text).length > 0 || text.includes('?');
 }
 /* Kept as explicit per-clause planning rather than choosing the first matching keyword. */
 function isArrivalQuestion(text: string) { return /(?:можно|могу|можем).{0,30}(?:приехать|подъехать)|(?:приехать|приехал|едем|приеду|приедем|подъехать).{0,20}(?:сейчас|сегодня|ночью)|ночью.{0,50}работа|работа.{0,50}ночью/u.test(normalize(text)); }

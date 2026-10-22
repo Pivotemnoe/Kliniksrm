@@ -35,6 +35,37 @@ test('grooming prices read the current module and validate persisted replies bef
    const op=await approve(c);await service.deliver(op.operationId);c=await service.getConversation(c.id);assert.equal(c.outbox.find(o=>o.id===op.operationId).status,'SENT');
    await load(id);await service.deliver(op.operationId);assert.equal(api.sent.filter(x=>x.chatId===id).length,1);
   });
+  await t.test('ordinary enquiries and the spaced price question are answered in AUTO without silently switching off the bot',async()=>{
+   const before=await service.integration();await service.updateSettings({version:before.settingsVersion,settings:{...before.settings,mode:'AUTO',profiles:before.settings.profiles.map(p=>({...p,enabled:p.direction==='GROOMING'}))}},actorId);
+   try{
+    const id=chat('ordinary-auto');
+    for(const [n,text] of ['Добрый день! Подскажите пожалуйста','Груминг','Можно?','Вы тут?','?','Здравствуйте, по чем стрижка полностью йорк терьер 10 лет, а вес примерно 3-4 кг'].entries()){
+     const messageId=`ordinary-${n}`;api.add(id,messageId,text);let c=await load(id);assert.equal(c.mode,'BOT');
+     const pending=c.outbox.find(o=>o.triggerMessageId===messageId);assert.ok(pending?.text);assert.equal(pending.status,'PENDING');
+     if(n===5){assert.match(pending.text,/Йоркширский терьер.*Полный комплекс/);assert.match(pending.text,/точную стоимость уточнит администратор груминга/);assert.equal(c.needsAttention,true);}
+     else assert.match(pending.text,/\?/);
+     await service.deliver(pending.id);await service.deliver(pending.id);await load(id);c=await service.getConversation(c.id);
+     assert.equal(c.mode,'BOT');assert.equal(c.outbox.find(o=>o.id===pending.id).status,'SENT');assert.equal(api.sent.filter(o=>o.chatId===id).length,n+1);
+    }
+    assert.equal((await service.getConversation((await prisma.avitoConversation.findUniqueOrThrow({where:{integrationId_externalChatId:{integrationId:f.integration.id,externalChatId:id}}})).id)).inquiries.length,0);
+   }finally{const current=await service.integration();await service.updateSettings({version:current.settingsVersion,settings:before.settings},actorId);}
+  });
+  await t.test('the actual enquiry uses a current numerical price when CRM contains one, with no private chat hardcoding',async()=>{
+   const where={installationId_catalogKey:{installationId:grooming.id,catalogKey:'dog:york:full'}},row=await prisma.groomingService.findUniqueOrThrow({where});
+   try{
+    await prisma.groomingService.update({where,data:{price:2500,priceType:'FIXED',version:{increment:1}}});
+    const id=chat('actual-priced');api.add(id,'actual-priced','Здравствуйте, по чем стрижка полностью йорк терьер 10 лет, а вес примерно 3-4 кг');const c=await load(id);
+    assert.match(clean(draft(c).text),/Йоркширский терьер.*Полный комплекс — 2 500 ₽/);assert.equal(c.mode,'BOT');assert.equal(c.needsAttention,false);
+    const op=await approve(c);await service.deliver(op.operationId);assert.equal((await service.getConversation(c.id)).outbox.find(o=>o.id===op.operationId).status,'SENT');
+   }finally{await prisma.groomingService.update({where,data:{price:row.price,priceType:row.priceType,version:{increment:1}}});}
+  });
+  await t.test('free wording PRICE classification reaches the grooming catalogue through sync and persisted delivery',async()=>{
+   const configured=f.model.configured,classify=f.model.classify;f.model.configured=()=>true;f.model.classify=async()=>({action:'PRICE',knowledgeId:null,serviceQuery:null});
+   try{
+    const id=chat('semantic-price');api.add(id,'semantic-price','По деньгам полный комплекс мальтезе');const c=await load(id);assert.match(clean(draft(c).text),/2 100–2 500 ₽/);
+    assert.ok(draft(c).replyContext.groomingPriceFingerprint);const op=await approve(c);await service.deliver(op.operationId);assert.equal((await service.getConversation(c.id)).outbox.find(o=>o.id===op.operationId).status,'SENT');
+   }finally{f.model.configured=configured;f.model.classify=classify;}
+  });
   await t.test('short cat and breed clarifications persist and simulation reads the same saved state',async()=>{
    const id=chat('cat');api.add(id,'cat-price','Сколько стрижка кошки?');let c=await load(id);assert.equal(c.contact.groomingPriceContext.awaiting,'CONDITION');assert.match(draft(c).text,/есть колтуны/);
    const sim=await service.simulate('202','Нет',c.contact);assert.match(clean(sim.decision.text),/2 500–3 300 ₽/);assert.equal(sim.persisted,false);
@@ -49,7 +80,7 @@ test('grooming prices read the current module and validate persisted replies bef
    api.add(id,'breed-maltese','Мальтезе');c=await load(id);assert.match(clean(draft(c).text),/1 500 ₽/);assert.equal(c.inquiries.length,0);
   });
   await t.test('QUOTE stays unknown and an actual callback is saved to grooming with the priced service source',async()=>{
-   const id=chat('quote');api.add(id,'quote-1','Сколько полный комплекс йорку?');let c=await load(id);assert.match(draft(c).text,/точная стоимость в прайсе не указана/);assert.doesNotMatch(draft(c).text,/\d\s*₽/);
+   const id=chat('quote');api.add(id,'quote-1','Сколько полный комплекс йорку?');let c=await load(id);assert.match(draft(c).text,/точную стоимость уточнит администратор груминга/);assert.doesNotMatch(draft(c).text,/\d\s*₽/);
    api.add(id,'quote-hygiene','А гигиена?');c=await load(id);assert.match(clean(draft(c).text),/2 100 ₽/);api.add(id,'quote-here','Здесь');c=await load(id);assert.equal(c.contact.bookingChannel,'CALLBACK');api.add(id,'quote-name','Анна');await load(id);api.add(id,'quote-phone','Мой номер +7 900 111-22-33');c=await load(id);
    assert.equal(c.inquiries.length,1);assert.equal(c.inquiries[0].direction,'GROOMING');assert.equal(c.inquiries[0].conversationId,c.id);assert.equal(c.inquiries[0].contactMessageId,'quote-phone');assert.match(c.inquiries[0].summary,/Йоркширский терьер.*Гигиенический уход/s);assert.equal(c.requestId,null);
    assert.equal(await prisma.onlineAppointmentRequest.count(),clinical);assert.equal(await prisma.groomingReservation.count(),reservations);

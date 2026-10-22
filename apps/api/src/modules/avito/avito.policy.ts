@@ -45,7 +45,8 @@ export function decideAvitoReply(input: DecisionInput): AdminDecision {
 function applyGroomingPrice(input: DecisionInput, decision: AdminDecision): AdminDecision {
   if (decision.direction !== 'GROOMING' || input.petService?.direction !== 'GROOMING' || input.mode && input.mode !== 'BOT'
     || input.mediaType && input.mediaType !== 'text' || ['URGENT', 'MEDICAL', 'CONTACT_DECLINED', 'DIRECT_HUMAN_REQUEST', 'HUMAN_CONTROL', 'UNSUPPORTED_MEDIA'].includes(decision.reason)) return decision;
-  const price = groomingPriceAnswer(input.petService, input.text, input.contact?.groomingPriceContext);
+  const priceIntent = input.intent?.action === 'PRICE' || input.intent?.questions?.some(question => question.kind === 'PRICE');
+  const price = groomingPriceAnswer(input.petService, input.text, input.contact?.groomingPriceContext, priceIntent);
   if (!price) return decision;
   const contact = { ...decision.contact, groomingPriceContext: price.context };
   if (!contact.collecting) contact.summary = [input.text, price.answer].filter(Boolean).join('\n').slice(0, 2000);
@@ -59,7 +60,7 @@ function applyGroomingPrice(input: DecisionInput, decision: AdminDecision): Admi
     : 'Могу оформить заявку здесь, чтобы администратор уточнил детали и помог с записью. Оставим заявку?';
   if (price.question) delete contact.bookingChoiceOffered; else contact.bookingChoiceOffered = true;
   return { ...priced, text: [price.answer, address, price.question || offer].filter(Boolean).join('\n\n'), reason: price.question ? 'GROOMING_PRICE_CLARIFY' : 'GROOMING_PRICE',
-    purpose: 'REPLY', handoff: false, needsAttention: false, createInquiry: false, petServiceBooking: undefined, petServiceChannel: undefined };
+    purpose: 'REPLY', handoff: false, needsAttention: !price.quoted && !price.question, createInquiry: false, petServiceBooking: undefined, petServiceChannel: undefined };
 }
 function decideCore(input: DecisionInput): AdminDecision {
   const { settings, listingId, text, messageId } = input;
@@ -162,7 +163,23 @@ function decideCore(input: DecisionInput): AdminDecision {
   const matched = profile.knowledge.filter(k => input.intent?.action === 'KNOWLEDGE' ? k.id === input.intent.knowledgeId : k.keywords.some(word => normalized.includes(word.toLocaleLowerCase('ru-RU').replace(/ё/g, 'е'))));
   if (matched.length === 1) return { ...base, text: matched[0].answer, reason: `KNOWLEDGE:${matched[0].id}` };
   if (input.intent?.action === 'GREETING' || /^(?:здравствуй(?:те)?|добрый\s+(?:день|вечер)|доброе\s+утро|привет)[.!\s]*$/u.test(normalized)) return { ...base, text: rule.greeting || 'Здравствуйте! Подскажите, пожалуйста, что вас интересует?', reason: 'GREETING' };
-  if (/^(?:спасибо|благодарю|понятно|хорошо|до свидания|все понятно)(?:[\s,.!]|$)/u.test(normalized) && !text.includes('?')) return { ...base, text: 'Пожалуйста! Если появятся ещё вопросы, напишите.', reason: 'COURTESY' };
+  if (/^(?:спасибо(?:\s+(?:большое|за\s+(?:ответ|помощь|информацию)))?|благодарю|понятно|хорошо|до свидания|все понятно)[\s,.!]*$/u.test(normalized)) return { ...base, text: 'Пожалуйста! Если появятся ещё вопросы, напишите.', reason: 'COURTESY' };
+  // A vague customer message needs a follow-up, not a permanent HUMAN switch.
+  // Explicit takeover, medical issues and contact preferences are handled above.
+  if (profile.direction === 'GROOMING') {
+    const awaiting = contact.groomingPriceContext?.awaiting;
+    const knownPet = contact.groomingPriceContext?.species || contact.petSpecies;
+    contact.groomingPriceContext ??= { awaiting: 'PET' };
+    const question = awaiting === 'PET' ? 'У вас кошка или собака? Если собака, напишите породу.'
+      : awaiting === 'BREED' ? 'Какой породы собака? Для метиса напишите примерный вес.'
+      : awaiting === 'SERVICE' ? 'Какая услуга нужна — полный комплекс, гигиенический уход или вычёсывание?'
+      : awaiting === 'CONDITION' ? 'Подскажите, у кошки есть колтуны?'
+      : knownPet ? 'Что ещё хотите уточнить по грумингу — стоимость, уход или запись?'
+      : 'Подскажите, какой у вас питомец и какая услуга нужна — стрижка, гигиенический уход или вычёсывание?';
+    const ping = /^(?:вы\s+(?:тут|здесь|на\s+связи)|кто[ -]нибудь\s+есть|ау|алло|ответьте|\?+)[\s.!?]*$/u.test(normalized);
+    const vague = /^(?:груминг|можно|подскажите(?:\s+пожалуйста)?|добрый\s+(?:день|вечер)[\s!,.]*(?:подскажите(?:\s+пожалуйста)?)?|да|нет)[\s.!?]*$/u.test(normalized);
+    return { ...base, text: `${ping ? 'Да, я на связи. ' : ''}${question}`, reason: 'GROOMING_CLARIFY', needsAttention: matched.length > 1 || !ping && !vague, handoff: false };
+  }
   return { ...base, text: offHours ? `Не хочу подсказать неточно. ${dutyDoctorReply(input.clinicPhone)}` : t.unknown, handoff: !offHours, reason: matched.length > 1 ? 'AMBIGUOUS_KNOWLEDGE' : 'NO_APPROVED_ANSWER' };
 }
 

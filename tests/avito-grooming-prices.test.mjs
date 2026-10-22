@@ -24,7 +24,7 @@ test('fixed breed prices are quoted from the current module without adding 300 a
  const d=reply('Сколько стоит гигиена йорка?');assert.match(clean(d),/Йоркширский терьер.*Гигиенический уход — 2 100 ₽/);assert.doesNotMatch(clean(d),/2 400|2 500|2 800/);assert.equal(d.reason,'GROOMING_PRICE');assert.equal(d.createInquiry,false);
 });
 test('a missing full-package price remains QUOTE and never becomes zero or the old document price',()=>{
- const d=reply('Сколько стоит полный комплекс йорку?',{}, {petService:{...source,selfBookingEnabled:true}});assert.match(d.text,/точная стоимость в прайсе не указана/);assert.doesNotMatch(d.text,/\d[\d\s]*\s*₽|самостоятельно на сайте/);assert.match(d.text,/администратор/);
+ const d=reply('Сколько стоит полный комплекс йорку?',{}, {petService:{...source,selfBookingEnabled:true}});assert.match(d.text,/точную стоимость уточнит администратор груминга/);assert.doesNotMatch(d.text,/\d[\d\s]*\s*₽|самостоятельно на сайте/);assert.match(d.text,/администратор/);
 });
 test('an approved range stays a range rather than a guessed minimum or a repeated surcharge',()=>{
  const d=reply('Сколько полный комплекс мальтезе?');assert.match(clean(d),/2 100–2 500 ₽/);assert.doesNotMatch(clean(d),/2 400–2 800|от 2 100/);
@@ -47,7 +47,7 @@ test('cat coat condition is clarified and both source ranges keep their exact la
 test('cat dry deshedding and wash-required haircuts are separate services',()=>{
  assert.match(clean(reply('Сколько экспресс-линька кошки без мытья?')),/Экспресс-линька без мытья — 1 300–2 300 ₽/);
  const haircut=reply('Сколько стрижка кошки без мытья?');assert.match(haircut.text,/Стрижки собак и кошек выполняем только с мытьём/);assert.doesNotMatch(haircut.text,/₽/);
- assert.match(reply('Сколько экспресс-линька и мытьё кошки без колтунов?').text,/точная стоимость в прайсе не указана/);
+ assert.match(reply('Сколько экспресс-линька и мытьё кошки без колтунов?').text,/точную стоимость уточнит администратор груминга/);
 });
 test('approved dry brushing for a shepherd remains available at its own price',()=>{
  const d=reply('Сколько вычесать немецкую овчарку без мытья?');assert.match(clean(d),/Немецкая овчарка.*Вычёсывание без мытья — 2 300 ₽/);assert.doesNotMatch(clean(d),/3 800/);
@@ -65,7 +65,7 @@ test('a new unlisted pet cannot inherit the earlier dog price while short servic
   assert.match(clean(reply('Мальтезе',d.contact)),/1 500 ₽/);
  }
  assert.match(clean(reply('А сколько это будет стоить, пожалуйста?',first.contact)),/2 100 ₽/);
- assert.match(clean(reply('А полный комплекс?',first.contact)),/точная стоимость в прайсе не указана/);
+ assert.match(clean(reply('А полный комплекс?',first.contact)),/точную стоимость уточнит администратор груминга/);
 });
 test('fixed extras, hourly fees and percentage supplements are not treated as package totals',()=>{
  assert.match(clean(reply('Сколько подстричь когти?')),/Подстригание когтей — 550 ₽/);

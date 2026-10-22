@@ -20,7 +20,9 @@ export type GroomingPriceAnswer = {
 };
 type ServiceRow = { id: string; catalogKey: string | null; title: string; version: number; price: unknown; maximumPrice: unknown; priceType: string; catalogData: unknown };
 const norm = (s: string) => s.toLocaleLowerCase('ru-RU').replace(/ё/g, 'е').replace(/[‐‑–—-]/g, ' ').replace(/\s+/g, ' ').trim();
-const stem = (s: string) => s.replace(/(?:ского|ской|ские|ский|ого|ому|ыми|ями|ами|иях|ях|ям|ов|ев|ая|яя|ое|ее|ые|ие|ий|ый|ой|ом|а|я|у|ю|е|ы|и)$/u, '').replace(/ь/g, '');
+// "Той" is a breed qualifier, not an inflection: dropping it makes every
+// "йорк терьер" enquiry also match the toy-terrier catalogue row.
+const stem = (s: string) => s === 'той' ? s : s.replace(/(?:ского|ской|ские|ский|ого|ому|ыми|ями|ами|иях|ях|ям|ов|ев|ая|яя|ое|ее|ые|ие|ий|ый|ой|ом|а|я|у|ю|е|ы|и)$/u, '').replace(/ь/g, '');
 const words = (s: string) => norm(s).match(/[а-яa-z]+/gu)?.map(stem).filter(w => w.length >= 3) ?? [];
 const breedFollowupWords = new Set(words('сколько стоит стоить стоимость цена прайс тариф почем обойдется будет получится подскажите скажите пожалуйста примерно примерно это этот эта эту все весь такой такая так же тоже еще теперь только для меня мой моя моей моего наш наша нашей нашего собака собаке собаки пес питомец питомца ему ей его нее для полный комплекс гигиена гигиенический уход стрижка подстричь вычесать вычесывание расчесать экспресс линька мытье мыть мытьем купание купать без нет надо нужно хочу интересует узнать вместе отдельно здесь тут авито сайт сайте онлайн адрес где находитесь находиться находится как добраться рубль рублей рубли'));
 
@@ -45,7 +47,8 @@ export function groomingPriceFingerprint(context: PetServiceContext) {
 
 export function groomingPriceQuestion(text: string) {
   const t = norm(text);
-  return /цен|стоим|прайс|тариф|почем|обойдется/u.test(t) || /сколько/u.test(t) && !/сколько\s+(?:времени|час|минут|дней|суток|лет|месяц|недел)/u.test(t);
+  return /цен|стоим|прайс|тариф|(?:^|[^а-я])по\s*чем(?=$|[^а-я])|обойдется|(?:^|[^а-я])скок(?:о|а)?(?=$|[^а-я])/u.test(t)
+    || /сколько/u.test(t) && !/сколько\s+(?:времени|час|минут|дней|суток|лет|месяц|недел)/u.test(t);
 }
 
 export function withGroomingPricePrefix(prefix: string | undefined, text: string | null) {
@@ -130,10 +133,10 @@ function extra(input: string) {
 }
 
 /** A strict, catalogue-backed selector. Unknown breed/service and ambiguous rows never become a guessed minimum. */
-export function groomingPriceAnswer(context: PetServiceContext, text: string, prior?: GroomingPriceContext): GroomingPriceAnswer | null {
+export function groomingPriceAnswer(context: PetServiceContext, text: string, prior?: GroomingPriceContext, priceIntent = false): GroomingPriceAnswer | null {
   if (context.direction !== 'GROOMING' || context.groomingPrices === undefined) return null;
   const t = norm(text), rows = context.groomingPrices, state = { ...(parseGroomingPriceContext(prior) ?? {}) };
-  const requested = groomingPriceQuestion(t), foundBreeds = breeds(rows, t), foundExtra = extra(t);
+  const requested = priceIntent || groomingPriceQuestion(t), foundBreeds = breeds(rows, t), foundExtra = extra(t);
   const species = petSpecies(t), hygiene = /гигиен/u.test(t), deshed = /вычес|вычеш|расчес|расчеш|линьк/u.test(t);
   const cut = /стриж|подстр|постри[гж]|стри(?:чь|гут|гу)/u.test(t), wash = /мыть|мытье|купан|купать/u.test(t);
   const uncertainCondition = /колтун/u.test(t) && /не\s+знаю|не\s+уверен|неясно|непонятно|или\s+нет/u.test(t);
@@ -194,6 +197,6 @@ export function groomingPriceAnswer(context: PetServiceContext, text: string, pr
   delete state.awaiting;
   if (candidates.length !== 1) return result('Точную стоимость по этому запросу нужно уточнить у администратора.');
   const row = candidates[0];
-  if (row.priceType === 'QUOTE') return result(`${row.title}: точная стоимость в прайсе не указана, её уточнит администратор.`);
+  if (row.priceType === 'QUOTE') return result(`${row.title}: точную стоимость уточнит администратор груминга. Можно продолжить здесь, в Авито.`);
   return { ...result(`${row.title} — ${row.label}.${row.note ? ` ${row.note}.` : ''}`, undefined, true), canSelfBook: row.category !== 'SUPPLEMENT' && row.priceType !== 'PERCENT' };
 }
