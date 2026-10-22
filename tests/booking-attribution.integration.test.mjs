@@ -28,7 +28,8 @@ test('referral validation accepts only the complete non-sensitive pair', async (
     { source: 'OTHER', listingId: '123' }, { source: 'AVITO', listingId: 123 },
     { source: 'AVITO', listingId: '0' }, { source: 'AVITO', listingId: '00123' },
     { source: 'AVITO', listingId: '1'.repeat(21) }, { ...good, phone: '+79990000000' },
-    { source: 'AVITO', listingId: 'https://example.test/?token=never' }]) {
+    { source: 'AVITO', listingId: 'https://example.test/?token=never' },
+    Object.assign(Object.create({ source: 'AVITO' }), { listingId: '123', other: true })]) {
     assert.equal(bookingAttribution(value), undefined);
     const fields = { clientKey: randomUUID(), offerToken: 'x'.repeat(64), contactConsent: true, bookingConsent: true,
       ownerId: 'qa-owner', animalId: 'qa-pet', roomId: 'qa-room', startsAt: '2026-11-01T07:00:00Z', endsAt: '2026-11-03T07:00:00Z', walkCount: 0, notes: '' };
