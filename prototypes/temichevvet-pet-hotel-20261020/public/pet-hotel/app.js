@@ -21,7 +21,7 @@ function updateMobile(quote,currentTrip,dog){
  mobileBar.querySelector('[data-start-rate]').textContent=quote?new Intl.NumberFormat('ru-RU').format(currentTrip.total):'от '+new Intl.NumberFormat('ru-RU').format(minimumRoomRate(roomRates,dog?'DOG':'CAT',terms.dailyRate));
  mobileBar.querySelector('i').textContent=quote?'за поездку':'/ сутки';
  mobileBar.querySelector('a').href=quote?'#trip-summary':'#estimate';
- mobileBar.querySelector('a').innerHTML=(quote?'К итогу':'Спланировать')+' <span aria-hidden="true">↗</span>';
+ mobileBar.querySelector('a').innerHTML=(quote?'Мой расчёт':'Выбрать даты')+' <span aria-hidden="true">↗</span>';
 }
 function recalculate(){
  const dog=kind.value==='DOG';
@@ -45,7 +45,7 @@ function recalculate(){
  const dailyRate=minimumRoomRate(roomRates,dog?'DOG':'CAT',terms.dailyRate);
  const stay=selectedQuote?Number(selectedQuote.stayPrice):days*dailyRate,walkPrice=selectedQuote?Number(selectedQuote.walksPrice):walkCount*Number(terms.walkRate);trip={dog,days,elapsedHours,walkCount,dogWeight,arrival:arrival.value,departure:departure.value,arrivalTime:arrivalTime.value,departureTime:departureTime.value,total:stay+walkPrice,...(selectedQuote?{roomName:selectedQuote.roomName}: {})};
  $('#stay-label').textContent=`${days} сут. × ${rubles(selectedQuote?.dailyRate??dailyRate)}`;$('#stay-price').textContent=rubles(stay);
- $('#walk-price-line').hidden=!dog||walkCount===0;$('#walk-price-label').textContent=`${walkCount} выгул. × ${rubles(selectedQuote?.walkRate??terms.walkRate)}`;$('#walk-price').textContent=rubles(walkPrice);$('#trip-total').textContent=rubles(trip.total);
+ $('#walk-price-line').hidden=!dog||walkCount===0;$('#walk-price-label').textContent=`Прогулки: ${walkCount} × ${rubles(selectedQuote?.walkRate??terms.walkRate)}`;$('#walk-price').textContent=rubles(walkPrice);$('#trip-total').textContent=rubles(trip.total);
  $('#total-label').textContent=selectedQuote?'По выбранному номеру':'Предварительно от';
  updateMobile(selectedQuote,trip,dog);
  booking?.updateTrip(trip);
@@ -56,7 +56,7 @@ function choosePet(value){
  $$('[data-pet-choose]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.petChoose===kind.value)));
  $('#hero-cat').classList.toggle('is-active',!dog);$('#hero-dog').classList.toggle('is-active',dog);
  $('#packing-image').src=dog?'assets/guest-6.jpg':'assets/guest-2.jpg';
- $('#packing-image').alt=dog?'Вест-хайленд-терьер в нашей гостинице, обработка качества с AI':'Кошки в нашей гостинице, обработка качества с AI';
+ $('#packing-image').alt=dog?'Вест-хайленд-терьер в нашей гостинице':'Кошки в нашей гостинице';
  recalculate();
 }
 $$('[data-pet-choose]').forEach(button=>button.addEventListener('click',()=>choosePet(button.dataset.petChoose)));
@@ -69,13 +69,13 @@ booking=new HotelBooking({getTrip:()=>trip,onQuote:q=>{selectedQuote=q;recalcula
 $('#copy-trip').addEventListener('click',async()=>{
  if(!trip)return;
  const text=`Здравствуйте! Хочу уточнить размещение в зоогостинице TemichevVET.\nПитомец: ${trip.dog?'собака, '+trip.dogWeight+' кг':'кошка'}.\nЖелаемые даты: ${dateLabel(trip.arrival)}, ${trip.arrivalTime} — ${dateLabel(trip.departure)}, ${trip.departureTime}.\nОплачиваемых суток: ${trip.days}; неполные сутки округляются вверх.\n${trip.dog?'Выгулов за всё проживание: '+trip.walkCount+'.\n':''}${trip.roomName?'По выбранному номеру':'Предварительно от'}: ${rubles(trip.total)}. Прошу подтвердить наличие номера, время выезда и итоговую стоимость.\nКорм и миски привезу с собой.`;
- try{await navigator.clipboard.writeText(text);$('#copy-status').textContent='План скопирован. Передайте администратору для согласования — бронь ещё не создана.';}
+ try{await navigator.clipboard.writeText(text);$('#copy-status').textContent='План скопирован. Отправьте его администратору, чтобы обсудить размещение.';}
  catch{$('#copy-fallback').value=text;$('#copy-dialog').showModal();$('#copy-fallback').focus();$('#copy-fallback').select();}
 });
 $('#copy-close').onclick=()=>$('#copy-dialog').close();
 const checks=$$('.checklist input'),packingKey='temichevvet-hotel-packing-v1';
 try{const saved=JSON.parse(localStorage.getItem(packingKey)||'[]');if(Array.isArray(saved))checks.forEach(c=>c.checked=saved.includes(c.value));}catch{}
-function updatePacking(){const count=checks.filter(c=>c.checked).length;$('#check-count').textContent=`${count}/${checks.length}`;$('.progress-ring').style.setProperty('--done',`${count/checks.length*100}%`);$('#check-progress').textContent=count===checks.length?'Всё отмечено. Уточните детали размещения у администратора.':count?`Приготовлено ${count} из ${checks.length}. Список сохранён на этом устройстве.`:'Пока ничего не собрано. Начнём с привычного корма?';}
+function updatePacking(){const count=checks.filter(c=>c.checked).length;$('#check-count').textContent=`${count}/${checks.length}`;$('.progress-ring').style.setProperty('--done',`${count/checks.length*100}%`);$('#check-progress').textContent=count===checks.length?'Всё отмечено. Уточните детали размещения у администратора.':count?`Приготовлено ${count} из ${checks.length}. Список сохранён на этом устройстве.`:'Начните с корма и мисок — они обязательны.';}
 checks.forEach(c=>c.addEventListener('change',()=>{try{localStorage.setItem(packingKey,JSON.stringify(checks.filter(c=>c.checked).map(c=>c.value)));}catch{}updatePacking();}));updatePacking();
 const roomPhotos=[
  {src:'assets/hotel-rooms-4814.jpg',title:'С порога.',alt:'Ряд номеров с остеклёнными дверцами',description:'Общий вид номеров с деревянными перегородками и остеклёнными дверцами.',detailTitle:'Остеклённые дверцы',detail:'Можно рассмотреть помещение через стекло. Подходящий номер обсудим при согласовании размещения.',x:'56%',y:'55%'},
@@ -100,13 +100,13 @@ $$('[data-angle]').forEach(button=>button.addEventListener('click',()=>{
  $$('[data-angle]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));
 }));
 $('#room-hotspot').onclick=()=>{const open=$('#room-detail').hidden;$('#room-detail').hidden=!open;$('#room-hotspot').setAttribute('aria-expanded',String(open));};
-const dialog=$('#photo-dialog');let photoIndex=0,photoSet=roomPhotos,opener=null,captionNote='Наши помещения · ретушь с AI';
+const dialog=$('#photo-dialog');let photoIndex=0,photoSet=roomPhotos,opener=null,captionNote='Наши номера';
 function showPhoto(index){photoIndex=(index+photoSet.length)%photoSet.length;$('#photo-full').src=photoSet[photoIndex].src;$('#photo-full').alt=photoSet[photoIndex].alt;$('#photo-caption').textContent=`${photoSet[photoIndex].alt}. ${captionNote}`;$('#photo-number').textContent=`${photoIndex+1} / ${photoSet.length}`;}
 function openPhoto(set,index,trigger,note){photoSet=set;opener=trigger;captionNote=note;showPhoto(index);dialog.showModal();}
-$('#room-expand').onclick=event=>openPhoto(roomPhotos,angle,event.currentTarget,'Наши помещения · ретушь с AI');
+$('#room-expand').onclick=event=>openPhoto(roomPhotos,angle,event.currentTarget,'Наши номера');
 $('#photo-close').onclick=()=>dialog.close();$('#photo-previous').onclick=()=>showPhoto(photoIndex-1);$('#photo-next').onclick=()=>showPhoto(photoIndex+1);
 dialog.addEventListener('keydown',event=>{if(event.key==='ArrowLeft'){event.preventDefault();showPhoto(photoIndex-1);}if(event.key==='ArrowRight'){event.preventDefault();showPhoto(photoIndex+1);}});dialog.addEventListener('close',()=>opener?.focus({preventScroll:true}));
-$$('[data-guest-photo]').forEach(button=>button.addEventListener('click',()=>{const active=$('[data-guest-filter][aria-pressed="true"]').dataset.guestFilter;const photos=guestPhotos.filter(photo=>active==='ALL'||photo.species===active);openPhoto(photos,photos.indexOf(guestPhotos[Number(button.dataset.guestPhoto)]),button,'Фото из нашего объявления · обработка качества с AI');}));
+$$('[data-guest-photo]').forEach(button=>button.addEventListener('click',()=>{const active=$('[data-guest-filter][aria-pressed="true"]').dataset.guestFilter;const photos=guestPhotos.filter(photo=>active==='ALL'||photo.species===active);openPhoto(photos,photos.indexOf(guestPhotos[Number(button.dataset.guestPhoto)]),button,'Наши гости');}));
 const guestTrack=$('#guest-track');
 $$('[data-guest-filter]').forEach(button=>button.addEventListener('click',()=>{
  $$('[data-guest-filter]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));

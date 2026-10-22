@@ -45,8 +45,8 @@ test('hotel public package is self-contained, excludes local/private sources, an
   }
   const index = await readFile(join(result.root, 'index.html'), 'utf8');
   assert.match(index, /assets\/salon-real-4806-retouched\.jpg/);
-  assert.match(index, /Фото нашего салона · ретушь с AI/);
-  assert.match(index, /Визуализация на основе наших помещений · AI/);
+  assert.match(index, /Наш салон груминга/);
+  assert.match(index, /Визуализация номера/);
   assert.match(await readFile(join(result.root, 'app.js'), 'utf8'), /HotelBooking/);
 });
 

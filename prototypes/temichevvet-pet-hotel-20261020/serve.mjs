@@ -3,7 +3,7 @@ import {readFile,stat} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {resolve,extname,sep} from 'node:path';
 const root=fileURLToPath(new URL('./public/',import.meta.url));
-const mime={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.jpg':'image/jpeg','.woff2':'font/woff2'};
+const mime={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.jpg':'image/jpeg','.png':'image/png','.svg':'image/svg+xml','.ico':'image/x-icon','.woff2':'font/woff2'};
 const gateway=process.env.PET_HOTEL_GATEWAY_ORIGIN?new URL(process.env.PET_HOTEL_GATEWAY_ORIGIN):null;
 if(gateway&&(!['127.0.0.1','localhost','[::1]'].includes(gateway.hostname)||gateway.protocol!=='http:'))throw Error('The local hotel preview only proxies a loopback gateway');
 const publicPaths=new Set(['/v1/public/pet-hotel/catalog','/v1/public/pet-hotel/availability','/v1/public/pet-hotel/drafts']);

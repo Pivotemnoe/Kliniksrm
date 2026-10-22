@@ -22,3 +22,44 @@ body:has(dialog[open]){overflow:hidden}dialog{border:0;background:var(--paper);c
 .header-account{font-size:10px;white-space:nowrap}.hotel-test-mode{padding:10px 20px;background:#fff1c7;color:#4e401c;font-size:12px;text-align:center}.hotel-test-mode:not([hidden])~.header{top:36px}.room-booking{margin-top:35px;padding-top:28px;border-top:1px solid #ccd5d9}.room-booking>.button{margin-top:18px}.room-options{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:22px}.room-choice{position:relative;padding:20px;text-align:left;border:1px solid #b8c5cf;background:#f5f7f7;display:flex;flex-direction:column;gap:9px;color:var(--ink);transition:border-color .2s,background .2s}.room-choice[aria-pressed=true]{border-color:var(--blue);background:#fff;box-shadow:inset 0 0 0 1px var(--blue)}.room-choice-number{font-size:9px;letter-spacing:.1em;color:var(--muted)}.room-choice strong{font-weight:550;font-size:18px;line-height:1.4;padding-right:15px}.room-choice>span:not(.room-choice-number){font-size:13px}.room-choice small{font-size:10px;color:var(--muted)}.room-choice i{font-style:normal;position:absolute;right:15px;top:15px;color:var(--blue);font-size:22px}.trip-summary>#continue-booking:not([hidden]){margin-top:24px}.trip-summary>#continue-booking:not([hidden])+.button{background:transparent;color:var(--ink);border:1px solid #bdc7ce;margin-top:12px}@media(max-width:600px){.header-account{display:none}.room-options{gap:10px}.room-choice{padding:16px 12px}.room-choice strong{font-size:16px}.room-choice small{font-size:9px}.room-booking>.button{width:100%}}
 
 .fact-strip strong [data-start-rate]{display:inline;font:inherit;letter-spacing:inherit;color:inherit;margin:0}
+
+/* Internal JTBD review: preserve photography and motion, improve text and tap targets. */
+:root{--muted:#56646b}
+.eyebrow,.hero-content .eyebrow,.room-console .eyebrow{font-size:11px}
+.button,.trip-summary .button{font-size:15px}.text-link,.room-console>.text-link{font-size:14px}
+.header nav,.header-contact,.header-account{font-size:13px}.header{gap:26px}.header nav{gap:24px}
+.hero-lead{font-size:18px;max-width:560px}.hero h1{font-size:clamp(56px,6.2vw,100px)}
+.explore-link{font-size:14px}.explore-link small{font-size:12px}.visual-note{font-size:11px}
+.welcome-aside p,.section-heading>p,.guest-intro>p,.room-console>div>p,.room-detail p,.packing-intro,.packing-progress>p,.journal-card>p,.faq details p,.salon-teaser p:not(.eyebrow),.contacts-layout>div>p,.summary-note,.subtle{font-size:14px;line-height:1.8}
+.fact-strip span,.fact-strip small,.guest-card figcaption small,.guest-filter button,.guest-bottom>p,.checklist small,.checklist em,.journal-card>small,.contact-details small,.contact-details>div>span,.contact-details .text-link,.room-angles span,.salon-teaser figcaption,.article-page .cover-note,.article-back,footer p,footer button{font-size:12px}
+.guest-filter button,.room-angles button,.duration-options button,.guest-bottom button{min-height:44px}
+.field-grid label{font-size:14px}.field-grid input{font-size:16px}.pet-option-copy>small{font-size:13px;line-height:1.6;max-width:none}
+.duration-options{font-size:13px;flex-wrap:wrap}.duration-options button{font-size:13px}
+.trip-summary #summary-dates,.price-line,.total-line>span{font-size:14px}.room-console>.subtle{font-size:13px}
+.room-choice{min-width:0}.room-choice strong{font-size:18px;overflow-wrap:anywhere}.room-choice small,.room-choice-number{font-size:12px}.room-choice>span:not(.room-choice-number){font-size:14px}
+.summary-reminder p{font-size:14px}.faq summary{font-size:16px}.article-body,.article-page .article-body{font-size:16px}.article-body .article-source{font-size:12px}.article-page .article-back{font-size:14px}
+@media(max-width:1100px){.header-contact{display:none}.header nav{gap:18px}}
+@media(min-width:601px) and (max-width:1000px){#trip-form{grid-template-columns:1fr}.trip-summary{position:static}.room-explorer{grid-template-columns:1fr 1fr}}
+@media(max-width:600px){
+ .header nav a:first-child{display:block;font-size:14px}.header nav a:nth-child(4){display:none}.brand small{font-size:8px}.header{gap:12px}.header nav{margin-left:auto}
+ .hero{height:max(850px,100svh)}.hero-content{padding-top:126px}.hero h1{font-size:clamp(38px,10.2vw,60px);line-height:1.14}
+ .hero-lead{font-size:16px;max-width:330px;line-height:1.65;margin-top:20px}.hero .button{font-size:15px;min-width:0;min-height:56px;margin-top:23px;width:min(100%,330px)}
+ .hero-content .eyebrow{font-size:10px;margin-bottom:22px}.hero-bottom{gap:14px}.hero-species button{font-size:19px}.explore-link{font-size:13px}.explore-link small{font-size:11px}.visual-note{font-size:10px;max-width:125px}
+ .section-heading h2,.welcome h2{font-size:36px}.welcome-aside{max-width:none}.welcome-aside p{font-size:15px}
+ .section-heading>p,.guest-intro>p,.packing-intro,.packing-progress>p,.journal-card>p,.faq details p,.salon-teaser p:not(.eyebrow),.contacts-layout>div>p,.subtle,.summary-note{font-size:14px}
+ .pet-options{grid-template-columns:1fr 1fr}.pet-option-copy{padding:12px 6px}.pet-option-copy>b{font-size:21px}.pet-option-copy>small{font-size:12px}.pet-option>img{height:150px}
+ .field-grid{gap:16px 12px}.field-grid label{font-size:13px}.trip-dates>.subtle,.dog-options>.subtle{font-size:13px}
+ .duration-options>span{width:100%}.duration-options{gap:8px}.duration-options button{padding:9px 14px}
+ .trip-summary #summary-dates,.price-line,.total-line>span{font-size:14px}.total-line{gap:16px;flex-wrap:wrap}.total-line strong{font-size:39px}.trip-summary .button{font-size:15px}
+ .room-options{grid-template-columns:1fr}.room-choice{padding:18px}.room-choice strong{font-size:19px}.room-choice small{font-size:13px}
+ .room-console>div>p,.room-console>.subtle,.room-detail p{font-size:14px}.room-console>.text-link{font-size:14px}.room-angles span{font-size:12px;gap:6px}.room-angles img{height:70px}.room-expand{font-size:12px;min-height:44px}
+ .guest-filter button{font-size:14px}.guest-bottom>p{font-size:12px}.guest-card figcaption small{font-size:13px}
+ .checklist small{font-size:13px}.checklist em{font-size:11px}.checklist label{gap:12px}.checklist strong{font-size:16px}.progress-ring b{font-size:12px}
+ .journal-card>small,.journal-picture>span,.salon-teaser figcaption{font-size:12px}.salon-teaser h2{font-size:39px}.salon-teaser .button{font-size:14px;min-width:0;width:100%}
+ .contact-details small,.contact-details>div>span{font-size:12px}.contact-details .text-link{font-size:13px}
+ .mobile-trip-bar small{font-size:11px;line-height:1.5}.mobile-trip-bar b{font-size:20px}.mobile-trip-bar i{font-size:12px}.mobile-trip-bar>a{font-size:13px;padding:12px 14px;gap:12px}.mobile-trip-bar{gap:12px;padding-inline:18px}
+ footer p,footer button{font-size:12px}footer p{max-width:none}.article-body,.article-page .article-body{font-size:16px}#article-dialog .eyebrow,.article-body .article-source,.article-page .cover-note{font-size:12px}#photo-caption{font-size:13px}#copy-fallback{font-size:16px}#article-permalink{font-size:14px}
+}
+.article-page .article-cover[src*="guest-"]{object-position:60% 10%}
+
+.room-booking .room-contact{margin-top:20px;min-height:44px;line-height:1.6}

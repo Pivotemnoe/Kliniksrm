@@ -63,7 +63,7 @@ export function OurWorks() {
   }, [item.id]);
   const move = direction => setSelected(items[(index + direction + items.length) % items.length].id);
   return <section className="our-works section" id="works" aria-labelledby="works-title">
-    <div className="section-heading reveal"><div><p className="eyebrow">НАШИ РАБОТЫ</p><h2 id="works-title">У каждого —<br/>свой образ.</h2></div><p>Наши питомцы. Наши стрижки.<br/>Посмотрите детали поближе.</p></div>
+    <div className="section-heading reveal"><div><p className="eyebrow">НАШИ РАБОТЫ</p><h2 id="works-title">Наши работы<br/>в деталях.</h2></div><p>Сравните фотографии до и после ухода.<br/>Любой снимок можно открыть целиком.</p></div>
     <div className="works-filters" role="group" aria-label="Фотографии работ">
       {[["all", "Все работы", 17], ["before-after", "До / после", 7], ["portrait", "Портреты", 10]].map(([value, label, count]) => <button key={value} aria-pressed={filter === value} onClick={() => { setFilter(value); setSelected(WORKS.find(item => value === "all" || item.kind === value).id); }}>{label}<span>{count}</span></button>)}
     </div>

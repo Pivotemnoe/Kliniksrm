@@ -12,7 +12,13 @@ test('preliminary rates respect individual active rooms and the selected animal'
 });
 test('missing or malformed room rates use the explicit catalogue fallback',()=>{
  assert.equal(minimumRoomRate(undefined,'CAT','700.00'),700);
- assert.equal(minimumRoomRate([{species:'CAT',dailyRate:'invalid'},{species:'CAT',dailyRate:0}], 'CAT','700.00'),700);
+ for(const dailyRate of [null,undefined,'','  ','invalid',NaN,Infinity,-1,false,[],{}])
+  assert.equal(minimumRoomRate([{species:'CAT',dailyRate}], 'CAT','700.00'),700);
+});
+test('an explicit zero room rate is valid and differs from a missing price',()=>{
+ for(const dailyRate of [0,'0','0.00'])
+  assert.equal(minimumRoomRate([{species:'CAT',dailyRate}], 'CAT','700.00'),0);
+ assert.equal(minimumRoomRate([...rooms,{species:'CAT',dailyRate:0}],null,700),0);
 });
 test('new catalogue prices are used without altering the room objects',()=>{
  const updated=rooms.map((r,i)=>i===0?{...r,dailyRate:'1500.00'}:{...r});

@@ -10,6 +10,7 @@ const hotelRoot = join(publicRoot, 'pet-hotel');
 const site = 'https://pet.temichevvet.ru';
 const pages = ['index.html', 'journal/choose-a-stay.html', 'journal/familiar-things.html', 'journal/first-visit.html'];
 const codeFiles = ['app.js', 'articles.js', 'booking.js', 'rates.js', 'style.css'];
+const icons = ['favicon.svg', 'favicon.ico', 'favicon-16.png', 'favicon-32.png', 'apple-touch-icon.png'];
 const photos = [
   'hotel-cat-premium.jpg', 'hotel-dog-premium.jpg',
   'hotel-rooms-4814.jpg', 'hotel-glass-4812.jpg', 'hotel-inside-4817-clean.jpg',
@@ -51,6 +52,7 @@ export async function buildHotelRelease({destination, releaseId, revision, built
     await put(name, data);
   }
   await put('booking-attribution.js', await readFile(join(project, '../../packages/booking-attribution/browser.mjs')));
+  for (const name of icons) await put(name, await readFile(join(hotelRoot, name)));
   for (const name of photos) await put('assets/' + name, await readFile(join(hotelRoot, 'assets', name)));
   for (const name of sharedAssets) await put('assets/' + name, await readFile(join(publicRoot, 'assets', name)));
   const locations = pages.map(name => site + '/pet-hotel/' + (name === 'index.html' ? '' : name));

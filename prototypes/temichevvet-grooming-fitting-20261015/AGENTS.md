@@ -1,3 +1,8 @@
+## Current owner instruction - internal JTBD review, 22 October 2026
+
+- Prepare revised copy, calls to action and responsive readability for both sites. Remove repeated editing/source/technical captions from real photos; retain a concise visualization label on staged imagery and distinguish catalogue examples from actual work. Preserve the accepted photographs and overall design.
+- The owner requested an INTERNAL version first and a before/after comparison sent to their own Gmail for remote review. Do not publish this new visual/copy revision until the owner replies with approval. Earlier publication authorization applies only to already completed scoped fixes.
+
 ## First screen and Jobs to be Done correction — 2026-10-21
 
 - Owner rejected the portfolio slideshow on the first screen: oversized photos, scroll/timer changes and an abstract slogan displaced a clear client action. Show ONE supplied photo with the real groomer and poodle, without automatic or scroll-driven photo changes. Preserve the existing brand/design language, edited portfolio, catalogue, prices and hotel referral.

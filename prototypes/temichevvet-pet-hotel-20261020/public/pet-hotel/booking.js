@@ -30,9 +30,10 @@ export class HotelBooking {
       if(data.connected&&data.fresh&&data.settings&&Array.isArray(data.rooms))this.onCatalog(data);
       $('#room-booking').hidden=false;
       $('#check-rooms').hidden=!data.selfBookingEnabled;
-      $('#room-booking-status').textContent=data.selfBookingEnabled?'Покажем номера, доступные на ваши даты, и стоимость каждого.':'Онлайн-бронирование пока не открыто. Расчёт можно обсудить с администратором.';
+      $('#room-booking-status').textContent=data.selfBookingEnabled?'Покажем номера, доступные на ваши даты, и стоимость каждого.':'Запишем по телефону. Позвоните, чтобы согласовать номер и даты.';
       if(data.testMode){$('#hotel-test-mode').hidden=false;}
       if(data.portalUrl){const u=new URL(data.portalUrl);if((u.protocol==='https:'||['127.0.0.1','localhost'].includes(u.hostname))&&u.pathname==='/portal/pet-hotel'){this.portal=u;$('#hotel-account').href=u.href;$('#hotel-account').hidden=false;}}
+      $('.summary-note').textContent=data.selfBookingEnabled?'Номер будет забронирован после подтверждения в кабинете. Если нужна помощь с выбором, позвоните нам.':'Для бронирования позвоните администратору — согласуем даты, номер и условия.';
       this.updateTrip(this.getTrip());
     }catch{
       $('#room-booking').hidden=false;$('#check-rooms').hidden=false;
@@ -60,10 +61,10 @@ export class HotelBooking {
       if(!data.enabled){$('#room-booking-status').textContent=data.notice||'Бронирование временно закрыто.';return;}
       if(!Array.isArray(data.rooms)||data.rooms.some(r=>!validQuote(r.quote,input.walkCount)||typeof r.id!=='string'||typeof r.offerToken!=='string'||!Number.isFinite(Date.parse(r.expiresAt))||Date.parse(r.expiresAt)<=Date.now()))throw new Error('Не удалось проверить стоимость. Повторите запрос.');
       this.rooms=data.rooms;
-      $('#room-booking-status').textContent=this.rooms.length?'Выберите подходящий номер. До подтверждения в кабинете он остаётся доступен другим клиентам.':'На эти даты свободных номеров нет. Попробуйте другие даты.';
-      $('#room-options').innerHTML=this.rooms.map((r,i)=>`<button type="button" class="room-choice" data-hotel-room="${i}" aria-pressed="false"><span class="room-choice-number">${escape(r.code)}</span><strong>${escape(r.name)}</strong><span>${rub(r.quote.dailyRate)} / сутки</span><small>${r.quote.billableDays} сут. · всего ${rub(r.quote.totalPrice)}${input.walkCount?' с выгулом':''}</small><i aria-hidden="true">↗</i></button>`).join('');
+      $('#room-booking-status').textContent=this.rooms.length?'Выберите номер, затем подтвердите его в кабинете через MAX.':'На эти даты свободных номеров нет. Попробуйте другие даты.';
+      $('#room-options').innerHTML=this.rooms.map((r,i)=>`<button type="button" class="room-choice" data-hotel-room="${i}" aria-pressed="false"><strong>${escape(r.name)}</strong><span>${rub(r.quote.dailyRate)} / сутки</span><small>${r.quote.billableDays} сут. · всего ${rub(r.quote.totalPrice)}${input.walkCount?' с выгулом':''}</small><i aria-hidden="true">↗</i></button>`).join('');
       $('#room-options').querySelectorAll('[data-hotel-room]').forEach(b=>b.onclick=()=>this.select(Number(b.dataset.hotelRoom)));
-    }catch(e){if(serial===this.serial)$('#room-booking-status').textContent=e.name==='AbortError'?'Проверка заняла больше времени. Повторите запрос.':e.message;}
+    }catch(e){if(serial===this.serial)$('#room-booking-status').textContent=e.name==='AbortError'||e.name==='TypeError'||e.status===503?'Не удалось проверить свободные номера. Повторите проверку или позвоните нам.':e.message;}
     finally{clearTimeout(timeout);if(serial===this.serial)$('#check-rooms').disabled=!this.getTrip();}
   }
   select(index) {
@@ -72,10 +73,10 @@ export class HotelBooking {
     this.selected=room;$('#room-options').querySelectorAll('[data-hotel-room]').forEach(b=>b.setAttribute('aria-pressed',String(Number(b.dataset.hotelRoom)===index)));
     this.onQuote({...room.quote,roomId:room.id,roomName:room.name});
     $('#continue-booking').hidden=false;$('#continue-booking').disabled=!this.portal;
-    $('#room-booking-status').textContent=this.portal?'Выбрано: '+room.name+'. Продолжите в кабинете владельца.':'Номер выбран. Переход в кабинет пока настраивается; свяжитесь с администратором.';
+    $('#room-booking-status').textContent=this.portal?'Выбрано: '+room.name+'. Осталось подтвердить бронь в кабинете через MAX.':'Номер выбран. Для бронирования позвоните администратору.';
     clearTimeout(this.expiry);this.expiry=setTimeout(()=>this.expire(),Math.max(0,Date.parse(room.expiresAt)-Date.now()));
   }
-  expire(message='Время предложения истекло. Проверьте номера и стоимость заново.'){this.selected=null;this.onQuote(null);$('#continue-booking').hidden=true;$('#room-options').replaceChildren();$('#room-booking-status').textContent=message;}
+  expire(message='Обновите свободные номера — за это время их могли забронировать.'){this.selected=null;this.onQuote(null);$('#continue-booking').hidden=true;$('#room-options').replaceChildren();$('#room-booking-status').textContent=message;}
   async continue() {
     if(!this.selected||!this.portal)return;
     if(Date.parse(this.selected.expiresAt)<=Date.now()){this.expire();return;}

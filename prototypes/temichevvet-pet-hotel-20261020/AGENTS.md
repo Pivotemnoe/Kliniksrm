@@ -1,3 +1,8 @@
+## Current owner instruction - internal JTBD review, 22 October 2026
+
+- Prepare revised copy, calls to action and responsive readability for both sites. Remove repeated editing/source/technical captions from real photos; retain a concise visualization label on staged imagery and distinguish catalogue examples from actual work. Preserve the accepted photographs and overall design.
+- The owner requested an INTERNAL version first and a before/after comparison sent to their own Gmail for remote review. Do not publish this new visual/copy revision until the owner replies with approval. Earlier publication authorization applies only to already completed scoped fixes.
+
 # Local pet-hotel section — 20.10.2026
 
 ## Latest human authorization — joint production release

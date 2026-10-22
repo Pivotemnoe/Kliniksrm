@@ -96,3 +96,8 @@
  .our-works .work-stage{min-height:0}.our-works .work-photo{height:370px}
 }
 @media(max-width:380px){.hero-start h1{font-size:32px}.hero.hero-start{padding-top:26px;gap:20px}.hero-start .hero-description{font-size:14px}.hero-portrait{width:186px}.hero-start .hero-actions{gap:8px 15px}.hero-location{max-width:250px}}
+
+/* Internal JTBD review: readable contacts and next steps in the accepted layout. */
+.hero-location{font-size:14px}.hero-price-link,.hero-portrait figcaption{font-size:13px}
+.catalogue-note,.care-context,.compare-copy small,.site-booking .booking-quote-note{font-size:14px;line-height:1.7}
+@media(max-width:760px){.hero-location{font-size:13px;max-width:none}.hero-price-link{font-size:13px;min-height:44px}.hero-portrait figcaption{font-size:12px}.hero-portrait figcaption a{min-height:44px}.booking-contact p{font-size:15px}.booking-contact .contact-number{font-size:14px}.site-booking .booking-quote-note{font-size:14px}.help-button{font-size:13px}}
