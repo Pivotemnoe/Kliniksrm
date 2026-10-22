@@ -1,4 +1,9 @@
-## Current owner instruction - internal JTBD review, 22 October 2026
+## Latest owner approval — public visual release, 22 October 2026
+
+- After reviewing the internal version and the corrected hotel hero, the owner explicitly approved: «Хорошо, делай публикацию», then clarified: «Зоу гостиницу и громен салон, всю публику». This approves publication of BOTH public static websites, including the reviewed copy, photographs and favicons. The approved visual source is d6a5cc8c6c9eff9b448949d1bf6b7fbfba1e4aa8.
+- Preserve the running attribution integration, cached asset URLs, existing service configuration and all clinical data. No API, CRM Web, gateway, database or MAX changes belong to this static release. Retain exact predecessor pointers and standalone rollback for both sites before the frozen coordinated rollback can be used.
+
+## Previous owner instruction - internal JTBD review, 22 October 2026
 
 - Prepare revised copy, calls to action and responsive readability for both sites. Remove repeated editing/source/technical captions from real photos; retain a concise visualization label on staged imagery and distinguish catalogue examples from actual work. Preserve the accepted photographs and overall design.
 - The owner requested an INTERNAL version first and a before/after comparison sent to their own Gmail for remote review. Do not publish this new visual/copy revision until the owner replies with approval. Earlier publication authorization applies only to already completed scoped fixes.

@@ -154,9 +154,14 @@ def main():
     parser.add_argument('--archive')
     parser.add_argument('--sha256')
     args = parser.parse_args()
-    for value in [args.release, args.expected_previous]:
-        if value is not None and not re.fullmatch(r'grooming-site-[a-z0-9-]{1,70}', value):
-            parser.error('Invalid release identifier')
+    if not re.fullmatch(r'grooming-site-[a-z0-9-]{1,70}', args.release):
+        parser.error('Invalid release identifier')
+    # The coordinated attribution release is also a valid static predecessor.
+    # deploy() still requires CURRENT to resolve to this exact existing release.
+    if args.expected_previous is not None and not re.fullmatch(
+            r'(?:grooming-site-|booking-attribution-grooming-)[a-z0-9-]{1,70}',
+            args.expected_previous):
+        parser.error('Invalid previous release identifier')
     if socket.gethostname() != 'msk-1-vm-d817':
         raise RuntimeError('Wrong public website host')
     backup, build = BACKUPS / args.release, ROOT / 'releases' / args.release
