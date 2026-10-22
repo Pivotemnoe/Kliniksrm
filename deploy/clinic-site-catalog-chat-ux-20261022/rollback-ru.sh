@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 test "$(hostname)" = msk-1-vm-d817
-test "$(readlink -f /var/www/temichevvet-clinic/current)" = /var/www/temichevvet-clinic/releases/20261022-catalog-chat-ux-v1
+test "$(readlink -f /var/www/temichevvet-clinic/current)" = /var/www/temichevvet-clinic/releases/20261022-catalog-chat-ux-v2
 test "$(sha256sum /var/www/temichevvet-clinic/releases/20261020-checkup-assistant-v1/index.html | cut -d ' ' -f1)" = af14fbe161f84f3a0911495e398ff5884e6a80f0e5ccd482babce146b2d8b0c6
 test ! -e /var/www/temichevvet-clinic/current-manual-rollback-20261022
 ln -s /var/www/temichevvet-clinic/releases/20261020-checkup-assistant-v1 /var/www/temichevvet-clinic/current-manual-rollback-20261022

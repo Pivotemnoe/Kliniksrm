@@ -1,5 +1,7 @@
 {
-  "release": "20261022-catalog-chat-ux-v1",
+  "release": "20261022-catalog-chat-ux-v2",
+  "archiveSha256": "aea68ab4167bc985a016d96c38624ea2c6520c885f7d51a263bdd127621324b1",
+  "archiveOptions": "COPYFILE_DISABLE=1 tar --no-xattrs --no-acls --no-fflags",
   "createdAt": "2026-10-22T05:22:59.992Z",
   "target": "https://clinic.temichevvet.ru",
   "baseGit": "734c1524d38089d261a44e0e55f8c9567cb249b0",

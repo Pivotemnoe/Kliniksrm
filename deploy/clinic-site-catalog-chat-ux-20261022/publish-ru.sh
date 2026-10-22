@@ -2,9 +2,9 @@
 set -euo pipefail
 base=/var/www/temichevvet-clinic
 previous=/var/www/temichevvet-clinic/releases/20261020-checkup-assistant-v1
-release=/var/www/temichevvet-clinic/releases/20261022-catalog-chat-ux-v1
-backup=/var/www/temichevvet-clinic/backups/20261022-catalog-chat-ux-v1
-incoming=/var/www/temichevvet-clinic/releases/.incoming-20261022-catalog-chat-ux-v1.tar.gz
+release=/var/www/temichevvet-clinic/releases/20261022-catalog-chat-ux-v2
+backup=/var/www/temichevvet-clinic/backups/20261022-catalog-chat-ux-v2
+incoming=/var/www/temichevvet-clinic/releases/.incoming-20261022-catalog-chat-ux-v2.tar.gz
 tree_hash() { (cd "$1" && find . -type f -print0 | sort -z | xargs -0 sha256sum) | sha256sum | cut -d ' ' -f1; }
 guards() {
   test "$(hostname)" = msk-1-vm-d817
@@ -41,7 +41,7 @@ http_hash() {
   printf 'HTTP200 SHA256_OK %s %s\n' "$path" "$actual"
 }
 guards
-test "$(sha256sum "$incoming" | cut -d ' ' -f1)" = e6082c2d5d7f2954969b6642f9d3aa9729cc3592c9d62f98dd74fd8cf30d7a96
+test "$(sha256sum "$incoming" | cut -d ' ' -f1)" = aea68ab4167bc985a016d96c38624ea2c6520c885f7d51a263bdd127621324b1
 test ! -e "$release"
 test ! -e "$backup"
 test "$(df -Pk "$base" | awk 'NR==2 {print $4}')" -gt 200000

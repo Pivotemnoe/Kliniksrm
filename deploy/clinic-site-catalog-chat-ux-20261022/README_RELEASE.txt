@@ -1,4 +1,4 @@
-TemichevVET clinic static release: 20261022-catalog-chat-ux-v1
+TemichevVET clinic static release: 20261022-catalog-chat-ux-v2
 
 Target: https://clinic.temichevvet.ru only. Do not switch gateway, CRM, PWA,
 grooming, hotel, nginx or databases with this package.
@@ -20,6 +20,11 @@ publish-ru.sh uses fixed reviewed guards, backs up the old static site/config,
 retains old hashed chunks and pre-serves new chunks before the HTML switch.
 No new account, medical record, appointment, campaign or marketing permission
 is created by deploying this frontend. A real live test lead is not submitted.
+
+Archive with COPYFILE_DISABLE=1 and tar --no-xattrs --no-acls --no-fflags.
+The first v1 staging attempt was rejected by its exact file-count guard because
+macOS added AppleDouble metadata. It was never activated. v2 keeps the same
+reviewed frontend payload and all revision/neighbor guards; no guard is bypassed.
 
 Changes: selected public services transfer into the existing consented chat;
 directional lists keep only their own services; UZI search excludes mid-word
