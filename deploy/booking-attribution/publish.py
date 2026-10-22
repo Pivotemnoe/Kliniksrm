@@ -91,6 +91,7 @@ def reviewed(m, receipt):
     require(sha(P/'qa/clinical-qualified-source-manifest.json')==dependency['qualifiedManifestSha256'],'Clinical qualified manifest changed')
     require(dependency.get('imageQualificationPrepared') is True and sha(P/'qa/clinical-images-identified.json')==dependency.get('imageIdentificationSha256'),'Clinical final image identification missing or changed')
     require(dependency.get('actualImageQaPassed') is True and sha(P/'qa/clinical-actual-image-qa.json')==dependency.get('actualImageQaSha256'),'Clinical final actual-image QA missing or changed')
+    require(dependency.get('backupRestorePassed') is True and sha(P/'qa/clinical-backup-restore.json')==dependency.get('backupRestoreSha256'),'Clinical full backup/restore qualification missing or changed')
     clinical=r.get('clinical',{})
     require(clinical.get('sourceManifestSha256')==dependency['qualifiedManifestSha256'] and clinical.get('forwardReference')==dependency['forwardReference'] and clinical.get('compatReference')==dependency['compatReference'] and clinical.get('compatibleRollbackAccepted') is True,'Root clinical consumer/rollback acceptance missing')
     require(all(re.fullmatch(r'sha256:[0-9a-f]{64}',clinical.get(n,'')) for n in ['forwardImageId','compatImageId']),'Root must record exact qualified clinical image IDs')
