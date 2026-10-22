@@ -60,7 +60,7 @@ test('unknown breeds, mixed boundary weights and unknown services do not borrow 
 });
 test('a new unlisted pet cannot inherit the earlier dog price while short service follow-ups still can',()=>{
  const first=reply('Сколько гигиена йорка?');
- for(const text of ['А сколько для корги?','А гигиена корги?','Сколько гигиена для другой собаки?','Сколько гигиена кавказской овчарке?']){
+ for(const text of ['А сколько для корги?','А гигиена корги?','А для другой собаки?','А для другой собаки, пожалуйста?','Сколько гигиена для другой собаки?','Сколько гигиена кавказской овчарке?']){
   const d=reply(text,first.contact);assert.doesNotMatch(d.text,/₽/,text);assert.equal(d.contact.groomingPriceContext.awaiting,'BREED',text);assert.match(d.text,/породы/,text);
   assert.match(clean(reply('Мальтезе',d.contact)),/1 500 ₽/);
  }
