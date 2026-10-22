@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 077
 base=/opt/temichevvet-owner-gateway
 previous=temichevvet-owner-gateway:grooming-owner-contact-986ba0421242
 previous_id=sha256:8bcb7da10a8069a2a5ad8811bed5f665adea263ca22e03b6a903e82bd23a0380
@@ -10,6 +11,49 @@ incoming=/opt/temichevvet-owner-gateway/clinic-catalog-context-20261022-v1.tar.g
 tree_hash() { (cd "$1" && find . -type f -print0 | sort -z | xargs -0 sha256sum) | sha256sum | cut -d ' ' -f1; }
 dist_manifest() { docker exec temichevvet-owner-gateway sh -c 'cd /app/apps/owner-gateway/dist; find . -type f -print0 | sort -z | xargs -0 sha256sum'; }
 runtime_env_hash() { docker exec temichevvet-owner-gateway env | grep -v '^HOSTNAME=' | sort | sha256sum | cut -d ' ' -f1; }
+verify_dump_restore() (
+  set -euo pipefail
+  restore_name=codex-clinic-context-restore-20261022-v1
+  restore_id=
+  restore_volume=
+  cleanup_restore() {
+    result=$?
+    trap - EXIT
+    if test -n "$restore_id"; then
+      test "$(docker inspect "$restore_id" --format '{{index .Config.Labels "codex.task"}}')" = clinic-catalog-context-20261022
+      docker rm -f -v "$restore_id" > "$backup/restore-qa-cleanup.txt"
+      if docker container inspect "$restore_id" >/dev/null 2>&1; then exit 11; fi
+      if test -n "$restore_volume" && docker volume inspect "$restore_volume" >/dev/null 2>&1; then exit 12; fi
+      printf 'QA_CONTAINER_AND_ANONYMOUS_VOLUME_REMOVED true\n' >> "$backup/restore-qa-cleanup.txt"
+    fi
+    exit "$result"
+  }
+  trap cleanup_restore EXIT
+  if docker container inspect "$restore_name" >/dev/null 2>&1; then exit 13; fi
+  pg_image=$(docker inspect temichevvet-owner-postgres --format '{{.Image}}')
+  test "$pg_image" = sha256:4e6e670bb069649261c9c18031f0aded7bb249a5b6664ddec29c013a89310d50
+  test "$(stat -c %s "$backup/database.dump")" -lt 1000000000
+  restore_id=$(docker run -d --network none --name "$restore_name" --label codex.task=clinic-catalog-context-20261022 --memory 256m --cpus 0.5 --pids-limit 96 -e POSTGRES_USER=qa_restore -e POSTGRES_DB=clinic_context_restore_qa -e POSTGRES_PASSWORD=isolated-restore-only-20261022 "$pg_image" postgres -c shared_buffers=16MB -c max_connections=10 -c maintenance_work_mem=32MB -c work_mem=2MB)
+  test "$(docker inspect "$restore_id" --format '{{.HostConfig.NetworkMode}}')" = none
+  test "$(docker inspect "$restore_id" --format '{{len .Mounts}}')" -eq 1
+  test "$(docker inspect "$restore_id" --format '{{(index .Mounts 0).Type}}')" = volume
+  restore_volume=$(docker inspect "$restore_id" --format '{{(index .Mounts 0).Name}}')
+  [[ "$restore_volume" =~ ^[a-f0-9]{64}$ ]]
+  ready=0
+  for attempt in {1..30}; do
+    if docker exec "$restore_id" pg_isready -h 127.0.0.1 -U qa_restore -d clinic_context_restore_qa >/dev/null 2>&1; then ready=1; break; fi
+    sleep 1
+  done
+  test "$ready" -eq 1
+  docker exec -i "$restore_id" pg_restore -l < "$backup/database.dump" > "$backup/restore-toc.txt"
+  docker exec -i "$restore_id" pg_restore --exit-on-error --no-owner --no-privileges -U qa_restore -d clinic_context_restore_qa < "$backup/database.dump" > "$backup/restore-output.txt" 2>&1
+  expected_tables=$(grep -c ' TABLE public ' "$backup/restore-toc.txt")
+  actual_tables=$(docker exec "$restore_id" psql -X -v ON_ERROR_STOP=1 -U qa_restore -d clinic_context_restore_qa -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE'")
+  test "$expected_tables" -gt 0
+  test "$actual_tables" -eq "$expected_tables"
+  docker exec "$restore_id" psql -X -v ON_ERROR_STOP=1 -U qa_restore -d clinic_context_restore_qa -tAc 'SELECT (SELECT count(*) FROM "ClinicConversation"), (SELECT count(*) FROM "ClinicChatMessage"), (SELECT count(*) FROM "OwnerSnapshot"), (SELECT count(*) FROM "PortalSession")' > "$backup/restore-invariants.txt"
+  printf 'RESTORE_OK true\nPUBLIC_TABLES %s\nDATA_STAYED_ON_RU true\n' "$actual_tables" > "$backup/restore-result.txt"
+)
 guards() {
   test "$(hostname)" = msk-1-vm-d817
   test "$(docker inspect temichevvet-owner-gateway --format '{{.Image}}')" = "$previous_id"
@@ -44,6 +88,20 @@ restart_gateway() {
   return 1
 }
 guards
+if test "${CLINIC_CONTEXT_PREFLIGHT_RESTORE_ONLY:-false}" = true; then
+  backup=$(mktemp -d "$base/backups/clinic-catalog-context-20261022-preflight-restore.XXXXXX")
+  chmod 700 "$backup"
+  protected_state > "$backup/protected.before"
+  docker exec temichevvet-owner-postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$backup/database.dump"
+  chmod 600 "$backup/database.dump"
+  sha256sum "$backup/database.dump" > "$backup/database.SHA256"
+  verify_dump_restore
+  protected_state > "$backup/protected.after"
+  cmp "$backup/protected.before" "$backup/protected.after"
+  printf 'PREFLIGHT_RESTORE_VERIFIED %s\nPRODUCTION_NOT_SWITCHED true\n' "$backup"
+  cat "$backup/restore-result.txt" "$backup/restore-qa-cleanup.txt"
+  exit 0
+fi
 test "$(grep -c '^OWNER_GATEWAY_IMAGE=' "$base/.env")" -eq 1
 test "$(grep '^OWNER_GATEWAY_IMAGE=' "$base/.env")" = "OWNER_GATEWAY_IMAGE=$previous"
 test "$(sha256sum "$incoming" | cut -d ' ' -f1)" = 72771a0c8f879e8381edac8782bc2b10c035391d1aaa1def6303b61c90b9fc5c
@@ -61,6 +119,7 @@ cp -p "$base/docker-compose.yml" "$backup/docker-compose.yml"
 docker exec temichevvet-owner-postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$backup/database.dump"
 test -s "$backup/database.dump"
 sha256sum "$backup/database.dump" > "$backup/database.SHA256"
+verify_dump_restore
 # The dump is private recovery evidence only. Never restore it during image
 # rollback: that would overwrite legitimate requests received in the meantime.
 tar -xzf "$incoming" -C "$build" --no-same-owner --no-same-permissions
@@ -108,6 +167,9 @@ dist_manifest > "$backup/dist.after.SHA256SUMS"
 cmp "$backup/dist.candidate.SHA256SUMS" "$backup/dist.after.SHA256SUMS"
 protected_state > "$backup/protected.after"
 cmp "$backup/protected.before" "$backup/protected.after"
+sha256sum "$base/.env" > "$backup/env.after.SHA256SUMS"
+sha256sum "$base/docker-compose.yml" > "$backup/compose.after.SHA256SUMS"
+printf '%s\n' "$new_id" > "$backup/new-image-id.txt"
 for url in https://clinic.temichevvet.ru/ https://clinic.temichevvet.ru/prices https://clinic.temichevvet.ru/api/prices https://cabinet.temichevvet.ru/portal https://temichevvet.ru/api/health; do
   code=$(curl --max-time 20 -sS -o /dev/null -w '%{http_code}' "$url")
   case "$code" in 200|302) printf 'HTTP %s %s\n' "$code" "$url";; *) exit 9;; esac

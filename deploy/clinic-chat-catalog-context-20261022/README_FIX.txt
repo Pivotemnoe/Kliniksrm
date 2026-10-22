@@ -27,6 +27,8 @@ The unmodified TypeScript copy rebuilt to exactly the current production
 clinic-chat.service.js SHA5eed0b… before editing. The compiled check-up module
 also matches production. PATCH.json records full hashes and image base.
 The fix is compiled with the existing TypeScript settings, not hand-edited JS.
+The minimal tracked source fix is commit b6e8c9fd18dd9a86cf821b8be594c4aac9052f60.
+Its preceding baseline-capture commit is not needed by an already current tree.
 The public evidence contains only synthetic QA identifiers/counts, no contacts,
 cookies, secrets, customer records or database dump.
 
@@ -52,4 +54,19 @@ build from a historical backend source branch.
 
 Release gate
 Root review and a separate gateway window are REQUIRED. The current source
-working tree and production API/gateway have NOT been changed by this patch.
+canonical working tree and production API/gateway have NOT been changed by this
+patch. The isolated branch contains the tracked source fix for future full builds.
+
+Recovery verification
+The publisher's backup-only mode was executed on RU on 2026-10-22. A fresh
+private pg_dump was actually restored with pg_restore --exit-on-error into a
+network-disabled, port-free, resource-limited QA PostgreSQL container. All 32
+public tables were restored; the QA container and its anonymous volume were
+removed afterward. Production protected-state fingerprints matched before/after.
+No clinical/customer data or dump left RU. See evidence/restore-preflight.json.
+Apply repeats this verification on its own fresh private backup before switching.
+Image rollback never restores a database or overwrites newly received requests.
+
+The standalone rollback additionally requires the exact new image ID recorded
+by this Apply, patched JS and unchanged 276-file dist manifest, and exact .env
+and compose hashes recorded after this Apply. It refuses subsequent drift.

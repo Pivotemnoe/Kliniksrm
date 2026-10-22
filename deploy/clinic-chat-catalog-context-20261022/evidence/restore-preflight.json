@@ -1,0 +1,19 @@
+{
+  "verifiedAt": "2026-10-22T06:27:36.825Z",
+  "mode": "backup-and-isolated-restore-only",
+  "publisherSha256": "7c3508eee0aa7112c5b8495d2e923855acdc12fed08eb2615046a105115192b2",
+  "exitCode": 0,
+  "freshPrivatePgDump": true,
+  "actualPgRestoreExitOnError": true,
+  "restoredPublicTables": 32,
+  "qaNetwork": "none",
+  "qaPublishedPorts": 0,
+  "qaContainerRemoved": true,
+  "qaAnonymousVolumeRemoved": true,
+  "productionProtectedStateUnchanged": true,
+  "productionSwitched": false,
+  "dataTransferredOffRu": false,
+  "backupRetainedPrivatelyOnRu": true,
+  "productionMessages": 0,
+  "productionLeads": 0
+}

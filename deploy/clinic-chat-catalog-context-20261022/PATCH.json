@@ -27,6 +27,12 @@
     }
   ],
   "baselineTypeScriptBuildMatchedProduction": true,
+  "sourceFixCommit": "b6e8c9fd18dd9a86cf821b8be594c4aac9052f60",
+  "distFileCount": 277,
+  "unchangedDistFileCount": 276,
+  "publisherSha256": "7c3508eee0aa7112c5b8495d2e923855acdc12fed08eb2615046a105115192b2",
+  "rollbackSha256": "bf9dd3518469652f73c2ce0f57ab7069538df4e71a78d983c7c7fb1b918d23cf",
+  "backupRestorePreflight": "evidence/restore-preflight.json",
   "backendTests": {
     "passed": 8,
     "failed": 0,
