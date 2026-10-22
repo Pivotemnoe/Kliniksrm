@@ -1,8 +1,8 @@
 [CmdletBinding()]
-param([ValidateSet('Inspect','Prepare','Apply','Rollback','Verify')][string]$Mode='Inspect',[string]$Root='GetReleaseContainer:/Users/TemichevVet/TemichevVet',[string]$PackageRoot=$PSScriptRoot,[switch]$Execute)
+param([ValidateSet('Inspect','Prepare','Apply','Rollback','Verify')][string]$Mode='Inspect',[string]$Root='C:/Users/TemichevVet/TemichevVet',[string]$PackageRoot=$PSScriptRoot,[switch]$Execute)
 $ErrorActionPreference='Stop'; Set-StrictMode -Version Latest
 if($env:COMPUTERNAME -ne 'WIN-I123AM83GR4'){throw 'Wrong host'}
-$env:DOCKER_HOST='npipe:////./pipe/dockerDesktopLinuxEngine';$env:DOCKER_CONFIG='GetReleaseContainer:/Users/TemichevVet/.docker';$env:Path='GetReleaseContainer:/Program Files/Docker/Docker/resources/bin;'+$env:Path
+$env:DOCKER_HOST='npipe:////./pipe/dockerDesktopLinuxEngine';$env:DOCKER_CONFIG='C:/Users/TemichevVet/.docker';$env:Path='C:/Program Files/Docker/Docker/resources/bin;'+$env:Path
 [Console]::OutputEncoding=New-Object Text.UTF8Encoding($false);$OutputEncoding=[Console]::OutputEncoding
 function InvokeReleaseDocker([string[]]$A){$old=$ErrorActionPreference;try{$ErrorActionPreference='Continue';$s=& docker @A 2>&1|Out-String;$code=$LASTEXITCODE}finally{$ErrorActionPreference=$old};if($code -ne 0){throw ('Docker operation failed: '+$A[0]+' '+$s)};return $s}
 function ReadReleaseJson($p){ConvertFrom-Json -InputObject ([IO.File]::ReadAllText($p))}
