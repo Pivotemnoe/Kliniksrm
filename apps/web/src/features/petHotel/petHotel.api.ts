@@ -1,3 +1,4 @@
+import type { BookingAttribution } from '../../shared/ui/BookingSource';
 import { apiRequest } from '../../api/client';
 export const hotelStatuses: Record<string, string> = { RESERVED: 'Бронь', IN_HOUSE: 'Проживает', CHECKED_OUT: 'Выехал', CANCELLED: 'Отменена', NO_SHOW: 'Не приехал' };
 export const hotelSpecies: Record<string, string> = { CAT: 'Кошки', DOG: 'Собаки' };
@@ -5,7 +6,7 @@ export type HotelRoom = { id: string; code: string; name: string; species: strin
 export type HotelSettings = { dailyRate: string; walkRate: string; minimumDays: number; maximumDogWeightKg: string; checkInFrom: string; checkInTo: string; siteUrl: string; selfBookingEnabled: boolean; administratorMaxIds: string[]; reminderHours: number[]; version: number };
 export type HotelPet = { id: string; nickname: string; species: string | null; breed: string | null };
 export type HotelClient = { id: string; fullName: string; phone: string | null; animals: HotelPet[] };
-export type HotelBooking = { id: string; ownerId: string; animalId: string; roomId: string; owner: { id: string; fullName: string; phone: string | null }; animal: HotelPet; room: HotelRoom; startsAt: string; endsAt: string; actualCheckInAt: string | null; actualCheckOutAt: string | null; status: string; version: number; species: string; weightKg: string | null; billableDays: number; walkCount: number; dailyRate: string; walkRate: string; totalPrice: string; notes: string };
+export type HotelBooking = { source?: string; attribution?: BookingAttribution | null; id: string; ownerId: string; animalId: string; roomId: string; owner: { id: string; fullName: string; phone: string | null }; animal: HotelPet; room: HotelRoom; startsAt: string; endsAt: string; actualCheckInAt: string | null; actualCheckOutAt: string | null; status: string; version: number; species: string; weightKg: string | null; billableDays: number; walkCount: number; dailyRate: string; walkRate: string; totalPrice: string; notes: string };
 export type HotelOverview = { installation: { enabled: boolean }; limited: boolean; canManage: boolean; canOperate: boolean; mode: string; settings: HotelSettings; rooms: HotelRoom[]; stats: { catRooms: number; dogRooms: number; inHouse: number; upcoming: number } };
 export type HotelQuote = { billableDays: number; dailyRate: string; walkRate: string; stayPrice: string; walksPrice: string; totalPrice: string };
 export type HotelAvailability = { rooms: HotelRoom[]; species: string; quote: HotelQuote };
