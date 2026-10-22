@@ -1,0 +1,9 @@
+ARG BASE_GATEWAY_IMAGE
+FROM ${BASE_GATEWAY_IMAGE}
+ARG RELEASE_REVISION
+ARG OWNER_HTML_SHA256
+ARG OWNER_JS_SHA256
+LABEL org.opencontainers.image.revision=$RELEASE_REVISION
+COPY candidate/grooming.html /app/apps/owner-gateway/dist/public/grooming.html
+COPY candidate/grooming.js /app/apps/owner-gateway/dist/public/grooming.js
+RUN echo "$OWNER_HTML_SHA256  /app/apps/owner-gateway/dist/public/grooming.html" | sha256sum -c - && echo "$OWNER_JS_SHA256  /app/apps/owner-gateway/dist/public/grooming.js" | sha256sum -c -

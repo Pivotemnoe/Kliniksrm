@@ -1,0 +1,37 @@
+--- before/grooming.html
++++ candidate/grooming.html
+@@ -7,8 +7,8 @@
+   <link rel="stylesheet" href="/portal/grooming.css?v=20261020-1">
+ </head>
+ <body>
+-  <header class="topbar"><a class="brand" href="/portal/grooming"><img src="/portal/icons/lk-icon-192.png" alt="" width="44" height="44"><span><strong>TemichevVet</strong><small>Груминг · кабинет владельца</small></span></a><nav aria-label="Кабинет"><a href="/portal">Кабинет клиники</a><button id="logout" hidden>Выйти</button></nav></header>
++  <header class="topbar"><a class="brand" href="/portal/grooming"><img src="/portal/icons/lk-icon-192.png" alt="" width="44" height="44"><span><strong>TemichevVet</strong><small>Груминг · кабинет владельца</small></span></a><nav aria-label="Кабинет"><a href="https://pet.temichevvet.ru/">Сайт груминга ↗</a><a href="/portal">Кабинет клиники</a><button id="logout" hidden>Выйти</button></nav></header>
+   <main id="grooming-app" class="shell" aria-live="polite"><section class="state"><p>Загружаем кабинет груминга…</p></section></main>
+-  <script src="/portal/grooming.js?v=20261019-3" defer></script>
++  <script src="/portal/grooming.js?v=20261022-1" defer></script>
+ </body>
+ </html>
+--- before/grooming.js
++++ candidate/grooming.js
+@@ -1,6 +1,7 @@
+ const app = document.querySelector('#grooming-app');
+ const statuses = { CONFIRMED: 'Записан', ARRIVED: 'Пришёл', IN_PROGRESS: 'На процедуре', COMPLETED: 'Завершён', CANCELLED: 'Отменён', NO_SHOW: 'Не пришёл' };
+ const species = { DOG: 'Собака', CAT: 'Кошка' };
++const clinicContact = Object.freeze({ phone: '+7 (928) 421-45-42', phoneHref: 'tel:+79284214542', site: 'https://pet.temichevvet.ru/', address: 'Армавир, ул. Каспарова, 27/2' });
+ let state = null, offers = [], selected = '', moving = null, draft = {}, busy = false, loginTimer = null, loginPolling = false, catalogue = [];
+ const pendingKey = 'temichevvet-grooming-pending-operation';
+ const incomingDraft = new URLSearchParams(location.hash.slice(1)).get('draft');
+@@ -92,9 +93,12 @@
+   finally { loginPolling = false; }
+ }
+ function option(value, label, current) { return `<option value="${escape(value)}"${value === current ? ' selected' : ''}>${escape(label)}</option>`; }
++function closedBooking() {
++  return `<div class="notice"><p>Самостоятельная запись пока закрыта. Позвоните администратору — согласуем уход, стоимость и время визита.</p><p><a class="button" href="${clinicContact.phoneHref}">Позвонить и записаться</a></p><p><a href="${clinicContact.phoneHref}">${clinicContact.phone}</a><br>${clinicContact.address}</p><p><a href="${clinicContact.site}">Посмотреть работы и цены ↗</a></p><p class="muted">Существующие записи и история ухода доступны ниже.</p></div>`;
++}
+ function render(message = '') {
+   const future = array(state.bookings).filter(b => ['CONFIRMED', 'ARRIVED', 'IN_PROGRESS'].includes(b.status) && Date.parse(b.startsAt) > Date.now()).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+-  app.innerHTML = `${state.mode === 'qa' ? `<p class="notice">${state.qaDelivery === 'device' ? 'Проверка на телефоне · вымышленные данные · тестовые сообщения MAX.' : 'Локальная проверка · все данные вымышленные · сообщения MAX перехвачены.'}</p>` : ''}<section class="hero"><div><p class="eyebrow">Кабинет владельца</p><h1>Груминг для моих питомцев</h1><p>${escape(state.owner.fullName)}</p></div><button id="refresh" class="button secondary">Обновить</button></section>${message ? `<p class="success" role="status">${escape(message)}</p>` : ''}<div class="workspace"><aside><section class="next-card"><p class="eyebrow">Ближайшая запись</p>${future[0] ? `<h2>${escape(dateTime(future[0].startsAt, future[0].location.timezone))}</h2><p>${escape(future[0].animal.nickname)} · ${escape(future[0].serviceTitle)}</p><p>${escape(future[0].employee.fullName)}</p><span class="badge">${escape(statuses[future[0].status])}</span>` : '<h2>Выберем удобное время?</h2><p>Предстоящих записей пока нет.</p>'}</section><section class="pet-card"><h2>Мои питомцы</h2>${array(state.animals).map(p => `<p><strong>${escape(p.nickname)}</strong><br><small>${escape(p.breed || p.species || '')}</small></p>`).join('') || '<p>Добавьте своего первого питомца.</p>'}<button class="text-button" id="add-pet">+ Добавить питомца</button><div id="pet-form-slot"></div></section></aside><div><section class="booking-card"><div class="section-heading"><div><p class="eyebrow">${moving ? 'Перенос записи' : 'Самостоятельная запись'}</p><h2>${moving ? 'Выберите новое время' : 'Кому нужен уход?'}</h2></div>${moving ? '<button id="cancel-move" class="text-button">Отменить перенос</button>' : ''}</div>${state.selfBookingEnabled ? bookingForm() : '<p class="notice">Сейчас самостоятельная запись закрыта. Существующие записи и история доступны ниже.</p>'}</section><section class="history"><h2>Мои записи и история ухода</h2>${array(state.bookings).map(bookingCard).join('') || '<p class="muted">Здесь появится ваша первая запись.</p>'}</section></div></div>`;
++  app.innerHTML = `${state.mode === 'qa' ? `<p class="notice">${state.qaDelivery === 'device' ? 'Проверка на телефоне · вымышленные данные · тестовые сообщения MAX.' : 'Локальная проверка · все данные вымышленные · сообщения MAX перехвачены.'}</p>` : ''}<section class="hero"><div><p class="eyebrow">Кабинет владельца</p><h1>Груминг для моих питомцев</h1><p>${escape(state.owner.fullName)}</p></div><button id="refresh" class="button secondary">Обновить</button></section>${message ? `<p class="success" role="status">${escape(message)}</p>` : ''}<div class="workspace"><aside><section class="next-card"><p class="eyebrow">Ближайшая запись</p>${future[0] ? `<h2>${escape(dateTime(future[0].startsAt, future[0].location.timezone))}</h2><p>${escape(future[0].animal.nickname)} · ${escape(future[0].serviceTitle)}</p><p>${escape(future[0].employee.fullName)}</p><span class="badge">${escape(statuses[future[0].status])}</span>` : state.selfBookingEnabled ? '<h2>Выберем удобное время?</h2><p>Предстоящих записей пока нет.</p>' : `<h2>Запись через администратора</h2><p>Предстоящих записей пока нет. Обсудим ближайшее время по телефону.</p><a href="${clinicContact.phoneHref}">${clinicContact.phone}</a>`}</section><section class="pet-card"><h2>Мои питомцы</h2>${array(state.animals).map(p => `<p><strong>${escape(p.nickname)}</strong><br><small>${escape(p.breed || p.species || '')}</small></p>`).join('') || '<p>Добавьте своего первого питомца.</p>'}<button class="text-button" id="add-pet">+ Добавить питомца</button><div id="pet-form-slot"></div></section></aside><div><section class="booking-card"><div class="section-heading"><div><p class="eyebrow">${moving ? 'Перенос записи' : 'Запись на груминг'}</p><h2>${moving ? 'Выберите новое время' : state.selfBookingEnabled ? 'Кому нужен уход?' : 'Договоримся о визите'}</h2></div>${moving ? '<button id="cancel-move" class="text-button">Отменить перенос</button>' : ''}</div>${state.selfBookingEnabled ? bookingForm() : closedBooking()}</section><section class="history"><h2>Мои записи и история ухода</h2>${array(state.bookings).map(bookingCard).join('') || '<p class="muted">Здесь появится ваша первая запись.</p>'}</section></div></div>`;
+   document.querySelector('#refresh').onclick = async () => { await guarded(async () => { await recover(); state = await command('STATE'); render('Данные обновлены'); }); };
+   document.querySelector('#add-pet').onclick = renderPetForm;
+   document.querySelector('#cancel-move')?.addEventListener('click', () => { moving = null; draft = {}; offers = []; render(); });

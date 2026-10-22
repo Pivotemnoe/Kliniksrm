@@ -4,7 +4,7 @@ import test from 'node:test';
 import vm from 'node:vm';
 
 // Render the actual portal script with fictional state; no gateway or database.
-const source=readFileSync(new URL('../apps/owner-gateway/public/grooming.js',import.meta.url),'utf8');
+const source=readFileSync(process.env.GROOMING_PORTAL_SOURCE||new URL('../apps/owner-gateway/public/grooming.js',import.meta.url),'utf8');
 assert.match(source,/\nvoid start\(\);\s*$/);
 function render(selfBookingEnabled,bookings=[]) {
  const app={innerHTML:'',querySelectorAll:()=>[]}, controls=new Map();
