@@ -90,6 +90,7 @@ def reviewed(m, receipt):
     require(dependency.get('passed') is True and dependency.get('forwardCompiledBytesUnchanged') is True and dependency.get('compatCompiledBytesUnchanged') is True and dependency.get('schemaFormattingOnly') is True,'Clinical dependency qualification not passed')
     require(sha(P/'qa/clinical-qualified-source-manifest.json')==dependency['qualifiedManifestSha256'],'Clinical qualified manifest changed')
     require(dependency.get('imageQualificationPrepared') is True and sha(P/'qa/clinical-images-identified.json')==dependency.get('imageIdentificationSha256'),'Clinical final image identification missing or changed')
+    require(dependency.get('actualImageQaPassed') is True and sha(P/'qa/clinical-actual-image-qa.json')==dependency.get('actualImageQaSha256'),'Clinical final actual-image QA missing or changed')
     clinical=r.get('clinical',{})
     require(clinical.get('sourceManifestSha256')==dependency['qualifiedManifestSha256'] and clinical.get('forwardReference')==dependency['forwardReference'] and clinical.get('compatReference')==dependency['compatReference'] and clinical.get('compatibleRollbackAccepted') is True,'Root clinical consumer/rollback acceptance missing')
     require(all(re.fullmatch(r'sha256:[0-9a-f]{64}',clinical.get(n,'')) for n in ['forwardImageId','compatImageId']),'Root must record exact qualified clinical image IDs')
