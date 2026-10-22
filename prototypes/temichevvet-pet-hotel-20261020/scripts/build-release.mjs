@@ -9,7 +9,7 @@ const publicRoot = join(project, 'public');
 const hotelRoot = join(publicRoot, 'pet-hotel');
 const site = 'https://pet.temichevvet.ru';
 const pages = ['index.html', 'journal/choose-a-stay.html', 'journal/familiar-things.html', 'journal/first-visit.html'];
-const codeFiles = ['app.js', 'articles.js', 'booking.js', 'style.css'];
+const codeFiles = ['app.js', 'articles.js', 'booking.js', 'rates.js', 'style.css'];
 const photos = [
   'hotel-cat-premium.jpg', 'hotel-dog-premium.jpg',
   'hotel-rooms-4814.jpg', 'hotel-glass-4812.jpg', 'hotel-inside-4817-clean.jpg',
