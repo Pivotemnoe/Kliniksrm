@@ -1,3 +1,9 @@
+## Latest owner instruction — keep online selection open, 22 October 2026
+
+- The owner now explicitly requests opening online grooming selection while they add real groomers today or tomorrow. This supersedes the prior self-booking OFF requirement for this scoped change. Coordinate the grooming setting with the CRM runtime owner; do not invent specialists, shifts or reservations.
+- Keep service, groomer and date selection visible when enabled. With no eligible groomers or available times, show a truthful, friendly no-availability message and the clinic phone. Do not claim all groomers are busy when there are none configured. Real slots must appear automatically when actual groomers, service rules and work periods are added.
+- Preserve real photographs, design, prices (York full complex final 2500 RUB), MAX identity/draft/confirmation safeguards, hotel and all other services.
+
 ## Latest owner approval — public visual release, 22 October 2026
 
 - After reviewing the internal version and the corrected hotel hero, the owner explicitly approved: «Хорошо, делай публикацию», then clarified: «Зоу гостиницу и громен салон, всю публику». This approves publication of BOTH public static websites, including the reviewed copy, photographs and favicons. The approved visual source is d6a5cc8c6c9eff9b448949d1bf6b7fbfba1e4aa8.
