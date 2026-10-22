@@ -559,7 +559,7 @@ export class BusinessService {
     const range = resolveReportRange({ from: businessDate, to: businessDate });
     const [payments, supplierPayments, entries] = await Promise.all([
       this.prisma.payment.findMany({
-        where: { paidAt: { gte: range.start, lte: range.end }, type: { not: PaymentType.DEPOSIT }, OR: [{ cashbox: { officeId } }, { bill: { owner: { officeId } } }] },
+        where: { paidAt: { gte: range.start, lte: range.end }, type: { not: PaymentType.DEPOSIT }, ...paymentOfficeFilter(officeId) },
         include: { cashbox: true, paymentMethod: true },
       }),
       this.prisma.supplierPayment.findMany({
@@ -610,7 +610,7 @@ export class BusinessService {
     const dateWhere = { gte: start, lte: end };
     const [bills, payments, movements, entries, supplierPayments, payroll, visits, newOwners] = await Promise.all([
       this.prisma.bill.findMany({ where: { createdAt: dateWhere, status: { not: PaymentStatus.CANCELLED }, ...(officeId ? { owner: { officeId } } : {}) }, select: { createdAt: true, totalAmount: true } }),
-      this.prisma.payment.findMany({ where: { paidAt: dateWhere, type: { not: PaymentType.DEPOSIT }, ...(officeId ? { OR: [{ cashbox: { officeId } }, { bill: { owner: { officeId } } }] } : {}) }, select: { paidAt: true, amount: true, type: true } }),
+      this.prisma.payment.findMany({ where: { paidAt: dateWhere, type: { not: PaymentType.DEPOSIT }, ...(officeId ? { ...paymentOfficeFilter(officeId) } : {}) }, select: { paidAt: true, amount: true, type: true } }),
       this.prisma.stockMovement.findMany({
         where: { createdAt: dateWhere, type: { in: [StockMovementType.SALE, StockMovementType.VISIT_USAGE, StockMovementType.CORRECTION] }, stockBatchId: { not: null }, ...(officeId ? { warehouse: { officeId } } : {}) },
         select: { createdAt: true, type: true, quantity: true, unitCost: true, billItemId: true, visitId: true, saleId: true, stockBatch: { select: { purchasePrice: true } } },
@@ -750,6 +750,22 @@ function addDailyLine(
   if (amount.greaterThanOrEqualTo(0)) row.inflowAmount = row.inflowAmount.plus(amount);
   else row.outflowAmount = row.outflowAmount.plus(amount.abs());
   rows.set(lineKey, row);
+}
+
+// A payment belongs to its cashbox office. Legacy payments without an
+// assigned cashbox office fall back to the owner's office, never both.
+function paymentOfficeFilter(officeId: string): Prisma.PaymentWhereInput {
+  return {
+    OR: [
+      { cashbox: { officeId } },
+      {
+        AND: [
+          { OR: [{ cashboxId: null }, { cashbox: { officeId: null } }] },
+          { bill: { owner: { officeId } } },
+        ],
+      },
+    ],
+  };
 }
 
 function attachDailyLineBreakdown<T extends { lines: Array<{ lineKey: string; systemAmount: Prisma.Decimal }> }>(close: T, snapshotLines: DailyLine[]) {
