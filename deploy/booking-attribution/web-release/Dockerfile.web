@@ -1,0 +1,8 @@
+ARG BASE_WEB_IMAGE
+FROM ${BASE_WEB_IMAGE}
+ARG RELEASE_REVISION
+LABEL org.opencontainers.image.revision=$RELEASE_REVISION
+COPY web/ /usr/share/nginx/html/
+# The running assets volume masks the image directory. Its startup hook copies
+# new files from this separate directory and retains assets used by open tabs.
+COPY web/assets/ /opt/temichevvet-web-assets/
