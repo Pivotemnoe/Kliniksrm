@@ -29,7 +29,7 @@ function Worker($script,$image,$operation=''){
 function Health($ai,$wi){for($i=0;$i -lt 40;$i++){try{if((GetReleaseContainer 'clinic-crm-api').Image -ne $ai -or (GetReleaseContainer 'clinic-crm-web').Image -ne $wi){throw 'Images differ'};$h=Invoke-RestMethod 'http://127.0.0.1:3000/api/health' -TimeoutSec 4;if($h.status -eq 'ok' -and $h.database -eq 'ok'){return}}catch{};Start-Sleep -Milliseconds 500};throw 'Health failed'}
 function CheckConfig($s,$phase){foreach($f in $s.config){$expected=if($phase -eq 'after'){$f.afterHash}else{$f.beforeHash};if((GetReleaseHash (Join-Path $Root $f.name)) -ne $expected){throw ('Concurrent configuration edit: '+$f.name)}}}
 function ConfigWrite($s,$phase){CheckConfig $s $(if($phase -eq 'after'){'before'}else{'after'});foreach($f in $s.config){$src=Join-Path $b ($phase+'-'+$f.saved);[IO.File]::WriteAllBytes((Join-Path $Root $f.name),[IO.File]::ReadAllBytes($src))}}
-$before=Compose '' '' '';if($before.services.api.image -ne $api.Config.Image -or $before.services.web.image -ne $web.Config.Image){throw 'Running/Compose pins disagree'}
+$before=Compose '' '' '';if($Mode -ne 'Rollback' -and ($before.services.api.image -ne $api.Config.Image -or $before.services.web.image -ne $web.Config.Image)){throw 'Running/Compose pins disagree'}
 if($Mode -in @('Inspect','Prepare')){if($api.Image -ne $m.previousApi -or $web.Image -ne $m.previousWeb){throw 'Baseline changed'};CheckCompose $before (Compose $m.candidateApi $m.candidateWeb $m.revision);$null=Worker 'invariants.cjs' $m.previousApi}
 if($Mode -eq 'Inspect'){@{baselineVerified=$true;api=$api.Image;web=$web.Image;revision=$m.revision}|ConvertTo-Json;return}
 if($Mode -ne 'Verify' -and -not $Execute){throw 'Explicit -Execute is required'}
@@ -63,6 +63,15 @@ if($s.phase -notin @('PREPARED','RIGHTS_APPLIED') -or $api.Image -ne $m.previous
 CheckConfig $s 'before';$null=Worker 'invariants.cjs' $m.previousApi
 if((ConvertFrom-Json -InputObject (InvokeReleaseDocker @('image','inspect',$m.candidateApi)))[0].Id -ne $s.apiId -or (ConvertFrom-Json -InputObject (InvokeReleaseDocker @('image','inspect',$m.candidateWeb)))[0].Id -ne $s.webId){throw 'Candidate tag changed'}
 # The worker holds role/permission table locks, compares exact before rows, then changes rights.
+try {
+
 if($s.phase -eq 'PREPARED'){$null=Worker 'rights.cjs' $s.apiId 'apply';$s.phase='RIGHTS_APPLIED';Save $stateFile $s}else{$null=Worker 'rights.cjs' $s.apiId 'verify'}
 ConfigWrite $s 'after';CheckCompose $before (Compose '' '' '');$s.phase='SWITCHING';Save $stateFile $s
 Compose $m.candidateApi $m.candidateWeb $m.revision -Switch;Health $s.apiId $s.webId;$null=Worker 'rights.cjs' $s.apiId 'verify';$null=Worker 'invariants.cjs' $s.apiId;CheckProtected $s.protected;$s.phase='COMPLETE';Save $stateFile $s;@{applied=$true;revision=$m.revision;backup=$b}|ConvertTo-Json
+
+} catch {
+ $applyFailure=$_
+ try { & $PSCommandPath -Mode Rollback -Root $Root -PackageRoot $PackageRoot -Execute }
+ catch { throw ('Apply failed and guarded rollback needs review: '+$_.Exception.Message) }
+ throw $applyFailure
+}
