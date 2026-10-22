@@ -17,6 +17,7 @@ test('only haircuts without washing are removed; all other approved prices and k
   }
   assert.ok(byKey.has('cat:extra:deshed'));assert.ok(byKey.has('cat:clean:wash'));assert.ok(byKey.has('cat:matted:wash'));
   assert.ok(entries.some(e=>e.priceType==='QUOTE'),'unpriced offered services remain available for consultation');
+  const york=byKey.get('dog:york:full');assert.equal(york.price,2500);assert.equal(york.maximumPrice,null);assert.equal(york.priceType,'FIXED','owner-confirmed full package has no repeated 300-ruble increase');
   const brushing=entries.find(entry=>entry.catalogKey.startsWith('dog:')&&entry.catalogData.kind==='dry');
   assert.ok(brushing);assert.equal(groomingServiceBookable({...brushing,priceType:'FIXED'}),true);
   assert.equal(groomingServiceBookable({catalogKey:null,priceType:'FIXED'}),true,'manual services keep existing behavior');

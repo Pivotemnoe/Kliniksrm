@@ -23,8 +23,8 @@ test('all 172 current module entries retain their price types and retired dry ha
 test('fixed breed prices are quoted from the current module without adding 300 again',()=>{
  const d=reply('Сколько стоит гигиена йорка?');assert.match(clean(d),/Йоркширский терьер.*Гигиенический уход — 2 100 ₽/);assert.doesNotMatch(clean(d),/2 400|2 500|2 800/);assert.equal(d.reason,'GROOMING_PRICE');assert.equal(d.createInquiry,false);
 });
-test('a missing full-package price remains QUOTE and never becomes zero or the old document price',()=>{
- const d=reply('Сколько стоит полный комплекс йорку?',{}, {petService:{...source,selfBookingEnabled:true}});assert.match(d.text,/точную стоимость уточнит администратор груминга/);assert.doesNotMatch(d.text,/\d[\d\s]*\s*₽|самостоятельно на сайте/);assert.match(d.text,/администратор/);
+test('a genuinely unspecified full-package price remains QUOTE and never becomes zero or a guessed price',()=>{
+ const d=reply('Сколько стоит полный комплекс эрдельтерьеру?',{}, {petService:{...source,selfBookingEnabled:true}});assert.match(d.text,/точную стоимость уточнит администратор груминга/);assert.doesNotMatch(d.text,/\d[\d\s]*\s*₽|самостоятельно на сайте/);assert.match(d.text,/администратор/);
 });
 test('an approved range stays a range rather than a guessed minimum or a repeated surcharge',()=>{
  const d=reply('Сколько полный комплекс мальтезе?');assert.match(clean(d),/2 100–2 500 ₽/);assert.doesNotMatch(clean(d),/2 400–2 800|от 2 100/);
@@ -65,7 +65,7 @@ test('a new unlisted pet cannot inherit the earlier dog price while short servic
   assert.match(clean(reply('Мальтезе',d.contact)),/1 500 ₽/);
  }
  assert.match(clean(reply('А сколько это будет стоить, пожалуйста?',first.contact)),/2 100 ₽/);
- assert.match(clean(reply('А полный комплекс?',first.contact)),/точную стоимость уточнит администратор груминга/);
+ assert.match(clean(reply('А полный комплекс?',first.contact)),/Полный комплекс — 2 500 ₽/);
 });
 test('fixed extras, hourly fees and percentage supplements are not treated as package totals',()=>{
  assert.match(clean(reply('Сколько подстричь когти?')),/Подстригание когтей — 550 ₽/);

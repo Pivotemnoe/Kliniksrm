@@ -19,15 +19,21 @@ test('the lost enquiry is a price request including spaced and colloquial price 
   assert.equal(groomingPriceQuestion(text),true);
   const d=reply(text);assert.equal(d.reason,'GROOMING_PRICE');assert.match(d.text,/Йоркширский терьер.*Полный комплекс/);
   assert.equal(d.contact.groomingPriceContext.breedRowIds[0],'york');assert.equal(d.contact.groomingPriceContext.kind,'full');
-  assert.equal(d.needsAttention,true);assert.equal(d.handoff,false);assert.equal(d.createInquiry,false);
-  assert.doesNotMatch(d.text,/онлайн-запись пока закрыта|Стрижки собак и кошек|— 0 ₽|2\s*500/);
+  assert.equal(d.needsAttention,false);assert.equal(d.handoff,false);assert.equal(d.createInquiry,false);
+  assert.match(clean(d.text),/Полный комплекс — 2 500 ₽/);
+  assert.doesNotMatch(d.text,/онлайн-запись пока закрыта|Стрижки собак и кошек|— 0 ₽|2\s*800|точную стоимость уточнит/);
  }
 });
-test('a numerical CRM price is answered directly without a generic wash or site response',()=>{
- const current=groomingPriceRows(rows.map(row=>row.catalogKey==='dog:york:full'?{...row,priceType:'FIXED',price:2500,version:2}:row));
+test('a numerical CRM override is answered directly without a hardcoded catalogue price',()=>{
+ const current=groomingPriceRows(rows.map(row=>row.catalogKey==='dog:york:full'?{...row,priceType:'FIXED',price:3100,version:2}:row));
  const d=reply('Здравствуйте, по чем стрижка полностью йорк терьер 10 лет, а вес примерно 3-4 кг',{petService:{...source,groomingPrices:current}});
- assert.match(clean(d.text),/Йоркширский терьер.*Полный комплекс — 2 500 ₽/);assert.match(d.text,/Оставим заявку\?/);
+ assert.match(clean(d.text),/Йоркширский терьер.*Полный комплекс — 3 100 ₽/);assert.match(d.text,/Оставим заявку\?/);
  assert.equal(d.needsAttention,false);assert.doesNotMatch(d.text,/пока закрыта|Стрижки собак и кошек|точную стоимость уточнит/);
+});
+test('an explicitly missing CRM price flags staff attention while keeping the bot available',()=>{
+ const missing=groomingPriceRows(rows.map(row=>row.catalogKey==='dog:york:full'?{...row,priceType:'QUOTE',price:0,version:2}:row));
+ const d=reply('По чем полный комплекс йорку?',{petService:{...source,groomingPrices:missing}});
+ assert.match(d.text,/точную стоимость уточнит администратор груминга/);assert.equal(d.needsAttention,true);assert.equal(d.handoff,false);assert.doesNotMatch(d.text,/₽/);
 });
 test('a validated PRICE intent can select catalogue facts without an exact price keyword',()=>{
  const d=reply('По деньгам полный комплекс мальтезе',{intent:{action:'PRICE',knowledgeId:null,serviceQuery:null}});
