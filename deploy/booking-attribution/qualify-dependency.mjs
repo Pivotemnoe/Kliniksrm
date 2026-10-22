@@ -16,4 +16,15 @@ const log=execFileSync('node',[root+'/node_modules/prisma/build/index.js','forma
 const formatted=await fs.readFile(old),qualified=await fs.readFile(packet+'/schema.prisma');assert.equal(sha(formatted),sha(qualified),'Qualified schema changed beyond pinned official formatting');
 assert.equal(sha(qualified),source.schemaProof.formattedCandidateSha256);
 const binding={checkedAt:new Date().toISOString(),passed:true,testedManifestSha256:tested.clinicalSourceManifestSha256,qualifiedManifestSha256:sha(sourceBytes),forwardCompiledBytesUnchanged:true,compatCompiledBytesUnchanged:true,forwardFiles:Object.keys(tested.clinicalForwardFiles).length,compatFiles:Object.keys(tested.clinicalCompatFiles).length,testedRawSchemaSha256:sha(raw),qualifiedFormattedSchemaSha256:sha(qualified),schemaFormattingOnly:true,prismaVersion:version,sourceRevision:source.sourceRevision,rollbackSourceRevision:source.rollback.sourceRevision,forwardReference:source.candidate.reference,compatReference:source.rollback.reference,requiredRootAcceptance:'Exact built forward/compat image IDs, unchanged payload/generated client, compatible clinical replay and rollback acceptance must be recorded in the external root review before any host mutation. No API Apply is performed here.'};
+if(process.argv[4]){
+ const bytes=await fs.readFile(path.resolve(process.argv[4])),images=JSON.parse(bytes);
+ assert.equal(images.status,'IMAGES_PREPARED');assert.equal(images.metadataStamped,true);assert.equal(images.runtimeUnchanged,true);assert.equal(images.productionChanged,false);assert.equal(images.sourceManifestSha256,binding.qualifiedManifestSha256);
+ for(const [mode,key,revision,count,unit]of[['candidate','forward',source.sourceRevision,36,75],['rollback','compat',source.rollback.sourceRevision,21,52]]){
+  const image=images.images.find(v=>v.mode===mode);assert(image);assert.match(image.image,/^sha256:[0-9a-f]{64}$/);assert.equal(image.revision,revision);assert.equal(image.filesystemIdentical,true);
+  assert.equal(image.qualification.status,'PASS');assert.equal(image.qualification.overlayFiles,count);assert.equal(image.qualification.sourceRevision,revision);assert.equal(image.qualification.schemaSha256,binding.qualifiedFormattedSchemaSha256);assert.equal(image.qualification.prismaVersion.client,'6.19.3');assert(image.qualification.unitPass>=unit);assert.equal(image.qualification.productionChanged,false);
+  binding[key+'PreparedSourceReference']=binding[key+'Reference'];binding[key+'Reference']=image.reference;binding[key+'ImageId']=image.image;
+ }
+ binding.imageIdentificationSha256=sha(bytes);binding.imageQualificationPrepared=true;
+ await fs.writeFile(qa+'/clinical-images-identified.json',bytes);
+}
 await fs.writeFile(qa+'/clinical-dependency-binding.json',JSON.stringify(binding,null,2)+'\n');await fs.writeFile(qa+'/clinical-qualified-source-manifest.json',sourceBytes);console.log(binding);
