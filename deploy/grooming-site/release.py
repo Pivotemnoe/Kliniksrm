@@ -57,6 +57,13 @@ def routes():
         proxy_connect_timeout 5s;
         proxy_read_timeout 25s;
     }
+    location = /v1/public/grooming/availability {
+        limit_except GET { deny all; }
+        proxy_pass http://127.0.0.1:4100;
+        include /etc/nginx/proxy_params;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 25s;
+    }
     location = /v1/public/grooming/drafts {
         limit_except POST { deny all; }
         proxy_pass http://127.0.0.1:4100;
