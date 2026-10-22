@@ -32,6 +32,13 @@ type SettingsSection = {
 
 const settingsSections: SettingsSection[] = [
   {
+    title: 'Рабочее место',
+    description: 'Кабинет этого компьютера, смена привязки и отвязка рабочего места.',
+    path: '/settings/office/workstations',
+    icon: <ApartmentOutlined />,
+    permission: 'settings.read',
+  },
+  {
     title: 'Запись из чата',
     description: 'Разрешённые услуги, врачи, кабинеты и ограничения самостоятельной записи.',
     path: '/settings/assistant-booking',

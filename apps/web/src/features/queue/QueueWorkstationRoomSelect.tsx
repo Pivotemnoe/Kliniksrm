@@ -12,6 +12,17 @@ export function useQueueWorkstationDeviceId() {
   return deviceId;
 }
 
+export function WorkstationHeartbeat() {
+  const deviceId = useQueueWorkstationDeviceId();
+  useQuery({
+    queryKey: ['queue-workstation', deviceId],
+    queryFn: () => registerQueueWorkstation(deviceId!),
+    enabled: Boolean(deviceId),
+    refetchInterval: 15_000,
+  });
+  return null;
+}
+
 export function CurrentWorkstation({ canChange }: { canChange: boolean }) {
   const deviceId = useQueueWorkstationDeviceId();
   return deviceId ? <QueueWorkstationRoomSelect deviceId={deviceId} canChange={canChange} /> : <Alert type="warning" message="Не удалось сохранить рабочее место: разрешите хранение данных сайта в браузере" />;

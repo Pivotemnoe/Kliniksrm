@@ -104,6 +104,7 @@ export const menuItems: MenuProps['items'] = [
       { key: '/settings/modules', label: 'Подключаемые модули' },
       { key: '/settings/organization', icon: <ProfileOutlined />, label: 'Организация' },
       { key: '/settings/office', icon: <ApartmentOutlined />, label: 'Филиал' },
+      { key: '/settings/office/workstations', icon: <ApartmentOutlined />, label: 'Рабочее место' },
       { key: '/settings/employees', icon: <UserOutlined />, label: 'Сотрудники' },
       { key: '/settings/documents', icon: <FileTextOutlined />, label: 'Шаблоны' },
       { key: '/settings/phrases', icon: <MessageOutlined />, label: 'Быстрые фразы' },

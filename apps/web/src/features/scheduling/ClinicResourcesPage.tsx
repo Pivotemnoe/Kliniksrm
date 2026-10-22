@@ -1,3 +1,4 @@
+import { CurrentWorkstation } from '../queue/QueueWorkstationRoomSelect';
 import { EditOutlined, PlusOutlined, SaveOutlined } from '@ant-design/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -180,7 +181,13 @@ export function ClinicResourcesPage() {
           activeKey={activeTab}
           onChange={(key) => navigate(key === 'workstations' ? '/settings/office/workstations' : tabRoutes[key] ?? '/settings/office')}
           items={[
-            { key: 'workstations', label: 'Рабочие места', children: <QueueWorkstationsTab offices={offices} canManage={canManageWorkstations} /> },
+            { key: 'workstations', label: 'Рабочие места', children: <>
+              <div className="list-panel-body">
+                <Typography.Title level={5}>Этот компьютер</Typography.Title>
+                <CurrentWorkstation canChange={canManageWorkstations} />
+              </div>
+              <QueueWorkstationsTab offices={offices} canManage={canManageWorkstations} />
+            </> },
             {
               key: 'profile',
               label: 'Профиль филиала',

@@ -1,4 +1,4 @@
-import { CurrentWorkstation } from '../features/queue/QueueWorkstationRoomSelect';
+import { WorkstationHeartbeat } from '../features/queue/QueueWorkstationRoomSelect';
 import {
   CalendarOutlined,
   DownOutlined,
@@ -170,9 +170,7 @@ export function CrmLayout() {
           }}>{navigationCollapsed ? null : 'Свернуть меню'}</Button>
       </Sider>
       <Layout>
-        {hasPermission(employee, 'queue.read') ? <div style={{ padding: '6px 16px', background: '#fff' }}>
-          <CurrentWorkstation canChange={hasPermission(employee, 'queue.manage') || hasPermission(employee, 'settings.manage')} />
-        </div> : null}
+        {hasPermission(employee, 'queue.read') ? <WorkstationHeartbeat /> : null}
         <Header className="crm-header">
           <span className="crm-header-wordmark" aria-hidden="true">Temichev<span>VET</span></span>
           <div className="mobile-header-navigation">
