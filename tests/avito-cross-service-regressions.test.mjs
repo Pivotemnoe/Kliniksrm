@@ -6,6 +6,15 @@ const require = createRequire(import.meta.url);
 const { AvitoCrmKnowledgeService, crmQuestions } = require('../apps/api/dist/modules/avito/avito-crm-knowledge.service.js');
 const { defaultAvitoSettings } = require('../apps/api/dist/modules/avito/avito.settings.js');
 const { decideAvitoReply } = require('../apps/api/dist/modules/avito/avito.policy.js');
+const { petSpecies } = require('../apps/api/dist/modules/avito/avito-service-query.js');
+
+test('ordinary message words cannot infer a puppy or overwrite a known cat',()=>{
+ for(const text of ['Системное сообщение','Жду ваше сообщение','Есть помещение','Уточнение обращения'])assert.equal(petSpecies(text),null,text);
+ for(const text of ['Моя собака','У щенка','У щенков','Мой пёс','У пса'])assert.equal(petSpecies(text),'DOG',text);
+ assert.equal(petSpecies('Сообщение про кошку'),'CAT');assert.equal(petSpecies('Кошка и собака'),null);
+ const settings=defaultAvitoSettings();settings.listings=[{id:'cat-context',title:'Диспансеризация',direction:'CLINIC',enabled:true}];
+ const d=decideAvitoReply({settings,listingId:'cat-context',text:'Жду сообщение',messageId:'clarification',contact:{petSpecies:'CAT'},now:new Date('2026-10-22T09:00:00Z')});assert.equal(d.contact.petSpecies,'CAT');
+});
 const tariff = (title, price, min = null, max = null) => ({ title, priceType: min === null ? 'FIXED' : 'FLOATING', price, minimumPrice:min, maximumPrice:max });
 const rows = [tariff('УЗИ',1035),tariff('УЗИ обзорное',1380),tariff('Санация ротовой полости ультразвуковым аппаратом -- кошки',0,4050,5175),tariff('Санация ротовой полости ультразвуковым аппаратом -- собаки',0,5175,11500),tariff('Вакцинация кошки Мультифел',1900),tariff('Первичный прием врача',600)];
 const crm = new AvitoCrmKnowledgeService({ service:{findMany:async()=>rows}, clinicOffice:{findMany:async()=>[{phone:'+79284214542',workingHours:Object.fromEntries(['monday','tuesday','wednesday','thursday','friday','saturday','sunday'].map(day=>[day,{isWorking:true,is24Hours:true}]))}]} });
