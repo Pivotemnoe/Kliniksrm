@@ -82,6 +82,23 @@ test('a closed booking flow never promises self booking, while the website and a
  assert.doesNotMatch(website.text,/Самостоятельно выбрать услугу и доступное время можно/);assert.equal(website.createInquiry,false);
  assert.notEqual(petServiceAnswer(closed,'Хочу записаться'),petServiceAnswer(petService,'Хочу записаться'));
 });
+
+test('approved wash and care answers stay specific without inventing a dry haircut or a price',()=>{
+ const closed={...petService,selfBookingEnabled:false};
+ for(const text of ['Можно подстричь собаку без мытья?','Кошку можно стричь без купания?','Сухая стрижка есть?']){
+  const d=reply(text,{petService:closed});assert.equal(d.reason,'PET_SERVICE_INFO');assert.match(d.text,/Стрижки собак и кошек выполняем только с мытьём/);assert.equal(d.handoff,false);assert.doesNotMatch(d.text,/\d+\s*₽/);
+ }
+ const hygiene=reply('Можно только гигиену без мытья?',{petService:closed});assert.match(hygiene.text,/Гигиенический уход может быть без мытья/);assert.doesNotMatch(hygiene.text,/выполняем только с мытьём/);
+ const brushing=reply('Можно вычесать без купания?',{petService:closed});assert.match(brushing.text,/Вычёсывание может быть без мытья/);assert.doesNotMatch(brushing.text,/Стрижки/);
+});
+
+test('a callback offer after a price or care question supports the short choice here',()=>{
+ const closed={...petService,selfBookingEnabled:false};
+ for(const text of ['Сколько стоит груминг?','Можно гигиену без мытья?','Можно вычесать собаку?']){
+  const d=reply(text,{petService:closed});assert.equal(d.contact.bookingChoiceOffered,true);assert.match(d.text,/Оставим заявку здесь/);
+  const chosen=reply('Здесь',{petService:closed,contact:d.contact});assert.equal(chosen.contact.bookingChannel,'CALLBACK');assert.equal(chosen.contact.collecting,true);assert.equal(chosen.contact.name,undefined);
+ }
+});
 test('medical urgency, a request for human chat and refusal of calls still take priority',()=>{
  assert.equal(reply('Собака задыхается, хочу записаться').reason,'URGENT');
  assert.equal(reply('Чем лечить собаку?').reason,'MEDICAL');

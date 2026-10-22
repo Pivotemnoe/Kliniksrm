@@ -95,7 +95,7 @@ function decideCore(input: DecisionInput): AdminDecision {
     if (answer) {
       // An old unfinished intake must not keep collecting contacts for a site booking.
       if (contact.reason === 'BOOKING') { delete contact.collecting; delete contact.reason; delete contact.awaitingServiceDetails; }
-      if (grooming && !channel && (booking || input.petService.selfBookingEnabled)) contact.bookingChoiceOffered = true;
+      if (grooming && !channel) contact.bookingChoiceOffered = true;
       return { ...base, text: answer, reason: 'PET_SERVICE_INFO', petServiceBooking: booking && petServiceAnswer(input.petService, text) === null, petServiceChannel: channel };
     }
   }

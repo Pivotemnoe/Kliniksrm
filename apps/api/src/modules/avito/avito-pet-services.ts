@@ -46,7 +46,11 @@ export function petServiceAnswer(context: PetServiceContext, text: string, booki
   const booking = bookingIntent || /запис|запиш|брон|засели|свобод|места|сайт|ссылк|онлайн|оставить\s+(?:кот|кош|собак|питом)|хочу\s+(?:подстричь|груминг)/u.test(input);
   const address = /адрес|где\s+(?:вы|наход)|как\s+(?:к вам\s+)?добраться/u.test(input);
   const conditions = /услови|правил|кош|кот|собак|вес|килограмм|кг|сут|дней|выгул|заезд|выезд|время|час|принимаете/u.test(input);
-  if (!price && !booking && !address && !conditions) return null;
+  const haircut = /стриж|подстр|постри[гж]|стри(?:чь|гут|гу)/u.test(input);
+  const hygiene = /гигиен/u.test(input);
+  const brushing = /вычес|вычеш|расчес|расчеш|подшерст|линьк/u.test(input);
+  const care = context.direction === 'GROOMING' && (haircut || hygiene || brushing);
+  if (!price && !booking && !address && !conditions && !care) return null;
   const parts: string[] = [];
   if (address && context.address) parts.push(`Адрес груминга: ${context.address}.`);
   if (context.direction === 'HOTEL' && context.available && context.hotel) {
@@ -61,6 +65,11 @@ export function petServiceAnswer(context: PetServiceContext, text: string, booki
     if (conditions || price) parts.push(`Минимальный срок — ${hotel.minimumDays} сут. Неполные сутки считаются полными. Принимаем собак весом до ${hotel.maximumDogWeightKg} кг. Заезд — с ${hotel.checkInFrom} до ${hotel.checkInTo}.`);
   }
   if (context.direction === 'GROOMING') {
+    // The owner's wash policy is a supported answer, not just a classification
+    // prompt. Dry hygiene and brushing must not be mistaken for a dry haircut.
+    if (haircut) parts.push('Стрижки собак и кошек выполняем только с мытьём.');
+    if (hygiene || haircut && /без\s+(?:мыть|купани)|сух/u.test(input)) parts.push('Гигиенический уход может быть без мытья.');
+    if (brushing) parts.push('Вычёсывание может быть без мытья.');
     if (price) parts.push('Стоимость груминга зависит от выбранной услуги, питомца и состояния шерсти. Администратор поможет уточнить её; прайс также есть на сайте.');
     const website = bookingChannel === 'WEBSITE' || /сайт|ссылк|онлайн|самостоятельн/u.test(input);
     if (website) {
@@ -75,7 +84,7 @@ export function petServiceAnswer(context: PetServiceContext, text: string, booki
     } else {
       parts.push(context.selfBookingEnabled
         ? 'Можно оставить заявку здесь, чтобы администратор помог с записью, или выбрать услугу и время на сайте — как вам удобнее?'
-        : 'Для записи можно оставить заявку здесь, чтобы администратор помог подобрать время. Самостоятельная онлайн-запись пока закрыта; на сайте можно посмотреть услуги, прайс и примеры работ.');
+        : 'Самостоятельная онлайн-запись пока закрыта; на сайте можно посмотреть услуги, прайс и примеры работ. Оставим заявку здесь, чтобы администратор помог с записью?');
     }
     return parts.join('\n');
   } else parts.push(context.selfBookingEnabled
