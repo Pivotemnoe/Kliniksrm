@@ -49,10 +49,7 @@ function FinancialReports() {
 
   return (
     <div className="page reports-page">
-      <PageHeader
-        title="Финансовые отчёты"
-        description="Финансы, посещаемость, услуги, товары, сотрудники и состояние склада."
-        extra={
+      <div className="report-export-actions">
           <Space wrap>
             <Button
               icon={<DownloadOutlined />}
@@ -69,8 +66,7 @@ function FinancialReports() {
               Печать / PDF
             </Button>
           </Space>
-        }
-      />
+      </div>
 
 
       <Card className="report-filter-card">
