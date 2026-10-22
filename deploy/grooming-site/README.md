@@ -4,10 +4,13 @@ The public static client is served at https://pet.temichevvet.ru/ on RU
 193.188.23.65. NL is SSH transit only. The clinic API, CRM Web and owner gateway
 images are not rebuilt by this website deployment.
 
-- Current static release: `grooming-site-20261020-prices-r2`, source
-  `be34b88b9b96ecf5cf6d885003eabbf66d36a34b`.
-- Previous release retained for rollback: `grooming-site-20261020-r1`, source
-  `ef20104bae63e37dffc7f68ba9e2c2bb9043434e`.
+- Current static release: `grooming-site-20261022-jtbd-r2`, source
+  `d3deddff3771cc097dc627e9fed96bd3ebaa0b58`.
+- Previous release retained for rollback: `booking-attribution-grooming-20261022-r1`, source
+  `f88aba9451bddfb0d3cfe52cdaa31bd48ae31e41`.
+- Both public visual revisions were explicitly approved by the owner on 22 October.
+  See `docs/releases/public-sites-jtbd-20261022.md` for exact manifests, verification,
+  attribution/cache preservation and the required hotel-then-grooming rollback order.
 - Root: `/var/www/temichevvet-grooming/current`.
 - Vhost: `/etc/nginx/sites-available/pet.temichevvet.ru`.
 - Nginx backup and release receipts:

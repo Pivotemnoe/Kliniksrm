@@ -5,6 +5,13 @@ This publishes `https://pet.temichevvet.ru/pet-hotel/` on RU host
 and owner gateway first. This script never builds images, migrates databases,
 changes environment files, or restarts containers.
 
+Latest owner-approved static release: `pet-hotel-site-20261022-jtbd-r3`, source
+`d3deddff3771cc097dc627e9fed96bd3ebaa0b58`. The current predecessor is retained
+as `booking-attribution-pet-hotel-20261022-r1`. The paired grooming visual update
+was published first; for recovery restore hotel first, then grooming, before
+attempting the frozen coordinated attribution rollback. Exact identities and
+receipts: `docs/releases/public-sites-jtbd-20261022.md`.
+
 `publish.py` uses only Python's standard library plus the existing `nginx`,
 `systemctl`, `curl`, and Docker CLI. Its CLI requires root on the exact RU host;
 it has no alternate-host, alternate-root, or skip-gate option. Tests import the
