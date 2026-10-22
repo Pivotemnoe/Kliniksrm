@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { bookingAttribution } from '../../common/booking-attribution';
 import { Prisma } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -109,11 +110,12 @@ export class PetHotelService {
       if (previous?.status === 'IN_HOUSE' && (previous.startsAt.toISOString() !== new Date(input.startsAt).toISOString() || previous.roomId !== input.roomId)) throw new BadRequestException('После заезда доступны изменение даты выезда, прогулок и пожеланий');
       const result = await this.validateBooking(tx, installationId, settings, input, now, id, previous || undefined);
       if (!result.rooms.some(room => room.id === input.roomId)) throw new ConflictException('Номер недоступен на выбранные даты. Проверьте свободные места заново');
+      const attribution = bookingAttribution(input.attribution);
       const data = { roomId: input.roomId, ownerId: input.ownerId, animalId: input.animalId, species: result.species, weightKg: input.weightKg ?? null,
         startsAt: result.startsAt, endsAt: result.endsAt, billableDays: result.quote.billableDays, walkCount: input.walkCount,
         dailyRate: result.quote.dailyRate, walkRate: result.quote.walkRate, totalPrice: result.quote.totalPrice, notes: input.notes.trim() };
       const booking = previous ? await tx.petHotelReservation.update({ where: { id: previous.id }, data: { ...data, version: { increment: 1 } }, include })
-        : await tx.petHotelReservation.create({ data: { ...data, installationId, source }, include });
+        : await tx.petHotelReservation.create({ data: { ...data, installationId, source, ...(attribution ? { attribution } : {}) }, include });
       await this.audit.log({ actorId: actorId, action: previous ? 'pet_hotel.booking.update' : 'pet_hotel.booking.create', entityType: 'PetHotelReservation', entityId: booking.id, metadata: { version: booking.version } }, tx);
       await this.queueNotifications(tx, booking, previous ? 'RESCHEDULED' : 'CONFIRMED', now);
       return booking;

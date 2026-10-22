@@ -1,5 +1,6 @@
 import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsIn, IsInt, IsISO8601, IsNumber, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
+import { bookingAttribution, BookingAttribution } from '../../common/booking-attribution';
 
 export class GroomingSpecialistDto {
   @IsOptional() @IsString() @MinLength(1) employeeId?: string;
@@ -102,6 +103,7 @@ export class GroomingOptionsDto {
   @IsOptional() @IsString() reservationId?: string;
 }
 export class GroomingBookDto {
+  @IsOptional() @Transform(({ value }) => bookingAttribution(value)) attribution?: BookingAttribution;
   @IsString() @MinLength(16) @MaxLength(120) clientKey!: string;
   @IsString() @MinLength(20) @MaxLength(4096) offerToken!: string;
   @IsOptional() @IsString() @MaxLength(2000) notes?: string;

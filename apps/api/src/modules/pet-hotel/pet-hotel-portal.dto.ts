@@ -1,4 +1,6 @@
 import { IsBoolean, IsIn, IsInt, IsISO8601, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { bookingAttribution, BookingAttribution } from '../../common/booking-attribution';
 export class HotelOwnerOptionsDto {
   @IsString() @MinLength(1) @MaxLength(100) animalId!: string;
   @IsIn(['CAT', 'DOG']) species!: string;
@@ -9,6 +11,7 @@ export class HotelOwnerOptionsDto {
   @IsOptional() @IsString() @MaxLength(100) reservationId?: string;
 }
 export class HotelOwnerBookDto {
+  @IsOptional() @Transform(({ value }) => bookingAttribution(value)) attribution?: BookingAttribution;
   @IsString() @MinLength(1) @MaxLength(100) animalId!: string;
   @IsString() @MaxLength(6000) @MinLength(32) offerToken!: string;
   @IsString() @MaxLength(4000) notes!: string;
