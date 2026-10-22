@@ -44,6 +44,13 @@ try{
  foreach($name in @('.env','.env.runtime')){$p=$root+'/'+$name;$t=[IO.File]::ReadAllText($p);foreach($pair in @(@('TEMICHEVVET_API_IMAGE',$newApi),@('TEMICHEVVET_WEB_IMAGE',$newWeb),@('TEMICHEVVET_REMOTE_API_IMAGE',$newApi),@('TEMICHEVVET_REMOTE_WEB_IMAGE',$newWeb))){$t=[regex]::Replace($t,('(?m)^'+$pair[0]+'=[^\r\n]*'),($pair[0]+'='+$pair[1]))};[IO.File]::WriteAllText($p,$t,$utf)}
  $after=Config;if($after.services.api.image -ne $newApi -or $after.services.web.image -ne $newWeb){throw 'Pins not applied'};$after.services.api.image=$before.services.api.image;$after.services.web.image=$before.services.web.image;if(($after|ConvertTo-Json -Depth 40 -Compress) -ne ($before|ConvertTo-Json -Depth 40 -Compress)){throw 'Unexpected compose change'}
  $null=RunDocker ($compose+@('up','-d','--no-deps','--no-build','--pull','never','api','web'))
+ # This production Compose starts Node directly; migrations must be applied explicitly.
+ $guard = @'
+const fs=require('fs');const {PrismaClient}=require('/app/node_modules/@prisma/client');const p=new PrismaClient();(async()=>{const rows=await p.$queryRawUnsafe('SELECT migration_name FROM "_prisma_migrations" WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL');const done=new Set(rows.map(r=>r.migration_name));const pending=fs.readdirSync('/app/prisma/migrations').filter(n=>fs.existsSync('/app/prisma/migrations/'+n+'/migration.sql')&&!done.has(n));if(pending.some(n=>n!=='20261022113000_workstation_reception'))throw Error('Unexpected pending migrations');})().catch(e=>{console.error(e.message);process.exitCode=1}).finally(()=>p.$disconnect());
+'@
+ $encoded=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($guard))
+ $null=RunDocker @('exec','clinic-crm-api','node','-e',("eval(Buffer.from('"+$encoded+"','base64').toString())"))
+ $null=RunDocker @('exec','-e','PGOPTIONS=-c lock_timeout=5000 -c statement_timeout=30000','clinic-crm-api','node','/app/node_modules/prisma/build/index.js','migrate','deploy','--schema','/app/prisma/schema.prisma')
  Health $s.apiId $s.webId;CheckProtected $s.protected
  $r=Invoke-RestMethod 'http://127.0.0.1:3000/release.json' -TimeoutSec 5;if($r.revision -ne $m.revision){throw 'Web revision mismatch'}
  $s.phase='COMPLETE';Save ($backup+'/state.json') $s;Write-Output ('COMPLETE '+$m.revision+'; health/database OK; protected services unchanged')
