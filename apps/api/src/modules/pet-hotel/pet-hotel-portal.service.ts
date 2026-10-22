@@ -5,6 +5,7 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { PrismaService } from '../../prisma/prisma.service';
 import { normalizePhoneForLookup } from '../../common/phone';
+import { bookingAttribution } from '../../common/booking-attribution';
 import { AuditService } from '../audit/audit.service';
 import { lockPetHotel, PetHotelService } from './pet-hotel.service';
 import { HotelOwnerBookDto, HotelOwnerCancelDto, HotelOwnerMoveDto, HotelOwnerOptionsDto, HotelOwnerPetDto } from './pet-hotel-portal.dto';
@@ -30,6 +31,11 @@ export class PetHotelOwnerService {
   }
   async execute(item: HotelOperation, now = new Date()) {
     if (!item.id || item.id.length > 120 || !item.ownerId || !item.input || Array.isArray(item.input)) throw new BadRequestException('Некорректный запрос гостиницы');
+    if (item.kind === 'BOOK' || item.kind === 'RESCHEDULE') {
+      const { attribution, ...input } = item.input;
+      const accepted = bookingAttribution(attribution);
+      item = { ...item, input: { ...input, ...(accepted ? { attribution: accepted } : {}) } };
+    }
     const fingerprint = hash({ ownerId: item.ownerId, kind: item.kind, input: item.input }), receiptId = `pet-hotel:portal:${item.id}`;
     return this.prisma.$transaction(async tx => {
       await lockPetHotel(tx);
@@ -62,7 +68,7 @@ export class PetHotelOwnerService {
           const refreshed = await this.options(tx, owner.id, ctx, { animalId: input.animalId, species: (await tx.petHotelRoom.findUnique({ where: { id: offer.roomId } }))?.species as string, startsAt: offer.startsAt, endsAt: offer.endsAt, weightKg: offer.weightKg, walkCount: offer.walkCount, reservationId: move?.reservationId }, now);
           const room = refreshed.rooms.find(r => r.id === offer.roomId);
           if (!room || room.version !== offer.roomVersion || ctx.settings.version !== offer.settingsVersion || hash(room.quote) !== hash(offer.quote)) throw new ConflictException('Номер или тариф изменился. Проверьте стоимость заново');
-          const saved = await this.hotel.saveReservation(tx, ctx.installation.id, ctx.settings, { clientKey: item.id, ownerId: owner.id, animalId: input.animalId, roomId: offer.roomId, startsAt: offer.startsAt, endsAt: offer.endsAt, weightKg: offer.weightKg, walkCount: offer.walkCount, notes: input.notes, ...(move ? { version: move.version } : {}) }, now, undefined, move?.reservationId, 'OWNER_PORTAL');
+          const saved = await this.hotel.saveReservation(tx, ctx.installation.id, ctx.settings, { clientKey: item.id, ownerId: owner.id, animalId: input.animalId, roomId: offer.roomId, startsAt: offer.startsAt, endsAt: offer.endsAt, weightKg: offer.weightKg, walkCount: offer.walkCount, notes: input.notes, attribution: input.attribution, ...(move ? { version: move.version } : {}) }, now, undefined, move?.reservationId, 'OWNER_PORTAL');
           await this.audit.log({ action: 'pet_hotel.owner.consents', entityType: 'PetHotelReservation', entityId: saved.id, metadata: { ownerId: owner.id, operationId: item.id, contactConsent: true, bookingConsent: true } }, tx);
           result = publicBooking(saved, now);
         } else if (item.kind === 'PET_CREATE') {

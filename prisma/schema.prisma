@@ -2907,6 +2907,7 @@ model PetHotelReservation {
   notes String @default("")
   source String @default("CRM")
   notifications PetHotelNotification[]
+  attribution Json?
   version Int @default(1)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -3034,6 +3035,7 @@ model GroomingReservation {
   notes String @default("")
   looks Json @default("[]")
   source String @default("CRM")
+  attribution Json?
   version Int @default(1)
   notifications GroomingNotification[]
   staffNotices GroomingStaffNotice[]
