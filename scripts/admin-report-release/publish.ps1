@@ -1,0 +1,64 @@
+[CmdletBinding()]
+param([ValidateSet('Inspect','Prepare','Apply','Rollback','Verify')][string]$Mode='Inspect',[string]$Root='C:/Users/TemichevVet/TemichevVet',[string]$PackageRoot=$PSScriptRoot,[switch]$Execute)
+$ErrorActionPreference='Stop'; Set-StrictMode -Version Latest
+if($env:COMPUTERNAME -ne 'WIN-I123AM83GR4'){throw 'Wrong host'}
+$env:DOCKER_HOST='npipe:////./pipe/dockerDesktopLinuxEngine';$env:DOCKER_CONFIG='C:/Users/TemichevVet/.docker';$env:Path='C:/Program Files/Docker/Docker/resources/bin;'+$env:Path
+[Console]::OutputEncoding=New-Object Text.UTF8Encoding($false);$OutputEncoding=[Console]::OutputEncoding
+function D([string[]]$A){$old=$ErrorActionPreference;try{$ErrorActionPreference='Continue';$s=& docker @A 2>&1|Out-String;$code=$LASTEXITCODE}finally{$ErrorActionPreference=$old};if($code -ne 0){throw ('Docker operation failed: '+$A[0]+' '+$s)};return $s}
+function J($p){ConvertFrom-Json -InputObject ([IO.File]::ReadAllText($p))}
+function H($p){(Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash.ToLowerInvariant()}
+function C($n){(ConvertFrom-Json -InputObject (D @('inspect',$n)))[0]}
+function Save($p,$v){$t=$p+'.new';if(Test-Path $t){throw 'Unresolved temporary state'};[IO.File]::WriteAllText($t,($v|ConvertTo-Json -Depth 64),(New-Object Text.UTF8Encoding($false)));if(Test-Path $p){[IO.File]::Replace($t,$p,$null)}else{[IO.File]::Move($t,$p)}}
+$m=J (Join-Path $PackageRoot 'manifest.json');if($m.releaseId -ne 'crm-admin-reports-20261022-r1' -or $m.revision -notmatch '^[a-f0-9]{40}$'){throw 'Unqualified release'}
+foreach($f in $m.files){if($f.name -match '(^|/)\.\.' -or (H (Join-Path $PackageRoot $f.name)) -ne $f.sha256){throw 'Packet checksum mismatch'}}
+$b=Join-Path $Root ('backups/manual-releases/'+$m.releaseId);$stateFile=Join-Path $b 'state.json';$rights=Join-Path $b 'rights'
+$api=C 'clinic-crm-api';$web=C 'clinic-crm-web';$project=$api.Config.Labels.'com.docker.compose.project'
+if(-not $project){throw 'Missing compose project'}
+function Protected{ @('clinic-crm-postgres','clinic-crm-redis','clinic-crm-minio','clinic-crm-backup')|ForEach-Object{$c=C $_;[pscustomobject]@{name=$_;id=$c.Id;image=$c.Image;started=$c.State.StartedAt}} }
+function CheckProtected($s){foreach($p in $s){$c=C $p.name;if($c.Id -ne $p.id -or $c.Image -ne $p.image -or $c.State.StartedAt -ne $p.started -or -not $c.State.Running){throw 'Protected service changed'}}}
+function Compose($ai,$wi,$rev,[switch]$Switch){
+ $args=@('compose','--project-directory',$Root,'--project-name',$project,'--file',(Join-Path $Root 'docker-compose.yml'),'--env-file',(Join-Path $Root '.env'));if(Test-Path (Join-Path $Root '.env.runtime')){$args+=@('--env-file',(Join-Path $Root '.env.runtime'))}
+ $keys=@('TEMICHEVVET_API_IMAGE','TEMICHEVVET_WEB_IMAGE','CRM_SOURCE_VERSION');$old=@{};foreach($k in $keys){$old[$k]=[Environment]::GetEnvironmentVariable($k,'Process')}
+ try{if($ai){$env:TEMICHEVVET_API_IMAGE=$ai};if($wi){$env:TEMICHEVVET_WEB_IMAGE=$wi};if($rev){$env:CRM_SOURCE_VERSION=$rev};if($Switch){$null=D ($args+@('up','-d','--no-deps','--no-build','--pull','never','api','web'))}else{ConvertFrom-Json -InputObject (D ($args+@('config','--format','json')))}}finally{foreach($k in $keys){[Environment]::SetEnvironmentVariable($k,$old[$k],'Process')}}
+}
+function CheckCompose($before,$after){if([string]$after.services.api.environment.SEED_ON_START -ne 'false'){throw 'Seed must remain disabled'};$c=ConvertFrom-Json -InputObject ($after|ConvertTo-Json -Depth 64);$c.services.api.image=$before.services.api.image;$c.services.web.image=$before.services.web.image;$c.services.api.environment.CRM_SOURCE_VERSION=$before.services.api.environment.CRM_SOURCE_VERSION;if(($before|ConvertTo-Json -Depth 64 -Compress) -ne ($c|ConvertTo-Json -Depth 64 -Compress)){throw 'Unexpected Compose change'}}
+function Worker($script,$image,$operation=''){
+ $a=C 'clinic-crm-api';$network=@($a.NetworkSettings.Networks.PSObject.Properties)[0].Name;$old=$env:DATABASE_URL
+ try{$env:DATABASE_URL=(@($a.Config.Env|Where-Object{$_ -like 'DATABASE_URL=*'})[0]).Substring(13);$args=@('run','--rm','--pull','never','--network',$network,'-e','DATABASE_URL','-e','NODE_PATH=/app/node_modules','--mount',('type=bind,source='+$PackageRoot+',target=/release,readonly'),'--entrypoint','node');if($operation){$args+=@('--mount',('type=bind,source='+$rights+',target=/private'))};$args+=@($image,('/release/'+$script));if($operation){$args+=@($operation,'/private')};D $args}finally{$env:DATABASE_URL=$old}
+}
+function Health($ai,$wi){for($i=0;$i -lt 40;$i++){try{if((C 'clinic-crm-api').Image -ne $ai -or (C 'clinic-crm-web').Image -ne $wi){throw 'Images differ'};$h=Invoke-RestMethod 'http://127.0.0.1:3000/api/health' -TimeoutSec 4;if($h.status -eq 'ok' -and $h.database -eq 'ok'){return}}catch{};Start-Sleep -Milliseconds 500};throw 'Health failed'}
+function CheckConfig($s,$phase){foreach($f in $s.config){$expected=if($phase -eq 'after'){$f.afterHash}else{$f.beforeHash};if((H (Join-Path $Root $f.name)) -ne $expected){throw ('Concurrent configuration edit: '+$f.name)}}}
+function ConfigWrite($s,$phase){CheckConfig $s $(if($phase -eq 'after'){'before'}else{'after'});foreach($f in $s.config){$src=Join-Path $b ($phase+'-'+$f.saved);[IO.File]::WriteAllBytes((Join-Path $Root $f.name),[IO.File]::ReadAllBytes($src))}}
+$before=Compose '' '' '';if($before.services.api.image -ne $api.Config.Image -or $before.services.web.image -ne $web.Config.Image){throw 'Running/Compose pins disagree'}
+if($Mode -in @('Inspect','Prepare')){if($api.Image -ne $m.previousApi -or $web.Image -ne $m.previousWeb){throw 'Baseline changed'};CheckCompose $before (Compose $m.candidateApi $m.candidateWeb $m.revision);$null=Worker 'invariants.cjs' $m.previousApi}
+if($Mode -eq 'Inspect'){@{baselineVerified=$true;api=$api.Image;web=$web.Image;revision=$m.revision}|ConvertTo-Json;return}
+if($Mode -ne 'Verify' -and -not $Execute){throw 'Explicit -Execute is required'}
+if($Mode -eq 'Prepare'){
+ if(Test-Path $b){throw 'Backup already exists; preserve and inspect it'};$null=New-Item -ItemType Directory $rights -Force;$account=[Security.Principal.WindowsIdentity]::GetCurrent().Name;& icacls $b /inheritance:r /grant:r ($account+':(OI)(CI)F') 'SYSTEM:(OI)(CI)F' *> $null;if($LASTEXITCODE -ne 0){throw 'Private backup ACL failed'}
+ $protected=@(Protected);$config=@();foreach($name in @('docker-compose.yml','.env','.env.runtime','diagnostics/bin/system-diagnostics-config.json')){if(-not(Test-Path (Join-Path $Root $name))){continue};$p=Join-Path $Root $name;$saved=$name.Replace('/','-');[IO.File]::WriteAllBytes((Join-Path $b ('before-'+$saved)),[IO.File]::ReadAllBytes($p));$text=[IO.File]::ReadAllText($p)
+ if($name -in @('.env','.env.runtime')){foreach($pair in @(@('TEMICHEVVET_API_IMAGE',$m.candidateApi),@('TEMICHEVVET_REMOTE_API_IMAGE',$m.candidateApi),@('TEMICHEVVET_WEB_IMAGE',$m.candidateWeb),@('TEMICHEVVET_REMOTE_WEB_IMAGE',$m.candidateWeb),@('CRM_SOURCE_VERSION',$m.revision))){$pat='(?m)^'+$pair[0]+'=[^\r\n]*';if([regex]::Matches($text,$pat).Count -gt 1){throw 'Duplicate pin'};$text=[regex]::Replace($text,$pat,($pair[0]+'='+$pair[1]))}}
+ if($name -like '*system-diagnostics-config.json'){$v=J $p;$v|Add-Member expectedRevision $m.revision -Force;$v|Add-Member expectedWebRevision $m.revision -Force;$v|Add-Member expectedApiImage $m.candidateApi -Force;$text=$v|ConvertTo-Json -Depth 32}
+ $after=Join-Path $b ('after-'+$saved);if($name -eq 'docker-compose.yml'){[IO.File]::WriteAllBytes($after,[IO.File]::ReadAllBytes($p))}else{[IO.File]::WriteAllText($after,$text,(New-Object Text.UTF8Encoding($false)))};$config+=[pscustomobject]@{name=$name;saved=$saved;beforeHash=(H $p);afterHash=(H $after)}
+ }
+ foreach($kind in @('api','web')){$base=if($kind -eq 'api'){$m.previousApi}else{$m.previousWeb};$tag=if($kind -eq 'api'){$m.candidateApi}else{$m.candidateWeb};$log=D @('build','--network','none','--pull=false','--platform','linux/amd64','--build-arg',('BASE_'+$kind.ToUpper()+'_IMAGE='+$base),'--build-arg',('RELEASE_REVISION='+$m.revision),'-f',(Join-Path $PackageRoot ('Dockerfile.'+$kind)),'-t',$tag,$PackageRoot);[IO.File]::WriteAllText((Join-Path $b ($kind+'-build.log')),$log)}
+ $ai=(ConvertFrom-Json -InputObject (D @('image','inspect',$m.candidateApi)))[0];$wi=(ConvertFrom-Json -InputObject (D @('image','inspect',$m.candidateWeb)))[0];if($ai.Architecture -ne 'amd64' -or $wi.Architecture -ne 'amd64'){throw 'Wrong architecture'};$null=Worker 'qualify.cjs' $ai.Id;$null=Worker 'invariants.cjs' $ai.Id
+ $pg=C 'clinic-crm-postgres';$user=(@($pg.Config.Env|Where-Object{$_ -like 'POSTGRES_USER=*'})[0]).Substring(14);$database=(@($pg.Config.Env|Where-Object{$_ -like 'POSTGRES_DB=*'})[0]).Substring(12);$temp='admin-reports-restore-'+[guid]::NewGuid().ToString('N').Substring(0,10);$dump='/tmp/'+$temp+'.dump'
+ try{$null=D @('exec','clinic-crm-postgres','pg_dump','-U',$user,'-d',$database,'-Fc','--file',$dump);$null=D @('cp',('clinic-crm-postgres:'+$dump),(Join-Path $b 'database.dump'));$null=D @('run','-d','--pull','never','--network','none','--name',$temp,'-e','POSTGRES_USER=qa','-e','POSTGRES_DB=qa','-e','POSTGRES_PASSWORD=isolated-restore-only',$pg.Image)
+ $ready=$false;for($i=0;$i -lt 60;$i++){try{$null=D @('exec',$temp,'pg_isready','-U','qa','-d','qa');$ready=$true;break}catch{Start-Sleep -Milliseconds 500}};if(-not $ready){throw 'Restore database not ready'};$null=D @('cp',(Join-Path $b 'database.dump'),($temp+':/tmp/database.dump'));$null=D @('exec',$temp,'pg_restore','-U','qa','-d','qa','--no-owner','--no-privileges','--exit-on-error','/tmp/database.dump')
+ }finally{$null=D @('rm','-f','-v',$temp);$null=D @('exec','clinic-crm-postgres','rm','-f',$dump)}
+ $null=Worker 'rights.cjs' $ai.Id 'snapshot';CheckProtected $protected
+ $s=[pscustomobject]@{phase='PREPARED';at=[DateTime]::UtcNow.ToString('o');manifestHash=(H (Join-Path $PackageRoot 'manifest.json'));previousApi=$api.Config.Image;previousWeb=$web.Config.Image;previousRevision=$before.services.api.environment.CRM_SOURCE_VERSION;apiId=$ai.Id;webId=$wi.Id;config=$config;protected=$protected;databaseHash=(H (Join-Path $b 'database.dump'));restoreTested=$true}
+ CheckConfig $s 'before';if((C 'clinic-crm-api').Id -ne $api.Id -or (C 'clinic-crm-web').Id -ne $web.Id){throw 'Baseline changed during prepare'};Save $stateFile $s;@{prepared=$true;api=$ai.Id;web=$wi.Id;backup=$b;restoreTested=$true}|ConvertTo-Json;return
+}
+$s=J $stateFile;if($s.manifestHash -ne (H (Join-Path $PackageRoot 'manifest.json'))){throw 'Manifest changed'};CheckProtected $s.protected
+if($Mode -eq 'Verify'){CheckConfig $s 'after';Health $s.apiId $s.webId;$null=Worker 'rights.cjs' $s.apiId 'verify';$null=Worker 'invariants.cjs' $s.apiId;$served=Invoke-RestMethod 'http://127.0.0.1:3000/release.json' -TimeoutSec 5;if($served.revision -ne $m.revision){throw 'Web revision differs'};@{verified=$true;revision=$m.revision}|ConvertTo-Json;return}
+if($Mode -eq 'Rollback'){
+ if($api.Image -notin @($s.apiId,$m.previousApi) -or $web.Image -notin @($s.webId,$m.previousWeb)){throw 'Refuse rollback of unrelated runtime'};foreach($f in $s.config){if((H (Join-Path $Root $f.name)) -notin @($f.beforeHash,$f.afterHash)){throw 'Concurrent configuration edit'}};$null=Worker 'rights.cjs' $s.apiId 'rollback';foreach($f in $s.config){[IO.File]::WriteAllBytes((Join-Path $Root $f.name),[IO.File]::ReadAllBytes((Join-Path $b ('before-'+$f.saved))))};Compose $s.previousApi $s.previousWeb $s.previousRevision -Switch;Health $m.previousApi $m.previousWeb;CheckProtected $s.protected;$s.phase='ROLLED_BACK';Save $stateFile $s;return
+}
+if($s.phase -ne 'PREPARED' -or $api.Image -ne $m.previousApi -or $web.Image -ne $m.previousWeb -or [DateTime]::Parse($s.at).ToUniversalTime() -lt [DateTime]::UtcNow.AddHours(-2) -or (H (Join-Path $b 'database.dump')) -ne $s.databaseHash){throw 'Fresh prepared baseline required'}
+CheckConfig $s 'before';$null=Worker 'invariants.cjs' $m.previousApi
+if((ConvertFrom-Json -InputObject (D @('image','inspect',$m.candidateApi)))[0].Id -ne $s.apiId -or (ConvertFrom-Json -InputObject (D @('image','inspect',$m.candidateWeb)))[0].Id -ne $s.webId){throw 'Candidate tag changed'}
+# The worker holds role/permission table locks, compares exact before rows, then changes rights.
+$null=Worker 'rights.cjs' $s.apiId 'apply';$s.phase='RIGHTS_APPLIED';Save $stateFile $s
+ConfigWrite $s 'after';CheckCompose $before (Compose '' '' '');$s.phase='SWITCHING';Save $stateFile $s
+Compose $m.candidateApi $m.candidateWeb $m.revision -Switch;Health $s.apiId $s.webId;$null=Worker 'rights.cjs' $s.apiId 'verify';$null=Worker 'invariants.cjs' $s.apiId;CheckProtected $s.protected;$s.phase='COMPLETE';Save $stateFile $s;@{applied=$true;revision=$m.revision;backup=$b}|ConvertTo-Json
