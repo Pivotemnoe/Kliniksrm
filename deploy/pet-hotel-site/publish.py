@@ -449,6 +449,48 @@ class Publisher:
                 raise RuntimeError(str(error) + '; rollback failed: ' + str(recovery)) from error
             raise
 
+    def update_static(self, release, expected_revision):
+        """Update an existing routed hotel by switching only its static symlink."""
+        require(RELEASE.fullmatch(release or ''), 'Invalid hotel release identifier')
+        build, backup = self.p.releases / release, self.p.backups / release
+        prepared = json.loads((backup / 'prepared.json').read_text())
+        before = prepared['before']
+        require(prepared['releaseId'] == release and not (backup / 'activation.json').exists(), 'Release activation already started')
+        require(before['previousCurrent'] is not None and BEGIN in self.p.conf.read_text(), 'Static update requires an existing hotel route')
+        require(digest(build / 'pet-hotel/release.json') == prepared['manifestSha256'], 'Staged manifest changed')
+        self.manifest(build, release)
+        self.unchanged(before)
+        identities = self.containers()
+        gateway = self.gateway(expected_revision)
+        self.unchanged(before)
+        require(self.containers() == identities, 'Application containers changed before activation')
+        save(backup / 'activation.json', {'at': self.clock().isoformat(), 'status': 'ACTIVATING',
+                                         'kind': 'STATIC_ONLY', 'gateway': gateway, 'containers': identities})
+        try:
+            self.switch(str(build))
+            self.verify_public(release, before)
+            require(digest(self.p.conf) == before['nginxSha256'] and self.other_vhosts() == before['otherVhosts'], 'Nginx changed during static update')
+            require(self.containers() == identities, 'Application containers changed during static update')
+            require(self.pointer() == str(build), 'Activated hotel identity changed')
+            receipt = {'status': 'PUBLISHED', 'at': self.clock().isoformat(), 'releaseId': release,
+                       'revision': prepared['revision'], 'gateway': gateway, 'backup': str(backup),
+                       'kind': 'STATIC_ONLY', 'nginxUnchanged': True, 'groomingUnchanged': True, 'containersUnchanged': True}
+            save(backup / 'published.json', receipt)
+            return receipt
+        except Exception as error:
+            self.restore_static(release, prepared)
+            save(backup / 'failure.json', {'phase': 'update-static', 'error': str(error), 'restoredPrevious': True})
+            raise
+
+    def restore_static(self, release, prepared):
+        before = prepared['before']
+        require(self.pointer() in [before['previousCurrent'], str(self.p.releases / release)], 'Refusing to replace a later hotel release')
+        require(digest(self.p.conf) == before['nginxSha256'] and self.other_vhosts() == before['otherVhosts'], 'Refusing rollback after Nginx drift')
+        require(self.grooming() == before['grooming'], 'Protected grooming site changed')
+        self.switch(before['previousCurrent'])
+        self.unchanged(before)
+        self.verify_grooming(before)
+
     def restore(self, release, prepared):
         before, backup = prepared['before'], self.p.backups / release
         current = self.pointer()
@@ -471,7 +513,11 @@ class Publisher:
         require((backup / 'activation.json').exists(), 'Release activation has not started')
         prepared = json.loads((backup / 'prepared.json').read_text())
         identities = self.containers()
-        self.restore(release, prepared)
+        activation = json.loads((backup / 'activation.json').read_text())
+        if activation.get('kind') == 'STATIC_ONLY':
+            self.restore_static(release, prepared)
+        else:
+            self.restore(release, prepared)
         require(self.containers() == identities, 'Application containers changed during static rollback')
         receipt = {'status': 'ROLLED_BACK', 'at': self.clock().isoformat(), 'releaseId': release,
                    'previousCurrent': prepared['before']['previousCurrent'], 'groomingUnchanged': True,
@@ -482,7 +528,7 @@ class Publisher:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('mode', choices=['prepare', 'activate', 'rollback'])
+    parser.add_argument('mode', choices=['prepare', 'activate', 'update-static', 'rollback'])
     parser.add_argument('--release', required=True)
     parser.add_argument('--archive', type=Path)
     parser.add_argument('--sha256')
@@ -504,6 +550,8 @@ def main():
             result = publisher.prepare(args.release, args.archive, args.sha256, args.expected_nginx_sha256)
         elif args.mode == 'activate':
             result = publisher.activate(args.release, args.gateway_revision)
+        elif args.mode == 'update-static':
+            result = publisher.update_static(args.release, args.gateway_revision)
         else:
             result = publisher.rollback(args.release)
     print(json.dumps(result, ensure_ascii=False))

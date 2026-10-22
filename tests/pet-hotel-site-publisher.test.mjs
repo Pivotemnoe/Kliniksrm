@@ -126,6 +126,43 @@ function python(code) {
   assert.equal(result.status, 0, result.stderr || result.stdout || String(result.error));
 }
 
+test('existing hotel static update and rollback preserve nginx bytes and all application containers',()=>{
+ python(String.raw`
+previous=p.releases/'previous-hotel'
+previous.mkdir()
+p.current.symlink_to(previous)
+p.conf.write_text(mod.candidate_config(original_conf,p.current))
+before_conf=p.conf.read_bytes()
+prepare()
+calls.clear()
+receipt=pub.update_static(release,gateway_revision)
+assert receipt['kind']=='STATIC_ONLY' and receipt['nginxUnchanged']
+assert p.conf.read_bytes()==before_conf
+assert os.readlink(p.current)==str(p.releases/release)
+pub.rollback(release)
+assert os.readlink(p.current)==str(previous)
+assert p.conf.read_bytes()==before_conf
+assert all(args[0]=='docker' and args[1] in ['ps','inspect'] for args in calls)
+`);
+});
+
+test('static update refuses missing routing or gateway drift before switching',()=>{
+ python(String.raw`
+prepare()
+expect_error(lambda:pub.update_static(release,gateway_revision),'Static update requires an existing hotel route')
+assert not p.current.exists()
+assert not any(args[0]=='systemctl' for args in calls)
+`);
+ python(String.raw`
+previous=p.releases/'previous-hotel'; previous.mkdir(); p.current.symlink_to(previous)
+p.conf.write_text(mod.candidate_config(original_conf,p.current))
+prepare()
+before=p.conf.read_bytes()
+expect_error(lambda:pub.update_static(release,'d'*40),'Production gateway revision differs')
+assert os.readlink(p.current)==str(previous) and p.conf.read_bytes()==before
+`);
+});
+
 test('prepare is inactive; activation publishes only hotel subtree and rollback restores exact grooming/config', () => {
   python(String.raw`
 before_grooming = pub.grooming()
