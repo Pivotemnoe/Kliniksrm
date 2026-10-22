@@ -4,3 +4,6 @@ ARG RELEASE_REVISION
 LABEL org.opencontainers.image.revision=$RELEASE_REVISION
 # Overlay preserves existing hashed assets for already opened tabs.
 COPY web/ /usr/share/nginx/html/
+
+# Startup copies these assets into the retained named volume.
+COPY web/assets/ /opt/temichevvet-web-assets/
