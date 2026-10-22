@@ -91,4 +91,20 @@ test('split bill payments are atomic, method-specific, replay-safe and preserve 
     assert.equal(refund.type,'CASH');assert.equal(refund.cashboxId,cashbox.id);assert.equal(refund.paymentMethodId,cash.id);assert.equal(refund.amount.toString(),'-30');
     assert.equal((await db.payment.findUnique({where:{id:created[1].id}})).amount.toString(),'70');
   });
+  await t.test('late payment blocks approval; returned close recalculates and can be balanced',async()=>{
+    const actor={id:employee.id,permissions:['*'],roles:['director']}, businessDate='2026-10-20';
+    const initial=await business.prepareDailyClose({officeId:office.id,businessDate},actor);
+    const balanced=await business.prepareDailyClose({officeId:office.id,businessDate,lines:initial.lines.map(l=>({lineKey:l.lineKey,actualAmount:Number(l.systemAmount)}))},actor);
+    assert.equal(Number(balanced.difference),0);
+    await business.submitDailyClose(balanced.id,employee.id);
+    const late=await makeBill();await billing.createSplitPayment(late.id,input(),employee.id);
+    await assert.rejects(business.approveDailyClose(balanced.id,employee.id),/изменились оплаты/);
+    await business.returnDailyClose(balanced.id,{reason:'Synthetic late payment reconciliation'},employee.id);
+    const updated=await business.prepareDailyClose({officeId:office.id,businessDate},actor);
+    assert.equal(Number(updated.expectedAmount),Number(initial.expectedAmount)+100);
+    const final=await business.prepareDailyClose({officeId:office.id,businessDate,lines:updated.lines.map(l=>({lineKey:l.lineKey,actualAmount:Number(l.systemAmount)}))},actor);
+    assert.equal(Number(final.difference),0);
+    await business.submitDailyClose(final.id,employee.id);await business.approveDailyClose(final.id,employee.id);
+  });
+
 });
