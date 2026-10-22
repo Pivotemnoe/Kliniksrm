@@ -1,6 +1,6 @@
 {
   "createdAt": "2026-10-22T06:05:39.711Z",
-  "status": "LOCAL_VERIFIED_NOT_DEPLOYED",
+  "status": "PUBLISHED_VERIFIED",
   "baseImage": "temichevvet-owner-gateway:grooming-owner-contact-986ba0421242",
   "baseImageId": "sha256:8bcb7da10a8069a2a5ad8811bed5f665adea263ca22e03b6a903e82bd23a0380",
   "runtimeFiles": [
@@ -51,5 +51,11 @@
     "marketing": false
   },
   "sourceMap": "unchanged by release requirement",
-  "notes": "Review publisher and allocate a distinct gateway slot before Apply. No attribution/JTBD changes included."
+  "publication": {
+    "verifiedAt": "2026-10-22T06:35:12.356Z",
+    "image": "temichevvet-owner-gateway:clinic-catalog-context-20261022-v1",
+    "imageId": "sha256:339981be14103cd2ad16d26c71d93d80c058e89b0d3ca2bb5a61ea6f2ecf14fb",
+    "evidence": "evidence/publication.json"
+  },
+  "notes": "Published exact reviewed publisher in a distinct gateway slot after fresh guards and actual private backup restore. No attribution/JTBD changes included."
 }

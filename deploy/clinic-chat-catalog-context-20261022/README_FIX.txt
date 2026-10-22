@@ -1,4 +1,4 @@
-Clinic catalog request context correction — prepared locally, NOT deployed
+Clinic catalog request context correction — PUBLISHED AND VERIFIED 2026-10-22
 
 Contract
 1. Recognize only SITE_CHAT messages made by the existing priceSelectionBooking
@@ -53,9 +53,11 @@ This fixture requires an already built baseline runtime, not an autonomous CI
 build from a historical backend source branch.
 
 Release gate
-Root review and a separate gateway window are REQUIRED. The current source
-canonical working tree and production API/gateway have NOT been changed by this
-patch. The isolated branch contains the tracked source fix for future full builds.
+Published in the separately reviewed gateway window with the exact approved
+publisher/rollback hashes in PATCH.json. Fresh image, file manifests, health and
+protected-state evidence passed; root independently repeated read-only checks.
+One gateway JS changed. No API/Web/CRM data/tunnel/JTBD changes were made.
+The isolated branch contains the tracked source fix for future full builds.
 
 Recovery verification
 The publisher's backup-only mode was executed on RU on 2026-10-22. A fresh
@@ -70,3 +72,6 @@ Image rollback never restores a database or overwrites newly received requests.
 The standalone rollback additionally requires the exact new image ID recorded
 by this Apply, patched JS and unchanged 276-file dist manifest, and exact .env
 and compose hashes recorded after this Apply. It refuses subsequent drift.
+The exact approved script is also retained privately on RU at
+/opt/temichevvet-owner-gateway/backups/clinic-catalog-context-20261022-v1/rollback-ru.sh.
+Run it only after resolving the target and rechecking a requested rollback.

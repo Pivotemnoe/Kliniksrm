@@ -1,0 +1,37 @@
+{
+  "verifiedAt": "2026-10-22T06:35:12.356Z",
+  "result": "PASS",
+  "publisherCommit": "e6415d4840d7b0fb4a0d384e7aee3e6badae823f",
+  "publisherSha256": "7c3508eee0aa7112c5b8495d2e923855acdc12fed08eb2615046a105115192b2",
+  "rollbackSha256": "bf9dd3518469652f73c2ce0f57ab7069538df4e71a78d983c7c7fb1b918d23cf",
+  "archiveSha256": "72771a0c8f879e8381edac8782bc2b10c035391d1aaa1def6303b61c90b9fc5c",
+  "image": "temichevvet-owner-gateway:clinic-catalog-context-20261022-v1",
+  "imageId": "sha256:339981be14103cd2ad16d26c71d93d80c058e89b0d3ca2bb5a61ea6f2ecf14fb",
+  "baseImageId": "sha256:8bcb7da10a8069a2a5ad8811bed5f665adea263ca22e03b6a903e82bd23a0380",
+  "health": "healthy",
+  "changedDistFiles": 1,
+  "unchangedDistFiles": 276,
+  "patchedFileSha256": "22ab1c61e24d6fb0cc51b15d2002e6b03418a7a7af131d110339fc371d21f80e",
+  "unchangedDistManifestSha256": "cff1e818fbdd40645ccd3b2053d9328748423880200593a055230fc70c199a70",
+  "actualApplyBackupRestore": {
+    "success": true,
+    "restoredPublicTables": 32,
+    "qaContainerRemoved": true,
+    "qaAnonymousVolumeRemoved": true,
+    "dataStayedOnRu": true
+  },
+  "protectedStateUnchanged": true,
+  "envAndComposeMatchApplyReceipts": true,
+  "privateBackup": "/opt/temichevvet-owner-gateway/backups/clinic-catalog-context-20261022-v1",
+  "rollbackPath": "/opt/temichevvet-owner-gateway/backups/clinic-catalog-context-20261022-v1/rollback-ru.sh",
+  "publicHttp": [
+    { "url": "https://clinic.temichevvet.ru/", "status": 200 },
+    { "url": "https://clinic.temichevvet.ru/prices", "status": 200 },
+    { "url": "https://clinic.temichevvet.ru/api/prices", "status": 200 },
+    { "url": "https://cabinet.temichevvet.ru/portal", "status": 200 },
+    { "url": "https://temichevvet.ru/api/health", "status": 200 }
+  ],
+  "productionTestMessages": 0,
+  "productionTestLeads": 0,
+  "boundary": "No production contact was submitted. End-to-end CRM persistence was tested using synthetic data in isolated local databases. No claim of physical iPhone or full WCAG/CWV acceptance."
+}
