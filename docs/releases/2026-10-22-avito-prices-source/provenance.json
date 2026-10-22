@@ -1,0 +1,47 @@
+{
+  "release": "crm-avito-prices-source-20261022-r1",
+  "date": "2026-10-22",
+  "scope": "API prices and booking attribution; independent Web/gateway releases",
+  "sourceRevision": "7e4f6b0e946b2266147adcc429eb4ecc50f8ab50",
+  "compatibleSourceRevision": "8d9fd7fe55b63792b443a02df5894ce6aa1a35e2",
+  "forwardImageDigest": "sha256:cc979c594ef7b3cb4f346e7b8da81fccca9cac0cd15bc6098a7ffbad38a8d69e",
+  "compatibleImageDigest": "sha256:52df4be598d215c8c3b62017f372e504a00fb6ac2ebe7160fadb6879f18f9b17",
+  "protectedArtifactDigests": {
+    "preparedManifest": "fb21445e210d638c88bcf9e630f8f4ef9610c06682be43192fe424e5e53de652",
+    "sourceManifest": "5e14fd1c0129ed56b15cc2500ca767b46e8bf33483d78310deb825cadf2f08bd",
+    "backupRestoreProof": "de8398088eba2339691f08007c15eab78ffe981e86d8a47730682469fe95badc",
+    "applyVerifyProof": "6770a3cafc4db44170d28c922946896da5182294a1a67f18c8bef3edcd49b533"
+  },
+  "migration": {
+    "name": "20261022080000_pet_service_booking_attribution",
+    "sha256": "b2493c51ad78ed0f4d5b34292465477c996ecea139d0a44d817d3cfba0aa83df",
+    "nullableJsonbColumns": 2,
+    "historyRecordsAdded": 1,
+    "otherMigrations": false,
+    "seed": false
+  },
+  "prisma": {
+    "version": "6.19.3",
+    "engineRevision": "c2990dca591cba766e3b7ef5d9e8a84796e47ab7",
+    "nativeTarget": "linux-musl-openssl-3.0.x",
+    "formattedSchemaSha256": "5efcc8d4cea0ebb230905a928c60f14b960622f9b85b40c775dd85dacb6e3ad5"
+  },
+  "checks": {
+    "forwardUnitPass": 75,
+    "compatibleUnitPass": 52,
+    "actualImageChecks": 19,
+    "publisherIoChecks": 4,
+    "fullRestoreTablesCompared": 152,
+    "defaultEntrypointStartupImages": 2,
+    "financialCompiledFilesPreserved": 9
+  },
+  "postApply": {
+    "status": "API_VERIFY_PASS",
+    "timeEuropeMoscow": "2026-10-22 11:57:50",
+    "selfBookingEnabled": false,
+    "otherServicesUnchangedAtApiCheckpoint": true,
+    "manualMessagesSent": false,
+    "adsPublished": false
+  },
+  "operatorOnly": "Authorization, full manifests/inventories/configuration and backup/database files remain outside Git."
+}

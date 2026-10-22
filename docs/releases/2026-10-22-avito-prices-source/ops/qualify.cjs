@@ -1,0 +1,41 @@
+const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),assert=require('node:assert/strict'),{spawnSync}=require('node:child_process');
+const m=require('/opt/source-manifest.json'),mode=process.argv[2];
+assert.ok(['candidate','rollback'].includes(mode));
+const overlay=mode==='candidate'?m.overlay:m.rollback.overlay;
+const sha=b=>crypto.createHash('sha256').update(b).digest('hex');
+const actual=new Map();
+function scan(root,prefix=''){for(const ent of fs.readdirSync(root,{withFileTypes:true})){if(ent.isDirectory())scan(path.join(root,ent.name),prefix+ent.name+'/');else if(ent.isFile())actual.set(prefix+ent.name,sha(fs.readFileSync(path.join(root,ent.name))));else throw Error('Unexpected runtime entry: '+prefix+ent.name);}}
+scan('/app/apps/api/dist');
+const expected=new Map(m.baseline.distFiles.map(f=>[f.name,f.sha256]));
+for(const f of overlay)expected.set(f.name,f.sha256);
+assert.deepEqual([...actual.keys()].sort(),[...expected.keys()].sort(),'Only explicit compiled files may be added');
+for(const [name,hash] of expected)assert.equal(actual.get(name),hash,'Runtime file differs: '+name);
+const financial=m.baseline.distFiles.filter(f=>/^modules\/(business\/business\.service|dashboard\/dashboard\.service|reports\/reports\.controller)\.(?:js|js\.map|d\.ts)$/.test(f.name));
+assert.equal(financial.length,9);for(const f of financial)assert.equal(actual.get(f.name),f.sha256);
+assert.equal(sha(fs.readFileSync('/app/apps/api/docker-entrypoint.sh')),m.startup.sha256);
+assert.equal(sha(fs.readFileSync('/app/prisma/migrations/'+m.migration.name+'/migration.sql')),m.migration.sha256);
+assert.equal(require('/app/node_modules/prisma/package.json').version,'6.19.3');
+assert.equal(require('/app/node_modules/@prisma/client/package.json').version,'6.19.3');
+const {Prisma}=require('/app/node_modules/@prisma/client');
+assert.equal(Prisma.prismaVersion.engine,m.baseline.prismaEngine);
+const client='/app/node_modules/.prisma/client';
+const engine=m.baseline.clientFiles.find(f=>f.name==='libquery_engine-linux-musl-openssl-3.0.x.so.node');
+assert.ok(engine);assert.equal(sha(fs.readFileSync(path.join(client,engine.name))),engine.sha256);
+assert.equal(sha(fs.readFileSync(path.join(client,'schema.prisma'))),sha(fs.readFileSync('/app/prisma/schema.prisma')));
+const after=JSON.parse(JSON.stringify(Prisma.dmmf.datamodel)),before=require('/opt/baseline-datamodel.json');
+for(const table of ['GroomingReservation','PetHotelReservation']){
+ const model=after.models.find(x=>x.name===table),field=model.fields.find(x=>x.name==='attribution');
+ assert.ok(field);assert.equal(field.type,'Json');assert.equal(field.isRequired,false);assert.equal(field.hasDefaultValue,false);
+ model.fields=model.fields.filter(x=>x.name!=='attribution');
+}
+assert.deepEqual(after,before,'Generated client model changes must be exactly two optional fields');
+const tests=['avito-availability','avito-clinic-dialogue-rules','avito-grooming-booking-choice','avito-pet-services','avito-cross-service-regressions',...(mode==='candidate'?['avito-grooming-prices','avito-booking-source']:['avito-compatible-rollback'])].map(n=>'/opt/qualify/tests/'+n+'.test.mjs');
+const run=spawnSync(process.execPath,['--test','--test-reporter=tap',...tests],{cwd:'/opt/qualify',encoding:'utf8',timeout:60000,maxBuffer:8000000});
+fs.writeFileSync('/opt/qualify/unit.tap',(run.stdout||'')+(run.stderr||''));
+assert.equal(run.status,0,'Image unit tests failed: '+(run.stdout||'').slice(-3000)+(run.stderr||''));
+const n=mode==='candidate'?75:52;
+assert.match(run.stdout,new RegExp('\\# pass '+n+'\\b'));
+assert.match(run.stdout,/# skipped 0\b/);
+const result={status:'PASS',mode,at:new Date().toISOString(),sourceRevision:mode==='candidate'?m.sourceRevision:m.rollback.sourceRevision,baseline:m.baseline.api.image,baselineFiles:m.baseline.distFiles.length,overlayFiles:overlay.length,totalFiles:actual.size,financialFiles:financial.length,prismaVersion:Prisma.prismaVersion,engine:engine.name,engineSha256:engine.sha256,schemaSha256:sha(fs.readFileSync('/app/prisma/schema.prisma')),entrypointSha256:m.startup.sha256,migrationSha256:m.migration.sha256,unitPass:n,unitTapSha256:sha(run.stdout||''),productionChanged:false};
+fs.writeFileSync('/opt/qualify/qualification.json',JSON.stringify(result,null,2)+'\n');
+console.log(JSON.stringify(result));
