@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma.service';
 import { hashToken } from '../security';
 import { BoundedRateLimiter } from '../abuse-protection';
 import { HotelSnapshot, hotelQuote, hotelRoomFree, hotelSelection, hotelSnapshot } from './pet-hotel-contract';
+import { normalizeBookingAttribution } from '../booking-attribution';
 
 const token = () => randomBytes(32).toString('base64url');
 @Injectable()
@@ -44,7 +45,7 @@ export class PetHotelStorefrontService {
     })));
     return { enabled: true, rooms: offered, asOf: source.data.capturedAt, version: source.version, testMode: source.data.testMode, notice: 'Выбор номера ещё не создаёт бронь. После входа проверим занятость и цену повторно.' };
   }
-  async draft(offerToken: string, ip: string) {
+  async draft(offerToken: string, ip: string, sourceAttribution?: unknown) {
     this.limits.consume('hotel-draft:' + ip, 20, 60000);
     const offer = await this.prisma.petHotelBookingDraft.findUnique({ where: { tokenHash: hashToken(offerToken) } });
     if (!offer || offer.purpose !== 'OFFER' || offer.expiresAt <= new Date()) throw new NotFoundException('Предложение истекло. Проверьте свободные номера заново.');
@@ -56,7 +57,8 @@ export class PetHotelStorefrontService {
     const quote = hotelQuote(room.dailyRate, source.data.settings.walkRate, selection);
     if (room.version !== payload.roomVersion || !Object.entries(quote).every(([key, value]) => payload.quote?.[key] === value)) throw new ConflictException('Тариф изменился. Проверьте номера и стоимость заново.');
     const draftToken = token(), expiresAt = new Date(Date.now() + 15 * 60000);
-    await this.prisma.petHotelBookingDraft.create({ data: { purpose: 'DRAFT', tokenHash: hashToken(draftToken), ipHash: hashToken(ip), payload, expiresAt } });
+    const attribution = normalizeBookingAttribution(sourceAttribution);
+    await this.prisma.petHotelBookingDraft.create({ data: { purpose: 'DRAFT', tokenHash: hashToken(draftToken), ipHash: hashToken(ip), payload: { ...payload, ...(attribution ? { attribution } : {}) }, expiresAt } });
     return { token: draftToken, expiresAt };
   }
   async consume(ownerId: string, draftToken: string) {

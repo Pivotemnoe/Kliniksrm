@@ -1,5 +1,6 @@
 import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsObject, IsOptional, IsString, MaxLength, MinLength, IsISO8601, ValidateNested } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
+import { BookingAttribution, normalizeBookingAttribution } from '../booking-attribution';
 export class GroomingOperationDto {
   @IsString() @MinLength(16) @MaxLength(120) clientKey!: string;
   @IsIn(['STATE', 'OPTIONS', 'BOOK', 'RESCHEDULE', 'CANCEL', 'PET_CREATE']) kind!: string;
@@ -35,6 +36,7 @@ export class GroomingSiteSelectionDto {
   @IsIn(['ANY', 'SHORT', 'LONG', 'CURLY', 'DOUBLE']) coat!: string;
 }
 export class GroomingDraftDto {
+  @Transform(({ value }) => normalizeBookingAttribution(value)) @IsOptional() @IsObject() attribution?: BookingAttribution;
   @IsString() @MaxLength(100) breedId!: string;
   @IsArray() @ArrayMaxSize(6) @IsString({ each: true }) @MaxLength(180, { each: true }) looks!: string[];
   @IsString() @MaxLength(2000) notes!: string;

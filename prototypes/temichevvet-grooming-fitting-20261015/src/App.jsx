@@ -7,6 +7,7 @@ import { SiteBooking } from "./SiteBooking";
 import { OurWorks } from "./OurWorks";
 import { HotelTeaser, HOTEL_URL } from "./HotelTeaser";
 import { CLINIC_CONTACT } from "./clinic-contact";
+import { browserAttribution } from "../../../packages/booking-attribution/browser.mjs";
 
 const STORE = "temichevvet-grooming-wishes-v1";
 const DEVICE_QA = import.meta.env.VITE_GROOMING_QA_TRANSPORT === "device";
@@ -41,6 +42,7 @@ export function App() {
  const [config,setConfig]=useState({enabled:false,mode:"unavailable",privacyUrl:null});
  const breed=BREEDS.find(v=>v.id===breedId)||BREEDS[0];
  useGroomingMotion(motion);
+ useEffect(()=>{browserAttribution('GROOMING');},[]);
  useEffect(()=>{if(initialParams.has("breed")&&location.hash==="#looks")requestAnimationFrame(()=>document.getElementById("looks")?.scrollIntoView({behavior:"instant"}));},[]);
  useEffect(()=>{if(VISUAL_PREVIEW){let live=true;fetch("/visual-preview-catalog.json").then(r=>r.json()).then(x=>{if(live)setConfig(x);}).catch(()=>{});return()=>{live=false;};}let live=true;const load=()=>fetch("/v1/public/grooming/catalog",{cache:"no-store"}).then(r=>{if(!r.ok)throw Error();return r.json();}).then(x=>{if(live)setConfig(x);}).catch(()=>{});void load();const timer=setInterval(()=>{if(document.visibilityState==="visible")void load();},30000);return()=>{live=false;clearInterval(timer);};},[]);
  useEffect(()=>{try{localStorage.setItem(STORE,JSON.stringify(saved));setStorageError("");}catch{setStorageError("Браузер не разрешил сохранение. Образы доступны до закрытия страницы.");}},[saved]);

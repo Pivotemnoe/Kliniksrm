@@ -53,7 +53,7 @@ export class PetHotelPublicController {
   @Post('drafts') @Header('Cache-Control', 'no-store') draft(@Req() req: Request, @Body() dto: HotelDraftDto) {
     const origins = (process.env.PET_HOTEL_SITE_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
     if (!req.headers.origin || !origins.includes(req.headers.origin)) throw new ForbiddenException('Откройте выбор номера на сайте гостиницы');
-    return this.storefront.draft(dto.offerToken, req.ip || 'unknown');
+    return this.storefront.draft(dto.offerToken, req.ip || 'unknown', dto.attribution);
   }
 }
 @Controller('internal/v1/pet-hotel/portal')

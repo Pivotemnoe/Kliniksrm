@@ -2,6 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import {ArrowRight,Check} from '@phosphor-icons/react';
 import {groomingServiceOffered} from './pricing-data';
 import {CLINIC_CONTACT} from './clinic-contact';
+import {browserAttribution} from '../../../packages/booking-attribution/browser.mjs';
 
 const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Moscow',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 const clock=value=>new Intl.DateTimeFormat('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'}).format(new Date(value));
@@ -32,7 +33,8 @@ export function SiteBooking({config,breed,priceContext,notes,onNotes,lookIds,sel
   return()=>controller.abort();
  },[serviceId,specialistId,date,size,coat,storefront?.selfBookingEnabled,service?.bookable,refreshKey]);
  const proceed=async()=>{if(!selected||busy)return;setBusy(true);setError('');try{
-  const response=await fetch('/v1/public/grooming/drafts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({breedId:breed.id,looks:selectedLooks,notes,selection:{serviceId,specialistId:selected.specialistId,startsAt:selected.startsAt,species,size,coat}}),signal:AbortSignal.timeout(15000)});
+  const attribution=browserAttribution('GROOMING');
+  const response=await fetch('/v1/public/grooming/drafts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({breedId:breed.id,looks:selectedLooks,notes,selection:{serviceId,specialistId:selected.specialistId,startsAt:selected.startsAt,species,size,coat},...(attribution?{attribution}:{})}),signal:AbortSignal.timeout(15000)});
   const data=await response.json().catch(()=>null);if(!response.ok||!data?.token)throw Error(errorText(data)||'Не удалось сохранить выбранное время');
   const url=new URL(config.bookingPortalUrl);if(!['https:','http:'].includes(url.protocol))throw Error('Кабинет недоступен');url.hash=new URLSearchParams({draft:data.token}).toString();window.location.assign(url.href);
  }catch(e){setError(e.name==='TimeoutError'?'Ответ задержался. Попробуйте ещё раз.':e.message);setBusy(false);}};

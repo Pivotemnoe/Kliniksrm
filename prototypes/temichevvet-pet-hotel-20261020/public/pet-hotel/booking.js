@@ -1,3 +1,4 @@
+import {browserAttribution} from './booking-attribution.js';
 const $ = s => document.querySelector(s);
 const escape = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const rub = v => new Intl.NumberFormat('ru-RU', {style:'currency',currency:'RUB',minimumFractionDigits:0,maximumFractionDigits:2}).format(Number(v));
@@ -80,7 +81,8 @@ export class HotelBooking {
     if(Date.parse(this.selected.expiresAt)<=Date.now()){this.expire();return;}
     const serial=this.serial,offer=this.selected;$('#continue-booking').disabled=true;
     try {
-      const result=await this.request('drafts',{offerToken:offer.offerToken});
+      const attribution=browserAttribution('PET_HOTEL');
+      const result=await this.request('drafts',{offerToken:offer.offerToken,...(attribution?{attribution}:{})});
       if(serial!==this.serial||this.selected!==offer)return;
       if(typeof result.token!=='string'||!/^[A-Za-z0-9_-]{32,100}$/.test(result.token))throw new Error('Не удалось перенести выбор в кабинет. Повторите проверку.');
       const target=new URL(this.portal);target.hash=new URLSearchParams({draft:result.token}).toString();location.assign(target.href);

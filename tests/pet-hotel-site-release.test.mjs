@@ -34,6 +34,15 @@ test('hotel public package is self-contained, excludes local/private sources, an
   }
   const style = await readFile(join(result.root, 'style.css'), 'utf8');
   for (const [, name] of style.matchAll(/url\('([^']+)'\)/g)) await readFile(join(result.root, name));
+  // Static ES module dependencies must ship alongside their importers.
+  for (const name of names.filter(name => name.endsWith('.js'))) {
+    const code = await readFile(join(result.root, name), 'utf8');
+    for (const [, link] of code.matchAll(/(?:from\s*|import\s*)['"](\.\.?\/[^'"]+)['"]/g)) {
+      const target = new URL(link, new URL(name, 'https://pet.temichevvet.ru/pet-hotel/'));
+      assert.ok(target.pathname.startsWith('/pet-hotel/'), `${name}: module outside release`);
+      await readFile(join(result.root, target.pathname.slice('/pet-hotel/'.length)));
+    }
+  }
   const index = await readFile(join(result.root, 'index.html'), 'utf8');
   assert.match(index, /assets\/salon-real-4806-retouched\.jpg/);
   assert.match(index, /Фото нашего салона · ретушь с AI/);

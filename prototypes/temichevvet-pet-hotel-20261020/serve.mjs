@@ -23,6 +23,10 @@ const server=createServer(async(req,res)=>{
   res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','strict-origin-when-cross-origin');
   const url=new URL(req.url,'http://127.0.0.1:4274');
   if(publicPaths.has(url.pathname)){await publicApi(req,res,url);return;}
+  if(req.method==='GET'&&url.pathname==='/pet-hotel/booking-attribution.js'){
+    const data=await readFile(new URL('../../packages/booking-attribution/browser.mjs',import.meta.url));
+    res.writeHead(200,{'Content-Type':'text/javascript; charset=utf-8'});res.end(data);return;
+  }
   if(!['GET','HEAD'].includes(req.method)){res.writeHead(405);res.end();return;}
   let pathname;try{pathname=decodeURIComponent(new URL(req.url,'http://127.0.0.1:4274').pathname);}catch{res.writeHead(400);res.end();return;}
   if(pathname==='/'){res.writeHead(302,{Location:'/pet-hotel/'});res.end();return;}

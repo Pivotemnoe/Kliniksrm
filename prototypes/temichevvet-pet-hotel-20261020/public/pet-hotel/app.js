@@ -1,6 +1,8 @@
 import {articles} from './articles.js';
 import {HotelBooking} from './booking.js';
 import {minimumRoomRate} from './rates.js';
+import {browserAttribution} from './booking-attribution.js';
+browserAttribution('PET_HOTEL');
 const $=selector=>document.querySelector(selector), $$=selector=>[...document.querySelectorAll(selector)];
 const root=document.documentElement;
 const rubles=value=>new Intl.NumberFormat('ru-RU',{style:'currency',currency:'RUB',minimumFractionDigits:0,maximumFractionDigits:2}).format(value);

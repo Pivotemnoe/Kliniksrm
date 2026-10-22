@@ -7,6 +7,7 @@ import { MaxBotClient } from '../max-bot.client';
 import { OwnerNotificationService } from '../owner-notification.service';
 import { GroomingDeliveryDto, GroomingDraftDto, GroomingOperationDto, GroomingOperationResultDto, GroomingRegistrationDetailsDto, GroomingRegistrationResultDto } from './grooming-portal.dto';
 import { GROOMING_BREEDS, groomingLook } from './catalog';
+import { bookingCommandAttribution, normalizeBookingAttribution } from '../booking-attribution';
 const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 const fingerprint = (value: unknown) => hashToken(JSON.stringify(value));
 @Injectable()
@@ -20,8 +21,9 @@ export class GroomingPortalService {
   }
   async operation(token: string, input: GroomingOperationDto) {
     this.enabled(); const session = await this.session(token);
-    if (JSON.stringify(input.input).length > 14000) throw new BadRequestException('Слишком длинные данные записи');
-    const hash = fingerprint({ kind: input.kind, input: input.input });
+    const commandInput = bookingCommandAttribution(input.kind, input.input);
+    if (JSON.stringify(commandInput).length > 14000) throw new BadRequestException('Слишком длинные данные записи');
+    const hash = fingerprint({ kind: input.kind, input: commandInput });
     return this.prisma.$transaction(async tx => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(20261019, hashtext(${session.ownerId}))`;
       const live = await tx.portalSession.findFirst({ where: { id: session.id, revokedAt: null, expiresAt: { gt: new Date() } } });
@@ -30,7 +32,7 @@ export class GroomingPortalService {
       if (previous) { if (previous.fingerprint !== hash) throw new ConflictException('Ключ операции уже использован с другими данными'); return this.publicOperation(previous); }
       const recent = await tx.groomingPortalOperation.count({ where: { ownerId: session.ownerId, createdAt: { gt: new Date(Date.now() - 60000) } } });
       if (recent >= 30) throw new ConflictException('Слишком много запросов. Подождите минуту');
-      const saved = await tx.groomingPortalOperation.create({ data: { ownerId: session.ownerId, clientKey: input.clientKey, kind: input.kind, input: json(input.input), fingerprint: hash, expiresAt: new Date(Date.now() + 10 * 60000) } });
+      const saved = await tx.groomingPortalOperation.create({ data: { ownerId: session.ownerId, clientKey: input.clientKey, kind: input.kind, input: json(commandInput), fingerprint: hash, expiresAt: new Date(Date.now() + 10 * 60000) } });
       return this.publicOperation(saved);
     });
   }
@@ -43,9 +45,9 @@ export class GroomingPortalService {
     const ipHash = hashToken(ip), now = new Date();
     await this.prisma.groomingBookingDraft.deleteMany({ where: { expiresAt: { lt: now } } });
     if (await this.prisma.groomingBookingDraft.count({ where: { ipHash, createdAt: { gt: new Date(now.getTime() - 3600000) } } }) >= 20) throw new ConflictException('Слишком много запросов. Попробуйте позже');
-    const token = randomBytes(32).toString('base64url');
+    const token = randomBytes(32).toString('base64url'), attribution = normalizeBookingAttribution(input.attribution);
     if (selection && selection.species !== (breed.species === 'cat' ? 'CAT' : 'DOG')) throw new BadRequestException('Выберите услугу для этого вида питомца');
-    await this.prisma.groomingBookingDraft.create({ data: { tokenHash: hashToken(token), ipHash, expiresAt: new Date(now.getTime() + 15 * 60000), payload: json({ breedId: breed.id, breed: breed.name, species: breed.species === 'cat' ? 'CAT' : 'DOG', size: breed.species === 'cat' ? 'ANY' : String(breed.size || 'small').toUpperCase(), looks: input.looks, notes: input.notes, ...(selection ? { selection, serviceId: selection.serviceId, specialistId: selection.specialistId, date: selection.date, coat: selection.coat, size: selection.size } : {}) }) } });
+    await this.prisma.groomingBookingDraft.create({ data: { tokenHash: hashToken(token), ipHash, expiresAt: new Date(now.getTime() + 15 * 60000), payload: json({ breedId: breed.id, breed: breed.name, species: breed.species === 'cat' ? 'CAT' : 'DOG', size: breed.species === 'cat' ? 'ANY' : String(breed.size || 'small').toUpperCase(), looks: input.looks, notes: input.notes, ...(attribution ? { attribution } : {}), ...(selection ? { selection, serviceId: selection.serviceId, specialistId: selection.specialistId, date: selection.date, coat: selection.coat, size: selection.size } : {}) }) } });
     return { token };
   }
   async consumeDraft(sessionToken: string, token: string) {

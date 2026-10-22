@@ -159,7 +159,7 @@ function renderOffers(notice) {
     document.querySelector('#confirm-booking').onclick = async () => {
       if (!document.querySelector('#booking-consent').checked) { document.querySelector('#action-error').textContent = 'Подтвердите запись и разрешение на связь.'; return; }
       await guarded(async () => {
-        await command(moving ? 'RESCHEDULE' : 'BOOK', { offerToken: selected, notes: draft.notes || '', looks: moving?.looks || draft.looks || [], contactConsent: true, bookingConsent: true, ...(moving ? { reservationId: moving.id, version: moving.version } : {}) });
+        await command(moving ? 'RESCHEDULE' : 'BOOK', { offerToken: selected, notes: draft.notes || '', looks: moving?.looks || draft.looks || [], contactConsent: true, bookingConsent: true, ...(!moving && draft.attribution ? { attribution: draft.attribution } : {}), ...(moving ? { reservationId: moving.id, version: moving.version } : {}) });
         state = await command('STATE'); moving = null; draft = {}; offers = []; selected = ''; render('Запись подтверждена и сохранена в CRM. Уведомление поставлено в очередь MAX.');
       });
     };

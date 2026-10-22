@@ -50,6 +50,7 @@ export async function buildHotelRelease({destination, releaseId, revision, built
     if (name === 'style.css') data = data.replaceAll("url('../assets/manrope-", "url('assets/manrope-");
     await put(name, data);
   }
+  await put('booking-attribution.js', await readFile(join(project, '../../packages/booking-attribution/browser.mjs')));
   for (const name of photos) await put('assets/' + name, await readFile(join(hotelRoot, 'assets', name)));
   for (const name of sharedAssets) await put('assets/' + name, await readFile(join(publicRoot, 'assets', name)));
   const locations = pages.map(name => site + '/pet-hotel/' + (name === 'index.html' ? '' : name));

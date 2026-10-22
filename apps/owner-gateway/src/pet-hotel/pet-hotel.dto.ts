@@ -1,4 +1,6 @@
 import { IsBoolean, IsIn, IsObject, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { BookingAttribution, normalizeBookingAttribution } from '../booking-attribution';
 
 export class HotelOperationDto {
   @IsString() @MinLength(16) @MaxLength(120) clientKey!: string;
@@ -11,7 +13,10 @@ export class HotelResultDto {
   @IsOptional() @IsString() @MaxLength(300) error?: string;
 }
 export class HotelTokenDto { @IsString() @MinLength(32) @MaxLength(100) token!: string; }
-export class HotelDraftDto { @IsString() @MinLength(32) @MaxLength(100) offerToken!: string; }
+export class HotelDraftDto {
+  @IsString() @MinLength(32) @MaxLength(100) offerToken!: string;
+  @Transform(({ value }) => normalizeBookingAttribution(value)) @IsOptional() @IsObject() attribution?: BookingAttribution;
+}
 export class HotelSnapshotDto { @IsObject() payload!: Record<string, unknown>; }
 export class HotelRegistrationDetailsDto {
   @IsString() @MinLength(2) @MaxLength(120) fullName!: string;

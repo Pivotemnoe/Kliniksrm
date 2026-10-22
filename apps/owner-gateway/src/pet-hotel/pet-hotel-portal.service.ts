@@ -3,10 +3,11 @@ import { PrismaService } from '../prisma.service';
 import { hashToken } from '../security';
 import { Prisma } from '../generated/client';
 import { HotelOperationDto, HotelResultDto } from './pet-hotel.dto';
+import { bookingCommandAttribution } from '../booking-attribution';
 
 const allowed: Record<string, string[]> = {
   STATE: [], OPTIONS: ['animalId', 'species', 'startsAt', 'endsAt', 'weightKg', 'walkCount', 'reservationId'],
-  BOOK: ['offerToken', 'animalId', 'notes', 'contactConsent', 'bookingConsent'],
+  BOOK: ['offerToken', 'animalId', 'notes', 'contactConsent', 'bookingConsent', 'attribution'],
   RESCHEDULE: ['offerToken', 'animalId', 'notes', 'contactConsent', 'bookingConsent', 'reservationId', 'version'],
   CANCEL: ['reservationId', 'version'], PET_CREATE: ['nickname', 'species', 'breed', 'weightKg'],
 };
@@ -24,8 +25,9 @@ export class PetHotelPortalService {
   async operation(token: string, input: HotelOperationDto) {
     if (process.env.PET_HOTEL_CRM_SYNC_ENABLED !== 'true') throw new ServiceUnavailableException('Кабинет гостиницы пока не подключён');
     const session = await this.owner(token);
-    if (!allowed[input.kind] || Object.keys(input.input).some(k => !allowed[input.kind].includes(k)) || JSON.stringify(input.input).length > 14000) throw new BadRequestException('Некорректные данные запроса гостиницы');
-    const hash = fingerprint({ kind: input.kind, input: input.input });
+    const commandInput = bookingCommandAttribution(input.kind, input.input);
+    if (!allowed[input.kind] || Object.keys(commandInput).some(k => !allowed[input.kind].includes(k)) || JSON.stringify(commandInput).length > 14000) throw new BadRequestException('Некорректные данные запроса гостиницы');
+    const hash = fingerprint({ kind: input.kind, input: commandInput });
     return this.prisma.$transaction(async tx => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(20261020, hashtext(${session.ownerId}))`;
       if (!await tx.portalSession.findFirst({ where: { id: session.id, revokedAt: null, expiresAt: { gt: new Date() } } })) throw new ForbiddenException('Войдите в личный кабинет');
@@ -33,7 +35,7 @@ export class PetHotelPortalService {
       if (prior) { if (prior.fingerprint !== hash) throw new ConflictException('Ключ запроса использован с другими данными'); return this.public(prior); }
       const recent = await tx.petHotelPortalOperation.count({ where: { ownerId: session.ownerId, createdAt: { gt: new Date(Date.now() - 60000) } } });
       if (recent >= 30) throw new ConflictException('Слишком много запросов. Подождите минуту');
-      return this.public(await tx.petHotelPortalOperation.create({ data: { ownerId: session.ownerId, clientKey: input.clientKey, kind: input.kind, fingerprint: hash, input: json(input.input), expiresAt: new Date(Date.now() + 10 * 60000) } }));
+      return this.public(await tx.petHotelPortalOperation.create({ data: { ownerId: session.ownerId, clientKey: input.clientKey, kind: input.kind, fingerprint: hash, input: json(commandInput), expiresAt: new Date(Date.now() + 10 * 60000) } }));
     });
   }
   private public(row: { id: string; kind: string; status: string; result: unknown; error: string | null }) { return { id: row.id, kind: row.kind, status: row.status, result: row.result, error: row.error }; }
