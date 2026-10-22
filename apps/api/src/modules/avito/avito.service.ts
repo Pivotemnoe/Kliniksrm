@@ -267,7 +267,9 @@ export class AvitoService {
     } });
     // Model I/O stays outside the database transaction. Versions are checked again
     // before using its result; paid requests are idempotent on the existing gateway.
-    const candidate = [...history].sort((a, b) => b.created - a.created)[0];
+    // Avito can open a chat with a system notification before the customer has
+    // written anything. It is history, not a customer request or staff takeover.
+    const candidate = history.filter(message => message.type !== 'system').sort((a, b) => b.created - a.created)[0];
     const profile = settings.profiles.find(p => p.direction === mapping?.direction && p.enabled);
     let modelIntent: AvitoModelIntent | null = null;
     if (avitoPilotAllowsChat(chat.id) && profile && this.model.configured() && conversation.mode === 'BOT' && settings.mode !== 'MANUAL' && candidate?.type === 'text'
@@ -301,7 +303,7 @@ export class AvitoService {
       const petService = mapping ? await loadPetServiceContext(tx, integration.installation.organizationId, mapping.direction) : undefined;
       let current = await tx.avitoConversation.findUniqueOrThrow({ where: { id: conversation.id } });
       const validModelVersion = current.version === conversation.version && integration.settingsVersion === modelSettingsVersion;
-      let newCount = 0; let latest: AvitoApiMessage | null = null; let contact = current.contact as ContactState; let contactBeforeLatest = contact;
+      let newCount = 0; let activityCount = 0; let latest: AvitoApiMessage | null = null; let contact = current.contact as ContactState; let contactBeforeLatest = contact;
       let manual = current.mode !== 'BOT';
       const ordered = [...history].reverse().sort((a, b) => a.created - b.created);
       for (const message of ordered) {
@@ -310,6 +312,8 @@ export class AvitoService {
         const inserted = await tx.avitoMessage.createMany({ data: [{ conversationId: current.id, externalId: message.id, authorId: message.author_id == null ? null : String(message.author_id), direction, type: String(message.type ?? 'unknown'), text: typeof message.content?.text === 'string' ? message.content.text.slice(0, 16000) : '', occurredAt: new Date(message.created * 1000) }], skipDuplicates: true });
         if (!inserted.count) continue;
         newCount++;
+        if (message.type === 'system') continue;
+        activityCount++;
         if (direction === 'OUT') {
           const ours = await tx.avitoOutgoingOperation.findFirst({ where: { conversationId: current.id, externalMessageId: message.id } });
           if (!ours) manual = true;
@@ -326,7 +330,9 @@ export class AvitoService {
           }
         }
       }
-      if (!newCount) return 0;
+      // A notification must neither cancel a pending answer nor move an empty
+      // conversation into HUMAN, collect a contact or trigger an outgoing reply.
+      if (!activityCount) return newCount;
       await cancelQueued(tx, current.id, 'Получено новое сообщение');
       const lastAt = ordered.length ? new Date(Math.max(current.lastMessageAt?.getTime() ?? 0, ...ordered.map(m => Number.isFinite(m.created) ? m.created * 1000 : 0))) : current.lastMessageAt;
       const routeChanged = !mapping || (current.direction !== 'UNASSIGNED' && current.direction !== mapping.direction);

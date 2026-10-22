@@ -18,6 +18,35 @@ test('pet-service conversations use isolated PostgreSQL, module facts and separa
   const clinicalBefore = await prisma.onlineAppointmentRequest.count();
   const groomingBookingsBefore = await prisma.groomingReservation.count(), hotelBookingsBefore = await prisma.petHotelReservation.count();
   try {
+    await t.test('a system-only chat stays ready for the first actual customer message without unsolicited replies', async () => {
+      const id=chat('groom-system-only');
+      api.add(id,'system-1','[Системное сообщение] Пользователь создал чат, но пока ничего не написал. Напишите первыми!',{type:'system',author_id:0});
+      const empty=await load(id);assert.equal(empty.mode,'BOT');assert.equal(empty.needsAttention,false);assert.equal(empty.outbox.length,0);assert.equal(empty.inquiries.length,0);assert.equal(empty.messages.length,1);
+      const savedVersion=empty.version;await load(id);assert.equal((await service.getConversation(empty.id)).version,savedVersion);
+      api.add(id,'real-first','Хочу записаться на стрижку');const first=await load(id);assert.equal(first.stage,'PET_SERVICE_INFO');assert.equal(first.mode,'BOT');assert.equal(first.inquiries.length,0);assert.equal(first.outbox.length,1);
+      const op=await approve(first);await service.deliver(op.operationId);assert.equal((await service.getConversation(first.id)).outbox.find(x=>x.id===op.operationId).status,'SENT');
+      assert.equal(api.sent.filter(x=>x.chatId===id).length,1);
+    });
+    await t.test('a later system notification preserves the customer reply already awaiting delivery', async () => {
+      const id=chat('groom-system-after');api.add(id,'customer-1','Хочу записаться');const first=await load(id);const op=await approve(first);const before=await service.getConversation(first.id);
+      api.add(id,'system-after','Системное уведомление',{type:'system',author_id:0});const after=await load(id);
+      assert.equal(after.version,before.version);assert.equal(after.mode,'BOT');assert.equal(after.needsAttention,false);assert.equal(after.outbox.find(x=>x.id===op.operationId).status,'PENDING');assert.deepEqual(after.outbox.map(x=>[x.id,x.status]),before.outbox.map(x=>[x.id,x.status]));
+      await service.deliver(op.operationId);assert.equal((await service.getConversation(first.id)).outbox.find(x=>x.id===op.operationId).status,'SENT');assert.equal(api.sent.filter(x=>x.chatId===id).length,1);
+    });
+    await t.test('a trailing system notification cannot hide the latest customer question from the model', async () => {
+      const configured=f.model.configured,classify=f.model.classify;let calls=0;
+      f.model.configured=()=>true;f.model.classify=async()=>{calls++;return{action:'BOOKING'};};
+      try{
+        const id=chat('groom-system-model');api.add(id,'question-1','Можно оформить визит?');api.add(id,'trailing-system','Системное уведомление',{type:'system',author_id:0});const c=await load(id);
+        assert.equal(calls,1);assert.equal(c.stage,'PET_SERVICE_INFO');assert.equal(c.mode,'BOT');assert.equal(c.outbox.length,1);assert.equal(c.outbox[0].triggerMessageId,'question-1');
+      }finally{f.model.configured=configured;f.model.classify=classify;}
+    });
+    await t.test('system notifications never resume a conversation already controlled by staff', async () => {
+      const id=chat('groom-system-human');api.add(id,'human-question','Хочу записаться');const first=await load(id);
+      await service.setMode(first.id,{mode:'HUMAN',version:first.version},actorId);const before=await service.getConversation(first.id);const sent=api.sent.length;
+      api.add(id,'system-in-human','Системное уведомление',{type:'system',direction:'out',author_id:api.accountId});const after=await load(id);
+      assert.equal(after.mode,'HUMAN');assert.equal(after.version,before.version);assert.equal(after.needsAttention,true);assert.equal(api.sent.length,sent);assert.deepEqual(after.outbox.map(x=>[x.id,x.status]),before.outbox.map(x=>[x.id,x.status]));
+    });
     await t.test('site referrals persist without collecting callback contacts or creating bookings', async () => {
       for (const [prefix, request, expected] of [['groom', 'Хочу записаться на стрижку', /пока закрыта/], ['hotel', 'Сколько стоит и как забронировать?', /700 ₽/]]) {
         const id = chat(prefix); api.add(id, 'site-1', request); const c = await load(id);
