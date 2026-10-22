@@ -1,0 +1,82 @@
+{
+  "at": "2026-10-22T05:57:52.659Z",
+  "result": "PASS",
+  "localOnly": true,
+  "actualNestControllers": true,
+  "actualGatewayPostgres": true,
+  "actualCrmSyncService": true,
+  "actualCrmPostgres": true,
+  "sourcePatchOnly": true,
+  "productionMessagesSent": 0,
+  "productionLeadsSent": 0,
+  "passed": 8,
+  "failed": null,
+  "observations": [
+    {
+      "name": "anonymous checkup -> exact frontend catalog list -> consented CRM request and idempotent contact",
+      "result": "PASS"
+    },
+    {
+      "name": "explicit checkup continuation retains species/lab/program and correct approved prices",
+      "result": "PASS"
+    },
+    {
+      "name": "consented HUMAN conversation changes draft before early return and updates same CRM request",
+      "result": "PASS"
+    },
+    {
+      "name": "replayed older catalog clientKey cannot clear a newer explicit checkup draft",
+      "result": "PASS"
+    },
+    {
+      "name": "clinical warning is not bypassed by a catalog-looking message",
+      "result": "PASS"
+    },
+    {
+      "name": "a non-checkup booking draft is not erased",
+      "result": "PASS"
+    },
+    {
+      "name": "catalog handoff has deterministic priority with the model flag enabled; no run queued",
+      "result": "PASS"
+    },
+    {
+      "name": "authentication, callback consent and first-name requirements remain enforced",
+      "result": "PASS"
+    }
+  ],
+  "payloadSha256": "22ab1c61e24d6fb0cc51b15d2002e6b03418a7a7af131d110339fc371d21f80e",
+  "counts": {
+    "newCrmLeads": 2,
+    "owners": 0,
+    "appointments": 0,
+    "queuedModelRuns": 0,
+    "pending": 0
+  },
+  "databases": {
+    "gateway": "127.0.0.1:15498/clinic_context_form_qa",
+    "crm": "127.0.0.1:15498/clinic_context_crm_qa"
+  },
+  "runtimeSources": [
+    {
+      "module": "clinic-chat.controller.js",
+      "role": "baseline",
+      "sha256": "d47f5eabad81a48269b2f376e96ee7c3a1c35654190015abbf36be96fbdf82e1"
+    },
+    {
+      "module": "clinic-chat.service.js",
+      "role": "baseline",
+      "sha256": "5eed0b74408da6ced386d4b052a34d9f3718e1ce5ecdba2f6f81ecadc15d83b5"
+    },
+    {
+      "module": "clinic-conversation-sync.service.js",
+      "role": "baseline",
+      "sha256": "b6e5d5c7eeccbb29cc6417eff411d1eebe44a3cbac3d66bc8df8510f170624bd"
+    },
+    {
+      "module": "clinic-chat.service.js",
+      "role": "patched",
+      "sha256": "22ab1c61e24d6fb0cc51b15d2002e6b03418a7a7af131d110339fc371d21f80e"
+    }
+  ]
+}

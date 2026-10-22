@@ -1,0 +1,49 @@
+{
+  "createdAt": "2026-10-22T06:05:39.711Z",
+  "status": "LOCAL_VERIFIED_NOT_DEPLOYED",
+  "baseImage": "temichevvet-owner-gateway:grooming-owner-contact-986ba0421242",
+  "baseImageId": "sha256:8bcb7da10a8069a2a5ad8811bed5f665adea263ca22e03b6a903e82bd23a0380",
+  "runtimeFiles": [
+    {
+      "path": "/app/apps/owner-gateway/dist/clinic-chat.service.js",
+      "beforeSha256": "5eed0b74408da6ced386d4b052a34d9f3718e1ce5ecdba2f6f81ecadc15d83b5",
+      "afterSha256": "22ab1c61e24d6fb0cc51b15d2002e6b03418a7a7af131d110339fc371d21f80e"
+    }
+  ],
+  "diffs": [
+    {
+      "name": "source",
+      "file": "apps/owner-gateway/src/clinic-chat.service.ts",
+      "beforeSha256": "ba6faf9cda2a10927a65582b970c900c8c03b6c1aabbe2dc9e915972b612e03e",
+      "afterSha256": "48e5bdcdf5eebdfb9af46862e5ebc1f7898a5335773ec7260426a68bf05ee067",
+      "patchSha256": "72c192cb32bbdb5da93aacfb2f5d57bd4c6b983ac25e8bd1add1bc192463eba4"
+    },
+    {
+      "name": "compiled",
+      "file": "apps/owner-gateway/dist/clinic-chat.service.js",
+      "beforeSha256": "5eed0b74408da6ced386d4b052a34d9f3718e1ce5ecdba2f6f81ecadc15d83b5",
+      "afterSha256": "22ab1c61e24d6fb0cc51b15d2002e6b03418a7a7af131d110339fc371d21f80e",
+      "patchSha256": "2acf7f11ea9e6a80a5ecb987ea35b562ed1d65134aa88cbc57c2be1b906eb2d2"
+    }
+  ],
+  "baselineTypeScriptBuildMatchedProduction": true,
+  "backendTests": {
+    "passed": 8,
+    "failed": 0,
+    "actualGatewayPostgres": true,
+    "actualCrmPostgres": true,
+    "productionMessages": 0,
+    "productionLeads": 0
+  },
+  "scope": {
+    "dto": false,
+    "schema": false,
+    "prices": false,
+    "environment": false,
+    "website": false,
+    "max": false,
+    "marketing": false
+  },
+  "sourceMap": "unchanged by release requirement",
+  "notes": "Review publisher and allocate a distinct gateway slot before Apply. No attribution/JTBD changes included."
+}

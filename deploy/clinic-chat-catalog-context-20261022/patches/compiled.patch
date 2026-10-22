@@ -1,0 +1,38 @@
+diff --git a/apps/owner-gateway/dist/clinic-chat.service.js b/apps/owner-gateway/dist/clinic-chat.service.js
+--- a/apps/owner-gateway/dist/clinic-chat.service.js
++++ b/apps/owner-gateway/dist/clinic-chat.service.js
+@@ -12,6 +12,7 @@
+ exports.ClinicChatService = void 0;
+ const common_1 = require("@nestjs/common");
+ const node_crypto_1 = require("node:crypto");
++const client_1 = require("./generated/client");
+ const prisma_service_1 = require("./prisma.service");
+ const security_1 = require("./security");
+ const clinic_chat_policy_1 = require("./clinic-chat-policy");
+@@ -85,6 +86,11 @@
+             if (!cleaned || cleaned.length > 4000)
+                 throw new common_1.BadRequestException('Сообщение должно содержать от 1 до 4000 символов');
+             const message = await this.append(tx, row.id, 'OWNER', channel, cleaned, clientKey);
++            const catalogSelection = channel === 'SITE_CHAT' && /^Хочу уточнить визит и стоимость выбранных услуг из прейскуранта:\s*\n1\.\s+\S/u.test(cleaned);
++            if (catalogSelection && (0, clinic_checkup_1.checkupState)(row.bookingDraft)) {
++                await tx.clinicConversation.update({ where: { id: row.id }, data: { bookingDraft: client_1.Prisma.DbNull } });
++                row.bookingDraft = null;
++            }
+             let suppliedPhone;
+             if (channel === 'MAX') {
+                 try {
+@@ -126,6 +132,14 @@
+                     return;
+                 }
+                 await tx.clinicConversation.update({ where: { id: row.id }, data: { introductionComplete: true } });
++            }
++            if (catalogSelection && !(0, clinic_chat_policy_1.clinicSafetyIntent)((0, clinic_checkup_1.checkupSafetyText)(cleaned))) {
++                const handoff = (0, clinic_chat_policy_1.hasClinicReplyContact)(row);
++                await tx.clinicConversation.update({ where: { id: row.id }, data: { mode: handoff ? 'HUMAN' : 'ASSISTANT', needsAttention: handoff } });
++                await this.append(tx, row.id, 'ASSISTANT', channel, handoff
++                    ? 'Список услуг сохранён в обращении для администратора. Время визита и окончательную стоимость согласуют с вами отдельно.'
++                    : `Список услуг сохранён в переписке. ${(0, clinic_chat_policy_1.clinicContactRequiredReply)()}`, `reply:${clientKey}`);
++                return;
+             }
+             const checkup = !(0, clinic_chat_policy_1.clinicSafetyIntent)((0, clinic_checkup_1.checkupSafetyText)(cleaned)) ? (0, clinic_checkup_1.checkupDialogue)(cleaned, row.bookingDraft, message.sequence) : null;
+             if (checkup) {

@@ -1,0 +1,42 @@
+diff --git a/apps/owner-gateway/src/clinic-chat.service.ts b/apps/owner-gateway/src/clinic-chat.service.ts
+--- a/apps/owner-gateway/src/clinic-chat.service.ts
++++ b/apps/owner-gateway/src/clinic-chat.service.ts
+@@ -11,7 +11,7 @@
+ import { contactPhone, snapshotContact, introduction } from './clinic-contact';
+ import { PublicClinicCatalogService } from './public-clinic-catalog.service';
+ import { clinicPriceReply, isClinicPriceQuestion } from './clinic-price-reply';
+-import { checkupDialogue, checkupSafetyText, checkupSummary } from './clinic-checkup';
++import { checkupDialogue, checkupSafetyText, checkupState, checkupSummary } from './clinic-checkup';
+ 
+ type Db = Prisma.TransactionClient;
+ @Injectable()
+@@ -73,6 +73,14 @@
+       const cleaned = text.trim();
+       if (!cleaned || cleaned.length > 4000) throw new BadRequestException('Сообщение должно содержать от 1 до 4000 символов');
+       const message = await this.append(tx, row.id, 'OWNER', channel, cleaned, clientKey);
++      // The website's explicit catalog handoff starts a new request, not a
++      // continuation of a previously discussed check-up. Keep chat history,
++      // contact/consent and other booking flows; clear only that stale draft.
++      const catalogSelection = channel === 'SITE_CHAT' && /^Хочу уточнить визит и стоимость выбранных услуг из прейскуранта:\s*\n1\.\s+\S/u.test(cleaned);
++      if (catalogSelection && checkupState(row.bookingDraft)) {
++        await tx.clinicConversation.update({ where: { id: row.id }, data: { bookingDraft: Prisma.DbNull } });
++        row.bookingDraft = null;
++      }
+       // Ordinary website questions are not a contact-registration form: a
+       // number typed in chat must never silently become a CRM lead.
+       let suppliedPhone: string | undefined;
+@@ -105,6 +113,14 @@
+         }
+         // A visitor can ask their question immediately without completing intake.
+         await tx.clinicConversation.update({ where: { id: row.id }, data: { introductionComplete: true } });
++      }
++      if (catalogSelection && !clinicSafetyIntent(checkupSafetyText(cleaned))) {
++        const handoff = hasClinicReplyContact(row);
++        await tx.clinicConversation.update({ where: { id: row.id }, data: { mode: handoff ? 'HUMAN' : 'ASSISTANT', needsAttention: handoff } });
++        await this.append(tx, row.id, 'ASSISTANT', channel, handoff
++          ? 'Список услуг сохранён в обращении для администратора. Время визита и окончательную стоимость согласуют с вами отдельно.'
++          : `Список услуг сохранён в переписке. ${clinicContactRequiredReply()}`, `reply:${clientKey}`);
++        return;
+       }
+       const checkup = !clinicSafetyIntent(checkupSafetyText(cleaned)) ? checkupDialogue(cleaned, row.bookingDraft, message.sequence) : null;
+       if (checkup) {
