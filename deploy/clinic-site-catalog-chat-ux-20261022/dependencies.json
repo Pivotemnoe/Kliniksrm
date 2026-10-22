@@ -1,0 +1,380 @@
+{
+  "resolved": true,
+  "dependencies": [
+    {
+      "from": "404.html",
+      "path": "/assets/index-C15GGEdT.js",
+      "sha256": "39c3d2ca9bdd151de039fddfc42f3c258596f944de6c9b61e2adbd0f225d42be"
+    },
+    {
+      "from": "404.html",
+      "path": "/assets/index-BU9LiIB9.css",
+      "sha256": "5ac66c6ab1ef0b0bfe156ef3f35feca181490e7d0c0f7c0c30395d5dce85654b"
+    },
+    {
+      "from": "assets/index-BU9LiIB9.css",
+      "path": "/assets/manrope-cyrillic-wght-normal-Dvxsihut.woff2",
+      "sha256": "c268b459a9329e59fecf39a17618efd44c71735532048d60b12aab76a8c14914"
+    },
+    {
+      "from": "assets/index-BU9LiIB9.css",
+      "path": "/assets/manrope-greek-wght-normal-DL7QRZyv.woff2",
+      "sha256": "2fb2e8cbfd52ae46179a8b6024eb162f1f9c6de3d22d6e3a30d8f395de7220be"
+    },
+    {
+      "from": "assets/index-BU9LiIB9.css",
+      "path": "/assets/manrope-vietnamese-wght-normal-usUDDRr7.woff2",
+      "sha256": "6bbb044ab420e07edb0a3042d2eb314b85e83a0182e945a15ab3b9092668dfd5"
+    },
+    {
+      "from": "assets/index-BU9LiIB9.css",
+      "path": "/assets/manrope-latin-ext-wght-normal-Ch3YOpNY.woff2",
+      "sha256": "3911b66d9f2e005a4b989223405d0e5032619c668597ba467cc76a23c8fffcfb"
+    },
+    {
+      "from": "assets/index-BU9LiIB9.css",
+      "path": "/assets/manrope-latin-wght-normal-DHIcAJRg.woff2",
+      "sha256": "a30ddcd349703aff7464c34bef3fffdff405ee50c113440d7c8693c02d210972"
+    },
+    {
+      "from": "clinic/index.html",
+      "path": "/assets/index-C15GGEdT.js",
+      "sha256": "39c3d2ca9bdd151de039fddfc42f3c258596f944de6c9b61e2adbd0f225d42be"
+    },
+    {
+      "from": "clinic/index.html",
+      "path": "/assets/index-BU9LiIB9.css",
+      "sha256": "5ac66c6ab1ef0b0bfe156ef3f35feca181490e7d0c0f7c0c30395d5dce85654b"
+    },
+    {
+      "from": "contact-consent/index.html",
+      "path": "/assets/index-C15GGEdT.js",
+      "sha256": "39c3d2ca9bdd151de039fddfc42f3c258596f944de6c9b61e2adbd0f225d42be"
+    },
+    {
+      "from": "contact-consent/index.html",
+      "path": "/assets/index-BU9LiIB9.css",
+      "sha256": "5ac66c6ab1ef0b0bfe156ef3f35feca181490e7d0c0f7c0c30395d5dce85654b"
+    },
+    {
+      "from": "contacts/index.html",
+      "path": "/assets/index-C15GGEdT.js",
+      "sha256": "39c3d2ca9bdd151de039fddfc42f3c258596f944de6c9b61e2adbd0f225d42be"
+    },
+    {
+      "from": "contacts/index.html",
+      "path": "/assets/index-BU9LiIB9.css",
+      "sha256": "5ac66c6ab1ef0b0bfe156ef3f35feca181490e7d0c0f7c0c30395d5dce85654b"
+    },
+    {
+      "from": "index.html",
+      "path": "/assets/index-C15GGEdT.js",
+      "sha256": "39c3d2ca9bdd151de039fddfc42f3c258596f944de6c9b61e2adbd0f225d42be"
+    },
+    {
+      "from": "index.html",
+      "path": "/assets/index-BU9LiIB9.css",
+      "sha256": "5ac66c6ab1ef0b0bfe156ef3f35feca181490e7d0c0f7c0c30395d5dce85654b"
+    },
+    {
+      "from": "journal/articles/breathing/index.html",
+      "path": "/assets/index-C15GGEdT.js",
+      "sha256": "39c3d2ca9bdd151de039fddfc42f3c258596f944de6c9b61e2adbd0f225d42be"
+    },
+    {
+      "from": "journal/articles/breathing/index.html",
+      "path": "/assets/index-BU9LiIB9.css",
+      "sha256": "5ac66c6ab1ef0b0bfe156ef3f35feca181490e7d0c0f7c0c30395d5dce85654b"
+    },
+    {
+      "from": "journal/articles/checkup/index.html",
+      "path": "/assets/index-C15GGEdT.js",
+      "sha256": "39c3d2ca9bdd151de039fddfc42f3c258596f944de6c9b61e2adbd0f225d42be"
+    },
+    {
+      "from": "journal/articles/checkup/index.html",
+      "path": "/assets/index-BU9LiIB9.css",
+      "sha256": "5ac66c6ab1ef0b0bfe156ef3f35feca181490e7d0c0f7c0c30395d5dce85654b"
+    },
+    {
+      "from": "journal/articles/digestion/index.html",
+      "path": "/assets/index-C15GGEdT.js",
+      "sha256": "39c3d2ca9bdd151de039fddfc42f3c258596f944de6c9b61e2adbd0f225d42be"
+    },
+    {
+      "from": "journal/articles/digestion/index.html",
+      "path": "/assets/index-BU9LiIB9.css",
+      "sha256": "5ac66c6ab1ef0b0bfe156ef3f35feca181490e7d0c0f7c0c30395d5dce85654b"
+    },
+    {
+      "from": "journal/articles/ear/index.html",
+      "path": "/assets/index-C15GGEdT.js",
+      "sha256": "39c3d2ca9bdd151de039fddfc42f3c258596f944de6c9b61e2adbd0f225d42be"
+    },
+    {
+      "from": "journal/articles/ear/index.html",
+      "path": "/assets/index-BU9LiIB9.css",
+      "sha256": "5ac66c6ab1ef0b0bfe156ef3f35feca181490e7d0c0f7c0c30395d5dce85654b"
+    },
+    {
+      "from": "journal/articles/heart/index.html",
+      "path": "/assets/index-C15GGEdT.js",
+      "sha256": "39c3d2ca9bdd151de039fddfc42f3c258596f944de6c9b61e2adbd0f225d42be"
+    },
+    {
+      "from": "journal/articles/heart/index.html",
+      "path": "/assets/index-BU9LiIB9.css",
+      "sha256": "5ac66c6ab1ef0b0bfe156ef3f35feca181490e7d0c0f7c0c30395d5dce85654b"
+    },
+    {
+      "from": "journal/articles/index.html",
+      "path": "/assets/index-C15GGEdT.js",
+      "sha256": "39c3d2ca9bdd151de039fddfc42f3c258596f944de6c9b61e2adbd0f225d42be"
+    },
+    {
+      "from": "journal/articles/index.html",
+      "path": "/assets/index-BU9LiIB9.css",
+      "sha256": "5ac66c6ab1ef0b0bfe156ef3f35feca181490e7d0c0f7c0c30395d5dce85654b"
+    },
+    {
+      "from": "journal/articles/movement/index.html",
+      "path": "/assets/index-C15GGEdT.js",
+      "sha256": "39c3d2ca9bdd151de039fddfc42f3c258596f944de6c9b61e2adbd0f225d42be"
+    },
+    {
+      "from": "journal/articles/movement/index.html",
+      "path": "/assets/index-BU9LiIB9.css",
+      "sha256": "5ac66c6ab1ef0b0bfe156ef3f35feca181490e7d0c0f7c0c30395d5dce85654b"
+    },
+    {
+      "from": "journal/articles/skin/index.html",
+      "path": "/assets/index-C15GGEdT.js",
+      "sha256": "39c3d2ca9bdd151de039fddfc42f3c258596f944de6c9b61e2adbd0f225d42be"
+    },
+    {
+      "from": "journal/articles/skin/index.html",
+      "path": "/assets/index-BU9LiIB9.css",
+      "sha256": "5ac66c6ab1ef0b0bfe156ef3f35feca181490e7d0c0f7c0c30395d5dce85654b"
+    },
+    {
+      "from": "journal/articles/teeth/index.html",
+      "path": "/assets/index-C15GGEdT.js",
+      "sha256": "39c3d2ca9bdd151de039fddfc42f3c258596f944de6c9b61e2adbd0f225d42be"
+    },
+    {
+      "from": "journal/articles/teeth/index.html",
+      "path": "/assets/index-BU9LiIB9.css",
+      "sha256": "5ac66c6ab1ef0b0bfe156ef3f35feca181490e7d0c0f7c0c30395d5dce85654b"
+    },
+    {
+      "from": "journal/articles/urinary/index.html",
+      "path": "/assets/index-C15GGEdT.js",
+      "sha256": "39c3d2ca9bdd151de039fddfc42f3c258596f944de6c9b61e2adbd0f225d42be"
+    },
+    {
+      "from": "journal/articles/urinary/index.html",
+      "path": "/assets/index-BU9LiIB9.css",
+      "sha256": "5ac66c6ab1ef0b0bfe156ef3f35feca181490e7d0c0f7c0c30395d5dce85654b"
+    },
+    {
+      "from": "journal/index.html",
+      "path": "/assets/index-C15GGEdT.js",
+      "sha256": "39c3d2ca9bdd151de039fddfc42f3c258596f944de6c9b61e2adbd0f225d42be"
+    },
+    {
+      "from": "journal/index.html",
+      "path": "/assets/index-BU9LiIB9.css",
+      "sha256": "5ac66c6ab1ef0b0bfe156ef3f35feca181490e7d0c0f7c0c30395d5dce85654b"
+    },
+    {
+      "from": "journal/videos/index.html",
+      "path": "/assets/index-C15GGEdT.js",
+      "sha256": "39c3d2ca9bdd151de039fddfc42f3c258596f944de6c9b61e2adbd0f225d42be"
+    },
+    {
+      "from": "journal/videos/index.html",
+      "path": "/assets/index-BU9LiIB9.css",
+      "sha256": "5ac66c6ab1ef0b0bfe156ef3f35feca181490e7d0c0f7c0c30395d5dce85654b"
+    },
+    {
+      "from": "night/index.html",
+      "path": "/assets/index-C15GGEdT.js",
+      "sha256": "39c3d2ca9bdd151de039fddfc42f3c258596f944de6c9b61e2adbd0f225d42be"
+    },
+    {
+      "from": "night/index.html",
+      "path": "/assets/index-BU9LiIB9.css",
+      "sha256": "5ac66c6ab1ef0b0bfe156ef3f35feca181490e7d0c0f7c0c30395d5dce85654b"
+    },
+    {
+      "from": "offers/index.html",
+      "path": "/assets/index-C15GGEdT.js",
+      "sha256": "39c3d2ca9bdd151de039fddfc42f3c258596f944de6c9b61e2adbd0f225d42be"
+    },
+    {
+      "from": "offers/index.html",
+      "path": "/assets/index-BU9LiIB9.css",
+      "sha256": "5ac66c6ab1ef0b0bfe156ef3f35feca181490e7d0c0f7c0c30395d5dce85654b"
+    },
+    {
+      "from": "pets/index.html",
+      "path": "/assets/index-C15GGEdT.js",
+      "sha256": "39c3d2ca9bdd151de039fddfc42f3c258596f944de6c9b61e2adbd0f225d42be"
+    },
+    {
+      "from": "pets/index.html",
+      "path": "/assets/index-BU9LiIB9.css",
+      "sha256": "5ac66c6ab1ef0b0bfe156ef3f35feca181490e7d0c0f7c0c30395d5dce85654b"
+    },
+    {
+      "from": "prices/index.html",
+      "path": "/assets/index-C15GGEdT.js",
+      "sha256": "39c3d2ca9bdd151de039fddfc42f3c258596f944de6c9b61e2adbd0f225d42be"
+    },
+    {
+      "from": "prices/index.html",
+      "path": "/assets/index-BU9LiIB9.css",
+      "sha256": "5ac66c6ab1ef0b0bfe156ef3f35feca181490e7d0c0f7c0c30395d5dce85654b"
+    },
+    {
+      "from": "privacy/index.html",
+      "path": "/assets/index-C15GGEdT.js",
+      "sha256": "39c3d2ca9bdd151de039fddfc42f3c258596f944de6c9b61e2adbd0f225d42be"
+    },
+    {
+      "from": "privacy/index.html",
+      "path": "/assets/index-BU9LiIB9.css",
+      "sha256": "5ac66c6ab1ef0b0bfe156ef3f35feca181490e7d0c0f7c0c30395d5dce85654b"
+    },
+    {
+      "from": "reviews/index.html",
+      "path": "/assets/index-C15GGEdT.js",
+      "sha256": "39c3d2ca9bdd151de039fddfc42f3c258596f944de6c9b61e2adbd0f225d42be"
+    },
+    {
+      "from": "reviews/index.html",
+      "path": "/assets/index-BU9LiIB9.css",
+      "sha256": "5ac66c6ab1ef0b0bfe156ef3f35feca181490e7d0c0f7c0c30395d5dce85654b"
+    },
+    {
+      "from": "services/consultation/index.html",
+      "path": "/assets/index-C15GGEdT.js",
+      "sha256": "39c3d2ca9bdd151de039fddfc42f3c258596f944de6c9b61e2adbd0f225d42be"
+    },
+    {
+      "from": "services/consultation/index.html",
+      "path": "/assets/index-BU9LiIB9.css",
+      "sha256": "5ac66c6ab1ef0b0bfe156ef3f35feca181490e7d0c0f7c0c30395d5dce85654b"
+    },
+    {
+      "from": "services/dentistry/index.html",
+      "path": "/assets/index-C15GGEdT.js",
+      "sha256": "39c3d2ca9bdd151de039fddfc42f3c258596f944de6c9b61e2adbd0f225d42be"
+    },
+    {
+      "from": "services/dentistry/index.html",
+      "path": "/assets/index-BU9LiIB9.css",
+      "sha256": "5ac66c6ab1ef0b0bfe156ef3f35feca181490e7d0c0f7c0c30395d5dce85654b"
+    },
+    {
+      "from": "services/diagnostics/index.html",
+      "path": "/assets/index-C15GGEdT.js",
+      "sha256": "39c3d2ca9bdd151de039fddfc42f3c258596f944de6c9b61e2adbd0f225d42be"
+    },
+    {
+      "from": "services/diagnostics/index.html",
+      "path": "/assets/index-BU9LiIB9.css",
+      "sha256": "5ac66c6ab1ef0b0bfe156ef3f35feca181490e7d0c0f7c0c30395d5dce85654b"
+    },
+    {
+      "from": "services/index.html",
+      "path": "/assets/index-C15GGEdT.js",
+      "sha256": "39c3d2ca9bdd151de039fddfc42f3c258596f944de6c9b61e2adbd0f225d42be"
+    },
+    {
+      "from": "services/index.html",
+      "path": "/assets/index-BU9LiIB9.css",
+      "sha256": "5ac66c6ab1ef0b0bfe156ef3f35feca181490e7d0c0f7c0c30395d5dce85654b"
+    },
+    {
+      "from": "services/inpatient/index.html",
+      "path": "/assets/index-C15GGEdT.js",
+      "sha256": "39c3d2ca9bdd151de039fddfc42f3c258596f944de6c9b61e2adbd0f225d42be"
+    },
+    {
+      "from": "services/inpatient/index.html",
+      "path": "/assets/index-BU9LiIB9.css",
+      "sha256": "5ac66c6ab1ef0b0bfe156ef3f35feca181490e7d0c0f7c0c30395d5dce85654b"
+    },
+    {
+      "from": "services/laboratory/index.html",
+      "path": "/assets/index-C15GGEdT.js",
+      "sha256": "39c3d2ca9bdd151de039fddfc42f3c258596f944de6c9b61e2adbd0f225d42be"
+    },
+    {
+      "from": "services/laboratory/index.html",
+      "path": "/assets/index-BU9LiIB9.css",
+      "sha256": "5ac66c6ab1ef0b0bfe156ef3f35feca181490e7d0c0f7c0c30395d5dce85654b"
+    },
+    {
+      "from": "services/pharmacy/index.html",
+      "path": "/assets/index-C15GGEdT.js",
+      "sha256": "39c3d2ca9bdd151de039fddfc42f3c258596f944de6c9b61e2adbd0f225d42be"
+    },
+    {
+      "from": "services/pharmacy/index.html",
+      "path": "/assets/index-BU9LiIB9.css",
+      "sha256": "5ac66c6ab1ef0b0bfe156ef3f35feca181490e7d0c0f7c0c30395d5dce85654b"
+    },
+    {
+      "from": "services/surgery/index.html",
+      "path": "/assets/index-C15GGEdT.js",
+      "sha256": "39c3d2ca9bdd151de039fddfc42f3c258596f944de6c9b61e2adbd0f225d42be"
+    },
+    {
+      "from": "services/surgery/index.html",
+      "path": "/assets/index-BU9LiIB9.css",
+      "sha256": "5ac66c6ab1ef0b0bfe156ef3f35feca181490e7d0c0f7c0c30395d5dce85654b"
+    },
+    {
+      "from": "team/index.html",
+      "path": "/assets/index-C15GGEdT.js",
+      "sha256": "39c3d2ca9bdd151de039fddfc42f3c258596f944de6c9b61e2adbd0f225d42be"
+    },
+    {
+      "from": "team/index.html",
+      "path": "/assets/index-BU9LiIB9.css",
+      "sha256": "5ac66c6ab1ef0b0bfe156ef3f35feca181490e7d0c0f7c0c30395d5dce85654b"
+    },
+    {
+      "from": "team/temichev/index.html",
+      "path": "/assets/index-C15GGEdT.js",
+      "sha256": "39c3d2ca9bdd151de039fddfc42f3c258596f944de6c9b61e2adbd0f225d42be"
+    },
+    {
+      "from": "team/temichev/index.html",
+      "path": "/assets/index-BU9LiIB9.css",
+      "sha256": "5ac66c6ab1ef0b0bfe156ef3f35feca181490e7d0c0f7c0c30395d5dce85654b"
+    },
+    {
+      "from": "visit/index.html",
+      "path": "/assets/index-C15GGEdT.js",
+      "sha256": "39c3d2ca9bdd151de039fddfc42f3c258596f944de6c9b61e2adbd0f225d42be"
+    },
+    {
+      "from": "visit/index.html",
+      "path": "/assets/index-BU9LiIB9.css",
+      "sha256": "5ac66c6ab1ef0b0bfe156ef3f35feca181490e7d0c0f7c0c30395d5dce85654b"
+    }
+  ],
+  "allScriptAndStyleFiles": [
+    {
+      "file": "assets/index-BU9LiIB9.css",
+      "sha256": "5ac66c6ab1ef0b0bfe156ef3f35feca181490e7d0c0f7c0c30395d5dce85654b"
+    },
+    {
+      "file": "assets/index-C15GGEdT.js",
+      "sha256": "39c3d2ca9bdd151de039fddfc42f3c258596f944de6c9b61e2adbd0f225d42be"
+    }
+  ]
+}

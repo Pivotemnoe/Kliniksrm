@@ -1,0 +1,305 @@
+diff --git a/prototypes/temichevvet-blue-motion-20260923/src/App.jsx b/prototypes/temichevvet-blue-motion-20260923/src/App.jsx
+--- a/prototypes/temichevvet-blue-motion-20260923/src/App.jsx
++++ b/prototypes/temichevvet-blue-motion-20260923/src/App.jsx
+@@ -26,6 +26,7 @@
+ import { clinic, plans, services, routeTitles } from "./content";
+ import { team } from "./team-data.js";
+ import { displayPrice, filterCatalog, normalizeCatalog, rub } from "./catalog";
++import { priceSelectionBooking } from "./price-selection.js";
+ import { useMotion } from "./motion";
+ import { PetPortrait } from "./PetPortrait.jsx";
+ import { ClinicTour } from "./ClinicTour.jsx";
+@@ -1082,6 +1083,7 @@
+   const min = picked.reduce((a, x) => a + (x.minimumPrice || x.price), 0),
+     max = picked.reduce((a, x) => a + (x.maximumPrice || x.price), 0),
+     range = picked.some((x) => x.priceType === "RANGE");
++  const selectionBooking = priceSelectionBooking(catalog, selected);
+   const toggle = (id) =>
+     setSelected((s) =>
+       s.includes(id) ? s.filter((x) => x !== id) : [...s, id],
+@@ -1242,7 +1244,9 @@
+             Это не окончательная стоимость лечения. Препараты, расходные
+             материалы и стационар могут оплачиваться отдельно.
+           </p>
+-          <Button href={clinic.tel}>Уточнить в клинике</Button>
++          {!!picked.length && selectionBooking && <button className="button" type="button" onClick={() => window.dispatchEvent(new CustomEvent("clinic-booking", {detail:selectionBooking.message}))}>Оставить заявку по списку <Arrow /></button>}
++          {!!picked.length && !selectionBooking && <p className="small" role="status">Для передачи в заявке сократите список или уточните его по телефону. Ничего из выбранного не отправлено.</p>}
++          <Button href={clinic.tel} outline={picked.length > 0}>Уточнить по телефону</Button>
+           {!!picked.length && (
+             <button className="text-link" onClick={() => window.print()}>
+               Распечатать список <Printer size={18} />
+diff --git a/prototypes/temichevvet-blue-motion-20260923/src/ClinicChatPanel.jsx b/prototypes/temichevvet-blue-motion-20260923/src/ClinicChatPanel.jsx
+--- a/prototypes/temichevvet-blue-motion-20260923/src/ClinicChatPanel.jsx
++++ b/prototypes/temichevvet-blue-motion-20260923/src/ClinicChatPanel.jsx
+@@ -3,6 +3,7 @@
+ import { clinic } from "./content.js";
+ import { clinicChatRequest, clinicMessageText, visibleClinicMessages } from "./clinic-chat-api.js";
+ import { clinicLeadConfig } from "./clinic-lead-config.js";
++import { clinicLeadFormOpen } from "./clinic-chat-ui.js";
+ 
+ const firstMessage = "Здравствуйте! Расскажите, чем помочь питомцу. На простые вопросы ответим здесь, а если понадобится помощь сотрудника — позовём администратора.";
+ const leadConfig = clinicLeadConfig();
+@@ -31,6 +32,7 @@
+   const pollRef = useRef(false);
+   const bookingKey = useRef(crypto.randomUUID());
+   const bookingSent = useRef(false);
++  const leadFormOpen = clinicLeadFormOpen(leadOpen, conversation?.contactConsent);
+   useEffect(() => { if (booking) setLeadOpen(true); setBookingReceipt(false); bookingSent.current = false; bookingKey.current = crypto.randomUUID(); }, [booking]);
+ 
+   async function start() {
+@@ -67,14 +69,20 @@
+     return () => window.clearInterval(timer);
+   }, [conversation?.id]);
+   useEffect(() => {
+-    if (bodyRef.current && !leadOpen) bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
+-  }, [conversation?.sequence, sending, error, leadOpen, leadError]);
++    if (bodyRef.current && !leadFormOpen) bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
++  }, [conversation?.sequence, sending, error, leadFormOpen, leadError]);
+   useEffect(() => {
+-    if (leadOpen) requestAnimationFrame(() => {
+-      leadNameRef.current?.focus({ preventScroll: true });
+-      leadNameRef.current?.scrollIntoView({ block: "center" });
++    if (loading || sending) return;
++    const frame = requestAnimationFrame(() => {
++      if (leadFormOpen) {
++        leadNameRef.current?.focus({ preventScroll: true });
++        leadNameRef.current?.scrollIntoView({ block: "center" });
++      } else {
++        inputRef.current?.focus({ preventScroll: true });
++      }
+     });
+-  }, [leadOpen, loading]);
++    return () => cancelAnimationFrame(frame);
++  }, [leadFormOpen, loading, sending]);
+ 
+   async function send(value = draft, requestKey) {
+     const text = value.trim();
+@@ -88,7 +96,6 @@
+       setConversation(data);
+       if (value === draft) setDraft("");
+       messageKey.current = crypto.randomUUID();
+-      inputRef.current?.focus();
+       return true;
+     } catch (failure) {
+       messageKey.current = clientKey;
+@@ -159,14 +166,14 @@
+         {booking && conversation?.contactConsent && !bookingReceipt && <div className="chat-next-step"><p>{booking}</p><p>Используем контакт и способ ответа, которые вы уже оставили в этом чате. Время подтвердит администратор.</p><button disabled={sending} onClick={async () => { if (await send(booking, bookingKey.current)) setBookingReceipt(true); }}>Отправить заявку на приём</button></div>}
+         {bookingReceipt && <p className="chat-status" role="status">Заявка отправлена. Ожидайте согласования времени с администратором.</p>}
+         {humanIsHandling && <p className="chat-status">Обращение передано администратору. Ответ появится здесь; если помощь нужна срочно, позвоните.</p>}
+-        {needsBookingHandoff && !conversation?.contactConsent && !leadOpen && <div className="chat-next-step">
++        {needsBookingHandoff && !conversation?.contactConsent && !leadFormOpen && <div className="chat-next-step">
+           <p>Вопрос о записи можно обсудить здесь с администратором. Время приёма подтверждается отдельно.</p>
+           {leadConfig ? <button type="button" disabled={sending} onClick={() => setLeadOpen(true)}>Оставить контакт для администратора</button> : <p>Форма временно недоступна. <a href={clinic.tel}>Позвонить в клинику</a></p>}
+         </div>}
+-        {leadConfig && (hasAskedQuestion || leadOpen) && !conversation?.contactConsent && <div className="chat-next-step chat-lead-step">
++        {leadConfig && (leadFormOpen || (hasAskedQuestion && !needsBookingHandoff)) && !conversation?.contactConsent && <div className="chat-next-step chat-lead-step">
+           {!booking && <p>Нужен ответ сотрудника? Оставьте контакт. Без него ассистент ответит на общие вопросы, но не передаст обращение администратору.</p>}
+-          {!leadOpen && <button type="button" onClick={() => setLeadOpen(true)}>Оставить контакт</button>}
+-          {leadOpen && <form className="chat-lead-form" onSubmit={submitLead}>
++          {!leadFormOpen && <button type="button" onClick={() => setLeadOpen(true)}>Оставить контакт</button>}
++          {leadFormOpen && <form className="chat-lead-form" onSubmit={submitLead}>
+             {booking && <p><strong>Заявка на приём</strong><br />{booking}<br />Время приёма подтвердит администратор.</p>}
+             <label>Имя
+               <input ref={leadNameRef} autoComplete="given-name" required maxLength={60} value={leadName} onChange={(event) => setLeadName(event.target.value)} />
+@@ -206,18 +213,18 @@
+           <a href={clinic.tel}><Phone size={15} /> Позвонить: {clinic.phone}</a>
+         </div>}
+       </div>
+-      {!leadOpen && <div className="chat-quick" role="group" aria-label="Частые вопросы">
++      {!leadFormOpen && <div className="chat-quick" role="group" aria-label="Частые вопросы">
+         {["Цены", "Адрес", "Часы работы", "Акции"].map((question) => (
+           <button key={question} type="button" disabled={!conversation || sending} onClick={() => send(question)}>{question}</button>
+         ))}
+         <button type="button" disabled={!conversation || sending || humanIsHandling} onClick={() => leadConfig && !conversation?.contactConsent ? setLeadOpen(true) : send("Хочу поговорить с администратором")}>Администратор</button>
+       </div>}
+-      {!leadOpen && <form className="chat-input" onSubmit={(event) => { event.preventDefault(); send(); }}>
++      {!leadFormOpen && <form className="chat-input" onSubmit={(event) => { event.preventDefault(); send(); }}>
+         <input ref={inputRef} name="question" aria-label="Написать в чат клиники" placeholder="Напишите вопрос" maxLength={4000}
+           value={draft} disabled={!conversation || sending} onChange={(event) => { setDraft(event.target.value); messageKey.current = crypto.randomUUID(); }} />
+         <button type="submit" disabled={!conversation || sending || !draft.trim()} aria-label="Отправить сообщение в клинику"><PaperPlaneTilt size={22} /></button>
+       </form>}
+-      {!leadOpen && <p className="chat-private">Переписка поступает в клинику. Не пишите номер телефона, платёжные данные и данные документов в сообщениях. При срочном состоянии питомца <a href={clinic.tel}>позвоните</a>. <a href="/visit">Как записаться <ArrowUpRight size={12} /></a> · <a href="/privacy">Обработка данных</a></p>}
++      {!leadFormOpen && <p className="chat-private">Переписка поступает в клинику. Не пишите номер телефона, платёжные данные и данные документов в сообщениях. При срочном состоянии питомца <a href={clinic.tel}>позвоните</a>. <a href="/visit">Как записаться <ArrowUpRight size={12} /></a> · <a href="/privacy">Обработка данных</a></p>}
+     </section>
+   );
+ }
+diff --git a/prototypes/temichevvet-blue-motion-20260923/src/catalog.js b/prototypes/temichevvet-blue-motion-20260923/src/catalog.js
+--- a/prototypes/temichevvet-blue-motion-20260923/src/catalog.js
++++ b/prototypes/temichevvet-blue-motion-20260923/src/catalog.js
+@@ -68,11 +68,13 @@
+   return items.filter(
+     (i) =>
+       (!category || i.category === category) &&
+-      words.every((w) =>
+-        (i.title + " " + i.category)
++      words.every((w) => {
++        const text = (i.title + " " + i.category)
+           .toLocaleLowerCase("ru")
+-          .replaceAll("ё", "е")
+-          .includes(w),
+-      ),
++          .replaceAll("ё", "е");
++        // The clinical abbreviation is a word, not the fragment in «инфузия».
++        if (w === "узи") return /(?:^|[^\p{L}\p{N}])узи(?:$|[^\p{L}\p{N}])/u.test(text);
++        return text.includes(w);
++      }),
+   ).sort((a, b) => a.category.localeCompare(b.category, "ru") || a.title.localeCompare(b.title, "ru", { numeric: true }));
+ }
+diff --git a/prototypes/temichevvet-blue-motion-20260923/src/styles.css b/prototypes/temichevvet-blue-motion-20260923/src/styles.css
+--- a/prototypes/temichevvet-blue-motion-20260923/src/styles.css
++++ b/prototypes/temichevvet-blue-motion-20260923/src/styles.css
+@@ -1357,6 +1357,9 @@
+   width: 100%;
+   gap: 10px;
+ }
++.price-summary .button + .button {
++  margin-top: 12px;
++}
+ .price-summary > p:not(.eyebrow) {
+   font-size: 15px;
+ }
+diff --git a/prototypes/temichevvet-blue-motion-20260923/src/ServiceExperience.jsx b/prototypes/temichevvet-blue-motion-20260923/src/ServiceExperience.jsx
+--- a/prototypes/temichevvet-blue-motion-20260923/src/ServiceExperience.jsx
++++ b/prototypes/temichevvet-blue-motion-20260923/src/ServiceExperience.jsx
+@@ -4,6 +4,7 @@
+ import { displayPrice, filterCatalog, rub } from "./catalog.js";
+ import { serviceCatalogItems, selectedServiceItems } from "./service-catalog.js";
+ import { clinic, services } from "./content.js";
++import { priceSelectionBooking } from "./price-selection.js";
+ 
+ const experiences = {
+   consultation: {
+@@ -126,6 +127,7 @@
+   const available = serviceCatalogItems(catalog?.items || [], service.id);
+   const visible = filterCatalog(available, query, "");
+   const picked = selectedServiceItems(available, selected);
++  const selectionBooking = priceSelectionBooking(catalog && { ...catalog, items: available }, selected);
+   const minimum = picked.reduce((sum, item) => sum + item.minimumPrice, 0);
+   const maximum = picked.reduce((sum, item) => sum + item.maximumPrice, 0);
+   const sumLabel = minimum !== maximum ? `${rub(minimum)} – ${rub(maximum)}` : `${picked.some((item) => item.priceType === "RANGE") ? "от " : ""}${rub(minimum)}`;
+@@ -150,7 +152,9 @@
+       </div><aside className="direction-selection" id="direction-selected" tabIndex={-1}><p className="eyebrow">Для разговора с врачом</p><h3>Ваш список</h3>
+         {picked.length ? <><ul>{picked.map((item) => <li key={item.id}><span>{item.title}</span><button onClick={() => toggle(item.id)} aria-label={`Убрать: ${item.title}`}>Убрать</button></li>)}</ul><p>Сумма выбранных позиций<strong>{sumLabel}</strong></p><button className="text-link" onClick={copy}><Copy size={18} />Скопировать список</button></> : <p>Отметьте услуги слева. Это список для обсуждения, а не назначение лечения.</p>}
+         <p className="small muted">Не полная смета. Подготовка, препараты, анестезия и дополнительные процедуры могут оплачиваться отдельно. Состав помощи согласуется с врачом.</p>
+-        <a className="button" href={`/visit?direction=${service.id}`}>Обсудить запись<ArrowRight size={18} /></a><p className="small" role="status">{copied}</p>
++        {!!picked.length && selectionBooking && <button className="button" type="button" onClick={() => window.dispatchEvent(new CustomEvent("clinic-booking", { detail: selectionBooking.message }))}>Оставить заявку по списку<ArrowRight size={18} /></button>}
++        {!!picked.length && !selectionBooking && <p className="small" role="status">Для передачи в заявке сократите список или уточните его по телефону. Ничего из выбранного не отправлено.</p>}
++        {!picked.length && <a className="button" href={`/visit?direction=${service.id}`}>Обсудить запись<ArrowRight size={18} /></a>}<p className="small" role="status">{copied}</p>
+       </aside></div>
+       <a className="text-link" href="/prices">Весь прейскурант<ArrowUpRight size={19} /></a>
+     </>}
+diff --git a/prototypes/temichevvet-blue-motion-20260923/src/clinic-chat-ui.js b/prototypes/temichevvet-blue-motion-20260923/src/clinic-chat-ui.js
+new file mode 100644
+--- /dev/null
++++ b/prototypes/temichevvet-blue-motion-20260923/src/clinic-chat-ui.js
+@@ -0,0 +1,5 @@
++// A saved callback contact must never leave the composer hidden behind an
++// invisible contact form when another booking CTA opens the same conversation.
++export function clinicLeadFormOpen(requested, contactConsent) {
++  return Boolean(requested && !contactConsent);
++}
+diff --git a/prototypes/temichevvet-blue-motion-20260923/src/price-selection.js b/prototypes/temichevvet-blue-motion-20260923/src/price-selection.js
+new file mode 100644
+--- /dev/null
++++ b/prototypes/temichevvet-blue-motion-20260923/src/price-selection.js
+@@ -0,0 +1,23 @@
++import {displayPrice, normalizeCatalog, rub} from './catalog.js';
++
++// Re-resolve IDs against the current public catalog. Never carry arbitrary URL
++// text, stale/hidden entries, a claimed treatment total, or a partial long list.
++export function priceSelectionBooking(catalog, selectedIds, now = Date.now()) {
++  if (!catalog || !Array.isArray(selectedIds) || !selectedIds.length) return null;
++  let publicCatalog;
++  try { publicCatalog = normalizeCatalog(catalog, now); }
++  catch { return null; }
++  const selected = new Set(selectedIds);
++  const items = publicCatalog.items.filter(item => selected.has(item.id));
++  if (!items.length) return null;
++  const minimum = items.reduce((sum,item)=>sum+item.minimumPrice,0);
++  const maximum = items.reduce((sum,item)=>sum+item.maximumPrice,0);
++  const total = minimum === maximum ? rub(minimum) : `${rub(minimum)} – ${rub(maximum)}`;
++  const message = [
++    'Хочу уточнить визит и стоимость выбранных услуг из прейскуранта:',
++    ...items.map((item,index)=>`${index+1}. ${item.title} — ${displayPrice(item)}.`),
++    `По прейскуранту: ${total}. Это не окончательная стоимость лечения. Состав услуг и время визита прошу согласовать.`,
++  ].join('\n');
++  if (message.length > 4000) return null;
++  return {message, serviceIds:items.map(item=>item.id), count:items.length, minimum, maximum};
++}
+diff --git a/prototypes/temichevvet-blue-motion-20260923/tests/clinic-audit-20261022.test.mjs b/prototypes/temichevvet-blue-motion-20260923/tests/clinic-audit-20261022.test.mjs
+new file mode 100644
+--- /dev/null
++++ b/prototypes/temichevvet-blue-motion-20260923/tests/clinic-audit-20261022.test.mjs
+@@ -0,0 +1,72 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import {filterCatalog} from '../src/catalog.js';
++import {clinicLeadFormOpen} from '../src/clinic-chat-ui.js';
++import {priceSelectionBooking} from '../src/price-selection.js';
++import {serviceCatalogItems} from '../src/service-catalog.js';
++
++const now = Date.parse('2026-10-22T07:30:00Z');
++const fixed = (id,title,price=100) => ({id,title,category:'Диагностика',price,priceType:'FIXED',minimumPrice:null,maximumPrice:null});
++const data = items => ({status:'ready',currency:'RUB',updatedAt:new Date(now).toISOString(),items});
++
++test('УЗИ matches an abbreviation, not the middle of infusion/transfusion words',()=>{
++  const items=[fixed('1','УЗИ'),fixed('2','УЗИ обзорное'),fixed('3','УЗИ-диагностика'),fixed('4','Инфузия'),fixed('5','Гемотрансфузия'),fixed('6','Подкожная инфузионная терапия')];
++  assert.deepEqual(new Set(filterCatalog(items,'УзИ','').map(i=>i.id)),new Set(['1','2','3']));
++  assert.deepEqual(filterCatalog(items,'узи обзор','').map(i=>i.id),['2']);
++  assert.deepEqual(filterCatalog(items,'инфуз','').map(i=>i.id),['4','6']);
++});
++
++test('an existing consented contact never hides the composer behind a phantom lead form',()=>{
++  assert.equal(clinicLeadFormOpen(true,true),false);
++  assert.equal(clinicLeadFormOpen(false,true),false);
++  assert.equal(clinicLeadFormOpen(true,false),true);
++  assert.equal(clinicLeadFormOpen(false,false),false);
++  assert.equal(clinicLeadFormOpen(true,undefined),true);
++});
++
++test('selected public services keep current IDs, prices, ordering and a non-final estimate',()=>{
++  const catalog=data([fixed('uzi','УЗИ',1035),fixed('overview','УЗИ обзорное',1380)]);
++  const result=priceSelectionBooking(catalog,['overview','uzi','uzi'],now);
++  assert.equal(result.count,2);
++  assert.equal(result.minimum,2415);
++  assert.equal(result.maximum,2415);
++  assert.deepEqual(result.serviceIds,['uzi','overview']);
++  assert.match(result.message,/УЗИ — 1\s035 ₽/);
++  assert.match(result.message,/УЗИ обзорное — 1\s380 ₽/);
++  assert.doesNotMatch(result.message,/позиция|overview/);
++  assert.match(result.message,/не окончательная стоимость/);
++  assert.ok(result.message.indexOf('1. УЗИ —')<result.message.indexOf('2. УЗИ обзорное —'));
++});
++
++test('selection handoff excludes unknown, zero, internal and stale catalog data',()=>{
++  const catalog=data([fixed('public','УЗИ',1035),fixed('zero','Нулевая услуга',0),fixed('internal','Служебная позиция',500)]);
++  const result=priceSelectionBooking(catalog,['public','zero','internal','unknown'],now);
++  assert.equal(result.count,1);
++  assert.doesNotMatch(result.message,/Нулевая|Служебная|unknown/);
++  assert.equal(priceSelectionBooking({...catalog,updatedAt:'2020-01-01'},['public'],now),null);
++  assert.equal(priceSelectionBooking(catalog,['unknown'],now),null);
++  assert.equal(priceSelectionBooking(catalog,[],now),null);
++});
++
++test('a direction passes only its own currently public selected services',()=>{
++  const catalog=data([
++    {...fixed('uzi','УЗИ',1035),category:'Визуальная диагностика'},
++    {...fixed('surgery','Кастрация',6000),category:'ОПЕРАЦИИ ОБЩЕГО ПРОФИЛЯ'},
++  ]);
++  const available=serviceCatalogItems(catalog.items,'diagnostics');
++  const result=priceSelectionBooking({...catalog,items:available},['uzi','surgery'],now);
++  assert.deepEqual(result.serviceIds,['uzi']);
++  assert.equal(result.minimum,1035);
++  assert.doesNotMatch(result.message,/Кастрация/);
++  assert.equal(priceSelectionBooking({...catalog,items:serviceCatalogItems(catalog.items,'pharmacy')},['uzi'],now),null);
++});
++
++test('range estimates remain ranges and an oversized list is never silently truncated',()=>{
++  const catalog=data([{id:'range',title:'Процедура',category:'Диагностика',priceType:'RANGE',price:null,minimumPrice:100,maximumPrice:250}]);
++  const result=priceSelectionBooking(catalog,['range'],now);
++  assert.equal(result.minimum,100);
++  assert.equal(result.maximum,250);
++  assert.match(result.message,/100 ₽ – 250 ₽/);
++  const many=data(Array.from({length:50},(_,i)=>fixed(`id-${i}`,'Длинное название услуги '.repeat(8))));
++  assert.equal(priceSelectionBooking(many,many.items.map(i=>i.id),now),null);
++});

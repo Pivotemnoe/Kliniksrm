@@ -1,0 +1,64 @@
+{
+  "release": "20261022-catalog-chat-ux-v1",
+  "createdAt": "2026-10-22T05:22:59.992Z",
+  "target": "https://clinic.temichevvet.ru",
+  "baseGit": "734c1524d38089d261a44e0e55f8c9567cb249b0",
+  "baselineSourceFingerprint": "2b60b3027a80e0a8afa4d07826e44fc1f101260961f4c017a61f165b4f25c8b1",
+  "patchSha256": "804f9f4438ee87c473648fe35969f2b94c5e9d5037a1b94d979bda2d13be07ae",
+  "payloadManifestSha256": "24da4ba2b2f6fb7e4c9c1f8846bcb0b513857b5364f32f4db2a601dc4f4a67bb",
+  "payloadFiles": 94,
+  "tests": {
+    "passed": 57,
+    "failed": 0
+  },
+  "flags": {
+    "VITE_CLINIC_CHAT_LEADS_ENABLED": "true",
+    "VITE_SITE_PRIVACY_URL": "https://clinic.temichevvet.ru/privacy"
+  },
+  "changedFiles": [
+    {
+      "file": "prototypes/temichevvet-blue-motion-20260923/src/App.jsx",
+      "originalSha256": "c7393658e59c7180770d9691c93e2e68faedb296e57c0edbe6c2e3b59028297f",
+      "patchedSha256": "de0b05619128be676d8d961169ca15380f94cbd80ae1195e4c506782a50db3b3"
+    },
+    {
+      "file": "prototypes/temichevvet-blue-motion-20260923/src/ClinicChatPanel.jsx",
+      "originalSha256": "e112abe515b1f71df4533de2ec79cec0c3dee4334a743fe50fbc69ef0dfcbb9d",
+      "patchedSha256": "bd639f3065693a65195039b584eac5f61b778392882e1a2c4e9d625bb9af6ee9"
+    },
+    {
+      "file": "prototypes/temichevvet-blue-motion-20260923/src/catalog.js",
+      "originalSha256": "ed19233543ec212f61f3d75c9addb06e8116f30cb876faaff6c7752b0d204e88",
+      "patchedSha256": "5c6c7dd203ce39f321388ee42dc37d1489f1a7717478135b8d2aabbe9079a4cb"
+    },
+    {
+      "file": "prototypes/temichevvet-blue-motion-20260923/src/styles.css",
+      "originalSha256": "3bddd0de6c0f3ed67922feea48582185a3858bccdcb42fc4bdcaa6964826a250",
+      "patchedSha256": "2b033e3625775aeeb16145c19003c75d65b5bdc7c1ba9e332e234da1fcfebf3d"
+    },
+    {
+      "file": "prototypes/temichevvet-blue-motion-20260923/src/ServiceExperience.jsx",
+      "originalSha256": "d378da25a8309b96cadae2898943a827612c535dfbcf20ac3b76bc60329f6680",
+      "patchedSha256": "30e3891d8df7df1e1eeb2667084d960b63a52f03b3fafd327663e00a1ad1ea87"
+    },
+    {
+      "file": "prototypes/temichevvet-blue-motion-20260923/src/clinic-chat-ui.js",
+      "originalSha256": null,
+      "patchedSha256": "cb7868c02b0011e25c6e63cb689ec5bd5d4d1b3e68e74a945fda36813f3370a4"
+    },
+    {
+      "file": "prototypes/temichevvet-blue-motion-20260923/src/price-selection.js",
+      "originalSha256": null,
+      "patchedSha256": "bd5ebc7d04fc0e8035c53d815ce63e652b96e13247e3c69270b0b96c2c727c60"
+    },
+    {
+      "file": "prototypes/temichevvet-blue-motion-20260923/tests/clinic-audit-20261022.test.mjs",
+      "originalSha256": null,
+      "patchedSha256": "9f67066f8ed6db7664abafb9e3445dfc61e5a4bad63962f0e8c733c13405307f"
+    }
+  ],
+  "assetsReplaced": false,
+  "backendChanged": false,
+  "clinicalRecordsChanged": false,
+  "notes": "Public frontend source, already public assets and payload only. No env files, credentials, original portrait sources or database dump included."
+}

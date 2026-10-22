@@ -1,0 +1,1248 @@
+/* Real clinic photographs stay unretouched. Light is an optional UI overlay. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.hero-tour-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 13px;
+  margin-top: 24px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+}
+.hero-tour-link img {
+  width: 54px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 8px;
+  box-shadow: 0 4px 15px #0c315b18;
+  transition: transform 0.35s;
+}
+.hero-tour-link:hover img {
+  transform: scale(1.14) rotate(-4deg);
+}
+.clinic-tour {
+  background: #055fbe;
+  color: white;
+  height: 3000px;
+  margin: 50px 0 120px;
+  scroll-margin-top: var(--site-header, 112px);
+  --tour-progress: 0;
+}
+.tour-stage {
+  position: sticky;
+  top: var(--site-header, 112px);
+  padding: 40px 0 30px;
+  min-height: 680px;
+  height: calc(100svh - var(--site-header, 112px));
+  max-height: 850px;
+  overflow: clip;
+}
+.tour-heading {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  margin-bottom: 30px;
+}
+.tour-heading .eyebrow {
+  grid-column: 1/-1;
+  margin-bottom: 10px;
+  color: #c7e5ff;
+}
+.tour-heading h2 {
+  font-size: clamp(36px, 4.1vw, 60px);
+}
+.tour-heading > p:last-child {
+  font-size: 14px;
+  margin: 0 0 5px;
+  color: #c7e5ff;
+}
+.tour-layout {
+  display: grid;
+  grid-template-columns: 33% 1fr;
+  gap: 6%;
+  height: calc(100% - 125px);
+  min-height: 425px;
+}
+.tour-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding-top: 5px;
+  min-width: 0;
+}
+.tour-count {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.06em;
+  margin-bottom: 23px;
+  font-variant-numeric: tabular-nums;
+}
+.tour-count span {
+  font-size: 14px;
+  font-weight: 500;
+  color: #bbdcfb;
+  letter-spacing: 0;
+}
+.tour-text {
+  animation: tour-copy-enter 0.55s both;
+}
+.tour-text .eyebrow {
+  color: #c7e5ff;
+  font-size: 11px;
+  letter-spacing: 0.13em;
+  margin-bottom: 12px;
+}
+.tour-text h3 {
+  font-size: clamp(28px, 2.8vw, 40px);
+  margin-bottom: 20px;
+}
+.tour-text > p:last-child {
+  font-size: 15px;
+  line-height: 1.7;
+  min-height: 100px;
+  max-width: 330px;
+}
+.tour-copy .button {
+  font-size: 14px;
+  min-height: 50px;
+  padding: 15px 20px;
+  gap: 12px;
+  white-space: normal;
+}
+.tour-link {
+  display: inline-flex;
+  gap: 10px;
+  align-items: center;
+  font-size: 13px;
+  margin: 19px 0 24px;
+  border-bottom: 1px solid #c7e5ff70;
+  padding-bottom: 4px;
+}
+.tour-navigation {
+  display: flex;
+  width: 100%;
+  margin-top: auto;
+  border-top: 1px solid #ffffff45;
+  padding-top: 16px;
+}
+.tour-navigation button {
+  color: #b9dbff;
+  flex: 1;
+  position: relative;
+  text-align: left;
+  padding: 10px 0;
+  font-size: 14px;
+}
+.tour-navigation button:before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 10px;
+  top: -18px;
+  height: 3px;
+  background: transparent;
+  transition:
+    background 0.25s,
+    box-shadow 0.25s;
+}
+.tour-navigation [aria-current="step"] {
+  color: white;
+  font-weight: 800;
+}
+.tour-navigation [aria-current="step"]:before {
+  background: #fff;
+  box-shadow: 0 0 13px #a9d6ff;
+}
+.tour-stop-label {
+  display: none;
+}
+.tour-scroll-note {
+  font-size: 11px;
+  color: #c7e5ff;
+  margin: 6px 0 0;
+}
+.tour-window {
+  position: relative;
+  overflow: hidden;
+  border-radius: 22px;
+  isolation: isolate;
+  background: #cbddeb;
+  box-shadow: 0 24px 65px #043b7e66;
+  --light-x: 50%;
+  --light-y: 50%;
+}
+.tour-photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transform: scale(0.89) translateX(14%);
+  filter: blur(7px);
+  transition:
+    opacity 0.7s,
+    transform 1.1s cubic-bezier(0.2, 0.7, 0.15, 1),
+    filter 0.7s;
+  pointer-events: none;
+}
+.tour-photo.passed {
+  transform: scale(1.25) translateX(-8%);
+}
+.tour-photo.current {
+  opacity: 1;
+  transform: scale(1);
+  filter: blur(0);
+}
+.at-reception .tour-photo.current {
+  transform: scale(1.2);
+  transform-origin: 76% 45%;
+}
+.tour-light {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.35s;
+  background: radial-gradient(
+    circle 160px at var(--light-x) var(--light-y),
+    transparent 20%,
+    #0733633b 100%
+  );
+}
+.tour-window.light-on .tour-light {
+  opacity: 1;
+}
+.tour-window-top,
+.tour-window-bottom {
+  position: absolute;
+  inset: 20px 20px auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.tour-window-top > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  background: #fffef8e8;
+  color: var(--ink);
+  padding: 10px 13px;
+  border-radius: 30px;
+  backdrop-filter: blur(10px);
+}
+.tour-window-top button {
+  border-radius: 50%;
+  width: 43px;
+  height: 43px;
+  background: white;
+  color: var(--blue);
+  display: grid;
+  place-items: center;
+  box-shadow: 0 3px 15px #002b5030;
+}
+.tour-window-top [aria-pressed="true"] {
+  background: #b7e6ff;
+  box-shadow: 0 0 30px #8ed5ff;
+}
+.tour-window-bottom {
+  inset: auto 20px 43px;
+  background: #ffffffee;
+  color: var(--ink);
+  padding: 13px 17px;
+  border-radius: 12px;
+  backdrop-filter: blur(12px);
+}
+.tour-window-bottom > span {
+  font-size: 14px;
+  font-weight: 800;
+}
+.tour-window-bottom button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--blue);
+  min-height: 30px;
+}
+.tour-hotspot {
+  position: absolute;
+  left: 66%;
+  top: 44%;
+  width: 48px;
+  height: 48px;
+  border: 1px solid #ffffffc9;
+  border-radius: 50%;
+  background: #ffffffdf;
+  color: var(--blue);
+  display: grid;
+  place-items: center;
+  box-shadow:
+    0 0 0 10px #ffffff35,
+    0 5px 20px #062c5640;
+  transition:
+    box-shadow 0.3s,
+    transform 0.3s;
+}
+.tour-hotspot:hover,
+.tour-hotspot[aria-expanded="true"] {
+  transform: scale(1.12);
+  box-shadow:
+    0 0 0 16px #b8e5ff60,
+    0 0 35px #99d6ff;
+}
+.tour-detail {
+  position: absolute;
+  left: 25px;
+  right: 25px;
+  bottom: 90px;
+  max-width: 340px;
+  padding: 22px;
+  background: #fff;
+  color: var(--ink);
+  border-radius: 13px;
+  box-shadow: 0 8px 30px #083a6740;
+  animation: tour-copy-enter 0.25s both;
+}
+.tour-detail p {
+  font-size: 13px;
+  margin: 7px 0 0;
+  line-height: 1.55;
+}
+.clinic-tour :focus-visible {
+  outline-color: #90d5ff;
+}
+@keyframes tour-copy-enter {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.explore-links {
+  margin-block: 120px;
+}
+.explore-links-heading {
+  margin-bottom: 45px;
+}
+.explore-link-grid {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  gap: 28px;
+}
+.explore-link {
+  position: relative;
+  background: #eef8ff;
+  border-radius: 22px;
+  overflow: hidden;
+  isolation: isolate;
+  min-height: 405px;
+  transition: box-shadow 0.4s;
+}
+.explore-link img {
+  width: 100%;
+  height: 315px;
+  object-fit: contain;
+  padding: 18px 12px;
+  transition: transform 0.75s cubic-bezier(0.2, 0.7, 0.15, 1);
+}
+.explore-link.tooth-link img {
+  height: 315px;
+  object-fit: contain;
+  mix-blend-mode: multiply;
+}
+.explore-link > div {
+  position: relative;
+  padding: 23px 30px 32px;
+  background: #f4faff;
+}
+.explore-link > div > span {
+  font-size: 11px;
+  color: var(--muted);
+}
+.explore-link h3 {
+  margin-top: 9px;
+  padding-right: 25px;
+  font-size: 25px;
+}
+.explore-link > div > svg {
+  position: absolute;
+  right: 24px;
+  bottom: 33px;
+  color: var(--blue);
+  transition: transform 0.3s;
+}
+.explore-link:hover img {
+  transform: scale(1.025);
+}
+.explore-link:hover {
+  box-shadow: 0 16px 45px #0071d61c;
+}
+.explore-link:hover > div > svg {
+  transform: translate(3px, -3px);
+}
+.explorer-heading {
+  margin-bottom: 45px;
+}
+.explorer-heading > p:last-child {
+  max-width: 390px;
+  margin-top: 25px;
+  color: var(--muted);
+}
+.tooth-explorer {
+  margin-block: 30px 100px;
+}
+.tooth-layout {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  gap: 7%;
+  align-items: center;
+}
+.tooth-display {
+  position: relative;
+  border-radius: 25px;
+  overflow: hidden;
+  background: #eef8ff;
+  min-width: 0;
+}
+.experience-label {
+  position: absolute;
+  top: 22px;
+  left: 25px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.tooth-perspective {
+  perspective: 1100px;
+  aspect-ratio: 1;
+  max-height: min(560px, calc(100svh - var(--site-header, 112px) - 145px));
+}
+.tooth-turntable {
+  height: 100%;
+  width: 100%;
+  position: relative;
+  transform-style: preserve-3d;
+  transform: rotateY(var(--tooth-angle));
+  transition: transform 0.85s cubic-bezier(0.2, 0.75, 0.15, 1);
+}
+.tooth-turntable img {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  backface-visibility: hidden;
+  mix-blend-mode: multiply;
+}
+.tooth-back {
+  transform: rotateY(180deg);
+}
+.tooth-controls {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 0 22px 23px;
+}
+.view-switch {
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  border: 1px solid #c9dff1;
+  border-radius: 30px;
+  gap: 3px;
+  width: max-content;
+  max-width: 100%;
+  background: #fff8;
+}
+.view-switch button {
+  border-radius: 24px;
+  padding: 11px 18px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+  min-height: 40px;
+  transition:
+    background 0.25s,
+    color 0.25s;
+}
+.view-switch [aria-pressed="true"] {
+  background: var(--blue);
+  color: white;
+  box-shadow: 0 3px 12px #0071d629;
+}
+.turn-control {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  color: var(--blue);
+  min-width: 90px;
+}
+.turn-control input {
+  width: 100%;
+  min-width: 50px;
+  max-width: 140px;
+  accent-color: var(--blue);
+  height: 32px;
+}
+.tooth-notes > .eyebrow {
+  font-size: 11px;
+}
+.tooth-part {
+  border-top: 1px solid var(--line);
+  padding: 25px 0;
+  display: grid;
+  grid-template-columns: 35px 1fr 22px;
+  gap: 13px;
+  text-align: left;
+  width: 100%;
+  transition: color 0.25s;
+}
+.tooth-part:last-of-type {
+  border-bottom: 1px solid var(--line);
+}
+.tooth-part.selected {
+  color: var(--blue);
+}
+.part-index {
+  font-size: 12px;
+  color: var(--muted);
+  padding-top: 5px;
+}
+.tooth-part strong {
+  font-size: 26px;
+  font-weight: 650;
+  letter-spacing: -0.04em;
+  display: block;
+}
+.part-text {
+  display: block;
+  font-size: 14px;
+  color: var(--muted);
+  line-height: 1.7;
+  margin-top: 15px;
+  max-width: 350px;
+  animation: tour-copy-enter 0.35s both;
+}
+.experience-note {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.tooth-notes .experience-note {
+  margin-block: 28px;
+}
+.experience-source {
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 25px;
+}
+.experience-source a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.anatomy-explorer {
+  margin-block: 15px 90px;
+}
+.anatomy-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 30px;
+  margin-bottom: 40px;
+}
+.anatomy-heading h2 {
+  font-size: clamp(34px, 4.3vw, 60px);
+}
+.anatomy-heading h2 span {
+  color: var(--sky);
+}
+.anatomy-heading > p {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.7;
+  margin: 0;
+}
+.anatomy-scene {
+  position: relative;
+  background: #eef8ff;
+  border-radius: 24px;
+  overflow: hidden;
+  aspect-ratio: 3/2;
+  max-height: min(720px, calc(100svh - var(--site-header, 112px) - 95px));
+  isolation: isolate;
+  user-select: none;
+}
+.anatomy-scene > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+.anatomy-exterior {
+  clip-path: inset(0 calc(100% - var(--anatomy-split)) 0 0);
+}
+.anatomy-divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: clamp(0px, var(--anatomy-split), calc(100% - 2px));
+  width: 2px;
+  background: #fff;
+  box-shadow: 0 0 15px #0071d638;
+}
+.anatomy-handle {
+  position: absolute;
+  top: 52%;
+  left: clamp(36px, var(--anatomy-split), calc(100% - 36px));
+  transform: translate(-50%, -50%);
+  width: 55px;
+  height: 55px;
+  border: 5px solid #fff;
+  color: white;
+  background: var(--blue);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  cursor: ew-resize;
+  touch-action: none;
+  box-shadow: 0 5px 24px #0065b63b;
+}
+.anatomy-handle:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 5px;
+}
+.anatomy-label {
+  position: absolute;
+  top: 25px;
+  border-radius: 30px;
+  background: #fff9;
+  font-size: 12px;
+  padding: 10px 15px;
+  pointer-events: none;
+}
+.anatomy-label.outside {
+  left: 25px;
+}
+.anatomy-label.inside {
+  right: 25px;
+}
+.anatomy-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 30px;
+  margin-top: 24px;
+}
+.anatomy-bottom .experience-note {
+  max-width: 450px;
+  margin: 0;
+}
+.asset-fallback {
+  padding: 100px 30px;
+  font-size: 14px;
+  color: var(--muted);
+}
+/* Noticeable but finite introductions; no auto-playing loop or scroll lock. */
+html[data-motion="on"] .hero-copy h1 {
+  animation: hero-arrive 0.9s cubic-bezier(0.15, 0.7, 0.25, 1) both;
+}
+html[data-motion="on"] .hero-pet {
+  animation: pet-arrive 1.2s both;
+}
+html[data-motion="on"] .hero-pet.dog {
+  animation-delay: 0.1s;
+}
+@keyframes hero-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+    filter: blur(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+@keyframes pet-arrive {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+.scroll-entry.arrived {
+  animation: section-arrive 0.75s cubic-bezier(0.16, 0.7, 0.2, 1) backwards;
+}
+@keyframes section-arrive {
+  from {
+    opacity: 0.2;
+    transform: translateY(46px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+html[data-motion="off"] .scroll-entry.arrived {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .scroll-entry.arrived {
+    animation: none;
+  }
+}
+@media (min-width: 961px) {
+  html[data-motion="on"] .story-doctor {
+    top: 25px;
+    transform: rotate(calc(-5deg - var(--stack-progress) * 4deg))
+      translateX(calc(var(--stack-progress) * -35px))
+      translateY(calc(var(--stack-progress) * 25px));
+  }
+  html[data-motion="on"] .diagnostic-card {
+    transform: translateX(calc(var(--card-phase) * -285px))
+      translateY(calc(var(--card-phase) * -60px))
+      rotate(calc(5deg - var(--card-phase) * 8deg))
+      scale(calc(1 + var(--card-phase) * 0.07));
+    box-shadow: 0 25px 60px #0d345b26;
+  }
+  html[data-motion="on"] .care-card {
+    transform: translateX(calc(var(--card-phase) * -335px))
+      translateY(calc(var(--card-phase) * -85px))
+      rotate(calc(10deg - var(--card-phase) * 12deg))
+      scale(calc(1 + var(--card-phase) * 0.08));
+    box-shadow: 0 25px 60px #0d345b26;
+  }
+  html[data-motion="on"] .story-track[data-progress^="0.5"] .care-card,
+  html[data-motion="on"] .story-track[data-progress^="0.6"] .care-card,
+  html[data-motion="on"] .story-track[data-progress^="0.7"] .care-card,
+  html[data-motion="on"] .story-track[data-progress^="0.8"] .care-card {
+    z-index: 7;
+  }
+}
+html[data-motion="on"] .story-track .stack-card:focus-within {
+  z-index: 12 !important;
+  transform: translateX(-180px) rotate(0deg) !important;
+}
+@media (max-width: 960px) {
+  html[data-motion="on"] .story-track .stack-card:focus-within {
+    transform: none !important;
+  }
+}
+html[data-motion="off"] .clinic-tour {
+  height: auto;
+}
+html[data-motion="off"] * {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
+}
+html[data-motion="off"] .tour-stage {
+  position: relative;
+  top: 0;
+  height: 760px;
+}
+html[data-motion="off"] .tour-scroll-note {
+  visibility: hidden;
+}
+html[data-motion="off"] .tour-text,
+html[data-motion="off"] .part-text,
+html[data-motion="off"] .tour-detail,
+html[data-motion="off"] .hero-pet,
+html[data-motion="off"] .hero-copy h1 {
+  animation: none;
+}
+html[data-motion="off"] .tour-photo,
+html[data-motion="off"] .tooth-turntable,
+html[data-motion="off"] .explore-link img {
+  transition: none;
+}
+@media (max-height: 820px) and (min-width: 900px) {
+  .topline {
+    height: 36px;
+    font-size: 12px;
+  }
+  .header-inner {
+    height: 100px;
+  }
+  .brand,
+  .brand img {
+    width: 84px;
+    height: 84px;
+    flex-basis: 84px;
+  }
+  .hero {
+    height: calc(100svh - 136px);
+    min-height: 570px;
+    max-height: none;
+  }
+  .hero-copy {
+    padding-top: 76px;
+    width: 60%;
+  }
+  .hero h1 {
+    font-size: clamp(65px, 6.9vw, 96px);
+  }
+  .hero-copy p {
+    font-size: 17px;
+    line-height: 1.55;
+    margin: 23px auto;
+  }
+  .hero-actions {
+    gap: 28px;
+  }
+  .hero-actions .button {
+    min-height: 52px;
+    font-size: 15px;
+    padding: 16px 25px;
+  }
+  .hero-actions .text-link {
+    font-size: 15px;
+  }
+  .hero-pet.cat {
+    width: 430px;
+    left: -123px;
+    bottom: -40px;
+  }
+  .hero-pet.dog {
+    width: 470px;
+    right: -130px;
+    bottom: -40px;
+  }
+  .hero-orbit {
+    top: 10px;
+    width: 56px;
+    height: 56px;
+  }
+  .hero-orbit .orbit-paw {
+    width: 21px;
+    height: 21px;
+  }
+  .hero-tour-link {
+    margin-top: 18px;
+    font-size: 12px;
+  }
+  .tour-stage {
+    padding-block: 23px;
+    min-height: 590px;
+  }
+  .tour-heading {
+    margin-bottom: 20px;
+  }
+  .tour-heading h2 {
+    font-size: 38px;
+  }
+  .tour-heading .eyebrow {
+    font-size: 10px;
+  }
+  .tour-layout {
+    height: calc(100% - 100px);
+    min-height: 415px;
+  }
+  .tour-count {
+    margin-bottom: 14px;
+  }
+  .tour-text h3 {
+    font-size: 30px;
+    margin-bottom: 14px;
+  }
+  .tour-text > p:last-child {
+    font-size: 14px;
+    min-height: 88px;
+    margin-bottom: 15px;
+  }
+  .tour-link {
+    margin-block: 14px;
+  }
+  .tour-scroll-note {
+    display: none;
+  }
+}
+@media (max-width: 899px) {
+  .clinic-tour {
+    height: auto;
+    margin-block: 65px;
+  }
+  .tour-stage,
+  html[data-motion="off"] .tour-stage {
+    position: relative;
+    top: 0;
+    max-height: none;
+    min-height: 0;
+    height: auto;
+    padding: 50px 0;
+  }
+  .tour-heading {
+    display: block;
+  }
+  .tour-heading h2 {
+    font-size: 40px;
+    margin-bottom: 13px;
+  }
+  .tour-layout {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    gap: 30px;
+  }
+  .tour-window {
+    height: 440px;
+    order: -1;
+  }
+  .tour-copy {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0 25px;
+    align-items: start;
+    padding: 0;
+  }
+  .tour-count {
+    grid-column: 1/-1;
+    font-size: 20px;
+    margin-bottom: 15px;
+  }
+  .tour-text {
+    grid-row: 2/5;
+    grid-column: 1;
+  }
+  .tour-text > p:last-child {
+    min-height: 0;
+    margin-bottom: 0;
+    font-size: 14px;
+    max-width: none;
+  }
+  .tour-copy .button {
+    grid-column: 2;
+    margin-top: 22px;
+  }
+  .tour-link {
+    grid-column: 2;
+  }
+  .tour-navigation {
+    grid-column: 1/-1;
+    margin-top: 25px;
+  }
+  .tour-scroll-note {
+    display: none;
+  }
+  .tour-stop-label {
+    display: block;
+    font-size: 10px;
+    font-weight: 500;
+    margin-top: 9px;
+  }
+  .tooth-layout {
+    gap: 30px;
+    grid-template-columns: 1fr 1fr;
+  }
+  .tooth-controls {
+    flex-direction: column;
+    padding-inline: 10px;
+  }
+  .turn-control {
+    width: 70%;
+    justify-content: center;
+  }
+  .anatomy-heading {
+    display: block;
+  }
+  .anatomy-heading > p {
+    margin-top: 22px;
+  }
+}
+@media (max-width: 600px) {
+  .tooth-perspective,
+  .anatomy-scene {
+    max-height: none;
+  }
+  .hero-tour-link {
+    font-size: 12px;
+    margin-top: 17px;
+    gap: 8px;
+  }
+  .hero-tour-link img {
+    width: 40px;
+    height: 30px;
+  }
+  .hero-orbit {
+    width: 40px;
+    height: 40px;
+  }
+  .hero-orbit .orbit-ring {
+    width: 40px;
+    height: 40px;
+  }
+  .hero-orbit .orbit-paw {
+    width: 17px;
+    height: 17px;
+  }
+  .tour-stage,
+  html[data-motion="off"] .tour-stage {
+    padding: 35px 0;
+  }
+  .tour-heading h2 {
+    font-size: 33px;
+  }
+  .tour-heading > p:last-child {
+    font-size: 12px;
+  }
+  .tour-layout {
+    gap: 22px;
+  }
+  .tour-window {
+    height: 350px;
+    border-radius: 15px;
+  }
+  .tour-window-top {
+    inset: 13px 13px auto;
+  }
+  .tour-window-top > span {
+    font-size: 10px;
+    padding: 9px;
+  }
+  .tour-window-bottom {
+    inset: auto 12px 12px;
+    padding: 11px;
+    gap: 8px;
+  }
+  .tour-window-bottom > span {
+    font-size: 12px;
+  }
+  .tour-window-bottom button {
+    font-size: 10px;
+    gap: 5px;
+  }
+  .tour-copy {
+    display: flex;
+    gap: 0;
+  }
+  .tour-count {
+    margin-bottom: 16px;
+  }
+  .tour-text h3 {
+    font-size: 29px;
+    margin-bottom: 15px;
+  }
+  .tour-text > p:last-child {
+    min-height: 85px;
+  }
+  .tour-copy .button {
+    margin-top: 18px;
+    font-size: 13px;
+  }
+  .tour-link {
+    margin-block: 17px;
+  }
+  .tour-navigation {
+    margin-top: 8px;
+  }
+  .tour-stop-label {
+    font-size: 9px;
+  }
+  .tour-detail {
+    left: 12px;
+    right: 12px;
+    bottom: 76px;
+    padding: 17px;
+  }
+  .tour-detail p {
+    font-size: 12px;
+  }
+  .explore-links {
+    margin-block: 70px;
+  }
+  .explore-links-heading {
+    margin-bottom: 28px;
+  }
+  .explore-link-grid {
+    grid-template-columns: 1fr;
+    gap: 23px;
+  }
+  .explore-link {
+    min-height: 0;
+  }
+  .explore-link img {
+    height: auto;
+    aspect-ratio: 3/2;
+  }
+  .explore-link.tooth-link img {
+    height: 260px;
+  }
+  .explore-link > div {
+    padding: 20px 23px 26px;
+  }
+  .explore-link h3 {
+    font-size: 22px;
+  }
+  .explore-link > div > span {
+    font-size: 10px;
+  }
+  .explore-link > div > svg {
+    right: 17px;
+    bottom: 25px;
+    width: 23px;
+  }
+  .tooth-layout {
+    grid-template-columns: 1fr;
+    gap: 35px;
+  }
+  .tooth-display {
+    border-radius: 17px;
+  }
+  .explorer-heading {
+    margin-bottom: 28px;
+  }
+  .explorer-heading > p:last-child {
+    font-size: 14px;
+    margin-top: 18px;
+  }
+  .tooth-controls {
+    flex-direction: row;
+    padding: 0 12px 16px;
+    gap: 10px;
+  }
+  .turn-control {
+    width: 35%;
+    gap: 5px;
+  }
+  .view-switch button {
+    padding: 10px 13px;
+    font-size: 11px;
+  }
+  .tooth-part {
+    padding: 20px 0;
+  }
+  .tooth-part strong {
+    font-size: 24px;
+  }
+  .experience-label {
+    left: 18px;
+    top: 18px;
+    font-size: 10px;
+  }
+  .tooth-notes .experience-note {
+    font-size: 11px;
+  }
+  .anatomy-scene {
+    border-radius: 15px;
+    aspect-ratio: 1.15;
+  }
+  .anatomy-scene > img {
+    object-fit: contain;
+  }
+  .anatomy-handle {
+    width: 45px;
+    height: 45px;
+    border-width: 4px;
+    left: clamp(32px, var(--anatomy-split), calc(100% - 32px));
+  }
+  .anatomy-label {
+    top: 14px;
+    padding: 8px 11px;
+    font-size: 10px;
+  }
+  .anatomy-label.outside {
+    left: 14px;
+  }
+  .anatomy-label.inside {
+    right: 14px;
+  }
+  .anatomy-bottom {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 18px;
+  }
+  .anatomy-bottom .view-switch {
+    order: -1;
+  }
+}
+@media (max-width: 700px) {
+  html[data-motion="on"] .clinic-tour { height: 280svh; }
+  html[data-motion="on"] .tour-stage {
+    position: sticky;
+    top: var(--site-header, 88px);
+    height: calc(100svh - var(--site-header, 88px) - 65px);
+    min-height: 0;
+    max-height: none;
+    padding: 8px 0 10px;
+    display: flex;
+    flex-direction: column;
+    overflow: clip;
+  }
+  html[data-motion="on"] .clinic-tour[data-manual="true"] { height: auto; }
+  html[data-motion="on"] .clinic-tour[data-manual="true"] .tour-stage {
+    position: relative;
+    top: 0;
+    height: auto;
+  }
+  .tour-heading { margin-bottom: 8px; }
+  .tour-heading .eyebrow { margin-bottom: 3px; }
+  .tour-heading h2 { font-size: 26px; margin-bottom: 0; }
+  .tour-heading > p:last-child { display: none; }
+  .tour-layout { flex: 1; min-height: 0; gap: 8px; }
+  .tour-window { height: clamp(175px, 32svh, 260px); flex: 0 0 auto; }
+  .tour-copy { min-height: 0; }
+  .tour-count { font-size: 17px; margin-bottom: 3px; }
+  .tour-text .eyebrow { font-size: 9px; margin-bottom: 3px; }
+  .tour-text h3 { font-size: 22px; margin-bottom: 4px; }
+  .tour-text > p:last-child { min-height: 0; margin: 0; font-size: 12px; line-height: 1.4; }
+  .tour-copy .button { min-height: 38px; padding: 8px 12px; margin-top: 8px; }
+  .tour-link { min-height: 32px; margin: 4px 0; }
+  .tour-navigation { margin-top: 2px; padding-top: 7px; }
+  .tour-stop-label { margin-top: 2px; font-size: 8px; }
+}
+@media (max-width: 700px) and (max-height: 700px) {
+  .tour-window { height: 155px; }
+  .tour-heading h2 { font-size: 23px; }
+  .tour-text > p:last-child { font-size: 11px; line-height: 1.3; }
+  .tour-navigation { padding-top: 4px; }
+}
+@media (max-width: 700px) and (max-height: 620px) {
+  html[data-motion="on"] .clinic-tour { height: auto; }
+  html[data-motion="on"] .tour-stage { position: relative; top: 0; height: auto; overflow: visible; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .clinic-tour {
+    height: auto;
+  }
+  .tour-stage {
+    position: relative;
+    top: 0;
+  }
+  .tour-photo,
+  .tooth-turntable {
+    transition: none;
+  }
+  .tour-text,
+  .part-text,
+  .tour-detail,
+  .hero-pet,
+  .hero-copy h1 {
+    animation: none !important;
+  }
+}
