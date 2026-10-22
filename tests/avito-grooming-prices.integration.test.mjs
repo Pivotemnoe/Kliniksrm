@@ -66,6 +66,16 @@ test('grooming prices read the current module and validate persisted replies bef
     assert.ok(draft(c).replyContext.groomingPriceFingerprint);const op=await approve(c);await service.deliver(op.operationId);assert.equal((await service.getConversation(c.id)).outbox.find(o=>o.id===op.operationId).status,'SENT');
    }finally{f.model.configured=configured;f.model.classify=classify;}
   });
+  await t.test('an approved duration survives a wrong PRICE classification, stored context and transport validation',async()=>{
+   const before=await service.integration(),configured=f.model.configured,classify=f.model.classify;
+   f.model.configured=()=>true;f.model.classify=async()=>({action:'PRICE',knowledgeId:null,serviceQuery:null});
+   const text='Утверждённая тестовая длительность процедуры.';
+   try{
+    await service.updateSettings({version:before.settingsVersion,settings:{...before.settings,profiles:before.settings.profiles.map(p=>p.direction==='GROOMING'?{...p,knowledge:[...p.knowledge,{id:'duration-qa',title:'Длительность',keywords:['часов'],answer:text}]}:p)}},actorId);
+    const id=chat('duration-price');api.add(id,'duration-price','Скок часов длится стрижка йорка?');const c=await load(id);assert.equal(c.stage,'KNOWLEDGE:duration-qa');assert.equal(draft(c).text,text);assert.equal(c.mode,'BOT');assert.doesNotMatch(draft(c).text,/₽/);
+    const op=await approve(c);await service.deliver(op.operationId);assert.equal((await service.getConversation(c.id)).outbox.find(o=>o.id===op.operationId).status,'SENT');
+   }finally{f.model.configured=configured;f.model.classify=classify;const current=await service.integration();await service.updateSettings({version:current.settingsVersion,settings:before.settings},actorId);}
+  });
   await t.test('short cat and breed clarifications persist and simulation reads the same saved state',async()=>{
    const id=chat('cat');api.add(id,'cat-price','Сколько стрижка кошки?');let c=await load(id);assert.equal(c.contact.groomingPriceContext.awaiting,'CONDITION');assert.match(draft(c).text,/есть колтуны/);
    const sim=await service.simulate('202','Нет',c.contact);assert.match(clean(sim.decision.text),/2 500–3 300 ₽/);assert.equal(sim.persisted,false);

@@ -45,10 +45,15 @@ export function groomingPriceFingerprint(context: PetServiceContext) {
   return createHash('sha256').update(JSON.stringify({ available: context.available, selfBooking: context.selfBookingEnabled, siteUrl: context.siteUrl, address: context.address, rows: context.groomingPrices ?? [] })).digest('hex');
 }
 
+const quantityText = (text: string) => norm(text).replace(/(^|[^а-я])скок(?:о|а)?(?=$|[^а-я])/gu, '$1сколько');
+const explicitPriceQuestion = (text: string) => /цен|стоим|прайс|тариф|(?:^|[^а-я])по\s*чем(?=$|[^а-я])|обойдется|по\s+деньгам/u.test(text);
+export function groomingNonPriceQuantityQuestion(text: string) {
+  const t = quantityText(text);
+  return !explicitPriceQuestion(t) && /сколько\s+(?:(?:примерно|обычно)\s+)?(?:по\s+)?(?:времени|час|минут|дней|суток|лет|месяц|недел)/u.test(t);
+}
 export function groomingPriceQuestion(text: string) {
   const t = norm(text);
-  return /цен|стоим|прайс|тариф|(?:^|[^а-я])по\s*чем(?=$|[^а-я])|обойдется|(?:^|[^а-я])скок(?:о|а)?(?=$|[^а-я])/u.test(t)
-    || /сколько/u.test(t) && !/сколько\s+(?:времени|час|минут|дней|суток|лет|месяц|недел)/u.test(t);
+  return explicitPriceQuestion(t) || /сколько/u.test(t) && !groomingNonPriceQuantityQuestion(t);
 }
 
 export function withGroomingPricePrefix(prefix: string | undefined, text: string | null) {
@@ -135,6 +140,8 @@ function extra(input: string) {
 /** A strict, catalogue-backed selector. Unknown breed/service and ambiguous rows never become a guessed minimum. */
 export function groomingPriceAnswer(context: PetServiceContext, text: string, prior?: GroomingPriceContext, priceIntent = false): GroomingPriceAnswer | null {
   if (context.direction !== 'GROOMING' || context.groomingPrices === undefined) return null;
+  // An erroneous model PRICE or saved price context cannot turn time/age into money.
+  if (groomingNonPriceQuantityQuestion(text)) return null;
   const t = norm(text), rows = context.groomingPrices, state = { ...(parseGroomingPriceContext(prior) ?? {}) };
   const requested = priceIntent || groomingPriceQuestion(t), foundBreeds = breeds(rows, t), foundExtra = extra(t);
   const species = petSpecies(t), hygiene = /гигиен/u.test(t), deshed = /вычес|вычеш|расчес|расчеш|линьк/u.test(t);

@@ -6,7 +6,7 @@ import { administratorWorking, dutyDoctorReply, groomingAdministratorNotice, gro
 import { clinicPhoneText, clinicUrgency, currentMedicalText } from './avito-clinic-guidance';
 import { petSpecies } from './avito-service-query';
 import { petServiceAnswer, PetServiceContext } from './avito-pet-services';
-import { groomingPriceAnswer, withGroomingPricePrefix, type GroomingPriceContext } from './avito-grooming-prices';
+import { groomingNonPriceQuantityQuestion, groomingPriceAnswer, withGroomingPricePrefix, type GroomingPriceContext } from './avito-grooming-prices';
 
 export type ContactState = { groomingPriceContext?: GroomingPriceContext; bookingChoiceOffered?: boolean; bookingChannel?: 'WEBSITE' | 'CALLBACK'; name?: string; phone?: string; callbackAt?: string; callbackMessageId?: string; collecting?: boolean; reason?: string; summary?: string; serviceQuestionAsked?: boolean; awaitingServiceDetails?: boolean; serviceDetails?: string; petSpecies?: 'CAT' | 'DOG'; petAge?: string; petSexKnown?: boolean; referralKnown?: boolean };
 export type AdminDecision = { text: string | null; purpose: 'REPLY' | 'CRM_REPLY' | 'CONTACT' | 'SUBMITTED'; handoff: boolean; needsAttention?: boolean; createInquiry: boolean; direction: Direction | null; reason: string; contact: ContactState; prompt?: string; petServiceBooking?: boolean; petServiceChannel?: 'WEBSITE'; groomingPriceFingerprint?: string; groomingPricePrefix?: string };
@@ -113,6 +113,10 @@ function decideCore(input: DecisionInput): AdminDecision {
 
   if (!callbackChoice && /(?:оператор|живой\s+(?:человек|администратор)|соедините|сотрудник)/u.test(normalized)) return { ...base, handoff: true, reason: 'DIRECT_HUMAN_REQUEST', text: offHours ? dutyDoctorReply(input.clinicPhone) : 'Передам диалог администратору. Продолжить общение можно здесь, в Авито.' };
   if (offHours && (medical || askHuman && !/(?:перезвоните|позвоните\s+мне|обратн\S*\s+звон)/u.test(normalized))) return { ...base, reason: medical ? 'MEDICAL' : 'HUMAN_REQUEST', text: `С этим вопросом поможет врач. ${dutyDoctorReply(input.clinicPhone)}` };
+  if (grooming && !medical && !askHuman && groomingNonPriceQuantityQuestion(text)) {
+    const approved = profile.knowledge.filter(k => k.keywords.some(word => normalized.includes(word.toLocaleLowerCase('ru-RU').replace(/ё/g, 'е'))));
+    if (approved.length === 1) return { ...base, text: approved[0].answer, reason: `KNOWLEDGE:${approved[0].id}` };
+  }
   if (input.petService?.direction === profile.direction && !medical && !askHuman && !providedCallbackPhone(text) && (!contact.collecting || contact.reason === 'BOOKING')) {
     const channel = grooming && contact.bookingChannel === 'WEBSITE' ? 'WEBSITE' : undefined;
     const answer = petServiceAnswer(input.petService, text, booking, channel);

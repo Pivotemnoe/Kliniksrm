@@ -3,7 +3,7 @@ import test from 'node:test';
 import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url);
 const {groomingPriceEntries}=require('../apps/api/dist/modules/grooming/price-catalog.js');
-const {groomingPriceRows,groomingPriceQuestion}=require('../apps/api/dist/modules/avito/avito-grooming-prices.js');
+const {groomingPriceRows,groomingPriceQuestion,groomingPriceAnswer}=require('../apps/api/dist/modules/avito/avito-grooming-prices.js');
 const {defaultAvitoSettings}=require('../apps/api/dist/modules/avito/avito.settings.js');
 const {decideAvitoReply}=require('../apps/api/dist/modules/avito/avito.policy.js');
 const settings=defaultAvitoSettings();settings.profiles.find(p=>p.direction==='GROOMING').enabled=true;
@@ -14,7 +14,7 @@ const reply=(text,extra={})=>decideAvitoReply({settings,listingId:'202',text,mes
 const clean=text=>text.replace(/\s/g,' ');
 
 test('the lost enquiry is a price request including spaced and colloquial price wording',()=>{
- for(const wording of ['по чем','по чём','по  чем','почём','скоко','скок']){
+ for(const wording of ['по чем','по чём','по  чем','почём']){
   const text=`Здравствуйте, ${wording} стрижка полностью йорк терьер 10 лет, а вес примерно 3-4 кг`;
   assert.equal(groomingPriceQuestion(text),true);
   const d=reply(text);assert.equal(d.reason,'GROOMING_PRICE');assert.match(d.text,/Йоркширский терьер.*Полный комплекс/);
@@ -32,6 +32,7 @@ test('a numerical CRM price is answered directly without a generic wash or site 
 test('a validated PRICE intent can select catalogue facts without an exact price keyword',()=>{
  const d=reply('По деньгам полный комплекс мальтезе',{intent:{action:'PRICE',knowledgeId:null,serviceQuery:null}});
  assert.match(clean(d.text),/2 100–2 500 ₽/);assert.equal(d.reason,'GROOMING_PRICE');assert.equal(d.handoff,false);
+ const colloquial=reply('Скок полный комплекс мальтезе',{intent:{action:'PRICE',knowledgeId:null,serviceQuery:null}});assert.match(clean(colloquial.text),/2 100–2 500 ₽/);
 });
 test('ordinary unclear enquiries keep the bot available and ask a concrete follow-up',()=>{
  for(const text of ['Груминг','Можно?','Добрый день! Подскажите пожалуйста','Вы тут?','?','Йорк']){
@@ -53,4 +54,14 @@ test('unclear wording does not reverse an actual staff takeover, medical escalat
  assert.equal(reply('Соедините с сотрудником').reason,'DIRECT_HUMAN_REQUEST');
  assert.equal(reply('Не звоните, только здесь').reason,'CONTACT_DECLINED');
  assert.equal(reply('Собака задыхается, по чём груминг?').reason,'URGENT');
+});
+test('colloquial duration and age cannot be forced into prices by a PRICE intent or earlier price context',()=>{
+ const prior=reply('Сколько гигиена йорка?').contact;
+ for(const text of ['Скок времени занимает стрижка йорка?','Скок часов длится процедура?','Скок лет грумеру?','Скоко по времени занимает процедура?','Сколько времени занимает стрижка йорка?']){
+  assert.equal(groomingPriceQuestion(text),false);assert.equal(groomingPriceAnswer(source,text,prior.groomingPriceContext,true),null);
+  const s=structuredClone(settings);s.profiles.find(p=>p.direction==='GROOMING').knowledge=[{id:'approved-duration',title:'Тестовая длительность',keywords:[text.includes('лет')?'лет':'времени','часов'],answer:'Утверждённый тестовый ответ о длительности или возрасте.'}];
+  const d=reply(text,{settings:s,contact:prior,intent:{action:'PRICE',knowledgeId:null,serviceQuery:null}});
+  assert.equal(d.reason,'KNOWLEDGE:approved-duration');assert.equal(d.text,'Утверждённый тестовый ответ о длительности или возрасте.');assert.doesNotMatch(d.text,/₽/);
+ }
+ const mixed=reply('Скок времени занимает стрижка йорка и какая цена?');assert.equal(mixed.reason,'GROOMING_PRICE');assert.match(mixed.text,/Йоркширский терьер.*Полный комплекс/);
 });
