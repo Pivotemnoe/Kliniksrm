@@ -115,12 +115,39 @@ def switch_static(m,mode):
     for kind in m['static']:
         current=pathlib.Path('/var/www/temichevvet-'+kind+'/current'); temp=current.with_name('current-attribution-'+uuid.uuid4().hex)
         temp.symlink_to(static_root(kind,mode)); temp.replace(current)
+def atomic_env(path, content, expected_hash):
+    require(sha(path)==expected_hash,'Environment changed before atomic write')
+    temp=path.with_name(path.name+'.'+uuid.uuid4().hex+'.tmp')
+    try:
+        fd=os.open(temp,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+        with os.fdopen(fd,'wb') as stream:
+            stream.write(content); stream.flush(); os.fchmod(stream.fileno(),0o600); os.fsync(stream.fileno())
+        require(sha(path)==expected_hash,'Environment changed before atomic replace')
+        os.replace(temp,path)
+        directory=os.open(path.parent,os.O_RDONLY|getattr(os,'O_DIRECTORY',0))
+        try: os.fsync(directory)
+        finally: os.close(directory)
+    finally:
+        try: temp.unlink()
+        except FileNotFoundError: pass
 def pin_image(m,mode,base_config):
-    reference=m['gateway'][mode+'Reference']; p=ROOT/'.env'; text=p.read_text(); pattern=r'(?m)^OWNER_GATEWAY_IMAGE=[^\r\n]*'
+    reference=m['gateway'][mode+'Reference']; p=ROOT/'.env'; original=p.read_bytes(); original_hash=hashlib.sha256(original).hexdigest(); text=original.decode(); pattern=r'(?m)^OWNER_GATEWAY_IMAGE=[^\r\n]*'
     require(len(re.findall(pattern,text))==1,'Expected one image pin')
-    p.write_text(re.sub(pattern,lambda _:'OWNER_GATEWAY_IMAGE='+reference,text)); p.chmod(0o600)
+    before=json.loads(compose('config','--format','json'))
+    allowed={m['previous']['reference'],m['gateway']['forwardReference'],m['gateway']['compatReference']}
+    known=json.loads(json.dumps(base_config)); known['services']['gateway']['image']=before['services']['gateway']['image']
+    require(before==known and before['services']['gateway']['image'] in allowed,'Compose configuration is not a guarded known version')
+    candidate=re.sub(pattern,lambda _:'OWNER_GATEWAY_IMAGE='+reference,text).encode(); candidate_hash=hashlib.sha256(candidate).hexdigest()
     expected=json.loads(json.dumps(base_config)); expected['services']['gateway']['image']=reference
-    require(json.loads(compose('config','--format','json'))==expected,'Unrelated Compose settings changed')
+    try:
+        atomic_env(p,candidate,original_hash)
+        require(json.loads(compose('config','--format','json'))==expected,'Unrelated Compose settings changed')
+    except Exception:
+        current=sha(p)
+        if current==candidate_hash: atomic_env(p,original,candidate_hash)
+        else: require(current==original_hash,'Environment changed externally; refusing to overwrite it during recovery')
+        require(json.loads(compose('config','--format','json'))==before,'Known environment restored but Compose configuration changed externally')
+        raise
 def verify_active(m,mode,built):
     require(inspect(APP)['Image']==built[mode]['id'],'Wrong active image')
     require(runtime(inspect(APP))==m['runtimeHash'],'Runtime configuration changed')
@@ -149,14 +176,17 @@ def main():
         pg=env(inspect(PG)); name='attribution-restore-'+uuid.uuid4().hex[:12]; dump='/tmp/'+name+'.dump'; started=False
         try:
             run(['docker','exec',PG,'pg_dump','-U',pg['POSTGRES_USER'],'-d',pg['POSTGRES_DB'],'-Fc','--file',dump]); run(['docker','cp',PG+':'+dump,str(B/'database.dump')]); (B/'database.dump').chmod(0o600)
-            run(['docker','run','-d','--network','none','--pull','never','--name',name,'-e','POSTGRES_USER=restore_test','-e','POSTGRES_DB=restore_test','-e','POSTGRES_PASSWORD=isolated-restore-only',inspect(PG)['Image']]); started=True
+            run(['docker','run','-d','--network','none','--pull','never','--memory','512m','--memory-swap','512m','--cpus','0.5','--pids-limit','128','--label','codex.task=booking-attribution-restore','--label','codex.release='+m['releaseId'],'--name',name,'-e','POSTGRES_USER=restore_test','-e','POSTGRES_DB=restore_test','-e','POSTGRES_PASSWORD=isolated-restore-only',inspect(PG)['Image']]); started=True
             for _ in range(60):
                 if subprocess.run(['docker','exec',name,'pg_isready','-h','127.0.0.1','-U','restore_test'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==0: break
                 time.sleep(.5)
             run(['docker','cp',str(B/'database.dump'),name+':/tmp/database.dump']); run(['docker','exec',name,'pg_restore','-U','restore_test','-d','restore_test','--no-owner','--no-privileges','--exit-on-error','/tmp/database.dump'])
             guard_baseline(m); save(B/'backup.json',dict(at=now(),restoreTested=True,sha256=sha(B/'database.dump'),configuration=m['configuration'],runtimeHash=m['runtimeHash'],baseConfig=json.loads(compose('config','--format','json')))); print('BACKUP_OK: isolated restore passed')
         finally:
-            if started: run(['docker','rm','-fv',name])
+            if started:
+                labels=inspect(name)['Config'].get('Labels') or {}
+                require(labels.get('codex.task')=='booking-attribution-restore' and labels.get('codex.release')==m['releaseId'],'Restore container ownership changed; refusing cleanup')
+                run(['docker','rm','-fv',name])
             run(['docker','exec',PG,'rm','-f',dump])
         return
     built=read(B/'built.json'); require(built['packetSha256']==sha(P/'checksums.json'),'Images built from another packet')
