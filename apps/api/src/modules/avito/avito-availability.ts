@@ -8,6 +8,27 @@ export function administratorWorking(settings: AvitoSettings, now = new Date()) 
   return time >= schedule.opensAt && time < schedule.closesAt;
 }
 
+/** Calendar wording follows the administrator's timezone, including after midnight. */
+export function groomingAdministratorWindow(settings: AvitoSettings, now = new Date()) {
+  if (administratorWorking(settings, now)) return 'WORKING';
+  const s = settings.administratorSchedule;
+  const time = new Intl.DateTimeFormat('en-GB', { timeZone: s.timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(now);
+  return `${time < s.opensAt ? 'сегодня' : 'завтра'} после ${s.opensAt}`;
+}
+
+export function groomingAdministratorNotice(settings: AvitoSettings, now = new Date()) {
+  const s = settings.administratorSchedule;
+  const window = groomingAdministratorWindow(settings, now);
+  return window === 'WORKING' ? `Администратор груминга на связи с ${s.opensAt} до ${s.closesAt}.`
+    : `Сейчас администратор не работает — он на связи с ${s.opensAt} до ${s.closesAt}. Он сможет ответить ${window}.`;
+}
+
+/** Used both when composing and when checking an automatic reply before delivery. */
+export function groomingReplyWithHours(settings: AvitoSettings, text: string | null, now = new Date()) {
+  if (!text || administratorWorking(settings, now) || !/администратор|сотрудник|заявк/iu.test(text)) return text;
+  return `${groomingAdministratorNotice(settings, now)}\n\n${text}`;
+}
+
 export function nightNotice(settings: AvitoSettings, phone?: string | null) {
   return `Сейчас клиника работает в ночном режиме, дежурит один врач. ${phone ? `Для связи с ним позвоните: ${clinicPhoneText(phone)}.` : dutyDoctorReply(phone)}`;
 }

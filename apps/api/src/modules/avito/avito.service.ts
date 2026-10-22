@@ -6,7 +6,7 @@ import { AuditService } from '../audit/audit.service';
 import { ClinicModulesService } from '../clinic-modules/clinic-modules.service';
 import { AvitoApiChat, AvitoApiClient, AvitoApiMessage, avitoPilotAllowsChat } from './avito-api.client';
 import { decideAvitoReply, ContactState, providedCallbackPhone } from './avito.policy';
-import { administratorWorking, avitoPricing } from './avito-availability';
+import { administratorWorking, avitoPricing, groomingAdministratorWindow, groomingReplyWithHours } from './avito-availability';
 import { AVITO_CAPABILITIES, defaultAvitoSettings, parseAvitoSettings } from './avito.settings';
 import { AvitoCallDto, AvitoListDto, AvitoModeDto, AvitoReplyDto, UpdateAvitoSettingsDto } from './dto/avito.dto';
 import { AvitoCrmKnowledgeService, AvitoCrmQuestion, avitoNeedsQuestionPlan, crmQuestion } from './avito-crm-knowledge.service';
@@ -88,6 +88,8 @@ export class AvitoService {
     // Simulator state is never used to persist an inquiry; live ingestion checks
     // the original incoming message containing the callback number.
     if (contact?.collecting === true) c.collecting = true;
+    if (contact?.bookingChoiceOffered === true) c.bookingChoiceOffered = true;
+    if (contact?.bookingChannel === 'WEBSITE' || contact?.bookingChannel === 'CALLBACK') c.bookingChannel = contact.bookingChannel;
     if (contact?.serviceQuestionAsked === true) c.serviceQuestionAsked = true;
     if (contact?.awaitingServiceDetails === true) c.awaitingServiceDetails = true;
     const settings = parseAvitoSettings(integration.settings);
@@ -265,7 +267,9 @@ export class AvitoService {
     } });
     // Model I/O stays outside the database transaction. Versions are checked again
     // before using its result; paid requests are idempotent on the existing gateway.
-    const candidate = [...history].sort((a, b) => b.created - a.created)[0];
+    // Avito can open a chat with a system notification before the customer has
+    // written anything. It is history, not a customer request or staff takeover.
+    const candidate = history.filter(message => message.type !== 'system').sort((a, b) => b.created - a.created)[0];
     const profile = settings.profiles.find(p => p.direction === mapping?.direction && p.enabled);
     let modelIntent: AvitoModelIntent | null = null;
     if (avitoPilotAllowsChat(chat.id) && profile && this.model.configured() && conversation.mode === 'BOT' && settings.mode !== 'MANUAL' && candidate?.type === 'text'
@@ -299,7 +303,7 @@ export class AvitoService {
       const petService = mapping ? await loadPetServiceContext(tx, integration.installation.organizationId, mapping.direction) : undefined;
       let current = await tx.avitoConversation.findUniqueOrThrow({ where: { id: conversation.id } });
       const validModelVersion = current.version === conversation.version && integration.settingsVersion === modelSettingsVersion;
-      let newCount = 0; let latest: AvitoApiMessage | null = null; let contact = current.contact as ContactState; let contactBeforeLatest = contact;
+      let newCount = 0; let activityCount = 0; let latest: AvitoApiMessage | null = null; let contact = current.contact as ContactState; let contactBeforeLatest = contact;
       let manual = current.mode !== 'BOT';
       const ordered = [...history].reverse().sort((a, b) => a.created - b.created);
       for (const message of ordered) {
@@ -308,6 +312,8 @@ export class AvitoService {
         const inserted = await tx.avitoMessage.createMany({ data: [{ conversationId: current.id, externalId: message.id, authorId: message.author_id == null ? null : String(message.author_id), direction, type: String(message.type ?? 'unknown'), text: typeof message.content?.text === 'string' ? message.content.text.slice(0, 16000) : '', occurredAt: new Date(message.created * 1000) }], skipDuplicates: true });
         if (!inserted.count) continue;
         newCount++;
+        if (message.type === 'system') continue;
+        activityCount++;
         if (direction === 'OUT') {
           const ours = await tx.avitoOutgoingOperation.findFirst({ where: { conversationId: current.id, externalMessageId: message.id } });
           if (!ours) manual = true;
@@ -324,7 +330,9 @@ export class AvitoService {
           }
         }
       }
-      if (!newCount) return 0;
+      // A notification must neither cancel a pending answer nor move an empty
+      // conversation into HUMAN, collect a contact or trigger an outgoing reply.
+      if (!activityCount) return newCount;
       await cancelQueued(tx, current.id, 'Получено новое сообщение');
       const lastAt = ordered.length ? new Date(Math.max(current.lastMessageAt?.getTime() ?? 0, ...ordered.map(m => Number.isFinite(m.created) ? m.created * 1000 : 0))) : current.lastMessageAt;
       const routeChanged = !mapping || (current.direction !== 'UNASSIGNED' && current.direction !== mapping.direction);
@@ -347,7 +355,11 @@ export class AvitoService {
       if (decision.createInquiry) requestId = await this.createInquiry(tx, current, decision.contact);
       const stop = decision.createInquiry || decision.handoff && (!decision.contact.collecting || ['URGENT', 'CONTACT_DECLINED', 'UNSUPPORTED_MEDIA', 'DIRECT_HUMAN_REQUEST', 'UNMAPPED_LISTING', 'CLINIC_PHONE_UNAVAILABLE'].includes(decision.reason));
       await tx.avitoConversation.update({ where: { id: current.id }, data: { contact: json(decision.contact), requestId, needsAttention: Boolean(decision.needsAttention || decision.handoff || decision.createInquiry), stage: decision.createInquiry ? 'TRANSFERRED' : decision.contact.collecting ? 'COLLECTING_CONTACT' : decision.reason, ...(stop ? { mode: 'HUMAN' } : {}) } });
-      if (decision.text) await tx.avitoOutgoingOperation.create({ data: { conversationId: current.id, triggerMessageId: latest.id, crmQuery: decision.purpose === 'CRM_REPLY' ? resolvedCrmQuery : null, replyContext: decision.reason === 'PET_SERVICE_INFO' ? json({ petService: true, bookingIntent: decision.petServiceBooking || undefined }) : clinic ? json({ administratorWorking: administratorWorking(settings, now), clinicPhone: clinic.phone, crmSuffix: decision.purpose === 'CRM_REPLY' && crmAnswer ? decision.text.slice(crmAnswer.text.length) : '', crmQuestions: intent?.questions ?? [] }) : undefined, clientKey: `bot:${current.id}:${latest.id}`, text: decision.text, purpose: decision.purpose, conversationVersion: current.version, settingsVersion: integration.settingsVersion, status: settings.mode === 'AUTO' ? 'PENDING' : 'DRAFT' } });
+      const petContext = decision.reason === 'PET_SERVICE_INFO' ? { petService: true, bookingIntent: decision.petServiceBooking || undefined, bookingChannel: decision.petServiceChannel } : {};
+      const replyContext = decision.direction === 'GROOMING' ? json({ ...petContext, groomingAdministratorWindow: groomingAdministratorWindow(settings, now) })
+        : decision.reason === 'PET_SERVICE_INFO' ? json(petContext)
+        : clinic ? json({ administratorWorking: administratorWorking(settings, now), clinicPhone: clinic.phone, crmSuffix: decision.purpose === 'CRM_REPLY' && crmAnswer ? decision.text?.slice(crmAnswer.text.length) ?? '' : '', crmQuestions: intent?.questions ?? [] }) : undefined;
+      if (decision.text) await tx.avitoOutgoingOperation.create({ data: { conversationId: current.id, triggerMessageId: latest.id, crmQuery: decision.purpose === 'CRM_REPLY' ? resolvedCrmQuery : null, replyContext, clientKey: `bot:${current.id}:${latest.id}`, text: decision.text, purpose: decision.purpose, conversationVersion: current.version, settingsVersion: integration.settingsVersion, status: settings.mode === 'AUTO' ? 'PENDING' : 'DRAFT' } });
       return newCount;
     }, { timeout: 20000 });
   }
@@ -417,16 +429,22 @@ export class AvitoService {
       if (!avitoPilotAllowsChat(c.externalChatId) || op.purpose === 'CONSENT' || !live.installation.enabled || c.version !== op.conversationVersion || (!op.actorId && (live.settingsVersion !== op.settingsVersion || settings.mode !== 'AUTO' || (c.mode !== 'BOT' && !allowedFinal)))) {
         await tx.avitoOutgoingOperation.update({ where: { id: op.id }, data: { status: 'CANCELLED', error: 'Диалог, режим или правила изменены' } }); return null;
       }
-      const context = op.replyContext as { petService?: boolean; bookingIntent?: boolean; administratorWorking: boolean; clinicPhone: string | null; crmSuffix: string; crmQuestions?: AvitoCrmQuestion[] } | null;
+      const context = op.replyContext as { petService?: boolean; bookingIntent?: boolean; bookingChannel?: 'WEBSITE'; groomingAdministratorWindow?: string; administratorWorking: boolean; clinicPhone: string | null; crmSuffix: string; crmQuestions?: AvitoCrmQuestion[] } | null;
+      if (context?.groomingAdministratorWindow && context.groomingAdministratorWindow !== groomingAdministratorWindow(settings, this.now())) {
+        await tx.avitoOutgoingOperation.update({ where: { id: op.id }, data: { status: 'CANCELLED', error: 'Рабочее время администратора изменилось. Нужен актуальный ответ.' } });
+        await tx.avitoConversation.update({ where: { id: c.id }, data: { needsAttention: true } }); return null;
+      }
       if (context?.petService) {
         const trigger = op.triggerMessageId ? await tx.avitoMessage.findUnique({ where: { conversationId_externalId: { conversationId: c.id, externalId: op.triggerMessageId } } }) : null;
         const mapping = settings.listings.find(listing => listing.id === c.listingId && listing.enabled && listing.direction === c.direction);
         const source = mapping && settings.profiles.some(p => p.enabled && p.direction === mapping.direction) ? await loadPetServiceContext(tx, live.installation.organizationId, mapping.direction) : undefined;
-        if (!source || !trigger || petServiceAnswer(source, trigger.text, context.bookingIntent === true) !== op.text) {
+        const answer = source && trigger ? petServiceAnswer(source, trigger.text, context.bookingIntent === true, context.bookingChannel === 'WEBSITE' ? 'WEBSITE' : undefined) : null;
+        const currentAnswer = source?.direction === 'GROOMING' ? groomingReplyWithHours(settings, answer, this.now()) : answer;
+        if (!source || !trigger || currentAnswer !== op.text) {
           await tx.avitoOutgoingOperation.update({ where: { id: op.id }, data: { status: 'CANCELLED', error: 'Условия или доступность записи изменились. Нужен актуальный ответ.' } });
           await tx.avitoConversation.update({ where: { id: c.id }, data: { needsAttention: true } }); return null;
         }
-      } else if (context) {
+      } else if (context && c.direction === 'CLINIC') {
         const phone = await this.crm.clinicContact(live.installation.organizationId, tx, settings.administratorSchedule.officeId);
         if (context.administratorWorking !== administratorWorking(settings, this.now()) || context.clinicPhone !== phone.phone) {
           await tx.avitoOutgoingOperation.update({ where: { id: op.id }, data: { status: 'CANCELLED', error: 'График администратора или номер клиники изменился. Нужен актуальный ответ.' } });

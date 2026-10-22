@@ -40,13 +40,17 @@ export async function loadPetServiceContext(db: Prisma.TransactionClient, organi
 }
 
 /** An enquiry in Avito is never a confirmed reservation or an invitation to collect payment. */
-export function petServiceAnswer(context: PetServiceContext, text: string, bookingIntent = false): string | null {
+export function petServiceAnswer(context: PetServiceContext, text: string, bookingIntent = false, bookingChannel?: 'WEBSITE'): string | null {
   const input = text.toLocaleLowerCase('ru-RU').replace(/ё/g, 'е');
   const price = /цен|стоим|сколько|почем|прайс|тариф/u.test(input);
   const booking = bookingIntent || /запис|запиш|брон|засели|свобод|места|сайт|ссылк|онлайн|оставить\s+(?:кот|кош|собак|питом)|хочу\s+(?:подстричь|груминг)/u.test(input);
   const address = /адрес|где\s+(?:вы|наход)|как\s+(?:к вам\s+)?добраться/u.test(input);
   const conditions = /услови|правил|кош|кот|собак|вес|килограмм|кг|сут|дней|выгул|заезд|выезд|время|час|принимаете/u.test(input);
-  if (!price && !booking && !address && !conditions) return null;
+  const haircut = /стриж|подстр|постри[гж]|стри(?:чь|гут|гу)/u.test(input);
+  const hygiene = /гигиен/u.test(input);
+  const brushing = /вычес|вычеш|расчес|расчеш|подшерст|линьк/u.test(input);
+  const care = context.direction === 'GROOMING' && (haircut || hygiene || brushing);
+  if (!price && !booking && !address && !conditions && !care) return null;
   const parts: string[] = [];
   if (address && context.address) parts.push(`Адрес груминга: ${context.address}.`);
   if (context.direction === 'HOTEL' && context.available && context.hotel) {
@@ -61,10 +65,28 @@ export function petServiceAnswer(context: PetServiceContext, text: string, booki
     if (conditions || price) parts.push(`Минимальный срок — ${hotel.minimumDays} сут. Неполные сутки считаются полными. Принимаем собак весом до ${hotel.maximumDogWeightKg} кг. Заезд — с ${hotel.checkInFrom} до ${hotel.checkInTo}.`);
   }
   if (context.direction === 'GROOMING') {
-    if (price) parts.push('Услуги и прайс груминга доступны на сайте. Стоимость зависит от выбранной услуги и питомца.');
-    parts.push(context.selfBookingEnabled
-      ? 'Услугу, грумера и доступное время можно выбрать на сайте. Запись оформляется там после входа через MAX и проверки расписания.'
-      : 'Онлайн-запись на груминг пока закрыта: расписание ещё настраивается. На сайте можно посмотреть услуги и прайс. Здесь можно задать вопрос или попросить сотрудника связаться с вами.');
+    // The owner's wash policy is a supported answer, not just a classification
+    // prompt. Dry hygiene and brushing must not be mistaken for a dry haircut.
+    if (haircut) parts.push('Стрижки собак и кошек выполняем только с мытьём.');
+    if (hygiene || haircut && /без\s+(?:мыть|купани)|сух/u.test(input)) parts.push('Гигиенический уход может быть без мытья.');
+    if (brushing) parts.push('Вычёсывание может быть без мытья.');
+    if (price) parts.push('Стоимость груминга зависит от выбранной услуги, питомца и состояния шерсти. Администратор поможет уточнить её; прайс также есть на сайте.');
+    const website = bookingChannel === 'WEBSITE' || /сайт|ссылк|онлайн|самостоятельн/u.test(input);
+    if (website) {
+      parts.push(context.selfBookingEnabled
+        ? 'Самостоятельно выбрать услугу и доступное время можно на сайте. Запись оформляется там после входа через MAX и проверки расписания. Если удобнее, можно оставить заявку на звонок администратора здесь, в Авито.'
+        : 'Самостоятельная онлайн-запись пока закрыта: расписание ещё настраивается. На сайте можно посмотреть услуги, прайс и примеры работ. Для записи можно оставить заявку здесь, чтобы администратор связался с вами.');
+      parts.push(context.siteUrl);
+    } else if (booking) {
+      parts.push(context.selfBookingEnabled
+        ? 'Как вам удобнее записаться: самостоятельно на сайте или оставить заявку здесь, чтобы администратор позвонил?'
+        : 'Самостоятельная онлайн-запись пока закрыта: расписание ещё настраивается. Могу оформить заявку здесь, чтобы администратор позвонил и помог с записью. Оставим заявку на звонок?');
+    } else {
+      parts.push(context.selfBookingEnabled
+        ? 'Можно оставить заявку здесь, чтобы администратор помог с записью, или выбрать услугу и время на сайте — как вам удобнее?'
+        : 'Самостоятельная онлайн-запись пока закрыта; на сайте можно посмотреть услуги, прайс и примеры работ. Оставим заявку здесь, чтобы администратор помог с записью?');
+    }
+    return parts.join('\n');
   } else parts.push(context.selfBookingEnabled
     ? 'Даты и свободный номер можно выбрать на сайте. Бронь оформляется там после входа через MAX и повторной проверки наличия мест.'
     : 'Онлайн-бронирование пока недоступно. Условия можно посмотреть на сайте или уточнить у сотрудника здесь.');

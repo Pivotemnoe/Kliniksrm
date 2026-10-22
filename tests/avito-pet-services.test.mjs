@@ -12,10 +12,10 @@ const grooming = { direction: 'GROOMING', available: true, selfBookingEnabled: f
 const hotel = { direction: 'HOTEL', available: true, selfBookingEnabled: true, siteUrl: 'https://pet.temichevvet.ru/pet-hotel/', address: null, hotel: { minimumDays: 2, maximumDogWeightKg: 10, walkRate: 150, checkInFrom: '09:00', checkInTo: '18:00', catRates: [700], dogRates: [800, 900] } };
 const reply = (text, context = grooming, extra = {}) => decideAvitoReply({ settings, listingId: context.direction === 'HOTEL' ? '3' : '2', text, messageId: 'incoming', petService: context, now: new Date('2026-10-21T21:00:00Z'), ...extra });
 
-test('a grooming booking request names the closed schedule and the grooming site without collecting a name or phone', () => {
+test('a grooming booking request names the closed schedule and offers an administrator callback without collecting a name or phone', () => {
   const d = reply('Хочу записаться на стрижку');
   assert.equal(d.reason, 'PET_SERVICE_INFO'); assert.equal(d.direction, 'GROOMING');
-  assert.match(d.text, /пока закрыта/); assert.match(d.text, /https:\/\/pet.temichevvet.ru\//);
+  assert.match(d.text, /пока закрыта/); assert.match(d.text, /заявку на звонок/); assert.doesNotMatch(d.text, /https:/); assert.equal(d.contact.bookingChoiceOffered, true);
   assert.equal(d.contact.collecting, undefined); assert.equal(d.createInquiry, false); assert.equal(d.handoff, false);
   assert.doesNotMatch(d.text, /дежурн|ночной тариф|Как к вам обращаться|вы записаны/);
 });
@@ -56,7 +56,7 @@ test('a model-recognized booking in free wording goes to its website, never into
   for (const context of [grooming, hotel]) {
     const d = reply('Можно оформить визит?', context, { intent: { action: 'BOOKING' } });
     assert.equal(d.reason, 'PET_SERVICE_INFO'); assert.equal(d.petServiceBooking, true);
-    assert.equal(d.createInquiry, false); assert.equal(d.contact.collecting, undefined); assert.ok(d.text.includes(context.siteUrl));
+    assert.equal(d.createInquiry, false); assert.equal(d.contact.collecting, undefined); if(context.direction === 'HOTEL') assert.ok(d.text.includes(context.siteUrl)); else assert.match(d.text,/администратор/);
   }
 });
 test('the source reads only its own organization and module, and an unavailable source closes online booking', async () => {
