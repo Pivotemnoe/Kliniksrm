@@ -72,6 +72,7 @@ test('grooming prices read the current module and validate persisted replies bef
   });
   await t.test('a website choice plus price is replayable without losing the website or forcing a callback',async()=>{
    const id=chat('website');api.add(id,'website-price','Сколько гигиена йорка на сайте?');const c=await load(id);assert.equal(c.contact.bookingChannel,'WEBSITE');assert.match(clean(draft(c).text),/2 100 ₽/);assert.match(draft(c).text,/https:\/\/pet.temichevvet.ru/);assert.ok(draft(c).replyContext.petService);assert.ok(draft(c).replyContext.groomingPricePrefix);
+   const url=new URL(draft(c).text.split('\n').find(x=>x.startsWith('https://')));assert.deepEqual([...url.searchParams],[['utm_source','avito'],['listing_id','202']]);
    const op=await approve(c);await service.deliver(op.operationId);assert.equal((await service.getConversation(c.id)).outbox.find(o=>o.id===op.operationId).status,'SENT');assert.equal(c.inquiries.length,0);
   });
  }finally{await prisma.$disconnect();}

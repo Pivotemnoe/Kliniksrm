@@ -13,6 +13,7 @@ import { AvitoCrmKnowledgeService, AvitoCrmQuestion, avitoNeedsQuestionPlan, crm
 import { AvitoDialogueTurn, AvitoModelGatewayClient, AvitoModelIntent, boundedAvitoHistory } from './avito-model-gateway.client';
 import { loadPetServiceContext, petServiceAnswer } from './avito-pet-services';
 import { groomingPriceFingerprint, parseGroomingPriceContext, withGroomingPricePrefix } from './avito-grooming-prices';
+import { withAvitoListingSource } from './avito-booking-source';
 
 type DB = Prisma.TransactionClient;
 const safeError = (error: unknown) => error instanceof ServiceUnavailableException ? error.message : 'Операция не завершена. Проверьте соединение и конечный результат.';
@@ -111,7 +112,7 @@ export class AvitoService {
     const query = crmIntentQuery(text, intent);
     const crmAnswer = rule?.direction === 'CLINIC' ? await this.crm.answer(integration.installation.organizationId, query, this.prisma, rule.crmQuery, settings.administratorSchedule.officeId, intent?.questions, { ...avitoPricing(settings, now), petSpecies: c.petSpecies }) : null;
     const clinic = rule?.direction === 'CLINIC' ? await this.crm.clinicContact(integration.installation.organizationId, this.prisma, settings.administratorSchedule.officeId) : null;
-    const petService = rule && profile ? await loadPetServiceContext(this.prisma, integration.installation.organizationId, rule.direction) : undefined;
+    const petService = rule && profile ? withAvitoListingSource(await loadPetServiceContext(this.prisma, integration.installation.organizationId, rule.direction), rule) : undefined;
     return { kind: options.useAi ? 'AI_ASSISTED_SCENARIO' : 'RULE_SCENARIO', persisted: false, modelStatus, decision: decideAvitoReply({ settings, listingId, text, contact: c, messageId: 'simulation', crmAnswer, clinicPhone: clinic?.phone, intent, now, petService }) };
   }
   async checkConnection(actorId: string) {
@@ -304,7 +305,7 @@ export class AvitoService {
       if (!integration.installation.enabled) return 0;
       const settings = parseAvitoSettings(integration.settings);
       const mapping = settings.listings.find(l => l.id === listingId && l.enabled);
-      const petService = mapping ? await loadPetServiceContext(tx, integration.installation.organizationId, mapping.direction) : undefined;
+      const petService = mapping ? withAvitoListingSource(await loadPetServiceContext(tx, integration.installation.organizationId, mapping.direction), mapping) : undefined;
       let current = await tx.avitoConversation.findUniqueOrThrow({ where: { id: conversation.id } });
       const validModelVersion = current.version === conversation.version && integration.settingsVersion === modelSettingsVersion;
       let newCount = 0; let activityCount = 0; let latest: AvitoApiMessage | null = null; let contact = current.contact as ContactState; let contactBeforeLatest = contact;
@@ -441,7 +442,7 @@ export class AvitoService {
       let priceSource: Awaited<ReturnType<typeof loadPetServiceContext>>;
       if (context?.groomingPriceFingerprint) {
         const mapping = settings.listings.find(l => l.id === c.listingId && l.enabled && l.direction === 'GROOMING' && c.direction === 'GROOMING');
-        priceSource = mapping && settings.profiles.some(p => p.direction === 'GROOMING' && p.enabled) ? await loadPetServiceContext(tx, live.installation.organizationId, 'GROOMING') : undefined;
+        priceSource = mapping && settings.profiles.some(p => p.direction === 'GROOMING' && p.enabled) ? withAvitoListingSource(await loadPetServiceContext(tx, live.installation.organizationId, 'GROOMING'), mapping) : undefined;
         if (!priceSource || groomingPriceFingerprint(priceSource) !== context.groomingPriceFingerprint) {
           await tx.avitoOutgoingOperation.update({ where: { id: op.id }, data: { status: 'CANCELLED', error: 'Прайс или доступность груминга изменились. Нужен актуальный ответ.' } });
           await tx.avitoConversation.update({ where: { id: c.id }, data: { needsAttention: true } }); return null;
@@ -450,7 +451,7 @@ export class AvitoService {
       if (context?.petService) {
         const trigger = op.triggerMessageId ? await tx.avitoMessage.findUnique({ where: { conversationId_externalId: { conversationId: c.id, externalId: op.triggerMessageId } } }) : null;
         const mapping = settings.listings.find(listing => listing.id === c.listingId && listing.enabled && listing.direction === c.direction);
-        const source = priceSource ?? (mapping && settings.profiles.some(p => p.enabled && p.direction === mapping.direction) ? await loadPetServiceContext(tx, live.installation.organizationId, mapping.direction) : undefined);
+        const source = priceSource ?? (mapping && settings.profiles.some(p => p.enabled && p.direction === mapping.direction) ? withAvitoListingSource(await loadPetServiceContext(tx, live.installation.organizationId, mapping.direction), mapping) : undefined);
         const answer = source && trigger ? petServiceAnswer(source, trigger.text, context.bookingIntent === true, context.bookingChannel === 'WEBSITE' ? 'WEBSITE' : undefined) : null;
         const currentAnswer = source?.direction === 'GROOMING' ? withGroomingPricePrefix(context.groomingPricePrefix, groomingReplyWithHours(settings, answer, this.now())) : answer;
         if (!source || !trigger || currentAnswer !== op.text) {
