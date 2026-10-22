@@ -1,4 +1,5 @@
 import type { Prisma } from '@prisma/client';
+import { groomingPriceQuestion, groomingPriceRows, type GroomingPriceRow } from './avito-grooming-prices';
 
 export type PetServiceContext = {
   direction: 'GROOMING' | 'HOTEL'; available: boolean; selfBookingEnabled: boolean;
@@ -6,6 +7,7 @@ export type PetServiceContext = {
     minimumDays: number; maximumDogWeightKg: number; walkRate: number;
     checkInFrom: string; checkInTo: string; catRates: number[]; dogRates: number[];
   };
+  groomingPrices?: GroomingPriceRow[];
 };
 
 const sites = { GROOMING: 'https://pet.temichevvet.ru/', HOTEL: 'https://pet.temichevvet.ru/pet-hotel/' };
@@ -20,9 +22,10 @@ export async function loadPetServiceContext(db: Prisma.TransactionClient, organi
         enabled: true, groomingSettings: { select: { selfBookingEnabled: true, testClientMaxId: true } },
         groomingLocations: { where: { isActive: true }, select: { address: true } },
         groomingRules: { where: { isActive: true, specialist: { isActive: true, workPeriods: { some: { isActive: true, kind: 'WORK', endsAt: { gt: new Date() } } } }, workplace: { isActive: true }, location: { isActive: true } }, select: { id: true }, take: 1 },
+        groomingServices: { where: { isActive: true }, select: { id: true, title: true, catalogKey: true, catalogData: true, price: true, maximumPrice: true, priceType: true, version: true } },
       } });
       const addresses = [...new Set(module?.groomingLocations.map(x => x.address.trim()).filter(Boolean))];
-      return { ...fallback, available: Boolean(module?.enabled), selfBookingEnabled: Boolean(module?.enabled && module.groomingSettings?.selfBookingEnabled && !module.groomingSettings.testClientMaxId && module.groomingRules.length), address: addresses.length === 1 ? addresses[0] : null };
+      return { ...fallback, available: Boolean(module?.enabled), selfBookingEnabled: Boolean(module?.enabled && module.groomingSettings?.selfBookingEnabled && !module.groomingSettings.testClientMaxId && module.groomingRules.length), address: addresses.length === 1 ? addresses[0] : null, groomingPrices: groomingPriceRows(module?.groomingServices ?? []) };
     }
     const module = await db.clinicModuleInstallation.findUnique({ where: { organizationId_moduleKey: { organizationId, moduleKey: 'PET_HOTEL' } }, select: {
       enabled: true, petHotelSettings: true, petHotelRooms: { where: { isActive: true }, select: { species: true, dailyRate: true } },
@@ -42,11 +45,11 @@ export async function loadPetServiceContext(db: Prisma.TransactionClient, organi
 /** An enquiry in Avito is never a confirmed reservation or an invitation to collect payment. */
 export function petServiceAnswer(context: PetServiceContext, text: string, bookingIntent = false, bookingChannel?: 'WEBSITE'): string | null {
   const input = text.toLocaleLowerCase('ru-RU').replace(/ё/g, 'е');
-  const price = /цен|стоим|сколько|почем|прайс|тариф/u.test(input);
+  const price = context.direction === 'GROOMING' ? groomingPriceQuestion(input) : /цен|стоим|сколько|почем|прайс|тариф/u.test(input);
   const booking = bookingIntent || /запис|запиш|брон|засели|свобод|места|сайт|ссылк|онлайн|оставить\s+(?:кот|кош|собак|питом)|хочу\s+(?:подстричь|груминг)/u.test(input);
   const address = /адрес|где\s+(?:вы|наход)|как\s+(?:к вам\s+)?добраться/u.test(input);
   const conditions = /услови|правил|кош|кот|собак|вес|килограмм|кг|сут|дней|выгул|заезд|выезд|время|час|принимаете/u.test(input);
-  const haircut = /стриж|подстр|постри[гж]|стри(?:чь|гут|гу)/u.test(input);
+  const haircut = !/когт|маникюр/u.test(input) && /стриж|подстр|постри[гж]|стри(?:чь|гут|гу)/u.test(input);
   const hygiene = /гигиен/u.test(input);
   const brushing = /вычес|вычеш|расчес|расчеш|подшерст|линьк/u.test(input);
   const care = context.direction === 'GROOMING' && (haircut || hygiene || brushing);
