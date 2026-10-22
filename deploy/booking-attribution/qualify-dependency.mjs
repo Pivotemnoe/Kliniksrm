@@ -34,4 +34,14 @@ if(process.argv[5]){
  const count=proof.checks.reduce((n,v)=>n+v.checks.length,0);assert(count>=19);
  binding.actualImageQaPassed=true;binding.actualImageQaChecks=count;binding.actualImageQaSha256=sha(bytes);await fs.writeFile(qa+'/clinical-actual-image-qa.json',bytes);
 }
+if(process.argv[6]){
+ const bytes=await fs.readFile(path.resolve(process.argv[6])),proof=JSON.parse(bytes);
+ assert.equal(proof.status,'BACKUP_RESTORE_QA_PASS');for(const k of ['restoreTested','singleMigrationTested','allExistingRowsCompared','runtimeUnchanged'])assert.equal(proof[k],true);assert.equal(proof.productionChanged,false);
+ const ledgers=proof.steps.filter(v=>v.status==='RESTORE_LEDGER_PASS');assert.deepEqual(ledgers.map(v=>v.mode).sort(),['after','before','rollback']);for(const v of ledgers){assert.equal(v.tables,152);if(v.mode!=='before')assert.equal(v.existingRowsUnchanged,true);}
+ const migration=proof.steps.find(v=>v.status==='SINGLE_MIGRATION_PASS');assert.equal(migration.nullableColumns,2);assert.equal(migration.historyRecordsAdded,1);assert.equal(migration.otherMigrationsRun,false);assert.equal(migration.seedRun,false);
+ for(const id of [binding.forwardImageId,binding.compatImageId]){const started=proof.steps.find(v=>v.status==='STARTUP_PASS'&&v.image===id);assert(started);for(const k of ['databaseHealthy','defaultEntrypoint','noPublishedPorts','noExternalNetwork'])assert.equal(started[k],true);}
+ const history=proof.steps.find(v=>v.status==='STARTUP_HISTORY_PASS');assert.equal(history.onlyApprovedMigration,true);assert.equal(history.migrationRecords,102);assert.match(proof.databaseSha256,/^[0-9a-f]{64}$/);assert(proof.databaseBytes>0);
+ binding.backupRestorePassed=true;binding.backupRestoreSha256=sha(bytes);binding.backupDumpSha256=proof.databaseSha256;binding.backupDumpBytes=proof.databaseBytes;binding.backupCreatedAt=proof.backupCreatedAt;binding.comparedTables=152;
+ await fs.writeFile(qa+'/clinical-backup-restore.json',bytes);
+}
 await fs.writeFile(qa+'/clinical-dependency-binding.json',JSON.stringify(binding,null,2)+'\n');await fs.writeFile(qa+'/clinical-qualified-source-manifest.json',sourceBytes);console.log(binding);
