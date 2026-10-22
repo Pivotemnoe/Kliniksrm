@@ -430,6 +430,13 @@ export class AvitoService {
         await tx.avitoOutgoingOperation.update({ where: { id: op.id }, data: { status: 'CANCELLED', error: 'Диалог, режим или правила изменены' } }); return null;
       }
       const context = op.replyContext as { petService?: boolean; bookingIntent?: boolean; bookingChannel?: 'WEBSITE'; groomingAdministratorWindow?: string; administratorWorking: boolean; clinicPhone: string | null; crmSuffix: string; crmQuestions?: AvitoCrmQuestion[] } | null;
+      // A rollback cannot validate the forward version's catalogue fingerprint.
+      // Fail closed here, before transport, without modifying the intake/history.
+      if (context && (Object.prototype.hasOwnProperty.call(context, 'groomingPriceFingerprint') || Object.prototype.hasOwnProperty.call(context, 'groomingPricePrefix'))) {
+        await tx.avitoOutgoingOperation.update({ where: { id: op.id }, data: { status: 'CANCELLED', error: 'Ответ с ценой требует повторной проверки после отката версии.' } });
+        await tx.avitoConversation.update({ where: { id: c.id }, data: { needsAttention: true } });
+        return null;
+      }
       if (context?.groomingAdministratorWindow && context.groomingAdministratorWindow !== groomingAdministratorWindow(settings, this.now())) {
         await tx.avitoOutgoingOperation.update({ where: { id: op.id }, data: { status: 'CANCELLED', error: 'Рабочее время администратора изменилось. Нужен актуальный ответ.' } });
         await tx.avitoConversation.update({ where: { id: c.id }, data: { needsAttention: true } }); return null;

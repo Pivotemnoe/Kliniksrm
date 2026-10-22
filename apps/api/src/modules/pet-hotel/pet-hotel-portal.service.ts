@@ -5,6 +5,7 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { PrismaService } from '../../prisma/prisma.service';
 import { normalizePhoneForLookup } from '../../common/phone';
+import { bookingAttribution } from '../../common/booking-attribution';
 import { AuditService } from '../audit/audit.service';
 import { lockPetHotel, PetHotelService } from './pet-hotel.service';
 import { HotelOwnerBookDto, HotelOwnerCancelDto, HotelOwnerMoveDto, HotelOwnerOptionsDto, HotelOwnerPetDto } from './pet-hotel-portal.dto';
@@ -30,6 +31,12 @@ export class PetHotelOwnerService {
   }
   async execute(item: HotelOperation, now = new Date()) {
     if (!item.id || item.id.length > 120 || !item.ownerId || !item.input || Array.isArray(item.input)) throw new BadRequestException('Некорректный запрос гостиницы');
+    // Normalize exactly as the forward version before recovering its receipts.
+    if (item.kind === 'BOOK' || item.kind === 'RESCHEDULE') {
+      const { attribution, ...input } = item.input;
+      const accepted = bookingAttribution(attribution);
+      item = { ...item, input: { ...input, ...(accepted ? { attribution: accepted } : {}) } };
+    }
     const fingerprint = hash({ ownerId: item.ownerId, kind: item.kind, input: item.input }), receiptId = `pet-hotel:portal:${item.id}`;
     return this.prisma.$transaction(async tx => {
       await lockPetHotel(tx);

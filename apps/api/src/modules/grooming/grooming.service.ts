@@ -7,6 +7,7 @@ import { AuditService } from '../audit/audit.service';
 import { AuthEmployee } from '../auth/auth.types';
 import { ClinicModulesService } from '../clinic-modules/clinic-modules.service';
 import { normalizePhoneForLookup } from '../../common/phone';
+import { bookingAttribution } from '../../common/booking-attribution';
 import { queueGroomingStaffNotices, supersedeGroomingStaffNotices } from './grooming-staff-notifications.service';
 import { GroomingPriceImportDto, GroomingScheduleBatchDto, GroomingRulesBatchDto, GroomingBookDto, GroomingCancelDto, GroomingChangeDto, GroomingLocationDto, GroomingOptionsDto, GroomingPetDto, GroomingRuleDto, GroomingServiceDto, GroomingSettingsDto, GroomingSpecialistDto, GroomingStatusDto, GroomingWorkPeriodDto, GroomingWorkplaceDto } from './grooming.dto';
 
@@ -365,6 +366,9 @@ export class GroomingCrmService {
   }
   async book(ownerId: string, input: GroomingBookDto, now = new Date(), actor?: AuthEmployee, reschedule?: { id: string; version: number }) {
     if (!input.contactConsent || !input.bookingConsent) throw new BadRequestException('Подтвердите запись и разрешение на связь');
+    // Keep the forward-version receipt fingerprint for cached clients and retries.
+    // The rollback receiver accepts metadata without creating new source values.
+    input = { ...input, attribution: bookingAttribution(input.attribution) };
     const fingerprint = digest({ ownerId, input, actorId: actor?.id, reschedule });
     const receiptId = `grooming:${actor ? `staff:${actor.id}` : `owner:${ownerId}`}:${input.clientKey}`;
     return this.prisma.$transaction(async tx => {
@@ -392,7 +396,7 @@ export class GroomingCrmService {
         await tx.groomingNotification.updateMany({ where: { reservationId: current.id, status: { in: ['QUEUED', 'FAILED'] } }, data: { status: 'CANCELLED', lastError: 'Запись перенесена' } });
       }
       const data = { installationId: rule.installationId, ruleId: rule.id, ownerId, animalId: offer.animalId, employeeId: rule.specialist.employeeId, locationId: rule.locationId, workplaceId: rule.workplaceId, serviceTitle: rule.service.title, price: rule.service.price, priceType: rule.service.priceType, maximumPrice: rule.service.maximumPrice, species: offer.species, size: offer.size, coat: offer.coat, startsAt, endsAt, blockedUntil, notes: input.notes?.trim() || '', looks: json(input.looks || []), source: actor ? 'CRM' : 'CLIENT_PORTAL' };
-      const saved = current ? await tx.groomingReservation.update({ where: { id: current.id }, data: { ...data, version: { increment: 1 } }, include: bookingInclude }) : await tx.groomingReservation.create({ data, include: bookingInclude });
+      const saved = current ? await tx.groomingReservation.update({ where: { id: current.id }, data: { ...data, source: current.source, version: { increment: 1 } }, include: bookingInclude }) : await tx.groomingReservation.create({ data, include: bookingInclude });
       await this.queueNotifications(tx, saved, current ? 'RESCHEDULED' : 'CONFIRMED', now, current?.employeeId);
       await this.audit.log({ actorId: actor?.id, action: current ? 'grooming.reschedule' : 'grooming.book', entityType: 'GroomingReservation', entityId: saved.id, metadata: { ownerId, animalId: saved.animalId, source: saved.source, contactConsent: true, bookingConsent: true } }, tx);
       const result = json(publicBooking(saved));
