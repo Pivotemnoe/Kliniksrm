@@ -1,0 +1,45 @@
+{
+  "release": {
+    "status": "VERIFIED",
+    "revision": "c43e0e8c8dd46de80a4616072b1a8f9d2826d1c1",
+    "candidate": {
+      "api": "sha256:21a88ff19c54ac7f4c971faaf124c7f7789a3e81e5641e9f6f9c4f83babd40a6",
+      "web": "sha256:aba28d6835d3200b61b41b62b2f90bb5e5a44e234a3f9c496dcc78750cf2a5a2"
+    },
+    "backup": "C:/Users/TemichevVet/TemichevVet/backups/manual-releases/crm-pet-hotel-client-tariffs-20261023-r1",
+    "databaseSha256": "ca82f6b5a70da2d7a8ff867f6ac1807b358a20e001a5bd7a2e408582d346f5b7",
+    "restoreTested": true,
+    "rollbackRehearsed": true,
+    "protectedServices": 4,
+    "database": {
+      "applied": true,
+      "administratorCanManage": true
+    }
+  },
+  "acceptance": {
+    "at": "2026-10-23T10:08:57.479Z",
+    "administratorCanManage": true,
+    "testOwnerAndPetRemoved": true,
+    "testRoomRemoved": true,
+    "temporaryAdministratorBlocked": true,
+    "temporarySessions": 0,
+    "workingRooms": 12,
+    "workingRoomRatesPreserved": true,
+    "groomingSettingsPreserved": true,
+    "avitoSettingsPreserved": true,
+    "hotelSettingsHash": "6287f91e4e4f56d0c99cd655170a6dd8d8b4b2cf488aa6e71d89edb9b6bd55d4",
+    "moduleEnabled": true
+  },
+  "cleanup": {
+    "status": "ACCEPTANCE_CLEANED",
+    "temporaryAccessRevoked": true,
+    "testOwnerAndPetRemoved": true,
+    "inactiveTestRoomRemoved": true,
+    "workingRooms": 12,
+    "workingTariffsPreserved": true,
+    "auditRetained": true
+  },
+  "completedAt": "2026-10-23T09:56:58.4042025Z",
+  "rollbackInstructionExists": true,
+  "temporaryCredentialFileRemoved": true
+}

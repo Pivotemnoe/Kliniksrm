@@ -1,0 +1,420 @@
+{
+  "releaseId": "crm-pet-hotel-client-tariffs-20261023-r1",
+  "migration": "20261023080000_pet_hotel_administrator_settings",
+  "migrationSha256": "8ab7d3eafea859f1fcbe732f9705a072b5b76e5c49b02788eb4cb757e2f02e8c",
+  "adminHadManage": false,
+  "appliedMigrations": [
+    {
+      "migration_name": "20260528000100_init",
+      "checksum": "c934b3d3819ad86649cd379c4900c57dfde449c8f825f19de0415b6fcc5efb3b"
+    },
+    {
+      "migration_name": "20260528000200_queue_intake_animal_fields",
+      "checksum": "0a1c335b954af2496cb3a59f3ab12a6750660e35f85c6b3a1aafcc32cd552877"
+    },
+    {
+      "migration_name": "20260528000300_animal_catalog",
+      "checksum": "8a456942f4f31d8ee6b784525a501a70e81766b330026eb5248d17fb2be14c76"
+    },
+    {
+      "migration_name": "20260604000100_queue_call_state",
+      "checksum": "7fb47eac9795f7b501083e78561cc7308e0897e3719ee64579f604c003c807c1"
+    },
+    {
+      "migration_name": "20260604000200_task_role_assignment",
+      "checksum": "170a969a941d18390909594d7dd7d469dcde59578364d140bebfcc36eabf0678"
+    },
+    {
+      "migration_name": "20260604000300_vaccination_revaccination_tasks",
+      "checksum": "78422086f0fd4b98ade0af93cb8eb10dad062e3cbc63c5826a571848af0bfbe9"
+    },
+    {
+      "migration_name": "20260604000400_notifications_portal_foundation",
+      "checksum": "24d2933294754eb2799b7eeb526fb174bae146ebde7eb04eed27f6b7c63fbae2"
+    },
+    {
+      "migration_name": "20260605000100_employee_permission_overrides",
+      "checksum": "c8a348b4554f1c42d1eb2e333c26e9fdc8ea52e53300df66405d3112b34040fd"
+    },
+    {
+      "migration_name": "20260605000200_finance_payment_settings",
+      "checksum": "b98869a0a9b11ae47be03a8880392cf7f53d7f885ee8d207de23a2fa4453d513"
+    },
+    {
+      "migration_name": "20260605000300_online_appointment_requests",
+      "checksum": "1e9b7cdb7f5ebc8c267ee22f5f7b29a32fa821dd3866217eda631516ec8fb7ff"
+    },
+    {
+      "migration_name": "20260605000400_laboratory_catalog",
+      "checksum": "28132ed8412ec631dd94942625bb2b4636cb709bcb826ab503948d3ec9cbd43c"
+    },
+    {
+      "migration_name": "20260605000500_visit_laboratory_orders",
+      "checksum": "56a90fc94f00cc0fed86e2a4176b634743e23fb5fe8b5d02647c7e8764fa6074"
+    },
+    {
+      "migration_name": "20260605000600_stock_movement_bill_item",
+      "checksum": "c4112c0a9213b94d20549a1870cc3a4d28e43941277c1c5f4c66fe0625331159"
+    },
+    {
+      "migration_name": "20260605000700_clinic_office_working_hours",
+      "checksum": "7443a2007967dc9a4133896455017969722f9f021b4dd069de499b1ba6a412ee"
+    },
+    {
+      "migration_name": "20260605000800_internal_news",
+      "checksum": "3006b15163c89fc87cf9102119f9aee525be88fb048f007a2cdd686b32774ce2"
+    },
+    {
+      "migration_name": "20260605000900_employee_default_route",
+      "checksum": "e8220205ab7dbcd450575ff92f15ed1b22f6a284e9f3360f378556e7cdd53f10"
+    },
+    {
+      "migration_name": "20260605001000_employee_warehouse_access",
+      "checksum": "2697e88c1809c30de1db7da0fd70fdeae9166b215dcd48b911a49bfb026b210a"
+    },
+    {
+      "migration_name": "20260605001100_bill_due_at",
+      "checksum": "ed58733df6e902a155c89e5b910449ce0dcff31d0a045d0952b8aec3dd17c2fd"
+    },
+    {
+      "migration_name": "20260605001200_default_bill_due_days",
+      "checksum": "e4c35b09f2de1b3c4c66f5318e873d9d45719d8edea7ef56f1d30ac1d6db7c02"
+    },
+    {
+      "migration_name": "20260605001300_client_portal_phone_login",
+      "checksum": "8150c313f83defb461f368dadd9a5681295d752e381254b14865922ab3df9ec7"
+    },
+    {
+      "migration_name": "20260615000100_queue_owner_address",
+      "checksum": "3a0bf11673080fddfbb409f3f204731f7196a399baae49ac8f6a1c53956289e1"
+    },
+    {
+      "migration_name": "20260615000200_owner_phone_normalization",
+      "checksum": "c4c85c93a921458241905cba7f5e5045982e3b6b52364ce2ecb200bd5fe4b9fc"
+    },
+    {
+      "migration_name": "20260619000100_medical_phrases",
+      "checksum": "64e9125b779d26210e3766973c4141d8875c9949158b52f0d9494b0063484c40"
+    },
+    {
+      "migration_name": "20260619000200_medical_phrase_management",
+      "checksum": "c77502dd3a7ece071bb87af95883cce93fbdabc19a523375d09d07703f8150ea"
+    },
+    {
+      "migration_name": "20260621000100_user_phone_normalization",
+      "checksum": "d70b00a86c1e2de208fc4f09c3fa9b5c6edfb49152ef5aa24e11a962e13f9bf6"
+    },
+    {
+      "migration_name": "20260624000100_employee_shifts",
+      "checksum": "fdd7cd53eb0637c1f511a0e5bea4cd91a98c323be42e01293270da4b170a212f"
+    },
+    {
+      "migration_name": "20260722000100_visit_type",
+      "checksum": "8a39d2e84dfb6c24ec25c078b6d2af211fed3fce29f9a68fc05819fdca05183e"
+    },
+    {
+      "migration_name": "20260724000100_messenger_reminders",
+      "checksum": "f85c9a4c6f0114183199ccce7c0ea5106c2e6c59baea2af54e6c180b7f5fcc78"
+    },
+    {
+      "migration_name": "20260725000100_data_transfer_batches",
+      "checksum": "7496395be9dc66569217f91532ba15019fdebe4796e27912277e5ece45166dbb"
+    },
+    {
+      "migration_name": "20260726000100_payroll_and_advanced_stock",
+      "checksum": "f4c616ec81e5d557e26cf9ed5987ffab8ece064e1aff98192112144742f17ca5"
+    },
+    {
+      "migration_name": "20260726000200_business_management",
+      "checksum": "bde48b9fca683bc287e5640a00562887f46cd21f9649eaed07622bd99a4cc75d"
+    },
+    {
+      "migration_name": "20260726000300_support_license_acceptance",
+      "checksum": "5dc5af7ffd09aad6f3590c6d36844355ad57e5f8fb23d65fceb74d75398a2323"
+    },
+    {
+      "migration_name": "20260727000100_hospital_records",
+      "checksum": "0107a063a06d3013e9c6b8803acef63056089e2b5bbf4443fe13979f2fc51d13"
+    },
+    {
+      "migration_name": "20260728000100_hospital_stay_lifecycle",
+      "checksum": "7102682a60316422f3e87ca85fbdced0c86f0c4769804a7a74230b671065fc7f"
+    },
+    {
+      "migration_name": "20260728000200_product_default_expiry",
+      "checksum": "6ca389aa26f2e3f9a5c24bbc43e944f64792070c71225c404d322fb390eae022"
+    },
+    {
+      "migration_name": "20260728000300_doctor_owner_permissions",
+      "checksum": "a3bd63bc487878140193ba17c7771399859c9b46b57c6238dcafe689ce2ef6e4"
+    },
+    {
+      "migration_name": "20260728000400_billing_and_stock_quantities",
+      "checksum": "db6b44f8c64459b185f66caac57cae48ce5fdfa161de85135e1f7c16df432d32"
+    },
+    {
+      "migration_name": "20260729000100_files_and_product_barcodes",
+      "checksum": "74f131bc337c56d6593be8f9bcd4202ff4699082faae94a0a888d849a3a5e1d9"
+    },
+    {
+      "migration_name": "20260730000100_owner_gateway_booking_and_barcode_normalization",
+      "checksum": "6c780292bbebde7aaa5fa7a94f5fb34f5adadd1d6d86c5ba33eb53547d51daba"
+    },
+    {
+      "migration_name": "20260730000200_supplier_invoice_employee_workflows",
+      "checksum": "4a6231e0061825623c35d16621e20d7947f90c6a12c052fd4f4ca25242c6a1b7"
+    },
+    {
+      "migration_name": "20260730000300_hospital_record_billing",
+      "checksum": "a061d0d0f64f261eeed1c2053bd16139f37eab786f54c1b2208bb3178d019f0c"
+    },
+    {
+      "migration_name": "20260801000100_remote_director_access",
+      "checksum": "6f0f1d478d7f48c4a0a8773babe16c03407cb708840a5f1784e2cac1ef52c699"
+    },
+    {
+      "migration_name": "20260801000200_organization_logo",
+      "checksum": "b13fe475913b5f374e1a7257352145b9837917983c63998a50c64749f8a92921"
+    },
+    {
+      "migration_name": "20260803000100_hospital_full_sheet",
+      "checksum": "388dd95e881bb21b88c78cb3e54ab790998293fc2f9a71ad0853638bd8e904d3"
+    },
+    {
+      "migration_name": "20260804000100_hospital_treatment_plans",
+      "checksum": "65ca1b41be6a28212762c312c0d53d42fa03787806f500612eb046e2a2207670"
+    },
+    {
+      "migration_name": "20260804000200_hospital_planned_catalog_items",
+      "checksum": "bc70fe16830b0079e8ac40cf8d24ca11e1bc7828741ca9443d477ccc82cdc312"
+    },
+    {
+      "migration_name": "20260804000300_documents_2_foundation",
+      "checksum": "08ec63802ab4eeab180f74bb969845a1f7589f4436ecfe36e3a51f65cdc01f55"
+    },
+    {
+      "migration_name": "20260805000100_stock_retail_price_at_inventory",
+      "checksum": "a5783404af2ad78fcffd121df0bee94f675d9f453f26214941fc19f28754fef5"
+    },
+    {
+      "migration_name": "20260806000100_supply_invoice_receipt_units",
+      "checksum": "57184b001c20afbe0e124e126104d8945f29fc1bcb68226fc61b89aef627945e"
+    },
+    {
+      "migration_name": "20260806000200_document_template_signature_rule",
+      "checksum": "e3496c297cf703fa89b42806e650d66b50a4dfe431b5fd255faf4ffdc016670b"
+    },
+    {
+      "migration_name": "20260807000100_staff_alerts_internal_messages",
+      "checksum": "9198d8bc826b9dcd48fb16beb435983744dafa1db132bb43e0fc0d8eefaa9b4f"
+    },
+    {
+      "migration_name": "20260807000200_catalog_item_archiving",
+      "checksum": "61f173eef5d0767000f41ce02683c63069cf8a553294ea5eada40f86ddaf5039"
+    },
+    {
+      "migration_name": "20260807000300_visit_overdue_alerts",
+      "checksum": "6309030d15b26d94d40b595d96f7dc9b2cdc9c77b8ae145ba72125d26ea7afd0"
+    },
+    {
+      "migration_name": "20260807000400_service_price_ranges",
+      "checksum": "f5d300c9e63afa0c6e4fe6616179b3bb5a917771b4ba95917786e5a0e58287dc"
+    },
+    {
+      "migration_name": "20260807000500_temporary_employee_passwords",
+      "checksum": "baf6e36dde03d858f8e7f5933f50eea84dff99d96b19571fce0cfbe452d84eca"
+    },
+    {
+      "migration_name": "20260808000100_payroll_manual_accruals",
+      "checksum": "b948931ad08cd69660f6370e50d8d66e1a0f1c8cc6a065ad6d364e78fb3606dd"
+    },
+    {
+      "migration_name": "20260810000100_document_editor_archive_assistant",
+      "checksum": "c1588890e7989ed84a74a20fd7e7630bdb99ce0cc9f3bc7c899fe2d0d27db6b6"
+    },
+    {
+      "migration_name": "20260810000200_business_close_resolution",
+      "checksum": "6db32599938f74acdcf198d4c4915cd636f2a6a20b948093312aacc565ad1506"
+    },
+    {
+      "migration_name": "20260810000300_staff_remote_read_only",
+      "checksum": "7df7c39b6ea9088f529f292ffab8007a0cf46e1be2344a8bbef91052cc5ada99"
+    },
+    {
+      "migration_name": "20260811000100_business_entry_corrections_and_expense_categories",
+      "checksum": "26bf8dbe5c03178755ce739879cb7c6ff2665e43d9c9cf936876db25aabda561"
+    },
+    {
+      "migration_name": "20260812000100_vtf_templates_reports_and_daily_briefing",
+      "checksum": "4f3dd4b66177865d1be32bd667c6badaac7e9d40ccac2e667a339b5a9d92cbee"
+    },
+    {
+      "migration_name": "20260812000200_animal_archive",
+      "checksum": "dfff141952e3180b8168b072d5dd8511b764d259d2a88323f68938ccc522ebd8"
+    },
+    {
+      "migration_name": "20260812000300_defer_bill_stock_writeoff_until_paid",
+      "checksum": "72a5b665135206c3ad60b994dac4d126706a6e8e539a0a757062b6892ea233d8"
+    },
+    {
+      "migration_name": "20260812000400_laboratory_green_disk_results",
+      "checksum": "ae516838af81af4be36b364f8e1153942bcaaf733e6f293625362b7fa9797ca5"
+    },
+    {
+      "migration_name": "20260814000100_laboratory_test_document_forms",
+      "checksum": "a31ad78de3fc763225348e466d46060d327b7dee65a721c61a7ddc7270fe5787"
+    },
+    {
+      "migration_name": "20260815000100_visit_operation_type",
+      "checksum": "00166f7c8fa8076b97f2796e98ea5bd1d74fe66ae563c6969f7fa424d09183dd"
+    },
+    {
+      "migration_name": "20260816000100_hospital_execution_and_vaccination_queue",
+      "checksum": "1c869cbc5a693099bd805d718a00a82f64b5540f9cd4754c025da1e1e03cca90"
+    },
+    {
+      "migration_name": "20260817000100_hospital_bill_continuation",
+      "checksum": "57b49b96d851d18b1fba69e310297c2f1f86d78992e87f08592377fb7a1ee8dd"
+    },
+    {
+      "migration_name": "20260820000200_queue_workstations",
+      "checksum": "4c68ba6e1f12f1d5946942005fa5936877df4fc88984ca7aa16f8f7b1f4c9886"
+    },
+    {
+      "migration_name": "20260820000300_store_catalog",
+      "checksum": "018289da9fcdb87186ded3e9369e009e8cd799c29b1d6409f0fb80a27bb8d1ea"
+    },
+    {
+      "migration_name": "20260820000400_visit_post_operation_type",
+      "checksum": "b8e715cc68634e3fdfeffe60ccd129cd8823c6bb2add585607120a94c58b53f1"
+    },
+    {
+      "migration_name": "20260825000100_doctor_payment_permission",
+      "checksum": "2efbd16d4177c96571896f146cfb6f6e1276000ef5d7edf80290265564a3ad28"
+    },
+    {
+      "migration_name": "20260826000100_hospital_daily_rates_and_linked_products",
+      "checksum": "7ca6a68a8be2419c8c607f544bb138158c024f91551c97cd6882716496722cb1"
+    },
+    {
+      "migration_name": "20260827000100_vaccination_visit_workflow",
+      "checksum": "42251fcfc3b39efa1ef5a1df509cfb39e47a150b57c9a7cf8264d5a9308e82ca"
+    },
+    {
+      "migration_name": "20260903000100_payroll_undistributed_amount",
+      "checksum": "ee21d2328f7301e7f427bff04533f46b6d051962eafe2aa87f2641605766163c"
+    },
+    {
+      "migration_name": "20260905130000_public_service_catalog",
+      "checksum": "179cb9c0b515b7d5d8db0034e1cd56383606a5758944727942265c02d8739b6a"
+    },
+    {
+      "migration_name": "20260916000100_silent_practice_collection",
+      "checksum": "80c58147191f56178396c20b38c0d5b9f6bf8c0ec0dc8abbf2b4fc62a27ae791"
+    },
+    {
+      "migration_name": "20260924000100_distinct_phrase_learning",
+      "checksum": "7f95f8c08d0fc1f64f1ccde3b5f8b441de4e461f12a463280358b871a322f742"
+    },
+    {
+      "migration_name": "20260929000100_local_address_catalog",
+      "checksum": "4aa177322105c8799c7edc6879ac6225c06a56d9cf02aef66e45b2d659c30406"
+    },
+    {
+      "migration_name": "20260929000200_hospital_care_and_billing",
+      "checksum": "08440a53af9768134403702f9a20af3d69fa714b443bca8565d70cc57f242129"
+    },
+    {
+      "migration_name": "20261008000400_supply_totals_consumable_ranges",
+      "checksum": "40d1da82732c37ae370c00d68c55c245966ea001ab8ee6d0f4b83a285b4d5ded"
+    },
+    {
+      "migration_name": "20261008000600_shared_consumable_rules",
+      "checksum": "3b3dc48098b981761e6d4f18bb121922a61d7ae96c85c0ad1e2b1841c2495094"
+    },
+    {
+      "migration_name": "20261008000100_online_request_attention",
+      "checksum": "c847e4179c1d7523e93bef629a08c5ab0148289b39065dd154a662b1d4b4764e"
+    },
+    {
+      "migration_name": "20261008000200_clinic_assistant",
+      "checksum": "7d434e5493762a23f8988d575e624278f4d4f37a8922f1a5842336e60caae509"
+    },
+    {
+      "migration_name": "20261008000300_conversation_episodes",
+      "checksum": "06664d5c9f44ede22e1c43daf2d1ce5613579c47869cbd122b43bbc0b3ab65f5"
+    },
+    {
+      "migration_name": "20261008000400_assistant_booking_rules",
+      "checksum": "e94c4ffb861c325d318fc8db686c1f8ee6365de9e4724a5fe02ea29bd85560b1"
+    },
+    {
+      "migration_name": "20261008000500_assistant_reminder_sources",
+      "checksum": "01277d8e6b445b0e4a6477e109c701604410eb0ad80095c4a82eb0964c82a174"
+    },
+    {
+      "migration_name": "20261015000100_monthly_prevention_reports",
+      "checksum": "474ac0d815494a38e5369a156f319372ea43f2ae863a8d9b2cc3945d5146bc01"
+    },
+    {
+      "migration_name": "20261016000100_prevention_report_admin_access",
+      "checksum": "72e400decf87589a4bbcba5d21182c575c3c95937c42ef9a96c8571d76efa65c"
+    },
+    {
+      "migration_name": "20261018000100_online_request_soft_delete",
+      "checksum": "c47b72b0b2ef208dbb5357f5beacc3db0940bc483f29432d95ac441fcc6f0dab"
+    },
+    {
+      "migration_name": "20261019000100_general_consumable_bindings",
+      "checksum": "67ca1f207098236a6147093c785ecacab925f5da8edb9e8fa35daf765e306429"
+    },
+    {
+      "migration_name": "20261019160000_clinic_module_registry",
+      "checksum": "ebe5122f2222803c5d0680b606d62cec578446d2e5a088029d27a9868cda4c30"
+    },
+    {
+      "migration_name": "20261019170000_grooming_crm",
+      "checksum": "8a8114d55feb8b98089a89101238c35fe5a2e55fcaee1df5ac63768c5da37757"
+    },
+    {
+      "migration_name": "20261019203000_grooming_staff_pwa",
+      "checksum": "0d93227d4f69ae38dc1ed69d96d27053bef143a863ac0c1198fbc69e681f15b5"
+    },
+    {
+      "migration_name": "20261020090000_avito_clinic_module",
+      "checksum": "c704524d9cdf23f7a70e461460a82422399305aba4783107b7d3ac535a9e3dea"
+    },
+    {
+      "migration_name": "20261020140000_avito_listing_snapshot",
+      "checksum": "881292896d4a054739a41877a692df2dc13990e8734fdc9c77cc5ba70fb43d86"
+    },
+    {
+      "migration_name": "20261020130000_grooming_price_catalog",
+      "checksum": "63ff17554a95f3aad05b3f2665a308523ecb9f2075b4e1dc0684bac5096459f2"
+    },
+    {
+      "migration_name": "20261020160000_grooming_independent_team",
+      "checksum": "6a7e76261b48cc8ad60ff9b96e43e4ab66de59cfcb47efe04f5b4d8a63e1a326"
+    },
+    {
+      "migration_name": "20261020163000_grooming_workplace_schedule",
+      "checksum": "3b3e49e23722fa7cdbd17fd17cbcf27bfb9b0b0b3cebc877e85180ad1b0ad768"
+    },
+    {
+      "migration_name": "20261020130000_pet_hotel_module",
+      "checksum": "d43f0c3d32848c62d51f56b23770898b9b6313b3500ee08cb98b387a9ff2e9d3"
+    },
+    {
+      "migration_name": "20261020203000_pet_hotel_owner_booking",
+      "checksum": "f3c5955f3bd8c1d424a0c7bfcde9f553c0c4753af56d3eb96f4adfbbcb460fbf"
+    },
+    {
+      "migration_name": "20261022080000_pet_service_booking_attribution",
+      "checksum": "b2493c51ad78ed0f4d5b34292465477c996ecea139d0a44d817d3cfba0aa83df"
+    },
+    {
+      "migration_name": "20261022113000_workstation_reception",
+      "checksum": "8cd83ae22d48a71ddceb37bcada897a0df2cd517419430ef069406a739dd0de6"
+    }
+  ]
+}

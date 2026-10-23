@@ -1,0 +1,239 @@
+{
+  "releaseId": "crm-pet-hotel-client-tariffs-20261023-r1",
+  "revision": "c43e0e8c8dd46de80a4616072b1a8f9d2826d1c1",
+  "webBaseRevision": "e24cf535e6a1267cb2819cccc2cc820ccfda9faa",
+  "previous": {
+    "api": {
+      "name": "/clinic-crm-api",
+      "id": "9f2216d1bdaf6ace3c543fb802c848ae81a933ca70f1e864eeaf2666a1b2099c",
+      "image": "sha256:186264d10d15d3b30944dcf7ff49057f1424a722eafbe74b03d0895c3029c0f6",
+      "reference": "temichevvet-crm-api:avito-grooming-dialogue-r2-13d85eb",
+      "startedAt": "2026-10-23T09:42:45.18965536Z",
+      "running": true,
+      "project": "temichevvet",
+      "source": [
+        "CRM_SOURCE_VERSION=7e4f6b0e946b2266147adcc429eb4ecc50f8ab50"
+      ]
+    },
+    "web": {
+      "name": "/clinic-crm-web",
+      "id": "36ee97f7da3d67eb904cdc476ba8c7efdebae2b13b212019e408f331aa7baa9b",
+      "image": "sha256:cdebb57256a22cfe1b646f2e0dd8bf72660acd4144b1d7f6cb406f980283068d",
+      "reference": "temichevvet-crm-web:workstation-settings-20261022",
+      "startedAt": "2026-10-23T09:42:45.178180085Z",
+      "running": true,
+      "project": "temichevvet",
+      "source": []
+    }
+  },
+  "candidate": {
+    "api": {
+      "reference": "temichevvet-crm-api:hotel-client-tariffs-c43e0e8-r1"
+    },
+    "web": {
+      "reference": "temichevvet-crm-web:hotel-client-tariffs-c43e0e8-r1"
+    }
+  },
+  "protected": [
+    {
+      "name": "/clinic-crm-postgres",
+      "id": "67bf978cfa17290f016b0b163380eb3e76f61ed76eed8dfe21b946836ad90317",
+      "image": "sha256:075f7ba66bc9b3ce7d6b8b635208ff61cd7cf1a67d71ec530eec5d7ae0cbe571",
+      "reference": "postgres:16-alpine",
+      "startedAt": "2026-10-23T09:42:45.169230859Z",
+      "running": true,
+      "project": "temichevvet",
+      "source": []
+    },
+    {
+      "name": "/clinic-crm-redis",
+      "id": "6fc8c65eef818d8d805186645aecf1d0eb1c8bf0e4b83a21befc751b48da3a76",
+      "image": "sha256:9702d01c1f10c3ea9f48211b4362e44f154ff02d063e6f7268eba804059f53bf",
+      "reference": "redis:7-alpine",
+      "startedAt": "2026-10-23T09:42:45.167852845Z",
+      "running": true,
+      "project": "temichevvet",
+      "source": []
+    },
+    {
+      "name": "/clinic-crm-minio",
+      "id": "be0ee07f181ef7a6f767d9d78ca1fe7680462522d2ae4e82edea8d1f5d47d74d",
+      "image": "sha256:a1a8bd4ac40ad7881a245bab97323e18f971e4d4cba2c2007ec1bedd21cbaba2",
+      "reference": "minio/minio:latest",
+      "startedAt": "2026-10-23T09:42:45.166570152Z",
+      "running": true,
+      "project": "temichevvet",
+      "source": []
+    },
+    {
+      "name": "/clinic-crm-backup",
+      "id": "a11643cb51883f17746cbc1941b8300c2eaff9f4b6321ff750f14b89cf976639",
+      "image": "sha256:7a396fd264a2067788b6551122b50f162bf6136312c7fc9d74381cb92c648382",
+      "reference": "postgres:16-alpine",
+      "startedAt": "2026-10-23T09:42:45.177063491Z",
+      "running": true,
+      "project": "temichevvet",
+      "source": []
+    }
+  ],
+  "configuration": [
+    {
+      "sha256": "75db2be162eea884b606242386a7a695e7cef48695f55d603eb623af4e782218",
+      "name": ".env"
+    },
+    {
+      "sha256": "f80868a98fc4c46f4858a7370b082cece0e2346cd6ac521ca34c4a84a64bb1b3",
+      "name": ".env.runtime"
+    },
+    {
+      "sha256": "e5d309999381e0590c03c2b63f925daed741af12b24932b45f35ae7bc19c9804",
+      "name": "docker-compose.yml"
+    },
+    {
+      "sha256": "d2dccf86f3e4fb8068d5d30bf673ccc88171bee8600272441fa88aea7fe962f0",
+      "name": "diagnostics/bin/system-diagnostics-config.json"
+    }
+  ],
+  "migration": "20261023080000_pet_hotel_administrator_settings",
+  "migrationSha256": "8ab7d3eafea859f1fcbe732f9705a072b5b76e5c49b02788eb4cb757e2f02e8c",
+  "allowedApiPaths": [
+    "/app/apps/api/dist/modules/pet-hotel/pet-hotel.controller.js",
+    "/app/apps/api/dist/modules/pet-hotel/pet-hotel.controller.js.map",
+    "/app/apps/api/dist/modules/pet-hotel/pet-hotel.controller.d.ts",
+    "/app/apps/api/dist/modules/pet-hotel/pet-hotel.dto.js",
+    "/app/apps/api/dist/modules/pet-hotel/pet-hotel.dto.js.map",
+    "/app/apps/api/dist/modules/pet-hotel/pet-hotel.dto.d.ts",
+    "/app/apps/api/dist/modules/pet-hotel/pet-hotel.service.js",
+    "/app/apps/api/dist/modules/pet-hotel/pet-hotel.service.js.map",
+    "/app/apps/api/dist/modules/pet-hotel/pet-hotel.service.d.ts"
+  ],
+  "host": "WIN-I123AM83GR4",
+  "root": "C:/Users/TemichevVet/TemichevVet",
+  "baselineRooms": [
+    {
+      "id": "eeb4cb70-fb75-44ca-9d73-a726ada24bd3",
+      "code": "CAT-1",
+      "name": "Номер №1 для кошки",
+      "species": "CAT",
+      "isActive": true,
+      "dailyRate": null,
+      "sortOrder": 1,
+      "version": 1
+    },
+    {
+      "id": "d56fcb58-c242-4e14-9d24-45db76ec0351",
+      "code": "CAT-2",
+      "name": "Номер №2 для кошки",
+      "species": "CAT",
+      "isActive": true,
+      "dailyRate": null,
+      "sortOrder": 2,
+      "version": 1
+    },
+    {
+      "id": "317d5292-b826-4a44-9456-c77f4550e553",
+      "code": "CAT-3",
+      "name": "Номер №3 для кошки",
+      "species": "CAT",
+      "isActive": true,
+      "dailyRate": null,
+      "sortOrder": 3,
+      "version": 1
+    },
+    {
+      "id": "ee4fd3e1-b14a-43a2-9cf9-8d01fcc5fd51",
+      "code": "CAT-4",
+      "name": "Номер №4 для кошки",
+      "species": "CAT",
+      "isActive": true,
+      "dailyRate": null,
+      "sortOrder": 4,
+      "version": 1
+    },
+    {
+      "id": "f7424de1-09cc-4184-9658-86711ce59bf6",
+      "code": "CAT-5",
+      "name": "Номер №5 для кошки",
+      "species": "CAT",
+      "isActive": true,
+      "dailyRate": null,
+      "sortOrder": 5,
+      "version": 1
+    },
+    {
+      "id": "2831d30a-0ddd-48de-a193-7ca9a0fb4f53",
+      "code": "CAT-6",
+      "name": "Номер №6 для кошки",
+      "species": "CAT",
+      "isActive": true,
+      "dailyRate": null,
+      "sortOrder": 6,
+      "version": 1
+    },
+    {
+      "id": "0a0253bf-5a28-4e57-b362-901e5b2b4ec4",
+      "code": "CAT-7",
+      "name": "Номер №7 для кошки",
+      "species": "CAT",
+      "isActive": true,
+      "dailyRate": null,
+      "sortOrder": 7,
+      "version": 1
+    },
+    {
+      "id": "91e841ea-aaf0-4f4d-89ff-4a6a1cd34af9",
+      "code": "CAT-8",
+      "name": "Номер №8 для кошки",
+      "species": "CAT",
+      "isActive": true,
+      "dailyRate": null,
+      "sortOrder": 8,
+      "version": 1
+    },
+    {
+      "id": "7d133702-4934-4d82-8076-7ecdf9bd5480",
+      "code": "DOG-1",
+      "name": "Номер №1 для собаки",
+      "species": "DOG",
+      "isActive": true,
+      "dailyRate": null,
+      "sortOrder": 101,
+      "version": 1
+    },
+    {
+      "id": "46906f82-0d69-4481-9131-15b40d11b033",
+      "code": "DOG-2",
+      "name": "Номер №2 для собаки",
+      "species": "DOG",
+      "isActive": true,
+      "dailyRate": null,
+      "sortOrder": 102,
+      "version": 1
+    },
+    {
+      "id": "b696debc-423e-4846-b019-2cf8c9d4c688",
+      "code": "DOG-3",
+      "name": "Номер №3 для собаки",
+      "species": "DOG",
+      "isActive": true,
+      "dailyRate": null,
+      "sortOrder": 103,
+      "version": 1
+    },
+    {
+      "id": "26a08561-2947-487f-af25-792e661e9bf9",
+      "code": "DOG-4",
+      "name": "Номер №4 для собаки",
+      "species": "DOG",
+      "isActive": true,
+      "dailyRate": null,
+      "sortOrder": 104,
+      "version": 1
+    }
+  ],
+  "guards": {
+    "groomingSettingsSha256": "698a5fbef04725331fbf95b903dd131958487c4bfacfadd0f2864cf7996ca529",
+    "avitoSettingsSha256": "319d6d4c2af1e6777394112d554825fdbc7e5bec554dcf134883fb4819e35b2e"
+  },
+  "engineRecoveredAt": "2026-10-23T09:44:02.606Z"
+}

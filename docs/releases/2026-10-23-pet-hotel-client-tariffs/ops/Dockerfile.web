@@ -1,0 +1,4 @@
+FROM temichevvet-crm-web:workstation-settings-20261022
+COPY web/ /usr/share/nginx/html/
+COPY web/assets/ /opt/temichevvet-web-assets/
+LABEL io.temichevvet.release="crm-pet-hotel-client-tariffs-20261023-r1" io.temichevvet.component-source="c43e0e8c8dd46de80a4616072b1a8f9d2826d1c1"

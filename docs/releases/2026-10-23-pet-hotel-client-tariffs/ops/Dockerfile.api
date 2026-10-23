@@ -1,0 +1,4 @@
+FROM temichevvet-crm-api:avito-grooming-dialogue-r2-13d85eb
+COPY api/ /app/apps/api/dist/modules/pet-hotel/
+COPY migration/ /app/prisma/migrations/
+LABEL io.temichevvet.release="crm-pet-hotel-client-tariffs-20261023-r1" io.temichevvet.component-source="c43e0e8c8dd46de80a4616072b1a8f9d2826d1c1"
