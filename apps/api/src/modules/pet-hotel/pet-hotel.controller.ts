@@ -4,7 +4,7 @@ import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { AuthEmployee } from '../auth/auth.types';
 import { PetHotelService } from './pet-hotel.service';
-import { PetHotelBookingDto, PetHotelChangeDto, PetHotelRoomDto, PetHotelSettingsDto, PetHotelSetupDto, PetHotelStatusDto } from './pet-hotel.dto';
+import { PetHotelAnimalDto, PetHotelBookingDto, PetHotelChangeDto, PetHotelClientDto, PetHotelRoomDto, PetHotelSettingsDto, PetHotelSetupDto, PetHotelStatusDto } from './pet-hotel.dto';
 class AvailabilityDto extends PetHotelBookingDto { @IsOptional() @IsString() reservationId?: string; }
 
 @Controller('v1/pet-hotel')
@@ -15,6 +15,8 @@ export class PetHotelController {
   @Get('bookings') bookings(@Query('from') from?: string, @Query('to') to?: string) { return this.service.bookings(from, to); }
   @Get('bookings/:id') booking(@Param('id') id: string) { return this.service.booking(id); }
   @Get('clients') clients(@Query('search') search?: string) { return this.service.clients(search); }
+  @Post('clients') @RequirePermissions('pet_hotel.operate') createClient(@Body() dto: PetHotelClientDto, @CurrentEmployee() actor: AuthEmployee) { return this.service.registerClient(dto, actor); }
+  @Post('clients/:ownerId/animals') @RequirePermissions('pet_hotel.operate') addAnimal(@Param('ownerId') ownerId: string, @Body() dto: PetHotelAnimalDto, @CurrentEmployee() actor: AuthEmployee) { return this.service.registerClient(dto, actor, ownerId); }
   @Get('notifications') notifications() { return this.service.notifications(); }
   @Post('availability') @RequirePermissions('pet_hotel.operate') availability(@Body() dto: AvailabilityDto) { return this.service.availability(dto); }
   @Post('bookings') @RequirePermissions('pet_hotel.operate') book(@Body() dto: PetHotelBookingDto, @CurrentEmployee() actor: AuthEmployee) { return this.service.book(dto, actor); }

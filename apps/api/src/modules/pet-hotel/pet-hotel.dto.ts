@@ -1,6 +1,21 @@
-import { ArrayMaxSize, ArrayUnique, IsArray, IsBoolean, IsIn, IsInt, IsISO8601, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { ArrayMaxSize, ArrayUnique, IsArray, IsBoolean, IsEmail, IsIn, IsInt, IsISO8601, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { bookingAttribution, BookingAttribution } from '../../common/booking-attribution';
+
+export class PetHotelAnimalDto {
+  @IsString() @MinLength(8) @MaxLength(100) clientKey!: string;
+  @IsString() @MinLength(1) @MaxLength(120) nickname!: string;
+  @IsIn(['CAT', 'DOG']) species!: string;
+  @IsOptional() @IsString() @MaxLength(120) breed?: string;
+  @IsOptional() @IsIn(['MALE', 'FEMALE', 'UNKNOWN']) sex?: 'MALE' | 'FEMALE' | 'UNKNOWN';
+  @IsOptional() @IsISO8601({ strict: true }) @Matches(/^\d{4}-\d{2}-\d{2}$/) birthDate?: string;
+}
+export class PetHotelClientDto extends PetHotelAnimalDto {
+  @IsString() @MinLength(2) @MaxLength(200) fullName!: string;
+  @IsOptional() @IsString() @MaxLength(32) phone?: string;
+  @IsOptional() @IsEmail() @MaxLength(200) email?: string;
+  @IsOptional() @IsString() @MaxLength(500) address?: string;
+}
 
 export class PetHotelBookingDto {
   @IsOptional() @Transform(({ value }) => bookingAttribution(value)) attribution?: BookingAttribution;

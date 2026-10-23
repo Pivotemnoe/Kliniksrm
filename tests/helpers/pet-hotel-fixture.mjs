@@ -11,10 +11,11 @@ export const qaPassword = 'LocalHotel2026!';
 export const hotelDb = name => `postgresql://grooming_module_qa:synthetic-grooming-only@127.0.0.1:55440/${name}`;
 export function assertHotelDatabase(url, preview = false) {
   const u = new URL(url);
-  if (u.hostname !== '127.0.0.1' || u.port !== '55440' || u.username !== 'grooming_module_qa' || u.pathname !== `/${preview ? 'pet_hotel_preview_20261020_qa' : 'pet_hotel_tests_20261020_qa_v2'}`) throw Error('Only the dedicated synthetic pet hotel database is allowed');
+  const names = preview ? ['pet_hotel_preview_20261020_qa', 'pet_hotel_client_tariffs_preview_20261023_qa'] : ['pet_hotel_tests_20261020_qa_v2'];
+  if (u.hostname !== '127.0.0.1' || u.port !== '55440' || u.username !== 'grooming_module_qa' || !names.some(name => u.pathname === `/${name}`)) throw Error('Only the dedicated synthetic pet hotel database is allowed');
 }
-export async function hotelFixture({ preview = false } = {}) {
-  const url = hotelDb(preview ? 'pet_hotel_preview_20261020_qa' : 'pet_hotel_tests_20261020_qa_v2'); assertHotelDatabase(url, preview);
+export async function hotelFixture({ preview = false, databaseName } = {}) {
+  const url = hotelDb(databaseName || (preview ? 'pet_hotel_preview_20261020_qa' : 'pet_hotel_tests_20261020_qa_v2')); assertHotelDatabase(url, preview);
   const prisma = new PrismaClient({ datasources: { db: { url } } });
   if (!preview) { await prisma.petHotelNotification.deleteMany(); await prisma.petHotelCommandReceipt.deleteMany(); await prisma.petHotelReservation.deleteMany(); await prisma.petHotelRoom.deleteMany(); await prisma.petHotelSettings.deleteMany(); }
   await prisma.organization.upsert({ where: { id: 'hotel-module-unit-qa-org' }, create: { id: 'hotel-module-unit-qa-org', displayName: 'Тест зоогостиницы · синтетические данные' }, update: {} });
@@ -23,7 +24,7 @@ export async function hotelFixture({ preview = false } = {}) {
   for (const [label, code, fullName] of [['director','director','Директор · локальная проверка'], ['administrator','administrator','Администратор · локальная проверка'], ['viewer','pet_hotel_qa_viewer','Наблюдатель · локальная проверка'], ['groomer','groomer','Грумер · локальная проверка']]) {
     const role = await prisma.role.upsert({ where: { code }, create: { code, title: fullName }, update: {} });
     if (['director','administrator'].includes(label)) {
-      const codes=label==='director'?['pet_hotel.read','pet_hotel.operate','pet_hotel.manage','modules.manage']:['pet_hotel.read','pet_hotel.operate'];
+      const codes=label==='director'?['pet_hotel.read','pet_hotel.operate','pet_hotel.manage','modules.manage']:['pet_hotel.read','pet_hotel.operate','pet_hotel.manage'];
       for(const code of codes){ const permission=await prisma.permission.upsert({where:{code},create:{code,title:code},update:{}});await prisma.rolePermission.upsert({where:{roleId_permissionId:{roleId:role.id,permissionId:permission.id}},create:{roleId:role.id,permissionId:permission.id},update:{}}); }
       const avito = await prisma.permission.findMany({where:{code:{startsWith:'avito.'}}});
       for(const permission of avito.filter(p => label === 'director' || p.code === 'avito.read')) await prisma.rolePermission.upsert({where:{roleId_permissionId:{roleId:role.id,permissionId:permission.id}},create:{roleId:role.id,permissionId:permission.id},update:{}});

@@ -2,9 +2,10 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { configureHotelQa, hotelQaApp } from '../tests/helpers/pet-hotel-qa-app.mjs';
-configureHotelQa('pet_hotel_preview_20261020_qa');
+const databaseName = process.argv[2] || 'pet_hotel_preview_20261020_qa';
+configureHotelQa(databaseName);
 const { hotelFixture, qaPassword } = await import('../tests/helpers/pet-hotel-fixture.mjs');
-const f = await hotelFixture({preview:true});
+const f = await hotelFixture({preview:true,databaseName});
 if (!await f.prisma.petHotelReservation.count()) {
   const today=new Date().toISOString().slice(0,10), start=new Date(today+'T10:00:00+03:00');
   const dog=await f.service.book(f.booking({animalId:f.dog.id,roomId:f.rooms.find(r=>r.code==='DOG-1').id,weightKg:6.5,walkCount:6,startsAt:start.toISOString(),endsAt:new Date(+start+72*3600000).toISOString(),notes:'QA: корм и миски с собой, прогулки согласованы'}),f.administrator,undefined,new Date(+start-3600000));

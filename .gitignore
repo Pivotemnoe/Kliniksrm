@@ -9,6 +9,7 @@ apps/owner-gateway/src/generated/
 __pycache__/
 *.pyc
 /output/
+/.playwright-cli/
 
 # Local env
 .env

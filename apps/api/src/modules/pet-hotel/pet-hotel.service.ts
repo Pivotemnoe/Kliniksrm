@@ -1,12 +1,13 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { bookingAttribution } from '../../common/booking-attribution';
+import { formatNormalizedRussianPhone, normalizeDisplayName, normalizePersonNameKey, normalizePhoneForLookup, normalizePhoneSearch } from '../../common/phone';
 import { Prisma } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { AuthEmployee } from '../auth/auth.types';
 import { ClinicModulesService } from '../clinic-modules/clinic-modules.service';
-import { PetHotelBookingDto, PetHotelChangeDto, PetHotelRoomDto, PetHotelSettingsDto, PetHotelStatusDto } from './pet-hotel.dto';
+import { PetHotelAnimalDto, PetHotelBookingDto, PetHotelChangeDto, PetHotelClientDto, PetHotelRoomDto, PetHotelSettingsDto, PetHotelStatusDto } from './pet-hotel.dto';
 import { petHotelQuote, petHotelTime } from './pet-hotel.pricing';
 
 export const PET_HOTEL_MODULE_KEY = 'PET_HOTEL';
@@ -16,6 +17,7 @@ const include = { room: true, owner: { select: { id: true, fullName: true, phone
 const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const speciesOf = (value?: string | null) => /кош|кот|cat/iu.test(value || '') ? 'CAT' : /собак|dog|п[её]с|щен/iu.test(value || '') ? 'DOG' : null;
+const clientSelect = { id: true, fullName: true, phone: true, animals: { where: { archivedAt: null }, select: { id: true, nickname: true, species: true, breed: true } } } satisfies Prisma.OwnerSelect;
 
 @Injectable()
 export class PetHotelService {
@@ -59,7 +61,51 @@ export class PetHotelService {
     await this.context();
     const q = search.trim().slice(0, 100);
     if (q.length < 2) return [];
-    return this.prisma.owner.findMany({ where: { OR: [{ fullName: { contains: q, mode: 'insensitive' } }, { phone: { contains: q } }, { animals: { some: { nickname: { contains: q, mode: 'insensitive' }, archivedAt: null } } }] }, select: { id: true, fullName: true, phone: true, animals: { where: { archivedAt: null }, select: { id: true, nickname: true, species: true, breed: true } } }, orderBy: { fullName: 'asc' }, take: 30 });
+    const phone = normalizePhoneSearch(q);
+    return this.prisma.owner.findMany({ where: { OR: [{ fullName: { contains: q, mode: 'insensitive' } }, { phone: { contains: q } }, ...(phone && phone.length >= 2 ? [{ phoneNormalized: { contains: phone } }] : []), { animals: { some: { nickname: { contains: q, mode: 'insensitive' }, archivedAt: null } } }] }, select: clientSelect, orderBy: { fullName: 'asc' }, take: 30 });
+  }
+  async registerClient(input: PetHotelClientDto | PetHotelAnimalDto, actor: AuthEmployee, ownerId?: string) {
+    if (!actor.permissions.includes('pet_hotel.operate')) throw new ForbiddenException('Нет права на регистрацию клиентов зоогостиницы');
+    const nickname = normalizeDisplayName(input.nickname);
+    if (!nickname) throw new BadRequestException('Укажите кличку питомца');
+    const birthDate = input.birthDate ? new Date(input.birthDate) : null;
+    if (birthDate && (!Number.isFinite(+birthDate) || birthDate > new Date())) throw new BadRequestException('Проверьте дату рождения питомца');
+    return this.prisma.$transaction(async tx => {
+      await lockPetHotel(tx);
+      const { installation } = await this.context(tx, true);
+      const receiptId = `${installation.id}:${actor.id}:client:${input.clientKey}`, fingerprint = hash({ ownerId, input });
+      const receipt = await tx.petHotelCommandReceipt.findUnique({ where: { id: receiptId } });
+      if (receipt) {
+        if (receipt.fingerprint !== fingerprint) throw new ConflictException('Ключ регистрации уже использован с другими данными');
+        return receipt.result;
+      }
+      let owner: { id: string } | null;
+      if (ownerId) {
+        owner = await tx.owner.findUnique({ where: { id: ownerId }, select: { id: true } });
+        if (!owner) throw new NotFoundException('Владелец не найден. Выберите его заново');
+      } else {
+        const data = input as PetHotelClientDto, fullName = normalizeDisplayName(data.fullName);
+        if (fullName.length < 2) throw new BadRequestException('Укажите имя владельца');
+        const fullNameNormalized = normalizePersonNameKey(fullName), phoneNormalized = normalizePhoneForLookup(data.phone);
+        if (phoneNormalized) {
+          const duplicate = await tx.owner.findFirst({ where: {
+            AND: [
+              { OR: [{ fullNameNormalized }, { fullName: { equals: fullName, mode: 'insensitive' } }] },
+              { OR: [{ phoneNormalized }, { phone: { in: [formatNormalizedRussianPhone(phoneNormalized)!, `+${phoneNormalized}`, phoneNormalized] } }] },
+            ],
+          }, select: { id: true } });
+          if (duplicate) throw new ConflictException('Этот владелец уже есть. Найдите его по телефону и выберите питомца или добавьте нового');
+        }
+        owner = await tx.owner.create({ data: { fullName, fullNameNormalized, phoneNormalized, phone: formatNormalizedRussianPhone(phoneNormalized), email: data.email?.trim().toLowerCase() || null, address: data.address?.trim() || null, source: 'PET_HOTEL_CRM' }, select: { id: true } });
+        await this.audit.log({ actorId: actor.id, action: 'pet_hotel.client.create', entityType: 'Owner', entityId: owner.id }, tx);
+      }
+      const animal = await tx.animal.create({ data: { ownerId: owner.id, nickname, species: input.species === 'CAT' ? 'Кошка' : 'Собака', breed: input.breed?.trim() || null, sex: input.sex || 'UNKNOWN', birthDate }, select: { id: true } });
+      await this.audit.log({ actorId: actor.id, action: 'pet_hotel.animal.create', entityType: 'Animal', entityId: animal.id, metadata: { ownerId: owner.id } }, tx);
+      const client = await tx.owner.findUniqueOrThrow({ where: { id: owner.id }, select: clientSelect });
+      const result = { client, animalId: animal.id };
+      await tx.petHotelCommandReceipt.create({ data: { id: receiptId, fingerprint, result: json(result) } });
+      return result;
+    });
   }
   private busy(installationId: string, startsAt: Date, endsAt: Date, now: Date, ignoreId?: string): Prisma.PetHotelReservationWhereInput {
     return { installationId, ...(ignoreId ? { id: { not: ignoreId } } : {}), status: { in: active }, startsAt: { lt: endsAt }, OR: [{ endsAt: { gt: startsAt } }, { status: 'IN_HOUSE', endsAt: { lte: now } }] };

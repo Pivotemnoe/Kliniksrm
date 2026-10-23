@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 export function configureHotelQa(name = 'pet_hotel_tests_20261020_qa_v2') {
-  if (!['pet_hotel_tests_20261020_qa_v2', 'pet_hotel_preview_20261020_qa'].includes(name)) throw Error('Unexpected QA database');
+  if (!['pet_hotel_tests_20261020_qa_v2', 'pet_hotel_preview_20261020_qa', 'pet_hotel_client_tariffs_preview_20261023_qa'].includes(name)) throw Error('Unexpected QA database');
   const keep = Object.fromEntries(['PATH','HOME','TMPDIR','LANG','TZ'].filter(k => process.env[k]).map(k => [k, process.env[k]]));
   for (const k of Object.keys(process.env)) delete process.env[k];
   Object.assign(process.env, keep, { NODE_ENV:'test', CLINIC_RUNTIME_MODE:'test', TEMICHEVVET_LICENSE_MODE:'compatibility', DATABASE_URL:`postgresql://grooming_module_qa:synthetic-grooming-only@127.0.0.1:55440/${name}`, SESSION_COOKIE_NAME:'pet_hotel_local_staff', SESSION_COOKIE_SECURE:'false', PET_HOTEL_QA_MODE:'true', GROOMING_QA_MODE:'true', GROOMING_CRM_SYNC_ENABLED:'false', CLINIC_ASSISTANT_ENABLED:'false', CLINIC_ASSISTANT_REMINDERS_ENABLED:'false', CLINIC_SITE_CATALOG_SYNC_ENABLED:'false', AVITO_WORKER_ENABLED:'false' });
