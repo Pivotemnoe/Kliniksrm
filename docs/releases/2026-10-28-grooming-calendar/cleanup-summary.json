@@ -1,0 +1,14 @@
+{
+  "clinicTemporaryArchiveBytes": 1436527,
+  "gatewayTemporaryArchiveBytes": 22284,
+  "localReproducibleBuildTreeBytes": 7471174,
+  "totalKnownBytes": 8929985,
+  "protectedBackupPreserved": true,
+  "protectedImagesAndVolumesRemoved": 0,
+  "sourceAndActivePreviewPreserved": true,
+  "completedScheduledTasksRemoved": [
+    "Codex-GroomingCalendar-20261028-Build",
+    "Codex-GroomingCalendar-20261028-Backup",
+    "Codex-GroomingCalendar-20261028-Apply"
+  ]
+}

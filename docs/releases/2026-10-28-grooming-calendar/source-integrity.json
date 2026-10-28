@@ -1,0 +1,9 @@
+{
+  "sourceRevision": "365ef4914b72d487be1e689360bad66f64d08c9a",
+  "baseRevision": "95d098dcc56d3a112c6ed9a762ff86a1602f25f2",
+  "clinicFinalArchiveSha256": "6748aa4dcc927c8a195dc95cf3c3f82f38fb218238074d56e6a178f19fae94bb",
+  "packetChecksumsSha256": "5be27d9b770cdca22d248858f822c25b69e59cb143b3ecbfa7707313ca7739cf",
+  "liveWebBase": "e24cf535e6a1267cb2819cccc2cc820ccfda9faa",
+  "productionHotelOverlay": "c43e0e8c8dd46de80a4616072b1a8f9d2826d1c1",
+  "generatedClient": "live schema plus followShiftWorkplace Boolean default false only"
+}

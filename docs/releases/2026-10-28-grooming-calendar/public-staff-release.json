@@ -1,0 +1,11 @@
+{
+  "url": "https://staff.temichevvet.ru/release.json?grooming-release=365ef49",
+  "status": 200,
+  "release": {
+    "revision": "365ef4914b72d487be1e689360bad66f64d08c9a",
+    "release": "crm-grooming-calendar-20261028-r1",
+    "baseWebRevision": "e24cf535e6a1267cb2819cccc2cc820ccfda9faa",
+    "previousRevision": "c43e0e8c8dd46de80a4616072b1a8f9d2826d1c1",
+    "baseWebImage": "sha256:aba28d6835d3200b61b41b62b2f90bb5e5a44e234a3f9c496dcc78750cf2a5a2"
+  }
+}

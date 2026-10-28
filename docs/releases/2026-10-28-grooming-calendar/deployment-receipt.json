@@ -1,0 +1,20 @@
+{
+  "releaseId": "crm-grooming-calendar-20261028-r1",
+  "sourceRevision": "365ef4914b72d487be1e689360bad66f64d08c9a",
+  "status": "VERIFIED_API_WEB_OWNER_GATEWAY",
+  "verifiedAt": "2026-10-28T15:45:02.133143+00:00",
+  "apiImage": "sha256:ffac9f138e63f05c7786c9eef454b8398939e2bf446392194c6ec473cdd87f31",
+  "webImage": "sha256:5d454b9bca584842b06c1f38ba77855d015370161bf73bed3ab006b293b46d6b",
+  "ownerGatewayImage": "sha256:7aee68003172b530cac3741491c6cd69836b4103faf78578b37a0e7a7d91ef7c",
+  "clinicBackupSha256": "f4d424de459eab7ef463b1ff9a5c82a27eb1fd4620736c7964713c4f595ad144",
+  "clinicRestoreTested": true,
+  "clinicOldClientReadsMigratedDatabase": true,
+  "gatewayBackupSha256": "4eedfa276fd6f8f74d6a0910ded5c1a4c01ab80fe413d0792d5ab673955dfb50",
+  "gatewayRestoreAndCandidateTested": true,
+  "protectedClinicServices": 4,
+  "protectedGatewayServices": 2,
+  "realExternalMessagesSent": 0,
+  "liveSyntheticBookingsCreated": 0,
+  "nativeApplicationsNotIncluded": true,
+  "staticSiteReleaseStatus": "OWNING_CHAT_RUNNING_SEPARATE_G_ONLY_RELEASE"
+}

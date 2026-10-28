@@ -1,0 +1,70 @@
+{
+    "state":  {
+                  "releaseId":  "crm-grooming-calendar-20261028-r1",
+                  "revision":  "365ef4914b72d487be1e689360bad66f64d08c9a",
+                  "manifestSha256":  "80a0afb3a7c70f8bd394141aa5e3d0b80a5ff76a9954808e2fd858c19cc0793f",
+                  "phase":  "COMPLETE",
+                  "preparedAt":  "2026-10-28T15:31:31.1452216Z",
+                  "candidate":  {
+                                    "api":  "sha256:ffac9f138e63f05c7786c9eef454b8398939e2bf446392194c6ec473cdd87f31",
+                                    "web":  "sha256:5d454b9bca584842b06c1f38ba77855d015370161bf73bed3ab006b293b46d6b"
+                                },
+                  "configuration":  [
+                                        {
+                                            "name":  ".env",
+                                            "sha256":  "90388c4ef22bc12a813d95b71bd7c57fdf0400e6a91dc2f0022120c601cc883a",
+                                            "savedName":  "before-.env",
+                                            "appliedHash":  "51bff2bfa0467a0605f6e96e7b784696495a062517f4445ac322abf25ffd23b8"
+                                        },
+                                        {
+                                            "name":  ".env.runtime",
+                                            "sha256":  "318f8f3f15d62fe768e49ef41abe9b11dfc558d385bd93f434770858ed97106f",
+                                            "savedName":  "before-.env.runtime",
+                                            "appliedHash":  "5c70139b1d707de2fffab9ebf72ecc8630e74993916d9f3d4ae125f8b1c78fa3"
+                                        },
+                                        {
+                                            "name":  "docker-compose.yml",
+                                            "sha256":  "e5d309999381e0590c03c2b63f925daed741af12b24932b45f35ae7bc19c9804",
+                                            "savedName":  "before-docker-compose.yml",
+                                            "appliedHash":  "e5d309999381e0590c03c2b63f925daed741af12b24932b45f35ae7bc19c9804"
+                                        },
+                                        {
+                                            "name":  "diagnostics/bin/system-diagnostics-config.json",
+                                            "sha256":  "a16e3fcd8c1bbc5b5e4bf9d02d7411c2ef65c7d26b159f3891f188d177c25194",
+                                            "savedName":  "before-diagnostics-bin-system-diagnostics-config.json",
+                                            "appliedHash":  "4c26c75e09b822c0525787ca60b39452664fb6a65b535747599dd66e40cc1504"
+                                        }
+                                    ],
+                  "databaseSha256":  "f4d424de459eab7ef463b1ff9a5c82a27eb1fd4620736c7964713c4f595ad144",
+                  "restoreTested":  true,
+                  "candidateQualified":  true,
+                  "rollbackRehearsed":  true,
+                  "completedAt":  "2026-10-28T15:34:09.8787496Z"
+              },
+    "qualification":  {
+                          "qualified":  true,
+                          "checks":  [
+                                         "two_places_two_groomers",
+                                         "third_shift_refused",
+                                         "any_service_without_website_rule",
+                                         "idempotent_manual_booking",
+                                         "overlap_refused",
+                                         "website_minimum_90",
+                                         "actual_shift_place",
+                                         "own_groomer_refines_duration",
+                                         "foreign_groomer_refused",
+                                         "extension_collision_refused",
+                                         "price_retained",
+                                         "staff_duration_notice",
+                                         "no_customer_technical_duration_notice",
+                                         "synthetic_records_removed"
+                                     ],
+                          "externalMaxMessages":  0,
+                          "productionChanged":  false
+                      },
+    "rollback":  {
+                     "oldRuntimeReadsMigratedDatabase":  true,
+                     "additiveColumnRetained":  true,
+                     "businessDataRestored":  false
+                 }
+}

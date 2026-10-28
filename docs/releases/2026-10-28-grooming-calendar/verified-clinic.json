@@ -1,0 +1,23 @@
+{
+    "status":  "VERIFIED",
+    "revision":  "365ef4914b72d487be1e689360bad66f64d08c9a",
+    "candidate":  {
+                      "api":  "sha256:ffac9f138e63f05c7786c9eef454b8398939e2bf446392194c6ec473cdd87f31",
+                      "web":  "sha256:5d454b9bca584842b06c1f38ba77855d015370161bf73bed3ab006b293b46d6b"
+                  },
+    "backup":  "C:/Users/TemichevVet/TemichevVet/backups/manual-releases/crm-grooming-calendar-20261028-r1",
+    "databaseSha256":  "f4d424de459eab7ef463b1ff9a5c82a27eb1fd4620736c7964713c4f595ad144",
+    "restoreTested":  true,
+    "rollbackRehearsed":  true,
+    "protectedServices":  4,
+    "database":  {
+                     "applied":  true,
+                     "shiftWorkplaceColumn":  {
+                                                  "data_type":  "boolean",
+                                                  "is_nullable":  "NO",
+                                                  "column_default":  "false"
+                                              },
+                     "clientKnowsFlag":  true,
+                     "calendarReady":  true
+                 }
+}
