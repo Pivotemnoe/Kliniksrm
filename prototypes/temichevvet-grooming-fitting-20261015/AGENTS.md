@@ -1,3 +1,10 @@
+## Latest owner instruction — initial reservation and updated end, 28 October 2026
+
+- Latest direct correction in this chat: client-facing choices show the start time only. Remove explanations about reservations, preliminary ends and staff duration changes. The allowed estimate is: «Стрижка занимает примерно 1,5 часа. Время может меняться в зависимости от состояния животного». Keep actual server start/end/duration values and staff controls intact internally.
+- The owner requests an initial website reservation of at least 90 minutes, with the assigned groomer or administrator able to refine the duration. Preserve the server interval internally; show only its actual start to the client. Do not calculate a guessed end or shorten longer services in the frontend.
+- Preserve the existing draft and MAX confirmation flow and the honest no-slots state. Client pages must not receive staff permissions. The latest start-only presentation above supersedes the earlier proposal to explain the end time.
+- The CRM redesign chat owns the API/Web/owner-gateway rollout for source 95d098dcc56d3a112c6ed9a762ff86a1602f25f2. Limit this chat to the grooming website and verify against the confirmed server contract before its separate static publication.
+
 ## Latest owner instruction — keep online selection open, 22 October 2026
 
 - The owner now explicitly requests opening online grooming selection while they add real groomers today or tomorrow. This supersedes the prior self-booking OFF requirement for this scoped change. Coordinate the grooming setting with the CRM runtime owner; do not invent specialists, shifts or reservations.

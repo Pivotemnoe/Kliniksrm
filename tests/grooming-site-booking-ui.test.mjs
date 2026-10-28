@@ -11,7 +11,7 @@ const React=require('react'),{renderToStaticMarkup}=require('react-dom/server');
 const temp=await mkdtemp(path.join(tmpdir(),'grooming-booking-ui-'));
 const bundle=await require('esbuild').build({entryPoints:[project+'src/SiteBooking.jsx'],bundle:true,platform:'node',format:'cjs',jsx:'automatic',write:false,plugins:[{name:'shared-react',setup(build){build.onResolve({filter:/^react(?:\/.*)?$/},args=>({path:require.resolve(args.path),external:true}));}}]});
 await writeFile(path.join(temp,'booking.cjs'),bundle.outputFiles[0].text);
-const {SiteBooking}=require(path.join(temp,'booking.cjs'));
+const {SiteBooking,BookingStart}=require(path.join(temp,'booking.cjs'));
 const service={id:'example-full',title:'Полный комплекс',priceLabel:'2 500 ₽',bookable:false,catalogData:{species:'DOG',breedId:'york',breedRowId:'york',kind:'full',category:'CARE'}};
 function render(storefront,breed={id:'york',name:'Йоркширский терьер',species:'dog',size:'small'}){
  return renderToStaticMarkup(React.createElement(SiteBooking,{config:{storefront,bookingPortalUrl:'https://cabinet.temichevvet.ru/portal/grooming'},breed,notes:'',onNotes(){},lookIds:[],selectedLooks:[],onToggleLook(){},lookName:id=>id}));
@@ -39,5 +39,12 @@ test('a disconnected catalogue is not presented as a fully booked schedule',()=>
  const html=render({...open,connected:false});
  assert.match(html,/Не удалось показать услуги/);
  assert.doesNotMatch(html,/Пока нет свободного времени|Дата визита/);
+});
+test('client choices keep the real start time and omit the end when duration changes',()=>{
+ const startsAt='2026-10-29T07:00:00.000Z';
+ const start=endsAt=>renderToStaticMarkup(React.createElement(BookingStart,{startsAt,endsAt}));
+ assert.equal(start('2026-10-29T08:30:00.000Z'),'10:00');
+ assert.equal(start('2026-10-29T09:00:00.000Z'),'10:00');
+ assert.equal(start('2026-10-29T10:00:00.000Z'),'10:00');
 });
 test.after(()=>rm(temp,{recursive:true,force:true}));
