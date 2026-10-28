@@ -7,11 +7,13 @@ import { apiRequest } from '../../api/client';
 import { getErrorMessage } from '../../api/errors';
 import { useCurrentEmployee, useIdleLogout, useLoginMutation, useUnauthorizedListener, isUnauthorized } from '../../auth/useAuth';
 import { at, day, statusLabels, time } from '../grooming/grooming.api';
+import { appointmentStatusLabels } from '../appointments/types';
 import { mobileApi, staffAppBase, type MobileBooking, type MobileProfile } from './staffApp.api';
 import { canUseWorker, staffCommandKey, staffWorker } from './staffPlatform';
 import { BookingForm } from './StaffBookingForm';
 import { Account, InstallApp, PasswordForm, PushSetup } from './StaffAccount';
 const StaffSettings = lazy(() => import('./StaffAppSettingsPage').then(module => ({ default: module.StaffAppSettingsPage })));
+const bookingStatusLabel = (status: string, grooming: boolean) => ((grooming ? statusLabels : appointmentStatusLabels) as Record<string, string>)[status] || status;
 
 const command = <T,>(path: string, body: unknown) => {
   if (!navigator.onLine) return Promise.reject(new Error('Нет связи. Действие не отправлено.'));
@@ -83,23 +85,23 @@ function StaffWorkspace() {
 function Agenda({ profile, name, online, calendar = false }: { profile: MobileProfile; name: string; online: boolean; calendar?: boolean }) {
   const location = useLocation(), navigate = useNavigate(), dateParam = new URLSearchParams(location.search).get('date');
   const scopeParam = new URLSearchParams(location.search).get('scope');
-  const [scope, setScope] = useState('mine');
+  const scope = profile.canViewClinic && scopeParam !== 'mine' ? 'clinic' : 'mine';
   const [date, setDate] = useState(dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : day(new Date())), [selected, setSelected] = useState<MobileBooking | null>(null), [booking, setBooking] = useState<MobileBooking | 'new' | null>(null);
   useEffect(() => { if (!calendar) setDate(day(new Date())); else if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) setDate(dateParam); }, [calendar, dateParam]);
-  useEffect(() => { setScope(calendar && scopeParam === 'clinic' && profile.canViewClinic ? 'clinic' : 'mine'); }, [calendar, scopeParam, profile.canViewClinic]);
   const from = new Date(`${date}T00:00:00+03:00`), to = new Date(+from + 86400000);
   const query = useQuery({ queryKey: ['staff-app', 'agenda', date, scope], queryFn: () => mobileApi.agenda(from.toISOString(), to.toISOString(), scope), refetchInterval: 20000 });
   const tasks = useQuery({ queryKey: ['staff-app', 'tasks'], queryFn: () => apiRequest<{ id: string; title: string; description?: string; status: string; dueAt?: string }[]>(`${staffAppBase}/tasks`), enabled: profile.kind === 'CLINIC' && !calendar, refetchInterval: 20000 });
   const ready = online && !query.isError;
-  return <section><div className="staff-page-title"><div><span className="staff-eyebrow">{profile.kind === 'GROOMING' ? 'Кабинет грумера' : 'Мой рабочий день'}</span><h1>{calendar ? scope === 'clinic' ? 'Записи клиники' : 'Мои записи' : `Здравствуйте, ${name.split(' ')[0]}`}</h1></div>
+  return <section><div className="staff-page-title"><div><span className="staff-eyebrow">{profile.kind === 'GROOMING' ? 'Кабинет грумера' : 'Мой рабочий день'}</span><h1>{calendar ? profile.kind === 'GROOMING' ? 'Мои записи' : scope === 'clinic' ? 'Приёмы клиники' : 'Мои приёмы' : `Здравствуйте, ${name.split(' ')[0]}`}</h1></div>
     {profile.canBook && <Button type="primary" icon={<PlusOutlined />} disabled={!ready} onClick={() => setBooking('new')}>Записать</Button>}</div>
-    <label className="staff-date">Дата<Input aria-label="Дата расписания" type="date" value={date} onChange={event => { if (event.target.value) setDate(event.target.value); }} /></label>
-    {calendar && profile.canViewClinic && <Segmented aria-label="Чьё расписание" block value={scope} options={[{ value: 'mine', label: 'Мои записи' }, { value: 'clinic', label: 'Клиника' }]} onChange={value => setScope(String(value))} />}
+    <label className="staff-date">Дата<Input aria-label="Дата расписания" type="date" value={date} onChange={event => { if (event.target.value) { setDate(event.target.value); const params = new URLSearchParams(location.search); params.set('date', event.target.value); navigate(`/calendar?${params}`, { replace: true }); } }} /></label>
+    {profile.canViewClinic && <Segmented aria-label="Чьё расписание" block value={scope} options={[{ value: 'clinic', label: 'Все приёмы' }, { value: 'mine', label: 'Мои приёмы' }]} onChange={value => { const params = new URLSearchParams(location.search); params.set('scope', String(value)); if (calendar) params.set('date', date); navigate({ search: params.toString() }, { replace: true }); }} />}
+    {!calendar && profile.canViewClinic && <h2>{scope === 'clinic' ? 'Все приёмы клиники' : 'Мои приёмы'}</h2>}
     {query.isPending ? <Spin /> : <>{query.isError && <Problem error={query.error} retry={() => void query.refetch()} />}
       <p className="staff-updated">{query.dataUpdatedAt ? `Обновлено ${time(new Date(query.dataUpdatedAt).toISOString())}` : ''}</p>
       {!!query.data?.shifts.length && <div className="staff-card staff-shift"><strong>Моя смена</strong><span>{query.data.shifts.map(shift => `${time(shift.startsAt)}–${time(shift.endsAt)}`).join(', ')}</span></div>}
       {!query.data?.items.length ? <Empty description="На эту дату записей нет" /> : <div className="staff-list">{query.data.items.map(item => <button className="staff-booking" key={item.id} onClick={() => setSelected(item)}>
-        <time>{time(item.startsAt)}</time><div><strong>{item.animal.nickname}</strong><span>{item.serviceTitle || item.animal.species || 'Приём'}</span><small>{item.owner.fullName}</small></div><Tag>{statusLabels[item.status] || ({ PLANNED: 'Запланирован', IN_PROGRESS: 'Приём идёт', COMPLETED: 'Завершён' } as Record<string, string>)[item.status] || item.status}</Tag>
+        <time>{time(item.startsAt)}</time><div><strong>{item.animal.nickname}</strong><span>{item.serviceTitle || item.animal.species || 'Приём'}</span><small>{item.owner.fullName}</small>{scope === 'clinic' && item.employee && <small>Врач: {item.employee.fullName}</small>}</div><Tag>{bookingStatusLabel(item.status, profile.kind === 'GROOMING')}</Tag>
       </button>)}</div>}
     </>}
     {!!tasks.data?.length && <section><h2>Мои задачи</h2>{tasks.data.filter(task => !['DONE', 'COMPLETED', 'CANCELLED', 'ARCHIVED'].includes(task.status)).map(task => <div className="staff-card" key={task.id}><strong>{task.title}</strong>{task.description && <p>{task.description}</p>}{task.dueAt && <small>{at(task.dueAt)}</small>}</div>)}</section>}
@@ -120,7 +122,7 @@ function BookingCard({ booking, grooming, canBook, online, onClose, onMove }: { 
     onSuccess: async () => { await client.invalidateQueries({ queryKey: ['staff-app'] }); message.success('Статус сохранён в CRM'); onClose(); }, onError: error => message.error(getErrorMessage(error)) });
   const transitions: Record<string, [string, string][]> = { CONFIRMED: [['ARRIVED', 'Клиент пришёл'], ['CANCELLED', 'Отменить'], ['NO_SHOW', 'Не пришёл']], ARRIVED: [['IN_PROGRESS', 'Начать процедуру']], IN_PROGRESS: [['COMPLETED', 'Завершить']] };
   return <Drawer title="Карточка записи" open={Boolean(booking)} onClose={onClose} width="min(440px, 100vw)">
-    {booking && <div className="staff-detail"><Tag>{statusLabels[booking.status] || booking.status}</Tag><h2>{booking.animal.nickname}</h2><p>{at(booking.startsAt)}</p><p>{booking.serviceTitle || 'Клинический приём'}</p>
+    {booking && <div className="staff-detail"><Tag>{bookingStatusLabel(booking.status, grooming)}</Tag><h2>{booking.animal.nickname}</h2><p>{at(booking.startsAt)}</p><p>{booking.serviceTitle || 'Клинический приём'}</p>
       <p>{[booking.animal.species, booking.animal.breed].filter(Boolean).join(' · ')}</p><h3>Клиент</h3><p>{booking.owner.fullName}</p>{booking.owner.phone && <a href={`tel:${booking.owner.phone.replace(/[^+\d]/g, '')}`}>{booking.owner.phone}</a>}
       {booking.employee && <p>Специалист: {booking.employee.fullName}</p>}{booking.location && <p>{booking.location.name}</p>}{booking.room && <p>{booking.room.name}</p>}
       {(booking.notes || booking.comment) && <p className="staff-prewrap">{booking.notes || booking.comment}</p>}

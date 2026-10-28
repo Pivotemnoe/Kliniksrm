@@ -71,8 +71,9 @@ export class StaffAppService {
       return { ok: true };
     });
   }
-  async agenda(actor: AuthEmployee, from: string, to: string, scope = 'mine') {
+  async agenda(actor: AuthEmployee, from: string, to: string, requestedScope?: string) {
     assertStaffApp(actor);
+    const scope = requestedScope ?? (!isGroomer(actor) && actor.permissions.includes('appointments.read') ? 'clinic' : 'mine');
     if (!['mine', 'clinic'].includes(scope)) throw new BadRequestException('Выберите своё расписание или расписание клиники');
     if (scope === 'clinic' && (isGroomer(actor) || !actor.permissions.includes('appointments.read'))) throw new ForbiddenException('Нет доступа к расписанию клиники');
     const start = new Date(from), end = new Date(to);

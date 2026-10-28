@@ -28,6 +28,8 @@ const options = await f.service.options(f.owner.id, f.options);
 const first = options.offers[0], second = options.offers.at(-1);
 for (const offer of [first, second].filter(Boolean)) await f.service.book(f.owner.id, { clientKey: randomUUID(), offerToken: offer.offerToken, notes: 'Запись с вымышленными данными для проверки мобильного интерфейса', looks: [], contactConsent: true, bookingConsent: true });
 await f.appointments.createAppointment({ ownerId: f.owner.id, animalId: f.animal.id, employeeId: doctor.id, startsAt: `${f.selectedDate}T11:00:00+03:00`, comment: 'Вымышленная запись для проверки' }, doctor.id);
+const colleague = await f.doctor('коллега');
+await f.appointments.createAppointment({ ownerId: f.otherOwner.id, animalId: f.otherAnimal.id, employeeId: colleague.id, startsAt: `${f.selectedDate}T13:00:00+03:00`, comment: 'Вымышленный приём другого врача для проверки общего списка' }, colleague.id);
 await f.prisma.employeeShift.create({ data: { employeeId: doctor.id, startsAt: new Date(`${f.selectedDate}T09:00:00+03:00`), endsAt: new Date(`${f.selectedDate}T20:00:00+03:00`) } });
 await f.prisma.internalMessage.create({ data: { senderId: director.id, recipientId: doctor.id, body: 'Тестовое сообщение: расписание на день подтверждено.' } });
 await f.prisma.task.create({ data: { title: 'Проверить расписание на следующий день', assigneeId: doctor.id, creatorId: director.id } });

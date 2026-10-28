@@ -75,7 +75,7 @@ test('groomer books only their own real slots; signed client and offer proofs ca
   } finally { await f.close(); }
 });
 
-test('clinic appointment retries commit once; patient mismatches, conflicting slots and personal scope stay protected', async () => {
+test('clinic appointment retries commit once; doctors see all appointments by default and can filter their own', async () => {
   const f = await staffMobileFixture();
   try {
     const startsAt = `${f.selectedDate}T11:00:00+03:00`;
@@ -89,9 +89,15 @@ test('clinic appointment retries commit once; patient mismatches, conflicting sl
     await assert.rejects(f.mobile.createAppointment({ ...input, clientKey: randomUUID() }, doctor), /занят|available|пересека|запис/i);
     await assert.rejects(f.mobile.createAppointment({ ...input, clientKey: randomUUID(), animalId: f.otherAnimal.id, startsAt: `${f.selectedDate}T15:00:00+03:00` }, doctor), /принадлеж|owner/i);
     const other = await f.doctor('other');
+    const otherAppointment = await f.appointments.createAppointment({ ownerId: f.otherOwner.id, animalId: f.otherAnimal.id, employeeId: other.id, startsAt: `${f.selectedDate}T13:00:00+03:00` }, other.id);
     const agenda = await f.mobile.agenda(doctor, `${f.selectedDate}T00:00:00+03:00`, `${f.selectedDate}T23:59:59+03:00`);
     assert.ok(agenda.items.some(item => item.id === a.id));
-    assert.ok(!(await f.mobile.agenda(other, `${f.selectedDate}T00:00:00+03:00`, `${f.selectedDate}T23:59:59+03:00`)).items.some(item => item.id === a.id));
+    assert.ok(agenda.items.some(item => item.id === otherAppointment.id));
+    assert.ok((await f.mobile.agenda(other, `${f.selectedDate}T00:00:00+03:00`, `${f.selectedDate}T23:59:59+03:00`)).items.some(item => item.id === a.id));
+    const personal = await f.mobile.agenda(other, `${f.selectedDate}T00:00:00+03:00`, `${f.selectedDate}T23:59:59+03:00`, 'mine');
+    assert.ok(personal.items.some(item => item.id === otherAppointment.id));
+    assert.ok(!personal.items.some(item => item.id === a.id));
+    assert.ok(!other.permissions.includes('business.read') && !other.permissions.includes('payroll.read') && !other.permissions.includes('daily_finance.read'));
     assert.ok((await f.mobile.agenda(other, `${f.selectedDate}T00:00:00+03:00`, `${f.selectedDate}T23:59:59+03:00`, 'clinic')).items.some(item => item.id === a.id));
     await assert.rejects(f.mobile.agenda(await f.actor(f.groomer.id), `${f.selectedDate}T00:00:00+03:00`, `${f.selectedDate}T23:59:59+03:00`, 'clinic'), /Нет доступа/);
     await assert.rejects(f.mobile.createAppointment(input, await f.configure(f.groomer.id, { groomingBooking: true })), /не включена/);
