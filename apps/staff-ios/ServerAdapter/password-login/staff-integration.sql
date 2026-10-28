@@ -1,3 +1,5 @@
+BEGIN;
+
 -- AlterTable
 ALTER TABLE "InternalMessage" ADD COLUMN     "clientKey" TEXT;
 
@@ -159,3 +161,4 @@ ALTER TABLE "StaffClinicChatMessage" ADD CONSTRAINT "StaffClinicChatMessage_chan
 -- AddForeignKey
 ALTER TABLE "StaffClinicChatMessage" ADD CONSTRAINT "StaffClinicChatMessage_senderId_fkey" FOREIGN KEY ("senderId") REFERENCES "Employee"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
+COMMIT;

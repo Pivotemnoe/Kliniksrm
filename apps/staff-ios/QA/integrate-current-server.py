@@ -61,6 +61,30 @@ for path in sorted(all_paths):
     if merged != t:
         changes.append({'path': path, 'currentSha256': hashlib.sha256(t).hexdigest() if t is not None else None, 'sha256': hashlib.sha256(merged).hexdigest()})
 
+# The deployed image carries a previously delivered queue-workstation field outside its public Git marker.
+# Keep the strict datamodel guard; preserve that verified runtime metadata instead of discarding it.
+runtime = own / 'ServerAdapter/runtime-base'
+runtime_manifest = json.loads((runtime / 'manifest.json').read_text())
+runtime_schema = (runtime / 'schema.prisma').read_bytes()
+if hashlib.sha256(runtime_schema).hexdigest() != runtime_manifest['schemaSha256']:
+    raise RuntimeError('Runtime schema snapshot changed')
+if runtime_manifest['apiImageId'] != 'sha256:f28aa61e0caf40e900f9e42b5afef13dbe768a1c143a250190cee8202bc3492d':
+    raise RuntimeError('Unreviewed runtime schema image')
+schema_path = 'prisma/schema.prisma'
+schema = (out / schema_path).read_text()
+import re
+actual_queue = re.search(r'model QueueWorkstation \{[\s\S]*?\n\}', runtime_schema.decode()).group(0)
+if not re.search(r'isReception\s+Boolean\s+@default\(false\)', actual_queue):
+    raise RuntimeError('Reviewed queue reception field missing')
+queue = re.search(r'model QueueWorkstation \{[\s\S]*?\n\}', schema).group(0)
+if 'isReception' not in queue:
+    schema = schema.replace(queue, queue.replace('model QueueWorkstation {', 'model QueueWorkstation {\n  isReception Boolean @default(false)'))
+(out / schema_path).write_text(schema)
+for entry in changes:
+    if entry['path'] == schema_path:
+        entry['currentSha256'] = runtime_manifest['schemaSha256']
+        entry['sha256'] = hashlib.sha256(schema.encode()).hexdigest()
+
 # Copy only after every three-way merge has succeeded. Nothing outside this app is edited.
 for path in sorted(all_paths):
     source = out / path
@@ -68,10 +92,11 @@ for path in sorted(all_paths):
         target = backend / path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(source.read_bytes())
-(out / 'current-schema.prisma').write_bytes(show(current, 'prisma/schema.prisma'))
+(out / 'current-schema.prisma').write_bytes(runtime_schema)
 report = {'currentProductionSourceCommit': current, 'commonBase': base,
           'groomingSpecificBase': grooming_base, 'changedFiles': changes,
           'unresolvedConflicts': 0, 'productionChanged': False,
-          'runtimeVerificationRequiredBeforeDeployment': True}
+          'runtimeVerificationRequiredBeforeDeployment': True,
+          'verifiedRuntimeSchema': runtime_manifest}
 (own / 'Docs/current-server-candidate.json').write_text(json.dumps(report, indent=2) + '\n')
 print(json.dumps({'currentServerCandidate': True, 'changedFiles': len(changes), 'unresolvedConflicts': 0, 'productionChanged': False}))

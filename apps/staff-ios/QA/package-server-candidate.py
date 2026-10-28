@@ -39,10 +39,10 @@ COPY assert-model.cjs /tmp/staff-assert-model.cjs
 RUN node /tmp/staff-assert-model.cjs && rm /tmp/staff-assert-model.cjs /tmp/staff-base-datamodel.json
 COPY api/ /app/apps/api/dist/
 COPY migration/ /app/prisma/migrations/20261028213000_staff_native_shared/
-LABEL io.temichevvet.release="crm-staff-native-password-20261028-r1"
+LABEL io.temichevvet.release="crm-staff-native-password-20261028-r2"
 ''')
 manifest = {
-    'releaseId': 'crm-staff-native-password-20261028-r1',
+    'releaseId': 'crm-staff-native-password-20261028-r2',
     'baseSourceCommit': report['currentProductionSourceCommit'],
     'expectedBaseApiImageId': 'sha256:f28aa61e0caf40e900f9e42b5afef13dbe768a1c143a250190cee8202bc3492d',
     'migration': '20261028213000_staff_native_shared',

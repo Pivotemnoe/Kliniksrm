@@ -1,7 +1,8 @@
 const fs = require('node:fs');
 const assert = require('node:assert/strict');
 const before = JSON.parse(fs.readFileSync(process.argv[2] || '/tmp/staff-base-datamodel.json', 'utf8'));
-const after = require('@prisma/client').Prisma.dmmf.datamodel;
+const requireClient = require('node:module').createRequire(fs.existsSync('/app/apps/api/package.json') ? '/app/apps/api/package.json' : __filename);
+const after = requireClient('@prisma/client').Prisma.dmmf.datamodel;
 assert.deepEqual(after.enums, before.enums, 'Existing enums must stay unchanged');
 for (const model of before.models) {
   const current = after.models.find(item => item.name === model.name);

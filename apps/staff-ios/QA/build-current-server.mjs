@@ -24,5 +24,5 @@ const statements = migration.stdout.replace(/--[^\n]*/g, '').split(';').map(s =>
 if (statements.some(sql => !/^(?:CREATE (?:TABLE|(?:UNIQUE )?INDEX) |ALTER TABLE "[A-Za-z0-9_]+" ADD (?:COLUMN|CONSTRAINT)\b)/.test(sql))) {
   throw new Error('Only additive table/column/index/foreign-key statements are allowed');
 }
-await writeFile(new URL('../ServerAdapter/password-login/staff-integration.sql', import.meta.url), migration.stdout);
+await writeFile(new URL('../ServerAdapter/password-login/staff-integration.sql', import.meta.url), 'BEGIN;\n\n' + migration.stdout.trim() + '\n\nCOMMIT;\n');
 console.log(JSON.stringify({ currentServerAPICompiled: true, destructiveSchemaStatements: false, productionChanged: false }));

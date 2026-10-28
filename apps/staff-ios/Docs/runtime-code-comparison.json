@@ -1,0 +1,65 @@
+{
+  "compiler": "5.9.3",
+  "checks": [
+    {
+      "path": "/app/apps/api/dist/app.module.js",
+      "matches4dbCompiled": true
+    },
+    {
+      "path": "/app/apps/api/dist/modules/auth/auth.controller.js",
+      "matches4dbCompiled": true
+    },
+    {
+      "path": "/app/apps/api/dist/modules/auth/auth.service.js",
+      "matches4dbCompiled": true
+    },
+    {
+      "path": "/app/apps/api/dist/modules/auth/auth.types.js",
+      "matches4dbCompiled": true
+    },
+    {
+      "path": "/app/apps/api/dist/modules/auth/session-auth.guard.js",
+      "matches4dbCompiled": true
+    },
+    {
+      "path": "/app/apps/api/dist/modules/grooming/grooming-staff-notifications.service.js",
+      "matches4dbCompiled": true
+    },
+    {
+      "path": "/app/apps/api/dist/modules/grooming/grooming.dto.js",
+      "matches4dbCompiled": true
+    },
+    {
+      "path": "/app/apps/api/dist/modules/grooming/grooming.module.js",
+      "matches4dbCompiled": true
+    },
+    {
+      "path": "/app/apps/api/dist/modules/grooming/grooming.service.js",
+      "matches4dbCompiled": true
+    },
+    {
+      "path": "/app/apps/api/dist/modules/internal-messages/dto/create-internal-message.dto.js",
+      "matches4dbCompiled": true
+    },
+    {
+      "path": "/app/apps/api/dist/modules/internal-messages/dto/list-internal-messages-query.dto.js",
+      "matches4dbCompiled": true
+    },
+    {
+      "path": "/app/apps/api/dist/modules/internal-messages/internal-messages.controller.js",
+      "matches4dbCompiled": true
+    },
+    {
+      "path": "/app/apps/api/dist/modules/internal-messages/internal-messages.module.js",
+      "matches4dbCompiled": true
+    },
+    {
+      "path": "/app/apps/api/dist/modules/internal-messages/internal-messages.service.js",
+      "matches4dbCompiled": true
+    },
+    {
+      "path": "/app/apps/api/dist/modules/owners/owners.module.js",
+      "matches4dbCompiled": true
+    }
+  ]
+}

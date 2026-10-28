@@ -160,11 +160,20 @@
     },
     {
       "path": "prisma/schema.prisma",
-      "currentSha256": "5c578a23b13281bd5ea6c8468ef65870ec032d9ef36fdd0f0d06654b9887b3b2",
-      "sha256": "f262689cefcad3d49002c7be39361fbcdd6f6f91cd4c556111584bfcdad0902b"
+      "currentSha256": "614a261840489614f5933527fe254b6d96dc792a46e9d64194e49067ac4fd6d7",
+      "sha256": "7557aa6abf639304185cffc85af0df44de424b25bbcf8b14038c0e0f35596da7"
     }
   ],
   "unresolvedConflicts": 0,
   "productionChanged": false,
-  "runtimeVerificationRequiredBeforeDeployment": true
+  "runtimeVerificationRequiredBeforeDeployment": true,
+  "verifiedRuntimeSchema": {
+    "apiImageId": "sha256:f28aa61e0caf40e900f9e42b5afef13dbe768a1c143a250190cee8202bc3492d",
+    "publicSourceCommit": "4db748e0236b4b294bca8171550f3cefed49a8db",
+    "schemaSha256": "614a261840489614f5933527fe254b6d96dc792a46e9d64194e49067ac4fd6d7",
+    "preserveAdditionalScalarFields": [
+      "QueueWorkstation.isReception Boolean @default(false)"
+    ],
+    "metadataOnlyNoBusinessRecords": true
+  }
 }
