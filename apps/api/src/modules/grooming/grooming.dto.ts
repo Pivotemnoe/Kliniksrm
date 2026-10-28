@@ -93,6 +93,7 @@ export class GroomingWorkPeriodDto {
   @IsOptional() @IsInt() @Min(1) version?: number;
 }
 export class GroomingOptionsDto {
+  @IsOptional() @IsString() @MaxLength(2048) clientAccessToken?: string;
   @IsString() @MinLength(1) animalId!: string;
   @IsString() @MinLength(1) serviceId!: string;
   @IsOptional() @IsString() specialistId?: string;

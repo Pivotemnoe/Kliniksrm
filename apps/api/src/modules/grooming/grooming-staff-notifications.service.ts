@@ -1,18 +1,24 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException, OnApplicationBootstrap, OnModuleDestroy, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, OnApplicationBootstrap, OnModuleDestroy, ServiceUnavailableException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import webpush from 'web-push';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthContext, AuthEmployee } from '../auth/auth.types';
 import { ClinicModulesService } from '../clinic-modules/clinic-modules.service';
+import { staffAppSettings } from '../staff-app/staff-app.policy';
 
 const day = 86400000;
 const employeeInclude = { roles: { include: { role: { include: { permissions: { include: { permission: true } } } } } }, permissionOverrides: { include: { permission: true } } } satisfies Prisma.EmployeeInclude;
 type Recipient = Prisma.EmployeeGetPayload<{ include: typeof employeeInclude }>;
+
 function canRead(employee: Recipient) {
   const override = employee.permissionOverrides.find(p => p.permission.code === 'grooming.read');
   return employee.status === 'ACTIVE' && (override ? override.effect !== 'DENY' : employee.roles.some(r => r.role.permissions.some(p => p.permission.code === 'grooming.read')));
 }
 function manager(employee: Recipient) { return employee.roles.some(r => ['director', 'administrator'].includes(r.role.code)); }
+function canReceivePush(employee: Recipient) {
+  const app = staffAppSettings(employee.permissionOverrides);
+  return canRead(employee) && app.enabled && app.notifications;
+}
 
 export async function supersedeGroomingStaffNotices(tx: Prisma.TransactionClient, reservationId: string, now: Date) {
   await tx.groomingPushDelivery.updateMany({ where: { notice: { reservationId }, status: 'QUEUED' }, data: { status: 'CANCELLED', lastError: 'Запись изменилась' } });
@@ -77,11 +83,13 @@ export class GroomingStaffNotificationsService implements OnApplicationBootstrap
     return { employeeId: actor.id, ...(actor.roles.some(r => ['director', 'administrator'].includes(r)) ? {} : { OR: [{ reservationId: null }, { event: 'REASSIGNED' }, { reservation: { employeeId: actor.id } }] }) };
   }
   async config(context: AuthContext) {
+    if (context.employee.staffApp?.notifications === false || context.employee.staffApp?.enabled === false) return { available: false, publicKey: null, devices: [] };
     const vapid = vapidDetails();
     const devices = await this.prisma.groomingPushSubscription.findMany({ where: { employeeId: context.employee.id, sessionId: context.sessionId, expiresAt: { gt: new Date() } }, select: { id: true, endpoint: true, expiresAt: true, lastSuccessAt: true } });
     return { available: Boolean(vapid), publicKey: vapid?.publicKey || null, devices };
   }
   async subscribe(context: AuthContext, input: { endpoint: string; p256dh: string; auth: string }) {
+    if (context.employee.staffApp?.notifications === false || context.employee.staffApp?.enabled === false) throw new ForbiddenException('Уведомления отключены в CRM');
     const vapid = vapidDetails();
     if (!vapid) throw new ServiceUnavailableException('Push-уведомления ещё не настроены на сервере');
     validateGroomingPushEndpoint(input.endpoint);
@@ -122,7 +130,7 @@ export class GroomingStaffNotificationsService implements OnApplicationBootstrap
       const items = await this.prisma.groomingPushDelivery.findMany({ where: { status: 'QUEUED', scheduledAt: { lte: now } }, take: 50, orderBy: { scheduledAt: 'asc' }, include: { notice: { include: { reservation: true, employee: { include: employeeInclude } } }, subscription: { include: { session: true, remoteDevice: { include: { organization: { include: { remoteAccessPolicy: true } } } } } } } });
       for (const item of items) {
         const { notice, subscription } = item, remote = subscription.remoteDevice;
-        const invalid = notice.supersededAt || notice.readAt || notice.expiresAt <= now || subscription.expiresAt <= now || subscription.vapidKey !== vapid.publicKey || subscription.employeeId !== notice.employeeId || !canRead(notice.employee) || subscription.session.userId !== notice.employee.userId || (subscription.session.accessType === 'REMOTE' && (!remote || remote.revokedAt || remote.employeeId !== notice.employeeId || !remote.organization.remoteAccessPolicy?.enabled)) || (notice.reservation && (notice.reservation.version !== notice.reservationVersion || (!manager(notice.employee) && notice.reservation.employeeId !== notice.employeeId && notice.event !== 'REASSIGNED')));
+        const invalid = notice.supersededAt || notice.readAt || notice.expiresAt <= now || subscription.expiresAt <= now || subscription.vapidKey !== vapid.publicKey || subscription.employeeId !== notice.employeeId || !canReceivePush(notice.employee) || subscription.session.userId !== notice.employee.userId || (subscription.session.accessType === 'REMOTE' && (!remote || remote.revokedAt || remote.employeeId !== notice.employeeId || !remote.organization.remoteAccessPolicy?.enabled)) || (notice.reservation && (notice.reservation.version !== notice.reservationVersion || (!manager(notice.employee) && notice.reservation.employeeId !== notice.employeeId && notice.event !== 'REASSIGNED')));
         if (invalid) { await this.prisma.groomingPushDelivery.updateMany({ where: { id: item.id, status: 'QUEUED' }, data: { status: 'CANCELLED', lastError: 'Событие прочитано, изменилось или доступ отозван' } }); continue; }
         if (!(await this.prisma.groomingPushDelivery.updateMany({ where: { id: item.id, status: 'QUEUED' }, data: { status: 'SENDING', attemptedAt: now, attempts: { increment: 1 } } })).count) continue;
         const payload = JSON.stringify({ title: 'TemichevVet · Груминг', body: notice.event === 'TEST' ? 'Проверка: уведомления подключены.' : 'Новое событие в вашем расписании. Откройте кабинет.', url: notice.href, tag: `grooming-staff:${notice.id}`, noticeId: notice.id });

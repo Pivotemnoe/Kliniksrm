@@ -1,0 +1,8 @@
+{
+  "id": "/staff/", "name": "TemichevVet — сотрудники", "short_name": "Сотрудники", "lang": "ru",
+  "description": "Расписание, записи и уведомления сотрудников TemichevVet", "start_url": "/staff/today", "scope": "/staff/",
+  "display": "standalone", "background_color": "#f3f6fb", "theme_color": "#086bc1",
+  "icons": [{ "src": "/staff/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/staff/icon-512.png", "sizes": "512x512", "type": "image/png" }],
+  "shortcuts": [{ "name": "Расписание", "url": "/staff/today" }, { "name": "Уведомления", "url": "/staff/inbox" }]
+}

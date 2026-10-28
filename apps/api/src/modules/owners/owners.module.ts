@@ -8,5 +8,6 @@ import { OwnersService } from './owners.service';
   imports: [AuditModule, AnimalsModule],
   controllers: [OwnersController],
   providers: [OwnersService],
+  exports: [OwnersService],
 })
 export class OwnersModule {}

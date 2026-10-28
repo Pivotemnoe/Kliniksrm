@@ -11,6 +11,8 @@ import { PasswordService } from './password.service';
 const SESSION_TTL_HOURS = Number(process.env.SESSION_TTL_HOURS ?? 12);
 const SESSION_IDLE_TIMEOUT_MINUTES = Number(process.env.SESSION_IDLE_TIMEOUT_MINUTES ?? 15);
 
+import { staffAppSettings } from '../staff-app/staff-app.policy';
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -341,6 +343,7 @@ export class AuthService {
       position: employee.position,
       defaultRoute: employee.defaultRoute,
       accountScope: employee.accountScope || 'CLINIC',
+      staffApp: staffAppSettings(employee.permissionOverrides),
       restrictLoginToShifts: Boolean(employee.restrictLoginToShifts),
       allowRemoteOutsideShift: Boolean(employee.allowRemoteOutsideShift),
       mustChangePassword,

@@ -44,8 +44,11 @@ import { TasksModule } from './modules/tasks/tasks.module';
 import { VisitsModule } from './modules/visits/visits.module';
 import { PrismaModule } from './prisma/prisma.module';
 
+import { StaffAppModule } from './modules/staff-app/staff-app.module';
+
 @Module({
   imports: [
+    StaffAppModule,
     AvitoModule,
     GroomingCrmModule,
     PetHotelModule,

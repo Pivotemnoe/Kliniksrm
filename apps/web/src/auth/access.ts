@@ -9,6 +9,7 @@ type RouteAccessRule = {
 };
 
 const routeAccessRules: RouteAccessRule[] = [
+  { path: '/settings/staff-app', anyOf: ['employees.manage', 'remote_access.manage', 'grooming.manage'], roles: ['director', 'administrator'] },
   { path: '/pet-hotel/settings', anyOf: ['pet_hotel.manage'] },
   { path: '/pet-hotel', anyOf: ['pet_hotel.read'] },
   { path: '/avito', anyOf: ['avito.read'], roles: ['director', 'administrator'] },

@@ -10,5 +10,5 @@ import { GroomingTeamService } from './grooming-team.service';
 import { AuthModule } from '../auth/auth.module';
 import { RemoteAccessModule } from '../remote-access/remote-access.module';
 import { GroomingPhonesController } from './grooming-phones.controller';
-@Module({ imports: [AuditModule, ClinicModulesModule, AuthModule, RemoteAccessModule], controllers: [GroomingController, GroomingStaffController, GroomingPhonesController], providers: [GroomingCrmService, GroomingSyncService, GroomingStaffNotificationsService, GroomingTeamService], exports: [GroomingCrmService] })
+@Module({ imports: [AuditModule, ClinicModulesModule, AuthModule, RemoteAccessModule], controllers: [GroomingController, GroomingStaffController, GroomingPhonesController], providers: [GroomingCrmService, GroomingSyncService, GroomingStaffNotificationsService, GroomingTeamService], exports: [GroomingCrmService, GroomingStaffNotificationsService] })
 export class GroomingCrmModule {}

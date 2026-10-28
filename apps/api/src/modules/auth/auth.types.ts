@@ -1,4 +1,6 @@
 export type AuthEmployee = {
+  accountScope?: string;
+  staffApp?: { enabled: boolean; clinicBooking: boolean; groomingBooking: boolean; notifications: boolean };
   id: string;
   userId: string;
   fullName: string;

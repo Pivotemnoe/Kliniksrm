@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
+    "staff:dev": "vite --config vite.staff.config.ts",
+    "staff:preview": "vite preview --config vite.staff.config.ts",
+    "staff:build": "tsc --noEmit -p tsconfig.json && vite build --config vite.staff.config.ts",
     "build": "tsc --noEmit -p tsconfig.json && vite build",
     "assistant:build": "tsc --noEmit -p tsconfig.json && vite build --config vite.assistant.config.ts",
     "preview": "vite preview --host 0.0.0.0",

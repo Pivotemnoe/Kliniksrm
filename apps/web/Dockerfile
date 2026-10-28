@@ -22,6 +22,7 @@ COPY apps/web apps/web
 COPY apps/owner-gateway/src/grooming/catalog.ts apps/owner-gateway/src/grooming/catalog.ts
 
 RUN npm --workspace @clinic-crm/web run build
+RUN npm --workspace @clinic-crm/web run staff:build
 
 FROM nginx:1.27-alpine AS runtime
 
@@ -36,6 +37,7 @@ LABEL org.opencontainers.image.source=$TEMICHEVVET_IMAGE_SOURCE
 
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
+COPY --from=build /app/apps/web/dist-staff /usr/share/nginx/html/staff
 COPY --from=build /app/apps/web/dist/assets /opt/temichevvet-web-assets
 COPY apps/web/retain-assets.sh /docker-entrypoint.d/40-retain-assets.sh
 RUN chmod +x /docker-entrypoint.d/40-retain-assets.sh

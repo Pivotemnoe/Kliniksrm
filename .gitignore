@@ -46,3 +46,4 @@ installers/*.exe
 # Local module acceptance and private release receipts
 .artifacts/
 apps/web/dist-grooming*/
+apps/web/dist-staff/

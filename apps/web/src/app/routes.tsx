@@ -88,6 +88,7 @@ const TasksPage = lazyPage(() => import('../features/tasks/TasksPage'), 'TasksPa
 const VisitCardPage = lazyPage(() => import('../features/visits/VisitCardPage'), 'VisitCardPage');
 const VisitsPage = lazyPage(() => import('../features/visits/VisitsPage'), 'VisitsPage');
 const LoginPage = lazyPage(() => import('../pages/LoginPage'), 'LoginPage');
+const StaffAppSettingsPage = lazyPage(() => import('../features/staffApp/StaffAppSettingsPage'), 'StaffAppSettingsPage');
 const ProfilePage = lazyPage(() => import('../pages/ProfilePage'), 'ProfilePage');
 
 export const routes: RouteObject[] = [
@@ -189,6 +190,7 @@ export const routes: RouteObject[] = [
           { path: '/settings/audit', element: <AuditLogsPage /> },
           { path: '/settings/system', element: <SystemSettingsPage /> },
           { path: '/settings/remote-access', element: <RemoteAccessSettingsPage /> },
+          { path: '/settings/staff-app', element: <StaffAppSettingsPage /> },
           { path: '/settings/support', element: <SupportPage /> },
           { path: '/settings/import', element: <VetafImportPage /> },
           { path: '/messages', element: <MessagesPage /> },

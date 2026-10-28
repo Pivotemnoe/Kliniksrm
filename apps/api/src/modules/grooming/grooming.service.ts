@@ -8,6 +8,7 @@ import { AuthEmployee } from '../auth/auth.types';
 import { ClinicModulesService } from '../clinic-modules/clinic-modules.service';
 import { normalizePhoneForLookup } from '../../common/phone';
 import { bookingAttribution } from '../../common/booking-attribution';
+import { assertStaffBooking } from '../staff-app/staff-app.policy';
 import { queueGroomingStaffNotices, supersedeGroomingStaffNotices } from './grooming-staff-notifications.service';
 import { GroomingPriceImportDto, GroomingScheduleBatchDto, GroomingRulesBatchDto, GroomingBookDto, GroomingCancelDto, GroomingChangeDto, GroomingLocationDto, GroomingOptionsDto, GroomingPetDto, GroomingRuleDto, GroomingServiceDto, GroomingSettingsDto, GroomingSpecialistDto, GroomingStatusDto, GroomingWorkPeriodDto, GroomingWorkplaceDto } from './grooming.dto';
 
@@ -17,7 +18,7 @@ const ruleInclude = { specialist: { include: { employee: true } }, service: true
 const bookingInclude = { rule: { select: { serviceId: true } }, animal: { select: { id: true, nickname: true, species: true, breed: true } }, owner: { select: { id: true, fullName: true, phone: true } }, employee: { select: { id: true, fullName: true } }, location: { select: { id: true, name: true, timezone: true } }, workplace: { select: { id: true, name: true } } } satisfies Prisma.GroomingReservationInclude;
 type Rule = Prisma.GroomingServiceRuleGetPayload<{ include: typeof ruleInclude }>;
 type Booking = Prisma.GroomingReservationGetPayload<{ include: typeof bookingInclude }>;
-type Offer = { ownerId: string; animalId: string; ruleId: string; ruleVersion: number; serviceVersion: string; startsAt: string; expiresAt: string; species: string; size: string; coat: string; ignoreId?: string; staff: boolean };
+type Offer = { ownerId: string; animalId: string; ruleId: string; ruleVersion: number; serviceVersion: string; startsAt: string; expiresAt: string; species: string; size: string; coat: string; ignoreId?: string; staff: boolean; actorId?: string };
 const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 export const lockGroomingSchedule = (tx: Prisma.TransactionClient) => tx.$executeRaw`SELECT pg_advisory_xact_lock(20261019, 2)`;
@@ -28,6 +29,26 @@ export class GroomingCrmService {
 
   private manager(actor: AuthEmployee) { return actor.roles.some(r => ['director', 'administrator'].includes(r)); }
   private scope(actor: AuthEmployee): Prisma.GroomingReservationWhereInput { return this.manager(actor) ? {} : { employeeId: actor.id }; }
+  issueStaffClientAccess(actor: AuthEmployee, ownerId: string) {
+    assertStaffBooking(actor, 'grooming');
+    const body = Buffer.from(JSON.stringify({ actorId: actor.id, ownerId, expires: Date.now() + 15 * minute })).toString('base64url');
+    return `${body}.${createHmac('sha256', this.secret()).update(`client:${body}`).digest('base64url')}`;
+  }
+  async assertStaffClientAccess(actor: AuthEmployee, ownerId: string, token?: string) {
+    assertStaffBooking(actor, 'grooming');
+    if (token) {
+      try {
+        const [body, signature, extra] = token.split('.');
+        const expected = createHmac('sha256', this.secret()).update(`client:${body}`).digest();
+        const received = Buffer.from(signature || '', 'base64url');
+        const proof = JSON.parse(Buffer.from(body, 'base64url').toString());
+        if (!extra && received.length === expected.length && timingSafeEqual(received, expected)
+          && proof.actorId === actor.id && proof.ownerId === ownerId && proof.expires > Date.now()) return;
+      } catch { /* Invalid proof never grants access. */ }
+    }
+    if (await this.prisma.groomingReservation.findFirst({ where: { ownerId, employeeId: actor.id }, select: { id: true } })) return;
+    throw new ForbiddenException('Найдите клиента по полному номеру телефона');
+  }
   async settings() {
     const installation = await this.modules.installation('GROOMING');
     return this.prisma.groomingSettings.upsert({ where: { installationId: installation.id }, create: { installationId: installation.id }, update: {} });
@@ -328,12 +349,12 @@ export class GroomingCrmService {
     await this.owner(ownerId); await this.animal(ownerId, input.animalId, input.species);
     if (!actor) await this.assertTestClient(ownerId);
     await this.writable(undefined, !actor);
-    if (actor && !this.manager(actor)) throw new ForbiddenException('Создавать записи может администратор');
+    if (actor && !this.manager(actor)) await this.assertStaffClientAccess(actor, ownerId, input.clientAccessToken);
     if (input.species === 'DOG' && input.size === 'ANY') throw new BadRequestException('Укажите размер собаки');
     if (input.reservationId) await this.editable(input.reservationId, ownerId, actor);
     const center = date(`${input.date}T12:00:00Z`);
     if (Math.abs(center.getTime() - now.getTime()) > 92 * day) throw new BadRequestException('Выберите дату в ближайшие 90 дней');
-    const rules = (await this.prisma.groomingServiceRule.findMany({ where: { isActive: true, serviceId: input.serviceId, species: input.species, size: { in: ['ANY', input.size] }, coat: { in: ['ANY', input.coat] }, ...(input.specialistId ? { specialistId: input.specialistId } : {}) }, include: ruleInclude })).filter(usable);
+    const rules = (await this.prisma.groomingServiceRule.findMany({ where: { isActive: true, serviceId: input.serviceId, species: input.species, size: { in: ['ANY', input.size] }, coat: { in: ['ANY', input.coat] }, ...(input.specialistId ? { specialistId: input.specialistId } : {}), ...(actor && !this.manager(actor) ? { specialist: { employeeId: actor.id } } : {}) }, include: ruleInclude })).filter(usable);
     const offers: Array<Record<string, unknown>> = [];
     for (const rule of rules) {
       const from = new Date(Math.max(center.getTime() - 26 * 3600000, now.getTime() + (actor ? 0 : rule.minimumLeadMinutes * minute))), to = new Date(Math.min(center.getTime() + 26 * 3600000, now.getTime() + rule.maximumDaysAhead * day));
@@ -346,7 +367,7 @@ export class GroomingCrmService {
           const begins = new Date(time), end = new Date(time + rule.durationMinutes * minute), blocked = new Date(end.getTime() + rule.bufferMinutes * minute);
           if (localDay(begins, rule.location.timezone) !== input.date) continue;
           if (await this.conflict(this.prisma, rule.specialist.employeeId, rule.workplaceId, begins, blocked, input.reservationId)) continue;
-          const offer: Offer = { ownerId, animalId: input.animalId, ruleId: rule.id, ruleVersion: rule.version, serviceVersion: rule.service.updatedAt.toISOString(), startsAt: begins.toISOString(), expiresAt: new Date(now.getTime() + 5 * minute).toISOString(), species: input.species, size: input.size, coat: input.coat, ignoreId: input.reservationId, staff: Boolean(actor) };
+          const offer: Offer = { ownerId, animalId: input.animalId, ruleId: rule.id, ruleVersion: rule.version, serviceVersion: rule.service.updatedAt.toISOString(), startsAt: begins.toISOString(), expiresAt: new Date(now.getTime() + 5 * minute).toISOString(), species: input.species, size: input.size, coat: input.coat, ignoreId: input.reservationId, staff: Boolean(actor), actorId: actor?.id };
           offers.push({ offerToken: this.sign(offer), startsAt: begins.toISOString(), endsAt: end.toISOString(), blockedUntil: blocked.toISOString(), expiresAt: offer.expiresAt, specialistId: rule.specialistId, specialistName: rule.specialist.displayName, serviceTitle: rule.service.title, price: rule.service.price, priceType: rule.service.priceType, maximumPrice: rule.service.maximumPrice, priceLabel: groomingPriceLabel(rule.service), durationMinutes: rule.durationMinutes, bufferMinutes: rule.bufferMinutes, timezone: rule.location.timezone, locationName: rule.location.name });
           if (offers.length >= 160) break;
         }
@@ -375,12 +396,15 @@ export class GroomingCrmService {
       if (previous) { if (previous.fingerprint !== fingerprint) throw new ConflictException('Ключ записи уже использован с другими данными'); return previous.result; }
       await this.writable(tx, !actor);
       if (!actor) await this.assertTestClient(ownerId, tx);
-      if (actor && !this.manager(actor)) throw new ForbiddenException('Создавать и переносить записи может администратор');
+      if (actor && !this.manager(actor)) assertStaffBooking(actor, 'grooming');
       const offer = this.verify(input.offerToken);
+      if (offer.actorId && offer.actorId !== actor?.id) throw new ForbiddenException('Предложение выдано другому сотруднику');
+      if (actor && !this.manager(actor) && offer.actorId !== actor.id) throw new ForbiddenException('Обновите свободное время в своём кабинете');
       if (offer.ownerId !== ownerId || offer.staff !== Boolean(actor) || (offer.ignoreId || undefined) !== reschedule?.id || date(offer.expiresAt) <= now) throw new ConflictException('Предложение истекло. Обновите свободное время');
       await this.owner(ownerId, tx); await this.animal(ownerId, offer.animalId, offer.species, tx);
       const rule = await tx.groomingServiceRule.findUnique({ where: { id: offer.ruleId }, include: ruleInclude });
       if (!rule || !usable(rule) || rule.version !== offer.ruleVersion || rule.service.updatedAt.toISOString() !== offer.serviceVersion) throw new ConflictException('Условия услуги изменились. Обновите свободное время');
+      if (actor && !this.manager(actor) && rule.specialist.employeeId !== actor.id) throw new ForbiddenException('Можно записывать только к себе');
       const startsAt = date(offer.startsAt), endsAt = new Date(startsAt.getTime() + rule.durationMinutes * minute), blockedUntil = new Date(endsAt.getTime() + rule.bufferMinutes * minute);
       if (startsAt.getTime() < now.getTime() + (actor ? 0 : rule.minimumLeadMinutes * minute) || startsAt.getTime() > now.getTime() + rule.maximumDaysAhead * day) throw new ConflictException('Это время больше недоступно');
       const shift = await tx.groomingWorkPeriod.findFirst({ where: { specialistId: rule.specialistId, locationId: rule.locationId, OR: [{ workplaceId: null }, { workplaceId: rule.workplaceId }], kind: 'WORK', isActive: true, startsAt: { lte: startsAt }, endsAt: { gte: blockedUntil } } });

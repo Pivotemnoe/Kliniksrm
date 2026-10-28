@@ -1,0 +1,7 @@
+ARG BASE_API_IMAGE
+FROM ${BASE_API_IMAGE}
+ARG RELEASE_REVISION
+LABEL org.opencontainers.image.revision=$RELEASE_REVISION
+ENV TEMICHEVVET_GIT_COMMIT=$RELEASE_REVISION
+# There is no database-schema or dependency change in this release.
+COPY api/ /app/apps/api/dist/

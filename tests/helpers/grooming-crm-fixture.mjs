@@ -24,10 +24,12 @@ export class FakeCurrentMax {
   async sendPortalButton() { throw new Error('Unexpected live invitation transport'); }
 }
 export async function groomingFixture({ fixed = false, preview = false, device = false } = {}) {
-  const crmName = device ? 'grooming_crm_device_qa' : preview ? 'grooming_crm_integration_preview' : 'avito_merge_grooming_crm_20261020';
-  const portalName = device ? 'grooming_portal_device_qa' : preview ? 'grooming_portal_integration_preview' : 'avito_merge_grooming_portal_20261020';
-  const activeCrmUrl = crmUrl.replace('avito_merge_grooming_crm_20261020', crmName);
-  const activePortalUrl = portalUrl.replace('avito_merge_grooming_portal_20261020', portalName);
+  const profile = process.env.GROOMING_QA_DATABASE_PROFILE;
+  if (profile && profile !== 'staff-mobile-20261028') throw new Error('Unknown isolated grooming QA database profile');
+  const crmName = profile ? 'avito_merge_grooming_crm_20261020' : device ? 'grooming_crm_device_qa' : preview ? 'grooming_crm_integration_preview' : 'avito_merge_grooming_crm_20261020';
+  const portalName = profile ? 'avito_merge_grooming_portal_20261020' : device ? 'grooming_portal_device_qa' : preview ? 'grooming_portal_integration_preview' : 'avito_merge_grooming_portal_20261020';
+  const activeCrmUrl = crmUrl.replace('avito_merge_grooming_crm_20261020', crmName) + (profile ? '?schema=staff_mobile_qa_20261028' : '');
+  const activePortalUrl = portalUrl.replace('avito_merge_grooming_portal_20261020', portalName) + (profile ? '?schema=staff_mobile_qa_20261028' : '');
   assertGroomingDatabase(activeCrmUrl, crmName); assertGroomingDatabase(activePortalUrl, portalName);
   const prisma = new PrismaClient({ datasources: { db: { url: activeCrmUrl } } });
   const gateway = new GatewayPrismaClient({ datasources: { db: { url: activePortalUrl } } });

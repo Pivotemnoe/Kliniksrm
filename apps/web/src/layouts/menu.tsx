@@ -112,6 +112,7 @@ export const menuItems: MenuProps['items'] = [
       { key: '/settings/audit', icon: <AuditOutlined />, label: 'Журнал аудита' },
       { key: '/settings/system', icon: <DatabaseOutlined />, label: 'Система' },
       { key: '/settings/remote-access', icon: <SafetyCertificateOutlined />, label: 'Удалённый доступ' },
+      { key: '/settings/staff-app', icon: <TeamOutlined />, label: 'Приложение сотрудников' },
       { key: '/settings/support', icon: <CustomerServiceOutlined />, label: 'Поддержка и лицензия' },
       { key: '/settings/import', icon: <ExportOutlined />, label: 'Перенос данных' },
     ],

@@ -36,3 +36,28 @@ test('read-only session stays valid outside shifts but all clinical mutation ver
   for (const method of ['POST','PATCH','PUT','DELETE']) { request.method=method; await assert.rejects(guard.canActivate(ctx),/просмотр/); }
   request.method='GET'; f.device.employeeId='other'; await assert.rejects(guard.canActivate(ctx),/отозвано/);
 });
+
+test('mobile booking exception still requires its individual grant and preserves the ordinary remote write ban',async()=>{
+  const {Reflector}=require('@nestjs/core');
+  const {StaffAppController}=require('../apps/api/dist/modules/staff-app/staff-app.controller.js');
+  const {PermissionsGuard}=require('../apps/api/dist/modules/auth/permissions.guard.js');
+  const {assertStaffBooking}=require('../apps/api/dist/modules/staff-app/staff-app.policy.js');
+  const f=fixture(); f.service.touchSession=async()=>{};
+  f.employee.permissionOverrides=['appointments.read','appointments.manage'].map(code=>({permission:{code},effect:'GRANT'}));
+  f.prisma.session.findUnique=async()=>({id:'s',userId:'u',accessType:'REMOTE',remoteDeviceId:'d',remoteDevice:f.device,expiresAt:new Date(Date.now()+60000),user:{employee:f.employee,mustChangePassword:false}});
+  const reflector=new Reflector(), guard=new SessionAuthGuard(reflector,f.prisma,f.service,{log:async()=>{}}), permissions=new PermissionsGuard(reflector);
+  const request={headers:{cookie:`${SESSION_COOKIE_NAME}=token`},method:'POST',originalUrl:'/api/v1/staff-app/clinic/appointments'};
+  let handler=StaffAppController.prototype.appointment;
+  const ctx={getHandler:()=>handler,getClass:()=>StaffAppController,switchToHttp:()=>({getRequest:()=>request})};
+  assert.equal(await guard.canActivate(ctx),true); assert.equal(permissions.canActivate(ctx),true);
+  assert.throws(()=>assertStaffBooking(request.auth.employee,'clinic'),/не включена/);
+  f.employee.permissionOverrides.push({permission:{code:'staff_app.clinic_booking'},effect:'GRANT'});
+  assert.equal(await guard.canActivate(ctx),true); assert.doesNotThrow(()=>assertStaffBooking(request.auth.employee,'clinic'));
+  f.employee.permissionOverrides=f.employee.permissionOverrides.filter(row=>row.permission.code!=='appointments.manage');
+  assert.equal(await guard.canActivate(ctx),true); assert.throws(()=>permissions.canActivate(ctx),/appointments.manage/);
+  handler=StaffAppController.prototype.save;
+  request.originalUrl='/api/v1/staff-app/settings/e'; request.method='PATCH';
+  await assert.rejects(guard.canActivate(ctx),/просмотр/);
+  handler=()=>{}; request.originalUrl='/api/v1/visits'; request.method='POST';
+  await assert.rejects(guard.canActivate(ctx),/просмотр/);
+});
