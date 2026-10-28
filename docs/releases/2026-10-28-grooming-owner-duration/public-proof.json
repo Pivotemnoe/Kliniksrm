@@ -1,0 +1,23 @@
+{
+  "verified": true,
+  "results": [
+    {
+      "url": "https://staff.temichevvet.ru/release.json?grooming-duration=4db748e",
+      "status": 200,
+      "release": {
+        "revision": "4db748e0236b4b294bca8171550f3cefed49a8db",
+        "release": "crm-grooming-owner-duration-20261028-r1",
+        "baseWebRevision": "e24cf535e6a1267cb2819cccc2cc820ccfda9faa",
+        "previousRevision": "365ef4914b72d487be1e689360bad66f64d08c9a",
+        "baseWebImage": "sha256:5d454b9bca584842b06c1f38ba77855d015370161bf73bed3ab006b293b46d6b",
+        "changeScope": "Owner duration notifications; CRM Web release metadata only"
+      }
+    },
+    {
+      "url": "https://cabinet.temichevvet.ru/portal/grooming.js?v=20261019-3",
+      "status": 200,
+      "sha256": "417ffc9a78b067fe150b33d6d2560a8005d81cba9acb26d74d3b557c869bbfec",
+      "cacheControl": "public, max-age=0"
+    }
+  ]
+}

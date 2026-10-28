@@ -1,0 +1,26 @@
+{
+  "verification": {
+    "status": "VERIFIED",
+    "revision": "4db748e0236b4b294bca8171550f3cefed49a8db",
+    "image": "sha256:e969c35cb2b16dc21a6220fa52b379820a535f873a916236755e88f2f097b2c5",
+    "backup": "/opt/temichevvet-owner-gateway/backups/crm-grooming-owner-duration-20261028-r1",
+    "protectedServicesPreserved": true,
+    "maxConfigurationPreserved": true
+  },
+  "receipt": {
+    "at": "2026-10-28T16:56:31.302397+00:00",
+    "revision": "4db748e0236b4b294bca8171550f3cefed49a8db",
+    "image": "sha256:e969c35cb2b16dc21a6220fa52b379820a535f873a916236755e88f2f097b2c5",
+    "protectedServicesPreserved": true,
+    "maxConfigurationPreserved": true,
+    "recordsRestored": false
+  },
+  "state": {
+    "connected": true,
+    "fresh": true,
+    "selfBookingEnabled": true,
+    "services": 172,
+    "specialists": 0,
+    "customerJsSha256": "417ffc9a78b067fe150b33d6d2560a8005d81cba9acb26d74d3b557c869bbfec"
+  }
+}

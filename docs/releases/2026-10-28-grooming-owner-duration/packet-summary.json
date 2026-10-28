@@ -1,0 +1,14 @@
+{
+  "releaseId": "crm-grooming-owner-duration-20261028-r1",
+  "revision": "4db748e0236b4b294bca8171550f3cefed49a8db",
+  "clinicArchiveSha256": "3a8b4812bdac15e9c4d8c7353633a11977c788fca646a56bafb0ae9dd7f2a1b5",
+  "gatewayArchiveSha256": "1ecabb5c074ae893b9921ff05aca1e7db989db688dfa579b6f9d2015587c30fd",
+  "schemaChanged": false,
+  "apiAllowedPaths": [
+    "/app/apps/api/dist/modules/grooming/grooming.service.js",
+    "/app/apps/api/dist/modules/grooming/grooming.service.js.map",
+    "/app/apps/api/dist/modules/grooming/grooming.service.d.ts"
+  ],
+  "gatewayAllowedPath": "/app/apps/owner-gateway/dist/public/grooming.js",
+  "webChanged": "release metadata only"
+}

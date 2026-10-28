@@ -1,0 +1,49 @@
+{
+  "build": {
+    "id": "sha256:e969c35cb2b16dc21a6220fa52b379820a535f873a916236755e88f2f097b2c5",
+    "reference": "temichevvet-owner-gateway:grooming-owner-duration-4db748e-r1",
+    "runtimePreservation": {
+      "protectedFiles": 279,
+      "unexpectedChanges": []
+    }
+  },
+  "backup": {
+    "at": "2026-10-28T16:46:07.857245+00:00",
+    "verified": true,
+    "restoreTested": true,
+    "migrationsRehearsed": true,
+    "candidateQualified": true,
+    "counts": "1399|75|150",
+    "databaseSha256": "c0ac18bf7b6aec52d7d5bff4302cb7a22940bc62765fb64909abb7823b0e0ded",
+    "envSha256": "a5e9477731be7f91279d29641a4b78ee17574f8e1ceead6d41c7cc9a4ca11451",
+    "composeSha256": "ff81e83e06092612392f4c3085bfb6d13144f6f3d76dccffe696f7ef51957d1c",
+    "protected": [
+      {
+        "name": "temichevvet-owner-postgres",
+        "id": "5c37084f42a1895da8dfbdc06b692bdb4793a1b62773c71d7882e51cdea59262",
+        "image": "sha256:4e6e670bb069649261c9c18031f0aded7bb249a5b6664ddec29c013a89310d50",
+        "started": "2026-07-23T14:18:46.867511514Z"
+      },
+      {
+        "name": "temichevvet-owner-backup",
+        "id": "c2c4b498781cdb901a304242d18b0ea1b29d17e374e7d98aa18026b78a4a77b1",
+        "image": "sha256:4e6e670bb069649261c9c18031f0aded7bb249a5b6664ddec29c013a89310d50",
+        "started": "2026-07-23T14:19:46.264909591Z"
+      }
+    ]
+  },
+  "qualification": {
+    "websiteMinimum90": true,
+    "actualShiftPlace": true,
+    "occupiedPlaceExcluded": true,
+    "unassignedShiftExcluded": true,
+    "qualified": true,
+    "ownerCountsPreserved": true,
+    "counts": {
+      "owners": 1399,
+      "bindings": 75,
+      "sessions": 150
+    },
+    "externalTransportConfigured": false
+  }
+}

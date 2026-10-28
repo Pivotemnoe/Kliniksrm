@@ -1,0 +1,29 @@
+{
+  "qualification": {
+    "qualified": true,
+    "checks": [
+      "two_places_two_groomers",
+      "third_shift_refused",
+      "any_service_without_website_rule",
+      "idempotent_manual_booking",
+      "overlap_refused",
+      "website_minimum_90",
+      "actual_shift_place",
+      "own_groomer_refines_duration",
+      "foreign_groomer_refused",
+      "extension_collision_refused",
+      "price_retained",
+      "staff_duration_notice",
+      "owner_duration_change_notice",
+      "synthetic_records_removed"
+    ],
+    "externalMaxMessages": 0,
+    "productionChanged": false
+  },
+  "rollbackCompatibility": {
+    "oldRuntimeReadsMigratedDatabase": true,
+    "additiveColumnRetained": true,
+    "businessDataRestored": false
+  },
+  "restoreTested": true
+}

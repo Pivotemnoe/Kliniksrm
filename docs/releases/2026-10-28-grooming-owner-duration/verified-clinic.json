@@ -1,0 +1,23 @@
+{
+    "status":  "VERIFIED",
+    "revision":  "4db748e0236b4b294bca8171550f3cefed49a8db",
+    "candidate":  {
+                      "api":  "sha256:f28aa61e0caf40e900f9e42b5afef13dbe768a1c143a250190cee8202bc3492d",
+                      "web":  "sha256:b4c416686181557d619e1ef8a5b5ceb7a281c1cf47f9f5b4e129c72967c654ba"
+                  },
+    "backup":  "C:/Users/TemichevVet/TemichevVet/backups/manual-releases/crm-grooming-owner-duration-20261028-r1",
+    "databaseSha256":  "284cdeda8218eed8b8ab7ff9001dc158bff9dd6b5274f487f6c17a7576f679eb",
+    "restoreTested":  true,
+    "rollbackRehearsed":  true,
+    "protectedServices":  4,
+    "database":  {
+                     "applied":  true,
+                     "shiftWorkplaceColumn":  {
+                                                  "data_type":  "boolean",
+                                                  "is_nullable":  "NO",
+                                                  "column_default":  "false"
+                                              },
+                     "clientKnowsFlag":  true,
+                     "calendarReady":  true
+                 }
+}
