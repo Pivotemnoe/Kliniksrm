@@ -1,0 +1,83 @@
+{
+  "source": "/Users/konstantin/.codex/worktrees/staff-android-native/CRM",
+  "baseCommit": "813d2ab5a0f5f792d562d3369c51a602b2471e1b",
+  "capturedAt": "2026-10-28T15:24:43.265Z",
+  "files": [
+    {
+      "path": "apps/api/src/app.module.ts",
+      "sha256": "e9fe71cb1f1e4561890021294d9222bf13c55b8391704cc207c69bcbac2069b8"
+    },
+    {
+      "path": "apps/api/src/modules/auth/decorators/passive-session-activity.decorator.ts",
+      "sha256": "7b59004b63c180ed18f832540e683e254258e6a2d38cb4fdb8cb2d363afe9996"
+    },
+    {
+      "path": "apps/api/src/modules/auth/session-auth.guard.ts",
+      "sha256": "c2ce726ec83c97c5ac7d388eb111de9d7ea149bb2f2604613b570089c472f600"
+    },
+    {
+      "path": "apps/api/src/modules/internal-messages/dto/clinic-chat.dto.ts",
+      "sha256": "f64a8be72bead33e2f45797d04e7591513bdbace67a874856f79467206039928"
+    },
+    {
+      "path": "apps/api/src/modules/internal-messages/dto/create-internal-message.dto.ts",
+      "sha256": "a72087689fc5e541c161b59a2036a12114dd1229616989c627db490c92695dd6"
+    },
+    {
+      "path": "apps/api/src/modules/internal-messages/dto/list-internal-messages-query.dto.ts",
+      "sha256": "d7f4d81987e22de7fa6f288fd8c49e3c8f581983d5d9012c6ebd5cbcd4eb6b1f"
+    },
+    {
+      "path": "apps/api/src/modules/internal-messages/dto/read-conversation.dto.ts",
+      "sha256": "2bf3510d6f69369200d5bb12cd7b43f5957e55e5920fb794ce9e6273b89a856f"
+    },
+    {
+      "path": "apps/api/src/modules/internal-messages/internal-messages.controller.ts",
+      "sha256": "75ea8c774b0866eab5b5451bda2b0c8650acf56d8dffd651b59bb0f3b3ffeeb9"
+    },
+    {
+      "path": "apps/api/src/modules/internal-messages/internal-messages.module.ts",
+      "sha256": "e7e6ec2dec498a27876ed33ea2338bdf7ae5f4dd991692812191428dcd70d598"
+    },
+    {
+      "path": "apps/api/src/modules/internal-messages/internal-messages.service.ts",
+      "sha256": "8da59b0a852ed9b5a97a181d3b2ef34aa5afb79f976998b0e460fd3bd8305d74"
+    },
+    {
+      "path": "apps/api/src/modules/internal-messages/staff-clinic-chat.service.ts",
+      "sha256": "a88b93c8b59ea28bee9a856e2cbc7ba8de745227977013846b76ea4b877a122d"
+    },
+    {
+      "path": "apps/api/src/modules/staff-native-push/native-push-transport.ts",
+      "sha256": "080a4e7b9422c5ce46f079601662cf7ba84bb23b2522ea3674ca53b66335c3ee"
+    },
+    {
+      "path": "apps/api/src/modules/staff-native-push/no-store.interceptor.ts",
+      "sha256": "18771d5b78f0e4055b0bc42abbf92f6f62f7ca45d897a9ee4dc8077b7bc3b263"
+    },
+    {
+      "path": "apps/api/src/modules/staff-native-push/staff-native-push.controller.ts",
+      "sha256": "1eacac6332e7f6e17564da97af691efcbc96db32f4faf70053f99f1423ef5271"
+    },
+    {
+      "path": "apps/api/src/modules/staff-native-push/staff-native-push.dto.ts",
+      "sha256": "a0c5f8754285284527e7221030f8f9b7b8283b15c64892edb55dfa4faea70e04"
+    },
+    {
+      "path": "apps/api/src/modules/staff-native-push/staff-native-push.module.ts",
+      "sha256": "3f394df08fc1e7e046eb9156ebb64fcb9609ad04724bf684033179e1a7c4065d"
+    },
+    {
+      "path": "apps/api/src/modules/staff-native-push/staff-native-push.service.ts",
+      "sha256": "7ef1f4a1d6603e86a4281484414be2a1426f1f54b2fcdf6cf56d31688478a130"
+    },
+    {
+      "path": "docs/mobile/STAFF_CHAT_API.md",
+      "sha256": "fcd556e41a2f15a5d8b3aee808b6fbc18f6955bea71cf086f730b97e72b4962a"
+    },
+    {
+      "path": "prisma/schema.prisma",
+      "sha256": "933a0e5753dbe0ab20296e28d0ca46afc6b54f581385fe17e25dbc78f93be30f"
+    }
+  ]
+}

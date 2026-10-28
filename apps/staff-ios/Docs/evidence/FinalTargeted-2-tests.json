@@ -1,0 +1,87 @@
+{
+  "devices" : [
+    {
+      "architecture" : "arm64",
+      "deviceId" : "5648BDF7-A57D-4633-BCC4-56B887C0B15F",
+      "deviceName" : "TemichevVet Staff iOS QA 20261028",
+      "modelName" : "iPhone 17",
+      "osBuildNumber" : "24A434",
+      "osVersion" : "27.0",
+      "platform" : "iOS Simulator"
+    }
+  ],
+  "testNodes" : [
+    {
+      "children" : [
+        {
+          "children" : [
+            {
+              "children" : [
+                {
+                  "duration" : "1 мин 38 с",
+                  "durationInSeconds" : 98.98048198223114,
+                  "name" : "test03GroomerCreatesMovesCompletesAndCancelsOwnBooking()",
+                  "nodeIdentifier" : "NativeAcceptanceTests/test03GroomerCreatesMovesCompletesAndCancelsOwnBooking()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffUITests/NativeAcceptanceTests/test03GroomerCreatesMovesCompletesAndCancelsOwnBooking",
+                  "nodeType" : "Test Case",
+                  "result" : "Passed"
+                },
+                {
+                  "children" : [
+                    {
+                      "name" : "Test exceeded execution time allowance of 3 minutes",
+                      "nodeType" : "Failure Message"
+                    },
+                    {
+                      "name" : "Invalid frame dimension (negative or non-finite).",
+                      "nodeType" : "Runtime Warning"
+                    }
+                  ],
+                  "duration" : "3 мин",
+                  "durationInSeconds" : 180,
+                  "name" : "test06PersonalChatDoctorGroomerAndDoctorDoctor()",
+                  "nodeIdentifier" : "NativeAcceptanceTests/test06PersonalChatDoctorGroomerAndDoctorDoctor()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffUITests/NativeAcceptanceTests/test06PersonalChatDoctorGroomerAndDoctorDoctor",
+                  "nodeType" : "Test Case",
+                  "result" : "Failed"
+                },
+                {
+                  "children" : [
+                    {
+                      "name" : "Invalid frame dimension (negative or non-finite).",
+                      "nodeType" : "Runtime Warning"
+                    }
+                  ],
+                  "duration" : "1 мин 24 с",
+                  "durationInSeconds" : 84.93968200683594,
+                  "name" : "test07GeneralClinicChatIsSharedWithIndependentReadState()",
+                  "nodeIdentifier" : "NativeAcceptanceTests/test07GeneralClinicChatIsSharedWithIndependentReadState()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffUITests/NativeAcceptanceTests/test07GeneralClinicChatIsSharedWithIndependentReadState",
+                  "nodeType" : "Test Case",
+                  "result" : "Passed"
+                }
+              ],
+              "name" : "NativeAcceptanceTests",
+              "nodeIdentifierURL" : "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffUITests/NativeAcceptanceTests",
+              "nodeType" : "Test Suite",
+              "result" : "Failed"
+            }
+          ],
+          "name" : "TemichevVetStaffUITests",
+          "nodeIdentifierURL" : "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffUITests",
+          "nodeType" : "UI test bundle",
+          "result" : "Failed"
+        }
+      ],
+      "name" : "TemichevVetStaff",
+      "nodeType" : "Test Plan",
+      "result" : "Failed"
+    }
+  ],
+  "testPlanConfigurations" : [
+    {
+      "configurationId" : "1",
+      "configurationName" : "Test Scheme Action"
+    }
+  ]
+}

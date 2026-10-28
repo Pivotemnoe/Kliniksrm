@@ -1,0 +1,34 @@
+{
+  "createdAt": "2026-10-28T16:38:40.591631+00:00",
+  "xcode": "27.1",
+  "sdk": "27.1",
+  "uploaded": false,
+  "physicalDeviceInstall": false,
+  "packages": [
+    {
+      "target": "Simulator",
+      "configuration": "Debug",
+      "platform": "iphonesimulator",
+      "minimumOSVersion": "17.0",
+      "bundleIdentifier": "ru.temichevvet.staff",
+      "archive": "Artifacts/TemichevVetStaff-Simulator.zip",
+      "archiveBytes": 3080885,
+      "archiveSHA256": "597632997ac66de3248c5f5fb0d79692606909c3c47bdf81358a6c08a53a5256",
+      "executableSHA256": "9b0fd020debd32d5106ac1ae7b00187b8801be939f01b312215138edee15af6c",
+      "signing": "Simulator development build",
+      "debugDylibSHA256": "7cf4e199cad5db42f68af32e7987f8bcb54d1b8b7c2f218e98848a4480309954"
+    },
+    {
+      "target": "iPhone",
+      "configuration": "Release",
+      "platform": "iphoneos",
+      "minimumOSVersion": "17.0",
+      "bundleIdentifier": "ru.temichevvet.staff",
+      "archive": "Artifacts/TemichevVetStaff-iPhone-unsigned.zip",
+      "archiveBytes": 800425,
+      "archiveSHA256": "73704922efb474e9c5e0b9aaa01ca471cb2719e5baeccca20af53bc4eeeba8d0",
+      "executableSHA256": "1823e1c5c6bc9dfca78ccb01977e5b5f8cb3c866b7aeb056a78b365fef82124d",
+      "signing": "CODE_SIGNING_ALLOWED=NO; not an installable IPA"
+    }
+  ]
+}

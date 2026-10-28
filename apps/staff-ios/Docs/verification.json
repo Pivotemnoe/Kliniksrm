@@ -1,0 +1,289 @@
+{
+  "verifiedAt": "2026-10-28T16:38:40.046721+00:00",
+  "aggregateMeaning": "Latest result per test across a full run and targeted reruns; not a single full green run.",
+  "passed": 25,
+  "failed": 0,
+  "unitAndSecurity": 16,
+  "nativeUI": 9,
+  "httpAcceptance": "Docs/http-acceptance.json",
+  "simulatorUDID": "5648BDF7-A57D-4633-BCC4-56B887C0B15F",
+  "schema": "staff_ios_qa_20261028",
+  "externalPushDelivery": false,
+  "realIPhoneInstall": false,
+  "realAndroidIPhoneExchange": false,
+  "runs": [
+    {
+      "source": "build/FinalAcceptance-1.xcresult",
+      "result": "Failed",
+      "passed": 22,
+      "failed": 3,
+      "testCount": 25,
+      "warnings": [],
+      "testTree": "Docs/evidence/FinalAcceptance-1-tests.json"
+    },
+    {
+      "source": "build/FinalTargeted-2.xcresult",
+      "result": "Failed",
+      "passed": 2,
+      "failed": 1,
+      "testCount": 3,
+      "warnings": [
+        {
+          "issueType": "Runtime Warning",
+          "message": "Invalid frame dimension (negative or non-finite)."
+        },
+        {
+          "issueType": "Runtime Warning",
+          "message": "Invalid frame dimension (negative or non-finite)."
+        }
+      ],
+      "testTree": "Docs/evidence/FinalTargeted-2-tests.json"
+    },
+    {
+      "source": "build/FinalMessaging-4.xcresult",
+      "result": "Passed",
+      "passed": 19,
+      "failed": 0,
+      "testCount": 19,
+      "warnings": [
+        {
+          "issueType": "Runtime Warning",
+          "message": "Invalid frame dimension (negative or non-finite)."
+        },
+        {
+          "issueType": "Runtime Warning",
+          "message": "Invalid frame dimension (negative or non-finite)."
+        }
+      ],
+      "testTree": "Docs/evidence/FinalMessaging-4-tests.json"
+    },
+    {
+      "source": "build/SafeAreaChat-7.xcresult",
+      "result": "Passed",
+      "passed": 2,
+      "failed": 0,
+      "testCount": 2,
+      "warnings": [
+        {
+          "issueType": "Runtime Warning",
+          "message": "Invalid frame dimension (negative or non-finite)."
+        },
+        {
+          "issueType": "Runtime Warning",
+          "message": "Invalid frame dimension (negative or non-finite)."
+        }
+      ],
+      "testTree": "Docs/evidence/SafeAreaChat-7-tests.json"
+    }
+  ],
+  "supersededIntermediateRuns": [
+    {
+      "source": "build/ChatAcceptance-3.xcresult",
+      "result": "Failed",
+      "passed": 1,
+      "failed": 1,
+      "reason": "Foreground alert before active-state polling fix",
+      "rawBundleRetained": false
+    },
+    {
+      "source": "build/KeyboardAcceptance-5.xcresult",
+      "result": "Failed",
+      "passed": 0,
+      "failed": 2,
+      "reason": "Keyboard/visibility experiment; superseded",
+      "rawBundleRetained": false
+    },
+    {
+      "source": "build/VisibleMessages-6.xcresult",
+      "result": "Failed",
+      "passed": 0,
+      "failed": 2,
+      "reason": "Stronger visible-row test exposed composer overlap; fixed with safeAreaInset",
+      "rawBundleRetained": false
+    }
+  ],
+  "finalChatAssertions": [
+    "confirmed message row in history, not draft text",
+    "native Done closes keyboard",
+    "message visible without manual scrolling",
+    "shared persisted API history and independent read cursor"
+  ],
+  "postTestDiagnostics": "Only optional simctl diagnose child for this simulator was interrupted after FinalMessaging-4 tests completed; xcodebuild exited 0 and finalized Passed bundle. Final SafeAreaChat-7 completed normally with verbose sysdiagnose disabled.",
+  "tests": [
+    {
+      "id": "NativeAcceptanceTests/test01DoctorAllAppointmentsMineTasksMessagesAndKeychain()",
+      "result": "Passed",
+      "durationSeconds": 60.284371972084045,
+      "sourceBundle": "build/FinalAcceptance-1.xcresult",
+      "testIdentifierURL": "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffUITests/NativeAcceptanceTests/test01DoctorAllAppointmentsMineTasksMessagesAndKeychain"
+    },
+    {
+      "id": "NativeAcceptanceTests/test02ClinicBookingIndividualGrantPersistsInCRM()",
+      "result": "Passed",
+      "durationSeconds": 51.05661606788635,
+      "sourceBundle": "build/FinalAcceptance-1.xcresult",
+      "testIdentifierURL": "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffUITests/NativeAcceptanceTests/test02ClinicBookingIndividualGrantPersistsInCRM"
+    },
+    {
+      "id": "NativeAcceptanceTests/test03GroomerCreatesMovesCompletesAndCancelsOwnBooking()",
+      "result": "Passed",
+      "durationSeconds": 98.98048198223114,
+      "sourceBundle": "build/FinalTargeted-2.xcresult",
+      "testIdentifierURL": "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffUITests/NativeAcceptanceTests/test03GroomerCreatesMovesCompletesAndCancelsOwnBooking"
+    },
+    {
+      "id": "NativeAcceptanceTests/test04OfflineDoesNotReplayAndExpiryRequiresLogin()",
+      "result": "Passed",
+      "durationSeconds": 24.510771989822388,
+      "sourceBundle": "build/FinalMessaging-4.xcresult",
+      "testIdentifierURL": "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffUITests/NativeAcceptanceTests/test04OfflineDoesNotReplayAndExpiryRequiresLogin"
+    },
+    {
+      "id": "NativeAcceptanceTests/test05RemoteTrustEnrollmentAndRevocation()",
+      "result": "Passed",
+      "durationSeconds": 30.84030592441559,
+      "sourceBundle": "build/FinalAcceptance-1.xcresult",
+      "testIdentifierURL": "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffUITests/NativeAcceptanceTests/test05RemoteTrustEnrollmentAndRevocation"
+    },
+    {
+      "id": "NativeAcceptanceTests/test06PersonalChatDoctorGroomerAndDoctorDoctor()",
+      "result": "Passed",
+      "durationSeconds": 134.7071409225464,
+      "sourceBundle": "build/SafeAreaChat-7.xcresult",
+      "testIdentifierURL": "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffUITests/NativeAcceptanceTests/test06PersonalChatDoctorGroomerAndDoctorDoctor"
+    },
+    {
+      "id": "NativeAcceptanceTests/test07GeneralClinicChatIsSharedWithIndependentReadState()",
+      "result": "Passed",
+      "durationSeconds": 90.0794860124588,
+      "sourceBundle": "build/SafeAreaChat-7.xcresult",
+      "testIdentifierURL": "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffUITests/NativeAcceptanceTests/test07GeneralClinicChatIsSharedWithIndependentReadState"
+    },
+    {
+      "id": "NativeAcceptanceTests/test08GroomerRefinesOwnBookingDuration()",
+      "result": "Passed",
+      "durationSeconds": 46.41668891906738,
+      "sourceBundle": "build/FinalAcceptance-1.xcresult",
+      "testIdentifierURL": "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffUITests/NativeAcceptanceTests/test08GroomerRefinesOwnBookingDuration"
+    },
+    {
+      "id": "NativeAcceptanceTests/test09GroomerAddsClientAndPetThroughNativeForms()",
+      "result": "Passed",
+      "durationSeconds": 52.827857971191406,
+      "sourceBundle": "build/FinalAcceptance-1.xcresult",
+      "testIdentifierURL": "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffUITests/NativeAcceptanceTests/test09GroomerAddsClientAndPetThroughNativeForms"
+    },
+    {
+      "id": "PushRoutingTests/testExpiredSessionKeepsOpaqueEventUntilLogin()",
+      "result": "Passed",
+      "durationSeconds": 0.19692206382751465,
+      "sourceBundle": "build/FinalMessaging-4.xcresult",
+      "testIdentifierURL": "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffTests/PushRoutingTests/testExpiredSessionKeepsOpaqueEventUntilLogin"
+    },
+    {
+      "id": "PushRoutingTests/testForeignEventDoesNotOpenOrReadAnyChat()",
+      "result": "Passed",
+      "durationSeconds": 0.04802203178405762,
+      "sourceBundle": "build/FinalMessaging-4.xcresult",
+      "testIdentifierURL": "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffTests/PushRoutingTests/testForeignEventDoesNotOpenOrReadAnyChat"
+    },
+    {
+      "id": "PushRoutingTests/testGroupNotificationOpensVerifiedChannelWithoutReadReceipt()",
+      "result": "Passed",
+      "durationSeconds": 0.046853065490722656,
+      "sourceBundle": "build/FinalMessaging-4.xcresult",
+      "testIdentifierURL": "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffTests/PushRoutingTests/testGroupNotificationOpensVerifiedChannelWithoutReadReceipt"
+    },
+    {
+      "id": "PushRoutingTests/testPassiveRequestsSetOnlyTheRequiredHeader()",
+      "result": "Passed",
+      "durationSeconds": 0.041751980781555176,
+      "sourceBundle": "build/FinalMessaging-4.xcresult",
+      "testIdentifierURL": "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffTests/PushRoutingTests/testPassiveRequestsSetOnlyTheRequiredHeader"
+    },
+    {
+      "id": "PushRoutingTests/testPushPayloadAcceptsOnlyKnownKindsAndOpaqueUUID()",
+      "result": "Passed",
+      "durationSeconds": 0.0005600452423095703,
+      "sourceBundle": "build/FinalMessaging-4.xcresult",
+      "testIdentifierURL": "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffTests/PushRoutingTests/testPushPayloadAcceptsOnlyKnownKindsAndOpaqueUUID"
+    },
+    {
+      "id": "PushRoutingTests/testWrongChannelFromEventCannotOpenCurrentClinic()",
+      "result": "Passed",
+      "durationSeconds": 0.042710065841674805,
+      "sourceBundle": "build/FinalMessaging-4.xcresult",
+      "testIdentifierURL": "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffTests/PushRoutingTests/testWrongChannelFromEventCannotOpenCurrentClinic"
+    },
+    {
+      "id": "SecurityContractTests/testConflictIsNeverDecodedAsSuccess()",
+      "result": "Passed",
+      "durationSeconds": 0.002375006675720215,
+      "sourceBundle": "build/FinalMessaging-4.xcresult",
+      "testIdentifierURL": "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffTests/SecurityContractTests/testConflictIsNeverDecodedAsSuccess"
+    },
+    {
+      "id": "SecurityContractTests/testCookieSurvivesClientRecreationAndLogoutKeepsDevice()",
+      "result": "Passed",
+      "durationSeconds": 0.058238983154296875,
+      "sourceBundle": "build/FinalMessaging-4.xcresult",
+      "testIdentifierURL": "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffTests/SecurityContractTests/testCookieSurvivesClientRecreationAndLogoutKeepsDevice"
+    },
+    {
+      "id": "SecurityContractTests/testForeignOriginAndTraversalRejectedBeforeRequest()",
+      "result": "Passed",
+      "durationSeconds": 0.011432051658630371,
+      "sourceBundle": "build/FinalMessaging-4.xcresult",
+      "testIdentifierURL": "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffTests/SecurityContractTests/testForeignOriginAndTraversalRejectedBeforeRequest"
+    },
+    {
+      "id": "SecurityContractTests/testGroomingTransitionsHaveNoActionsAfterTerminalStatus()",
+      "result": "Passed",
+      "durationSeconds": 0.0006390810012817383,
+      "sourceBundle": "build/FinalMessaging-4.xcresult",
+      "testIdentifierURL": "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffTests/SecurityContractTests/testGroomingTransitionsHaveNoActionsAfterTerminalStatus"
+    },
+    {
+      "id": "SecurityContractTests/testKeychainRoundTrip()",
+      "result": "Passed",
+      "durationSeconds": 0.04600989818572998,
+      "sourceBundle": "build/FinalMessaging-4.xcresult",
+      "testIdentifierURL": "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffTests/SecurityContractTests/testKeychainRoundTrip"
+    },
+    {
+      "id": "SecurityContractTests/testLostMutationResponseIsUncertainAndNeverRetried()",
+      "result": "Passed",
+      "durationSeconds": 0.05370593070983887,
+      "sourceBundle": "build/FinalMessaging-4.xcresult",
+      "testIdentifierURL": "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffTests/SecurityContractTests/testLostMutationResponseIsUncertainAndNeverRetried"
+    },
+    {
+      "id": "SecurityContractTests/testMoscowDayDoesNotFollowPhoneTimeZone()",
+      "result": "Passed",
+      "durationSeconds": 0.004302978515625,
+      "sourceBundle": "build/FinalMessaging-4.xcresult",
+      "testIdentifierURL": "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffTests/SecurityContractTests/testMoscowDayDoesNotFollowPhoneTimeZone"
+    },
+    {
+      "id": "SecurityContractTests/testNoDiskCacheOrSystemCredentialCookieStorage()",
+      "result": "Passed",
+      "durationSeconds": 0.0007749795913696289,
+      "sourceBundle": "build/FinalMessaging-4.xcresult",
+      "testIdentifierURL": "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffTests/SecurityContractTests/testNoDiskCacheOrSystemCredentialCookieStorage"
+    },
+    {
+      "id": "SecurityContractTests/testServerRejectsInsecureLANAndEmbeddedCredentials()",
+      "result": "Passed",
+      "durationSeconds": 0.0006290674209594727,
+      "sourceBundle": "build/FinalMessaging-4.xcresult",
+      "testIdentifierURL": "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffTests/SecurityContractTests/testServerRejectsInsecureLANAndEmbeddedCredentials"
+    },
+    {
+      "id": "SecurityContractTests/testUnauthorizedClearsSessionAndPreservesError()",
+      "result": "Passed",
+      "durationSeconds": 0.03446400165557861,
+      "sourceBundle": "build/FinalMessaging-4.xcresult",
+      "testIdentifierURL": "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffTests/SecurityContractTests/testUnauthorizedClearsSessionAndPreservesError"
+    }
+  ]
+}

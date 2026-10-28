@@ -1,0 +1,201 @@
+{
+  "at": "2026-10-28T16:40:49.056846+00:00",
+  "ownQAServer": "stopped through tracked terminal session after all acceptance tests",
+  "removed": [
+    {
+      "path": "/Users/konstantin/.codex/worktrees/staff-ios-native/CRM/apps/staff-ios/build/Core-Clinic-2.xcresult",
+      "bytes": 893104,
+      "reason": "obsolete own build/cache"
+    },
+    {
+      "path": "/Users/konstantin/.codex/worktrees/staff-ios-native/CRM/apps/staff-ios/build/CoreTests.xcresult",
+      "bytes": 274408,
+      "reason": "obsolete own build/cache"
+    },
+    {
+      "path": "/Users/konstantin/.codex/worktrees/staff-ios-native/CRM/apps/staff-ios/build/DoctorUI-2.xcresult",
+      "bytes": 9113780,
+      "reason": "obsolete own build/cache"
+    },
+    {
+      "path": "/Users/konstantin/.codex/worktrees/staff-ios-native/CRM/apps/staff-ios/build/DoctorUI-3.xcresult",
+      "bytes": 1167927,
+      "reason": "obsolete own build/cache"
+    },
+    {
+      "path": "/Users/konstantin/.codex/worktrees/staff-ios-native/CRM/apps/staff-ios/build/DoctorUI.xcresult",
+      "bytes": 28777675,
+      "reason": "obsolete own build/cache"
+    },
+    {
+      "path": "/Users/konstantin/.codex/worktrees/staff-ios-native/CRM/apps/staff-ios/build/NativeFlows-1.xcresult",
+      "bytes": 51963956,
+      "reason": "obsolete own build/cache"
+    },
+    {
+      "path": "/Users/konstantin/.codex/worktrees/staff-ios-native/CRM/apps/staff-ios/build/ChatAcceptance-3.xcresult",
+      "bytes": 118907254,
+      "reason": "obsolete own build/cache"
+    },
+    {
+      "path": "/Users/konstantin/.codex/worktrees/staff-ios-native/CRM/apps/staff-ios/build/KeyboardAcceptance-5.xcresult",
+      "bytes": 25098167,
+      "reason": "obsolete own build/cache"
+    },
+    {
+      "path": "/Users/konstantin/.codex/worktrees/staff-ios-native/CRM/apps/staff-ios/build/VisibleMessages-6.xcresult",
+      "bytes": 84178572,
+      "reason": "obsolete own build/cache"
+    },
+    {
+      "path": "/Users/konstantin/.codex/worktrees/staff-ios-native/CRM/apps/staff-ios/build/DerivedData/Build/Intermediates.noindex",
+      "bytes": 59381694,
+      "reason": "obsolete own build/cache"
+    },
+    {
+      "path": "/Users/konstantin/.codex/worktrees/staff-ios-native/CRM/apps/staff-ios/build/DerivedData/ModuleCache.noindex",
+      "bytes": 30840687,
+      "reason": "obsolete own build/cache"
+    },
+    {
+      "path": "/Users/konstantin/.codex/worktrees/staff-ios-native/CRM/apps/staff-ios/build/DerivedData/Index.noindex",
+      "bytes": 35498812,
+      "reason": "obsolete own build/cache"
+    },
+    {
+      "path": "/Users/konstantin/.codex/worktrees/staff-ios-native/CRM/apps/staff-ios/build/DeviceDerivedData/Build/Intermediates.noindex",
+      "bytes": 15403959,
+      "reason": "obsolete own build/cache"
+    },
+    {
+      "path": "/Users/konstantin/.codex/worktrees/staff-ios-native/CRM/apps/staff-ios/build/DeviceDerivedData/ModuleCache.noindex",
+      "bytes": 5240373,
+      "reason": "obsolete own build/cache"
+    },
+    {
+      "path": "/Users/konstantin/.codex/worktrees/staff-ios-native/CRM/apps/staff-ios/build/chat-acceptance-3.log",
+      "bytes": 136243,
+      "reason": "obsolete own build/cache"
+    },
+    {
+      "path": "/Users/konstantin/.codex/worktrees/staff-ios-native/CRM/apps/staff-ios/build/keyboard-acceptance-5.log",
+      "bytes": 204509,
+      "reason": "obsolete own build/cache"
+    },
+    {
+      "path": "/Users/konstantin/.codex/worktrees/staff-ios-native/CRM/apps/staff-ios/build/visible-messages-6.log",
+      "bytes": 206437,
+      "reason": "obsolete own build/cache"
+    },
+    {
+      "path": "/Users/konstantin/.codex/worktrees/staff-ios-native/CRM/apps/staff-ios/build/device-release.log",
+      "bytes": 91141,
+      "reason": "obsolete own build/cache"
+    },
+    {
+      "path": "/private/tmp/staff-ios-final-failures",
+      "bytes": 64079269,
+      "reason": "exported copy after original screenshot hashes verified"
+    },
+    {
+      "path": "/private/tmp/staff-ios-targeted2",
+      "bytes": 17840633,
+      "reason": "exported copy after original screenshot hashes verified"
+    },
+    {
+      "path": "/private/tmp/staff-ios-chat3",
+      "bytes": 65555851,
+      "reason": "exported copy after original screenshot hashes verified"
+    },
+    {
+      "path": "/private/tmp/staff-ios-final4",
+      "bytes": 3662002,
+      "reason": "exported copy after original screenshot hashes verified"
+    },
+    {
+      "path": "/private/tmp/staff-ios-keyboard5",
+      "bytes": 26650856,
+      "reason": "exported copy after original screenshot hashes verified"
+    },
+    {
+      "path": "/private/tmp/staff-ios-safearea7",
+      "bytes": 3662564,
+      "reason": "exported copy after original screenshot hashes verified"
+    },
+    {
+      "path": "/private/tmp/staff-ios-doctor-failure",
+      "bytes": 8821221,
+      "reason": "exported copy after original screenshot hashes verified"
+    },
+    {
+      "path": "/private/tmp/staff-ios-flow-failures",
+      "bytes": 50978790,
+      "reason": "exported copy after original screenshot hashes verified"
+    },
+    {
+      "path": "/private/tmp/staff-ios-acceptance1-summary.json",
+      "bytes": 6037,
+      "reason": "temporary result JSON copied into report/evidence"
+    },
+    {
+      "path": "/private/tmp/staff-ios-acceptance1-tests.json",
+      "bytes": 21620,
+      "reason": "temporary result JSON copied into report/evidence"
+    },
+    {
+      "path": "/private/tmp/staff-ios-targeted2-summary.json",
+      "bytes": 1776,
+      "reason": "temporary result JSON copied into report/evidence"
+    },
+    {
+      "path": "/private/tmp/staff-ios-targeted2-tests.json",
+      "bytes": 3660,
+      "reason": "temporary result JSON copied into report/evidence"
+    },
+    {
+      "path": "/private/tmp/staff-ios-chat3-summary.json",
+      "bytes": 1780,
+      "reason": "temporary result JSON copied into report/evidence"
+    },
+    {
+      "path": "/private/tmp/staff-ios-final4-summary.json",
+      "bytes": 1466,
+      "reason": "temporary result JSON copied into report/evidence"
+    },
+    {
+      "path": "/private/tmp/staff-ios-final4-tests.json",
+      "bytes": 13671,
+      "reason": "temporary result JSON copied into report/evidence"
+    },
+    {
+      "path": "/private/tmp/staff-ios-keyboard5-summary.json",
+      "bytes": 2508,
+      "reason": "temporary result JSON copied into report/evidence"
+    },
+    {
+      "path": "/private/tmp/staff-ios-visible6-summary.json",
+      "bytes": 2508,
+      "reason": "temporary result JSON copied into report/evidence"
+    },
+    {
+      "path": "/private/tmp/staff-ios-safearea7-summary.json",
+      "bytes": 1273,
+      "reason": "temporary result JSON copied into report/evidence"
+    },
+    {
+      "path": "/private/tmp/staff-ios-safearea7-tests.json",
+      "bytes": 2878,
+      "reason": "temporary result JSON copied into report/evidence"
+    }
+  ],
+  "bytesRemoved": 708689061,
+  "preserved": [
+    "all sources and adapter originals/manifests",
+    "two final app ZIP packages",
+    "19 original screenshot PNGs and test JSON evidence",
+    "four supporting final XCTest bundles and logs",
+    "synthetic database schemas and QA runtime data",
+    "dependencies, signing/SDK tools, other worktrees and services"
+  ],
+  "productionChanges": false
+}

@@ -1,0 +1,138 @@
+{
+  "data": "synthetic only",
+  "screenshots": [
+    {
+      "file": "01-doctor-all-appointments.png",
+      "sha256": "9863aa9b826a56ce9b864588d858859779b6efde48082a59654279770efda5e7",
+      "sourceBundle": "build/FinalAcceptance-1.xcresult",
+      "testIdentifier": "NativeAcceptanceTests/test01DoctorAllAppointmentsMineTasksMessagesAndKeychain()",
+      "originalPixelsUnchanged": true
+    },
+    {
+      "file": "02-colleague-appointment-card.png",
+      "sha256": "bb8964709bfbf947a2cd9e6e672a9d2e1a82127c2bf14513d536dc83939336e5",
+      "sourceBundle": "build/FinalAcceptance-1.xcresult",
+      "testIdentifier": "NativeAcceptanceTests/test01DoctorAllAppointmentsMineTasksMessagesAndKeychain()",
+      "originalPixelsUnchanged": true
+    },
+    {
+      "file": "03-doctor-inbox.png",
+      "sha256": "0db91bd907bccdac858dddda8cb14844b0704612d91ae4a70774c3acfb0d7551",
+      "sourceBundle": "build/FinalAcceptance-1.xcresult",
+      "testIdentifier": "NativeAcceptanceTests/test01DoctorAllAppointmentsMineTasksMessagesAndKeychain()",
+      "originalPixelsUnchanged": true
+    },
+    {
+      "file": "04-clinic-booking-confirmed.png",
+      "sha256": "bb072143346d21bd840bccd2ec1651d31986e2a6bc7a324b73f3e1f2bc32213c",
+      "sourceBundle": "build/FinalAcceptance-1.xcresult",
+      "testIdentifier": "NativeAcceptanceTests/test02ClinicBookingIndividualGrantPersistsInCRM()",
+      "originalPixelsUnchanged": true
+    },
+    {
+      "file": "05-groomer-agenda.png",
+      "sha256": "768e2f77d5ceaded26dbcb11a77e0a76a56c274d57dfc40428d9744042762bfa",
+      "sourceBundle": "build/FinalTargeted-2.xcresult",
+      "testIdentifier": "NativeAcceptanceTests/test03GroomerCreatesMovesCompletesAndCancelsOwnBooking()",
+      "originalPixelsUnchanged": true
+    },
+    {
+      "file": "06-groomer-rescheduled-card.png",
+      "sha256": "890cbac1ed8ef08148685083aad068f0324a76c4c6cbc23309d3ba73e7a7b092",
+      "sourceBundle": "build/FinalTargeted-2.xcresult",
+      "testIdentifier": "NativeAcceptanceTests/test03GroomerCreatesMovesCompletesAndCancelsOwnBooking()",
+      "originalPixelsUnchanged": true
+    },
+    {
+      "file": "07-groomer-completed.png",
+      "sha256": "9b65f2ccb7d5a95d48b1a5472dc470390af3c1e85e1a0490508c592acc2663bb",
+      "sourceBundle": "build/FinalTargeted-2.xcresult",
+      "testIdentifier": "NativeAcceptanceTests/test03GroomerCreatesMovesCompletesAndCancelsOwnBooking()",
+      "originalPixelsUnchanged": true
+    },
+    {
+      "file": "08-offline-no-replay.png",
+      "sha256": "3ba75dac3d7f77fd84b6852a7b7e39ba2f0e2658a731136be3e761eb415a9591",
+      "sourceBundle": "build/FinalMessaging-4.xcresult",
+      "testIdentifier": "NativeAcceptanceTests/test04OfflineDoesNotReplayAndExpiryRequiresLogin()",
+      "originalPixelsUnchanged": true
+    },
+    {
+      "file": "09-expired-session.png",
+      "sha256": "535c959bc37e6db0a5b722f0adac2a4f0264dbe852e17f784928fcf963678aaf",
+      "sourceBundle": "build/FinalMessaging-4.xcresult",
+      "testIdentifier": "NativeAcceptanceTests/test04OfflineDoesNotReplayAndExpiryRequiresLogin()",
+      "originalPixelsUnchanged": true
+    },
+    {
+      "file": "10-trusted-remote-device.png",
+      "sha256": "aedcdf8ef6d7141ef0f4d2fe65f3b3a92ed393fe0ea8f2762940c8cfda4f7f77",
+      "sourceBundle": "build/FinalAcceptance-1.xcresult",
+      "testIdentifier": "NativeAcceptanceTests/test05RemoteTrustEnrollmentAndRevocation()",
+      "originalPixelsUnchanged": true
+    },
+    {
+      "file": "11-personal-chat-sent-from-iphone.png",
+      "sha256": "695e050b2cdd7740e86e675e35e5bb2acb4e60739b3fbd863fa9208452510d43",
+      "sourceBundle": "build/SafeAreaChat-7.xcresult",
+      "testIdentifier": "NativeAcceptanceTests/test06PersonalChatDoctorGroomerAndDoctorDoctor()",
+      "originalPixelsUnchanged": true
+    },
+    {
+      "file": "12-groomer-received-doctor-message.png",
+      "sha256": "8d6059347154b14b9acbcba1598fbbeb5a95526ccd19690fa1abc4b00b50a064",
+      "sourceBundle": "build/SafeAreaChat-7.xcresult",
+      "testIdentifier": "NativeAcceptanceTests/test06PersonalChatDoctorGroomerAndDoctorDoctor()",
+      "originalPixelsUnchanged": true
+    },
+    {
+      "file": "13-foreground-message-alert.png",
+      "sha256": "37471731135b2d82d6639929feb62baf6ad6de7c22baab01ecb7d489c0a00724",
+      "sourceBundle": "build/SafeAreaChat-7.xcresult",
+      "testIdentifier": "NativeAcceptanceTests/test06PersonalChatDoctorGroomerAndDoctorDoctor()",
+      "originalPixelsUnchanged": true
+    },
+    {
+      "file": "14-chat-history-after-restart.png",
+      "sha256": "53a24fe445bb59b15cfff3fe5b931deea7ff9d38a8c7ce8c3361f9823ec9a829",
+      "sourceBundle": "build/SafeAreaChat-7.xcresult",
+      "testIdentifier": "NativeAcceptanceTests/test06PersonalChatDoctorGroomerAndDoctorDoctor()",
+      "originalPixelsUnchanged": true
+    },
+    {
+      "file": "15-clinic-chat-sent.png",
+      "sha256": "8d71f679267b77fec503f1bef8719954567fe725ffb6cce3b0ea3278e43fa456",
+      "sourceBundle": "build/SafeAreaChat-7.xcresult",
+      "testIdentifier": "NativeAcceptanceTests/test07GeneralClinicChatIsSharedWithIndependentReadState()",
+      "originalPixelsUnchanged": true
+    },
+    {
+      "file": "16-clinic-chat-groomer-received.png",
+      "sha256": "1812bd2039dd20f3f4b8f5a703dda6563d373d90868654e1f67fe6a8e5b76103",
+      "sourceBundle": "build/SafeAreaChat-7.xcresult",
+      "testIdentifier": "NativeAcceptanceTests/test07GeneralClinicChatIsSharedWithIndependentReadState()",
+      "originalPixelsUnchanged": true
+    },
+    {
+      "file": "17-clinic-chat-groomer-replied.png",
+      "sha256": "9826b0d2e4e6f010416240ecb8c97d380a0aff0ac3fd0d42b31cc2d3210f2175",
+      "sourceBundle": "build/SafeAreaChat-7.xcresult",
+      "testIdentifier": "NativeAcceptanceTests/test07GeneralClinicChatIsSharedWithIndependentReadState()",
+      "originalPixelsUnchanged": true
+    },
+    {
+      "file": "18-groomer-duration-saved.png",
+      "sha256": "6dfb44f671d5e9c2bdf0964b00461f530be4603f492979afac4252ffe058af65",
+      "sourceBundle": "build/FinalAcceptance-1.xcresult",
+      "testIdentifier": "NativeAcceptanceTests/test08GroomerRefinesOwnBookingDuration()",
+      "originalPixelsUnchanged": true
+    },
+    {
+      "file": "19-native-client-and-pet-created.png",
+      "sha256": "44aa96dc57d1d69a399c14896ce97c6e002592f10a39b698c8d58503946eecf9",
+      "sourceBundle": "build/FinalAcceptance-1.xcresult",
+      "testIdentifier": "NativeAcceptanceTests/test09GroomerAddsClientAndPetThroughNativeForms()",
+      "originalPixelsUnchanged": true
+    }
+  ]
+}

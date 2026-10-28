@@ -1,0 +1,24 @@
+{
+  "at": "2026-10-28T15:34:38.587Z",
+  "schema": "staff_ios_qa_20261028",
+  "externalDelivery": false,
+  "passed": 16,
+  "checks": [
+    "ordinary CRM login preserves doctor cashier stock without administrator",
+    "doctor sees colleague by default; mine is explicit; no-store",
+    "ungranted mobile booking rejected; employee settings remain privileged",
+    "clinic grant is individual; booking lands in ordinary CRM exactly once",
+    "groomer cannot request clinic agenda or clinic resources",
+    "full-phone lookup and client/pet creation use guarded CRM routes",
+    "groomer creates own booking and persisted card",
+    "own duration update preserves price and identity and rejects colleague access",
+    "reschedule verifies version and preserves reservation identity",
+    "arrival start completion and stale-version rejection",
+    "own cancellation and no-show persist through ordinary status API",
+    "inbox mark read persists across requests",
+    "personal messages include groomers and remain one shared idempotent history",
+    "one clinic channel reaches all peers with independent read boundaries",
+    "unconfigured APNs is unavailable and cannot masquerade as registered delivery",
+    "remote login requires trusted device; invitation single-use; revocation enforced"
+  ]
+}

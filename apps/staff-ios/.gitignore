@@ -1,0 +1,8 @@
+build/
+Artifacts/
+.derivedData/
+QA/runtime.json
+QA/.generated/
+QA/*.log
+*.xcuserstate
+xcuserdata/

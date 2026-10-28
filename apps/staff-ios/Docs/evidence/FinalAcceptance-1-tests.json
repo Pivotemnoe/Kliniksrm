@@ -1,0 +1,323 @@
+{
+  "devices" : [
+    {
+      "architecture" : "arm64",
+      "deviceId" : "5648BDF7-A57D-4633-BCC4-56B887C0B15F",
+      "deviceName" : "TemichevVet Staff iOS QA 20261028",
+      "modelName" : "iPhone 17",
+      "osBuildNumber" : "24A434",
+      "osVersion" : "27.0",
+      "platform" : "iOS Simulator"
+    }
+  ],
+  "testNodes" : [
+    {
+      "children" : [
+        {
+          "children" : [
+            {
+              "children" : [
+                {
+                  "duration" : "0,24s",
+                  "durationInSeconds" : 0.23651397228240967,
+                  "name" : "testExpiredSessionKeepsOpaqueEventUntilLogin()",
+                  "nodeIdentifier" : "PushRoutingTests/testExpiredSessionKeepsOpaqueEventUntilLogin()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffTests/PushRoutingTests/testExpiredSessionKeepsOpaqueEventUntilLogin",
+                  "nodeType" : "Test Case",
+                  "result" : "Passed"
+                },
+                {
+                  "duration" : "0,043s",
+                  "durationInSeconds" : 0.04292094707489014,
+                  "name" : "testForeignEventDoesNotOpenOrReadAnyChat()",
+                  "nodeIdentifier" : "PushRoutingTests/testForeignEventDoesNotOpenOrReadAnyChat()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffTests/PushRoutingTests/testForeignEventDoesNotOpenOrReadAnyChat",
+                  "nodeType" : "Test Case",
+                  "result" : "Passed"
+                },
+                {
+                  "duration" : "0,05s",
+                  "durationInSeconds" : 0.04992198944091797,
+                  "name" : "testGroupNotificationOpensVerifiedChannelWithoutReadReceipt()",
+                  "nodeIdentifier" : "PushRoutingTests/testGroupNotificationOpensVerifiedChannelWithoutReadReceipt()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffTests/PushRoutingTests/testGroupNotificationOpensVerifiedChannelWithoutReadReceipt",
+                  "nodeType" : "Test Case",
+                  "result" : "Passed"
+                },
+                {
+                  "duration" : "0,051s",
+                  "durationInSeconds" : 0.05124402046203613,
+                  "name" : "testPassiveRequestsSetOnlyTheRequiredHeader()",
+                  "nodeIdentifier" : "PushRoutingTests/testPassiveRequestsSetOnlyTheRequiredHeader()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffTests/PushRoutingTests/testPassiveRequestsSetOnlyTheRequiredHeader",
+                  "nodeType" : "Test Case",
+                  "result" : "Passed"
+                },
+                {
+                  "duration" : "0,00085s",
+                  "durationInSeconds" : 0.0008460283279418945,
+                  "name" : "testPushPayloadAcceptsOnlyKnownKindsAndOpaqueUUID()",
+                  "nodeIdentifier" : "PushRoutingTests/testPushPayloadAcceptsOnlyKnownKindsAndOpaqueUUID()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffTests/PushRoutingTests/testPushPayloadAcceptsOnlyKnownKindsAndOpaqueUUID",
+                  "nodeType" : "Test Case",
+                  "result" : "Passed"
+                },
+                {
+                  "duration" : "0,053s",
+                  "durationInSeconds" : 0.05333900451660156,
+                  "name" : "testWrongChannelFromEventCannotOpenCurrentClinic()",
+                  "nodeIdentifier" : "PushRoutingTests/testWrongChannelFromEventCannotOpenCurrentClinic()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffTests/PushRoutingTests/testWrongChannelFromEventCannotOpenCurrentClinic",
+                  "nodeType" : "Test Case",
+                  "result" : "Passed"
+                }
+              ],
+              "name" : "PushRoutingTests",
+              "nodeIdentifierURL" : "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffTests/PushRoutingTests",
+              "nodeType" : "Test Suite",
+              "result" : "Passed"
+            },
+            {
+              "children" : [
+                {
+                  "duration" : "0,057s",
+                  "durationInSeconds" : 0.0569300651550293,
+                  "name" : "testConflictIsNeverDecodedAsSuccess()",
+                  "nodeIdentifier" : "SecurityContractTests/testConflictIsNeverDecodedAsSuccess()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffTests/SecurityContractTests/testConflictIsNeverDecodedAsSuccess",
+                  "nodeType" : "Test Case",
+                  "result" : "Passed"
+                },
+                {
+                  "duration" : "0,051s",
+                  "durationInSeconds" : 0.051207900047302246,
+                  "name" : "testCookieSurvivesClientRecreationAndLogoutKeepsDevice()",
+                  "nodeIdentifier" : "SecurityContractTests/testCookieSurvivesClientRecreationAndLogoutKeepsDevice()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffTests/SecurityContractTests/testCookieSurvivesClientRecreationAndLogoutKeepsDevice",
+                  "nodeType" : "Test Case",
+                  "result" : "Passed"
+                },
+                {
+                  "duration" : "0,0021s",
+                  "durationInSeconds" : 0.002068042755126953,
+                  "name" : "testForeignOriginAndTraversalRejectedBeforeRequest()",
+                  "nodeIdentifier" : "SecurityContractTests/testForeignOriginAndTraversalRejectedBeforeRequest()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffTests/SecurityContractTests/testForeignOriginAndTraversalRejectedBeforeRequest",
+                  "nodeType" : "Test Case",
+                  "result" : "Passed"
+                },
+                {
+                  "duration" : "0,0015s",
+                  "durationInSeconds" : 0.0014650821685791016,
+                  "name" : "testGroomingTransitionsHaveNoActionsAfterTerminalStatus()",
+                  "nodeIdentifier" : "SecurityContractTests/testGroomingTransitionsHaveNoActionsAfterTerminalStatus()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffTests/SecurityContractTests/testGroomingTransitionsHaveNoActionsAfterTerminalStatus",
+                  "nodeType" : "Test Case",
+                  "result" : "Passed"
+                },
+                {
+                  "duration" : "0,082s",
+                  "durationInSeconds" : 0.08218502998352051,
+                  "name" : "testKeychainRoundTrip()",
+                  "nodeIdentifier" : "SecurityContractTests/testKeychainRoundTrip()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffTests/SecurityContractTests/testKeychainRoundTrip",
+                  "nodeType" : "Test Case",
+                  "result" : "Passed"
+                },
+                {
+                  "duration" : "0,015s",
+                  "durationInSeconds" : 0.014505982398986816,
+                  "name" : "testLostMutationResponseIsUncertainAndNeverRetried()",
+                  "nodeIdentifier" : "SecurityContractTests/testLostMutationResponseIsUncertainAndNeverRetried()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffTests/SecurityContractTests/testLostMutationResponseIsUncertainAndNeverRetried",
+                  "nodeType" : "Test Case",
+                  "result" : "Passed"
+                },
+                {
+                  "duration" : "0,014s",
+                  "durationInSeconds" : 0.014090895652770996,
+                  "name" : "testMoscowDayDoesNotFollowPhoneTimeZone()",
+                  "nodeIdentifier" : "SecurityContractTests/testMoscowDayDoesNotFollowPhoneTimeZone()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffTests/SecurityContractTests/testMoscowDayDoesNotFollowPhoneTimeZone",
+                  "nodeType" : "Test Case",
+                  "result" : "Passed"
+                },
+                {
+                  "duration" : "0,00057s",
+                  "durationInSeconds" : 0.0005689859390258789,
+                  "name" : "testNoDiskCacheOrSystemCredentialCookieStorage()",
+                  "nodeIdentifier" : "SecurityContractTests/testNoDiskCacheOrSystemCredentialCookieStorage()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffTests/SecurityContractTests/testNoDiskCacheOrSystemCredentialCookieStorage",
+                  "nodeType" : "Test Case",
+                  "result" : "Passed"
+                },
+                {
+                  "duration" : "0,00059s",
+                  "durationInSeconds" : 0.0005880594253540039,
+                  "name" : "testServerRejectsInsecureLANAndEmbeddedCredentials()",
+                  "nodeIdentifier" : "SecurityContractTests/testServerRejectsInsecureLANAndEmbeddedCredentials()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffTests/SecurityContractTests/testServerRejectsInsecureLANAndEmbeddedCredentials",
+                  "nodeType" : "Test Case",
+                  "result" : "Passed"
+                },
+                {
+                  "duration" : "0,16s",
+                  "durationInSeconds" : 0.16057109832763672,
+                  "name" : "testUnauthorizedClearsSessionAndPreservesError()",
+                  "nodeIdentifier" : "SecurityContractTests/testUnauthorizedClearsSessionAndPreservesError()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffTests/SecurityContractTests/testUnauthorizedClearsSessionAndPreservesError",
+                  "nodeType" : "Test Case",
+                  "result" : "Passed"
+                }
+              ],
+              "name" : "SecurityContractTests",
+              "nodeIdentifierURL" : "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffTests/SecurityContractTests",
+              "nodeType" : "Test Suite",
+              "result" : "Passed"
+            }
+          ],
+          "name" : "TemichevVetStaffTests",
+          "nodeIdentifierURL" : "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffTests",
+          "nodeType" : "Unit test bundle",
+          "result" : "Passed"
+        },
+        {
+          "children" : [
+            {
+              "children" : [
+                {
+                  "duration" : "1 мин",
+                  "durationInSeconds" : 60.284371972084045,
+                  "name" : "test01DoctorAllAppointmentsMineTasksMessagesAndKeychain()",
+                  "nodeIdentifier" : "NativeAcceptanceTests/test01DoctorAllAppointmentsMineTasksMessagesAndKeychain()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffUITests/NativeAcceptanceTests/test01DoctorAllAppointmentsMineTasksMessagesAndKeychain",
+                  "nodeType" : "Test Case",
+                  "result" : "Passed"
+                },
+                {
+                  "duration" : "51 с",
+                  "durationInSeconds" : 51.05661606788635,
+                  "name" : "test02ClinicBookingIndividualGrantPersistsInCRM()",
+                  "nodeIdentifier" : "NativeAcceptanceTests/test02ClinicBookingIndividualGrantPersistsInCRM()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffUITests/NativeAcceptanceTests/test02ClinicBookingIndividualGrantPersistsInCRM",
+                  "nodeType" : "Test Case",
+                  "result" : "Passed"
+                },
+                {
+                  "children" : [
+                    {
+                      "name" : "XCTAssertTrue failed - Required native element is absent",
+                      "nodeType" : "Failure Message",
+                      "sourceLocation" : {
+                        "filePath" : "/Users/konstantin/.codex/worktrees/staff-ios-native/CRM/apps/staff-ios/UITests/NativeAcceptanceTests.swift",
+                        "lineNumber" : 113
+                      }
+                    }
+                  ],
+                  "duration" : "54 с",
+                  "durationInSeconds" : 54.89704895019531,
+                  "name" : "test03GroomerCreatesMovesCompletesAndCancelsOwnBooking()",
+                  "nodeIdentifier" : "NativeAcceptanceTests/test03GroomerCreatesMovesCompletesAndCancelsOwnBooking()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffUITests/NativeAcceptanceTests/test03GroomerCreatesMovesCompletesAndCancelsOwnBooking",
+                  "nodeType" : "Test Case",
+                  "result" : "Failed"
+                },
+                {
+                  "duration" : "34 с",
+                  "durationInSeconds" : 34.68911099433899,
+                  "name" : "test04OfflineDoesNotReplayAndExpiryRequiresLogin()",
+                  "nodeIdentifier" : "NativeAcceptanceTests/test04OfflineDoesNotReplayAndExpiryRequiresLogin()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffUITests/NativeAcceptanceTests/test04OfflineDoesNotReplayAndExpiryRequiresLogin",
+                  "nodeType" : "Test Case",
+                  "result" : "Passed"
+                },
+                {
+                  "duration" : "30 с",
+                  "durationInSeconds" : 30.84030592441559,
+                  "name" : "test05RemoteTrustEnrollmentAndRevocation()",
+                  "nodeIdentifier" : "NativeAcceptanceTests/test05RemoteTrustEnrollmentAndRevocation()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffUITests/NativeAcceptanceTests/test05RemoteTrustEnrollmentAndRevocation",
+                  "nodeType" : "Test Case",
+                  "result" : "Passed"
+                },
+                {
+                  "children" : [
+                    {
+                      "name" : "Failed to tap \"logout\" Button: No matches found for Elements matching predicate '\"logout\" IN identifiers' from input {(\n    Button, label: 'Следующая клавиатура', value: English (UK),\n    Button, identifier: 'dictation', label: 'Диктовать', Disabled,\n    Button, identifier: 'shift', label: 'сдвиг', Selected,\n    Button, identifier: 'emoji', label: 'Эмодзи',\n    Button, identifier: 'Return', label: 'Ввод',\n    Button,\n    Button,\n    Button,\n    Button, identifier: 'sun.max', label: 'Сегодня',\n    Button, identifier: 'calendar', label: 'Записи',\n    Button, identifier: 'bubble.left.and.bubble.right', label: 'Сообщения', Selected,\n    Button, identifier: 'person.crop.circle', label: 'Профиль',\n    Button, identifier: 'BackButton', label: 'Сообщения',\n    Button, identifier: 'message-send', label: 'Отправить сообщение', Disabled\n)}\nPossibly caused by runtime issues:\nAutomation type mismatch: computed Button from legacy attributes vs Key from modern attribute. Input attributes and values: {\n    \"XC_kAXXCAttributeAutomationType\" = 20;\n    \"XC_kAXXCAttributeElementBaseType\" = UIAccessibilityElement;\n    \"XC_kAXXCAttributeElementType\" = UIAccessibilityElementKBKey;\n    \"XC_kAXXCAttributeTraits\" = 8589934649;\n}\nAutomation type mismatch: computed Button from legacy attributes vs Key from modern attribute. Input attributes and values: {\n    \"XC_kAXXCAttributeAutomationType\" = 20;\n    \"XC_kAXXCAttributeElementBaseType\" = UIAccessibilityElement;\n    \"XC_kAXXCAttributeElementType\" = UIAccessibilityElementKBKey;\n    \"XC_kAXXCAttributeTraits\" = 8589934641;\n}\nSee test report attachments for more detail.",
+                      "nodeType" : "Failure Message",
+                      "sourceLocation" : {
+                        "filePath" : "/Users/konstantin/.codex/worktrees/staff-ios-native/CRM/apps/staff-ios/UITests/NativeAcceptanceTests.swift",
+                        "lineNumber" : 58
+                      }
+                    }
+                  ],
+                  "duration" : "35 с",
+                  "durationInSeconds" : 35.9541540145874,
+                  "name" : "test06PersonalChatDoctorGroomerAndDoctorDoctor()",
+                  "nodeIdentifier" : "NativeAcceptanceTests/test06PersonalChatDoctorGroomerAndDoctorDoctor()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffUITests/NativeAcceptanceTests/test06PersonalChatDoctorGroomerAndDoctorDoctor",
+                  "nodeType" : "Test Case",
+                  "result" : "Failed"
+                },
+                {
+                  "children" : [
+                    {
+                      "name" : "Failed to tap \"logout\" Button: No matches found for Elements matching predicate '\"logout\" IN identifiers' from input {(\n    Button, label: 'Следующая клавиатура', value: English (UK),\n    Button, identifier: 'dictation', label: 'Диктовать', Disabled,\n    Button, identifier: 'shift', label: 'сдвиг', Selected,\n    Button, identifier: 'emoji', label: 'Эмодзи',\n    Button, identifier: 'Return', label: 'Ввод',\n    Button,\n    Button,\n    Button,\n    Button, identifier: 'sun.max', label: 'Сегодня',\n    Button, identifier: 'calendar', label: 'Записи',\n    Button, identifier: 'bubble.left.and.bubble.right', label: 'Сообщения', Selected,\n    Button, identifier: 'person.crop.circle', label: 'Профиль',\n    Button, identifier: 'BackButton', label: 'Сообщения',\n    Button, identifier: 'clinic-message-send', label: 'Отправить в общий чат', Disabled\n)}\nPossibly caused by runtime issues:\nAutomation type mismatch: computed Button from legacy attributes vs Key from modern attribute. Input attributes and values: {\n    \"XC_kAXXCAttributeAutomationType\" = 20;\n    \"XC_kAXXCAttributeElementBaseType\" = UIAccessibilityElement;\n    \"XC_kAXXCAttributeElementType\" = UIAccessibilityElementKBKey;\n    \"XC_kAXXCAttributeTraits\" = 8589934649;\n}\nAutomation type mismatch: computed Button from legacy attributes vs Key from modern attribute. Input attributes and values: {\n    \"XC_kAXXCAttributeAutomationType\" = 20;\n    \"XC_kAXXCAttributeElementBaseType\" = UIAccessibilityElement;\n    \"XC_kAXXCAttributeElementType\" = UIAccessibilityElementKBKey;\n    \"XC_kAXXCAttributeTraits\" = 8589934641;\n}\nSee test report attachments for more detail.",
+                      "nodeType" : "Failure Message",
+                      "sourceLocation" : {
+                        "filePath" : "/Users/konstantin/.codex/worktrees/staff-ios-native/CRM/apps/staff-ios/UITests/NativeAcceptanceTests.swift",
+                        "lineNumber" : 58
+                      }
+                    }
+                  ],
+                  "duration" : "42 с",
+                  "durationInSeconds" : 42.80448603630066,
+                  "name" : "test07GeneralClinicChatIsSharedWithIndependentReadState()",
+                  "nodeIdentifier" : "NativeAcceptanceTests/test07GeneralClinicChatIsSharedWithIndependentReadState()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffUITests/NativeAcceptanceTests/test07GeneralClinicChatIsSharedWithIndependentReadState",
+                  "nodeType" : "Test Case",
+                  "result" : "Failed"
+                },
+                {
+                  "duration" : "46 с",
+                  "durationInSeconds" : 46.41668891906738,
+                  "name" : "test08GroomerRefinesOwnBookingDuration()",
+                  "nodeIdentifier" : "NativeAcceptanceTests/test08GroomerRefinesOwnBookingDuration()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffUITests/NativeAcceptanceTests/test08GroomerRefinesOwnBookingDuration",
+                  "nodeType" : "Test Case",
+                  "result" : "Passed"
+                },
+                {
+                  "duration" : "52 с",
+                  "durationInSeconds" : 52.827857971191406,
+                  "name" : "test09GroomerAddsClientAndPetThroughNativeForms()",
+                  "nodeIdentifier" : "NativeAcceptanceTests/test09GroomerAddsClientAndPetThroughNativeForms()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffUITests/NativeAcceptanceTests/test09GroomerAddsClientAndPetThroughNativeForms",
+                  "nodeType" : "Test Case",
+                  "result" : "Passed"
+                }
+              ],
+              "name" : "NativeAcceptanceTests",
+              "nodeIdentifierURL" : "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffUITests/NativeAcceptanceTests",
+              "nodeType" : "Test Suite",
+              "result" : "Failed"
+            }
+          ],
+          "name" : "TemichevVetStaffUITests",
+          "nodeIdentifierURL" : "test://com.apple.xcode/TemichevVetStaff/TemichevVetStaffUITests",
+          "nodeType" : "UI test bundle",
+          "result" : "Failed"
+        }
+      ],
+      "name" : "TemichevVetStaff",
+      "nodeType" : "Test Plan",
+      "result" : "Failed"
+    }
+  ],
+  "testPlanConfigurations" : [
+    {
+      "configurationId" : "1",
+      "configurationName" : "Test Scheme Action"
+    }
+  ]
+}

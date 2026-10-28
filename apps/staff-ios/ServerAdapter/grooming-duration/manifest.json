@@ -1,0 +1,38 @@
+{
+  "commit": "365ef4914b72d487be1e689360bad66f64d08c9a",
+  "source": "/Users/konstantin/.codex/worktrees/pet-hotel-production-20261020/CRM",
+  "capturedAt": "2026-10-28T15:28:22.317Z",
+  "schemaAddition": "GroomingServiceRule.followShiftWorkplace Boolean @default(false)",
+  "files": [
+    {
+      "path": "apps/api/src/modules/grooming/grooming.service.ts",
+      "sha256": "9a94611410b8c0fad10ab789b24dcefb743af0db8c6e342e2e1a5d685047bbe0",
+      "mergedSha256": "9f8bb7eef19b872c42601487fa3f4382eaeabd8ccd15b1f770bb3d9a10e56988"
+    },
+    {
+      "path": "apps/api/src/modules/grooming/grooming.controller.ts",
+      "sha256": "95f60ff3d52c4338bea198fb05de54e0735132611d927636e37c813e62381b11",
+      "mergedSha256": "95f60ff3d52c4338bea198fb05de54e0735132611d927636e37c813e62381b11"
+    },
+    {
+      "path": "apps/api/src/modules/grooming/grooming.dto.ts",
+      "sha256": "53c0e11849a3f48e6cb521bc832a08cec3c012bbcd7ae1f952dfa5059afe1ecb",
+      "mergedSha256": "c5f9a98e94eb4abbfae29ada9a1449964762f49839fa9780765ebce617e63f48"
+    },
+    {
+      "path": "apps/api/src/modules/grooming/grooming-staff-notifications.service.ts",
+      "sha256": "fc4df01533d4e1bb127ad17480bcaf4504d6c99f32838005a5af9f31f1bf0ddc",
+      "mergedSha256": "1409c0eece8b09da4733c7b4bf00decc4ed47f0a141985471f51825ce777b575"
+    },
+    {
+      "path": "docs/grooming-calendar-acceptance-20261028.md",
+      "sha256": "c08ffa40d3e0098f09ab7f6bf5894b048685628b9aa6a14873656fd18f71e04a"
+    }
+  ],
+  "integrationResolutions": [
+    "PWA client access tokens preserved",
+    "offers bound to issuing employee",
+    "groomer slots and booking restricted to self",
+    "calendar workplace and duration checks retained"
+  ]
+}
