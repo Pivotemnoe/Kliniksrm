@@ -8,7 +8,7 @@ import { AuthEmployee } from '../auth/auth.types';
 import { GroomingCrmService } from './grooming.service';
 import { GroomingTeamService } from './grooming-team.service';
 import { CreateGroomerDto } from './grooming.dto';
-import { GroomingBookDto, GroomingChangeDto, GroomingLocationDto, GroomingOptionsDto, GroomingRuleDto, GroomingServiceDto, GroomingSettingsDto, GroomingSpecialistDto, GroomingStatusDto, GroomingWorkPeriodDto, GroomingWorkplaceDto, GroomingPriceImportDto, GroomingScheduleBatchDto, GroomingRulesBatchDto } from './grooming.dto';
+import { GroomingBookDto, GroomingChangeDto, GroomingLocationDto, GroomingOptionsDto, GroomingRuleDto, GroomingServiceDto, GroomingSettingsDto, GroomingSpecialistDto, GroomingStatusDto, GroomingWorkPeriodDto, GroomingWorkplaceDto, GroomingBookingDurationDto, GroomingCalendarBookingDto, GroomingCalendarChangeDto, GroomingServiceBookingDto, GroomingSlotsPreviewDto, GroomingPriceImportDto, GroomingScheduleBatchDto, GroomingRulesBatchDto } from './grooming.dto';
 class StaffOptions extends GroomingOptionsDto { @IsString() ownerId!: string; }
 class StaffBook extends GroomingBookDto { @IsString() ownerId!: string; }
 class StaffChange extends GroomingChangeDto { @IsString() ownerId!: string; }
@@ -32,6 +32,12 @@ export class GroomingController {
   reschedule(@CurrentEmployee() actor: AuthEmployee, @Param('id') id: string, @Body() input: StaffChange) { const { ownerId, version, ...dto } = input; return this.service.book(ownerId, dto, new Date(), actor, { id, version }); }
   @Post('bookings/:id/status') @AllowRemoteMutation() @RequirePermissions('grooming.operate')
   status(@CurrentEmployee() actor: AuthEmployee, @Param('id') id: string, @Body() input: GroomingStatusDto) { return this.service.status(id, '', input, new Date(), actor); }
+  @Patch('bookings/:id/duration') @AllowRemoteMutation() @RequirePermissions('grooming.operate') @RequireRoles('director', 'administrator', 'groomer')
+  duration(@CurrentEmployee() actor: AuthEmployee, @Param('id') id: string, @Body() input: GroomingBookingDurationDto) { return this.service.adjustDuration(id, input, actor); }
+  @Post('calendar/bookings') @RequirePermissions('grooming.operate') @RequireRoles('director', 'administrator')
+  calendarBook(@CurrentEmployee() actor: AuthEmployee, @Body() input: GroomingCalendarBookingDto) { return this.service.calendarBook(input, actor); }
+  @Patch('calendar/bookings/:id') @RequirePermissions('grooming.operate') @RequireRoles('director', 'administrator')
+  calendarMove(@CurrentEmployee() actor: AuthEmployee, @Param('id') id: string, @Body() input: GroomingCalendarChangeDto) { const { version, ...dto } = input; return this.service.calendarBook(dto, actor, { id, version }); }
   @Post('specialists') @RequirePermissions('grooming.manage')
   specialist(@CurrentEmployee() actor: AuthEmployee, @Body() input: CreateGroomerDto) { return this.team.createGroomer(input, actor); }
   @Post('workplaces/setup') @RequirePermissions('grooming.manage')
@@ -46,6 +52,10 @@ export class GroomingController {
   updateRule(@CurrentEmployee() actor: AuthEmployee, @Param('id') id: string, @Body() input: GroomingRuleDto) { return this.service.saveRule(input, actor, id); }
   @Post('services') @RequirePermissions('grooming.manage')
   createService(@CurrentEmployee() actor: AuthEmployee, @Body() input: GroomingServiceDto) { return this.service.saveService(input, actor); }
+  @Post('services/:id/booking') @RequirePermissions('grooming.manage')
+  serviceBooking(@CurrentEmployee() actor: AuthEmployee, @Param('id') id: string, @Body() input: GroomingServiceBookingDto) { return this.service.saveServiceBooking(id, input, actor); }
+  @Post('slots/preview') @RequirePermissions('grooming.manage')
+  previewSlots(@CurrentEmployee() actor: AuthEmployee, @Body() input: GroomingSlotsPreviewDto) { return this.service.previewSlots(input, actor); }
   @Post('services/import-prices') @RequirePermissions('grooming.manage')
   importPrices(@CurrentEmployee() actor: AuthEmployee, @Body() input: GroomingPriceImportDto) { return this.service.importPrices(input, actor); }
   @Patch('services/:id') @RequirePermissions('grooming.manage')

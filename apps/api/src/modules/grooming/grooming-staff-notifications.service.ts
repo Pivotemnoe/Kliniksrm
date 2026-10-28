@@ -20,14 +20,15 @@ export async function supersedeGroomingStaffNotices(tx: Prisma.TransactionClient
 }
 
 // The notice and its device outbox are committed in the reservation transaction.
-export async function queueGroomingStaffNotices(tx: Prisma.TransactionClient, booking: { id: string; employeeId: string; version: number; startsAt: Date; serviceTitle: string; animal: { nickname: string }; location: { timezone: string } }, event: string, now: Date, previousEmployeeId?: string) {
+export async function queueGroomingStaffNotices(tx: Prisma.TransactionClient, booking: { id: string; employeeId: string; version: number; startsAt: Date; endsAt?: Date; serviceTitle: string; animal: { nickname: string }; location: { timezone: string } }, event: string, now: Date, previousEmployeeId?: string) {
   await supersedeGroomingStaffNotices(tx, booking.id, now);
   const employees = await tx.employee.findMany({ where: { status: 'ACTIVE', OR: [{ id: { in: [booking.employeeId, ...(previousEmployeeId ? [previousEmployeeId] : [])] } }, { roles: { some: { role: { code: { in: ['director', 'administrator'] } } } } }] }, include: employeeInclude });
   const when = new Intl.DateTimeFormat('ru-RU', { timeZone: booking.location.timezone, dateStyle: 'short', timeStyle: 'short' }).format(booking.startsAt);
+  const ends = booking.endsAt ? '–' + new Intl.DateTimeFormat('ru-RU', { timeZone: booking.location.timezone, hour: '2-digit', minute: '2-digit' }).format(booking.endsAt) : '';
   for (const employee of employees.filter(canRead)) {
     const reassigned = !manager(employee) && employee.id !== booking.employeeId;
-    const title = reassigned ? 'Запись передана другому грумеру' : event === 'CANCELLED' ? 'Запись отменена' : event === 'RESCHEDULED' ? 'Запись перенесена' : 'Новая запись';
-    await createNotice(tx, { reservationId: booking.id, reservationVersion: booking.version, employeeId: employee.id, event: reassigned ? 'REASSIGNED' : event, dedupeKey: `${booking.id}:${booking.version}:${event}:${employee.id}`, title, body: reassigned ? 'Освободившееся время обновлено в вашем календаре.' : `${booking.animal.nickname} · ${booking.serviceTitle} · ${when}`.slice(0, 600), href: reassigned ? '/grooming/calendar' : `/grooming/bookings/${booking.id}`, expiresAt: new Date(now.getTime() + day), createdAt: now }, now);
+    const title = reassigned ? 'Запись передана другому грумеру' : event === 'CANCELLED' ? 'Запись отменена' : event === 'DURATION_CHANGED' ? 'Длительность уточнена' : event === 'RESCHEDULED' ? 'Запись перенесена' : 'Новая запись';
+    await createNotice(tx, { reservationId: booking.id, reservationVersion: booking.version, employeeId: employee.id, event: reassigned ? 'REASSIGNED' : event, dedupeKey: `${booking.id}:${booking.version}:${event}:${employee.id}`, title, body: reassigned ? 'Освободившееся время обновлено в вашем календаре.' : `${booking.animal.nickname} · ${booking.serviceTitle} · ${when}${ends}`.slice(0, 600), href: reassigned ? '/grooming/calendar' : `/grooming/bookings/${booking.id}`, expiresAt: new Date(now.getTime() + day), createdAt: now }, now);
   }
 }
 

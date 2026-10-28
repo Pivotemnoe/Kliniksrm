@@ -27,9 +27,9 @@ export class GroomingStorefrontService {
       for (const key of ['durationMinutes', 'bufferMinutes', 'stepMinutes', 'minimumLeadMinutes', 'maximumDaysAhead']) if (!Number.isInteger(r[key]) || r[key] < 0 || r[key] > 10080) throw new BadRequestException('Некорректные параметры длительности');
       if (r.durationMinutes < 5 || r.durationMinutes > 480 || r.stepMinutes < 5 || r.stepMinutes > 60 || r.maximumDaysAhead > 90) throw new BadRequestException('Некорректные параметры записи');
       try { new Intl.DateTimeFormat('ru', { timeZone: r.timezone }); } catch { throw new BadRequestException('Некорректный часовой пояс'); }
-      return Object.fromEntries(['id', 'specialistId', 'employeeId', 'serviceId', 'locationId', 'workplaceId', 'species', 'size', 'coat', 'durationMinutes', 'bufferMinutes', 'stepMinutes', 'minimumLeadMinutes', 'maximumDaysAhead', 'timezone', 'locationName'].map(k => [k, typeof r[k] === 'number' ? r[k] : text(r[k], 120)]));
+      return { followShiftWorkplace: r.followShiftWorkplace === true, ...Object.fromEntries(['id', 'specialistId', 'employeeId', 'serviceId', 'locationId', 'workplaceId', 'species', 'size', 'coat', 'durationMinutes', 'bufferMinutes', 'stepMinutes', 'minimumLeadMinutes', 'maximumDaysAhead', 'timezone', 'locationName'].map(k => [k, typeof r[k] === 'number' ? r[k] : text(r[k], 120)])) };
     });
-    const shifts = (payload.shifts as Item[]).map(s => ({ specialistId: text(s.specialistId, 100), locationId: text(s.locationId, 100), workplaceId: s.workplaceId ? text(s.workplaceId, 100) : null, kind: s.kind === 'WORK' ? 'WORK' : 'BLOCK', startsAt: instant(s.startsAt), endsAt: instant(s.endsAt) }));
+    const shifts = (payload.shifts as Item[]).map(s => ({ specialistId: text(s.specialistId, 100), locationId: text(s.locationId, 100), workplaceId: s.workplaceId ? text(s.workplaceId, 100) : null, timezone: text(s.timezone, 100), locationName: text(s.locationName, 120), workplaceName: text(s.workplaceName, 120), kind: s.kind === 'WORK' ? 'WORK' : 'BLOCK', startsAt: instant(s.startsAt), endsAt: instant(s.endsAt) }));
     const busy = (payload.busy as Item[]).map(s => ({ employeeId: text(s.employeeId, 100), workplaceId: text(s.workplaceId, 100), startsAt: instant(s.startsAt), endsAt: instant(s.endsAt) }));
     const safe: Snapshot = { testMode: payload.testMode === true, capturedAt, enabled: payload.enabled === true, selfBookingEnabled: payload.selfBookingEnabled === true, services, specialists, rules, shifts, busy };
     const fingerprint = createHash('sha256').update(JSON.stringify(safe)).digest('hex');
@@ -59,17 +59,19 @@ export class GroomingStorefrontService {
     if (!service) return { slots: [], enabled: true, notice: 'Для этой услуги время согласует администратор.' };
     const slots: Item[] = [];
     for (const r of data.rules.filter(r => r.serviceId === service.id && r.species === query.species && ['ANY', query.size].includes(r.size) && ['ANY', query.coat || 'ANY'].includes(r.coat) && (!query.specialistId || r.specialistId === query.specialistId))) {
+      const durationMinutes = Math.max(90, Math.ceil(r.durationMinutes / 30) * 30);
       const specialist = data.specialists.find(s => s.id === r.specialistId);
       if (!specialist) continue;
       const from = Math.max(center - 26 * 3600000, now.getTime() + r.minimumLeadMinutes * minute), to = Math.min(center + 26 * 3600000, now.getTime() + r.maximumDaysAhead * day);
-      for (const shift of data.shifts.filter(s => s.kind === 'WORK' && s.specialistId === r.specialistId && s.locationId === r.locationId && (!s.workplaceId || s.workplaceId === r.workplaceId))) {
+      for (const shift of data.shifts.filter(s => s.kind === 'WORK' && s.specialistId === r.specialistId && (r.followShiftWorkplace ? Boolean(s.workplaceId) : s.locationId === r.locationId && (!s.workplaceId || s.workplaceId === r.workplaceId)))) {
+        const workplaceId = r.followShiftWorkplace ? shift.workplaceId : r.workplaceId, timezone = r.followShiftWorkplace && shift.timezone ? shift.timezone : r.timezone;
         const start = Date.parse(shift.startsAt), end = Math.min(Date.parse(shift.endsAt), to), step = r.stepMinutes * minute;
-        for (let t = start + Math.max(0, Math.ceil((from - start) / step)) * step; t + (r.durationMinutes + r.bufferMinutes) * minute <= end; t += step) {
-          const finish = t + (r.durationMinutes + r.bufferMinutes) * minute;
-          if (localDay(new Date(t), r.timezone) !== query.date) continue;
+        for (let t = start + Math.max(0, Math.ceil((from - start) / step)) * step; t + (durationMinutes + r.bufferMinutes) * minute <= end; t += step) {
+          const finish = t + (durationMinutes + r.bufferMinutes) * minute;
+          if (localDay(new Date(t), timezone) !== query.date) continue;
           if (data.shifts.some(s => s.kind === 'BLOCK' && s.specialistId === r.specialistId && Date.parse(s.startsAt) < finish && Date.parse(s.endsAt) > t)) continue;
-          if (data.busy.some(b => (b.employeeId === r.employeeId || b.workplaceId === r.workplaceId) && Date.parse(b.startsAt) < finish && Date.parse(b.endsAt) > t)) continue;
-          slots.push({ serviceId: service.id, specialistId: r.specialistId, startsAt: new Date(t).toISOString(), endsAt: new Date(t + r.durationMinutes * minute).toISOString(), specialistName: specialist.displayName, durationMinutes: r.durationMinutes, priceLabel: service.priceLabel, timezone: r.timezone, locationName: r.locationName });
+          if (data.busy.some(b => (b.employeeId === r.employeeId || b.workplaceId === workplaceId) && Date.parse(b.startsAt) < finish && Date.parse(b.endsAt) > t)) continue;
+          slots.push({ serviceId: service.id, specialistId: r.specialistId, startsAt: new Date(t).toISOString(), endsAt: new Date(t + durationMinutes * minute).toISOString(), specialistName: specialist.displayName, durationMinutes, priceLabel: service.priceLabel, timezone, locationName: r.followShiftWorkplace ? shift.locationName : r.locationName, workplaceName: shift.workplaceName, workplaceId });
           if (slots.length >= 300) break;
         }
         if (slots.length >= 300) break;

@@ -53,6 +53,18 @@ export class GroomingServiceDto {
 export class GroomingPriceImportDto {
   @IsString() @MinLength(16) @MaxLength(120) clientKey!: string;
 }
+export class GroomingServiceBookingDto extends GroomingPriceImportDto {
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(40) @IsString({ each: true }) specialistIds!: string[];
+  @IsInt() @Min(30) @Max(480) durationMinutes!: number;
+  @IsBoolean() isActive!: boolean;
+  @IsInt() @Min(1) version!: number;
+}
+export class GroomingSlotsPreviewDto {
+  @IsString() @MinLength(1) serviceId!: string;
+  @IsOptional() @IsString() specialistId?: string;
+  @IsOptional() @IsIn(['DOG', 'CAT']) species?: string;
+  @IsString() @Matches(/^\d{4}-\d{2}-\d{2}$/) date!: string;
+}
 export class GroomingRulesBatchDto extends GroomingPriceImportDto {
   @IsArray() @ArrayMinSize(1) @ArrayMaxSize(250) @ValidateNested({ each: true }) @Type(() => GroomingRuleDto) rules!: GroomingRuleDto[];
 }
@@ -65,6 +77,7 @@ export class GroomingScheduleBatchDto extends GroomingPriceImportDto {
   @IsArray() @ArrayMinSize(1) @ArrayMaxSize(7) @IsIn([0, 1, 2, 3, 4, 5, 6], { each: true }) weekdays!: number[];
   @IsString() @Matches(/^(?:[01]\d|2[0-3]):[0-5]\d$/) startsTime!: string;
   @IsString() @Matches(/^(?:[01]\d|2[0-3]):[0-5]\d$/) endsTime!: string;
+  @IsOptional() @IsBoolean() endsNextDay?: boolean;
   @IsOptional() @IsArray() @ArrayMaxSize(62) @Matches(/^\d{4}-\d{2}-\d{2}$/, { each: true }) excludedDates?: string[];
   @IsString() @MaxLength(500) comment!: string;
 }
@@ -126,4 +139,26 @@ export class GroomingPetDto {
   @IsString() @MinLength(1) @MaxLength(80) nickname!: string;
   @IsIn(['DOG', 'CAT']) species!: string;
   @IsOptional() @IsString() @MaxLength(120) breed?: string;
+}
+
+export class GroomingCalendarBookingDto {
+  @IsString() @MinLength(16) @MaxLength(120) clientKey!: string;
+  @IsString() @MinLength(1) workPeriodId!: string;
+  @IsInt() @Min(1) workPeriodVersion!: number;
+  @IsString() @MinLength(1) serviceId!: string;
+  @IsString() @MinLength(1) ownerId!: string;
+  @IsString() @MinLength(1) animalId!: string;
+  @IsISO8601() startsAt!: string;
+  @IsInt() @Min(30) @Max(480) durationMinutes!: number;
+  @IsOptional() @IsString() @MaxLength(2000) notes?: string;
+  @IsBoolean() contactConsent!: boolean;
+  @IsBoolean() bookingConsent!: boolean;
+}
+export class GroomingCalendarChangeDto extends GroomingCalendarBookingDto {
+  @IsInt() @Min(1) version!: number;
+}
+
+export class GroomingBookingDurationDto extends GroomingPriceImportDto {
+  @IsInt() @Min(1) version!: number;
+  @IsInt() @Min(30) @Max(480) durationMinutes!: number;
 }

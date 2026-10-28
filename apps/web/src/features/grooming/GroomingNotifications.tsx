@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, App, Button, Card, Collapse, Drawer, Empty, Input, Segmented, Space, Tag, Typography } from 'antd';
-import { BellOutlined, CalendarOutlined, CheckOutlined, CloseCircleOutlined, DownloadOutlined, InfoCircleOutlined, MobileOutlined, SearchOutlined, SwapOutlined } from '@ant-design/icons';
+import { BellOutlined, CalendarOutlined, CheckOutlined, CloseCircleOutlined, ClockCircleOutlined, DownloadOutlined, InfoCircleOutlined, MobileOutlined, SearchOutlined, SwapOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { apiRequest } from '../../api/client';
 import { ApiError, getErrorMessage } from '../../api/errors';
@@ -104,12 +104,13 @@ export function GroomingDeviceCard({ actorId }: { actorId: string }) {
     {permission === 'denied' && <Alert type="warning" message="Уведомления запрещены в настройках браузера" description="Разрешите их для этого сайта и откройте кабинет снова." />}
     {(deviceError || config.isError) && <Alert type="error" showIcon message={deviceError || getErrorMessage(config.error)} />}
     <Space wrap><Button type="primary" icon={<BellOutlined />} disabled={!supported || !config.data?.available || (ios && !installed) || permission === 'denied' || linked} loading={connect.isPending} onClick={() => connect.mutate(Notification.requestPermission())}>Включить уведомления</Button>{linked && <><Button loading={test.isPending} onClick={() => test.mutate()}>Отправить проверку</Button><Button loading={disconnect.isPending} onClick={() => disconnect.mutate()}>Отключить на устройстве</Button></>}</Space>
-    <Typography.Text type="secondary">Новая запись, перенос и отмена поступают назначенному грумеру и администратору. Подробности доступны после входа. MAX подключается отдельно.</Typography.Text>
+    <Typography.Text type="secondary">Новая запись, уточнение длительности, перенос и отмена поступают назначенному грумеру и администратору. Подробности доступны после входа. MAX подключается отдельно.</Typography.Text>
   </Space></Card>;
 }
 
 const noticeGroups = [
   { key: 'CREATED', title: 'Новые записи', icon: <CalendarOutlined /> },
+  { key: 'DURATION_CHANGED', title: 'Уточнение длительности', icon: <ClockCircleOutlined /> },
   { key: 'RESCHEDULED', title: 'Переносы', icon: <SwapOutlined /> },
   { key: 'CANCELLED', title: 'Отмены', icon: <CloseCircleOutlined /> },
   { key: 'REASSIGNED', title: 'Передано другому грумеру', icon: <SwapOutlined /> },

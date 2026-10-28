@@ -2991,6 +2991,7 @@ model GroomingServiceRule {
   species String
   size String @default("ANY")
   coat String @default("ANY")
+  followShiftWorkplace Boolean @default(false)
   durationMinutes Int
   bufferMinutes Int @default(15)
   stepMinutes Int @default(15)
