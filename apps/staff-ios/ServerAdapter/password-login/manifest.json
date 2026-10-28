@@ -1,0 +1,20 @@
+{
+  "baseCommit": "813d2ab5a0f5f792d562d3369c51a602b2471e1b",
+  "purpose": "Existing CRM phone/password login for native staff apps; no invitation step; existing roles, remote guard and revocation retained.",
+  "files": [
+    {
+      "path": "apps/api/src/modules/auth/auth.controller.ts",
+      "sha256": "28067445d332edacb80f1f05aa9efe8f05f92f6e74c45532ff09f26e6b2caa3f",
+      "baseSha256": "db18048554eb98b2d167cd50879d97047aa2e00e6dc5fffc75f83511ddeeb64f"
+    },
+    {
+      "path": "apps/api/src/modules/auth/auth.service.ts",
+      "sha256": "fc74fa466380b0992a78a43685da35216eead4a69bd665a0409a1a3fb51e7e5e",
+      "baseSha256": "2ff6c7f421ed6925e41861456ccf7218c675ea070ecd9050f27efe891ede14f1"
+    },
+    {
+      "path": "apps/api/src/modules/auth/dto/staff-login.dto.ts",
+      "sha256": "4153ffddc41df6a4979c81daf00ca8c33a2209b283655d205be93887b76c644b"
+    }
+  ]
+}

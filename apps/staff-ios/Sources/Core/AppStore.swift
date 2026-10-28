@@ -9,7 +9,7 @@ import Network
     var loading = false
     var error: String?
     var banner: String?
-    var serverText = UserDefaults.standard.string(forKey: "staff.server") ?? ""
+    var serverText = UserDefaults.standard.string(forKey: "staff.server") ?? (Bundle.main.object(forInfoDictionaryKey: "StaffCRMServerURL") as? String ?? "https://staff.temichevvet.ru")
     var online = true
     var confirmed = false
     var isForeground = true
@@ -44,6 +44,12 @@ import Network
         api = try APIClient(address: address)
         UserDefaults.standard.set(address.origin, forKey: "staff.server")
     }
+    func changeServer(_ raw: String) throws {
+        guard employee == nil else { throw APIError.configuration("Сначала выйдите из текущей CRM.") }
+        let address = try ServerAddress(raw)
+        api = nil; serverText = address.origin; error = nil; banner = nil
+        UserDefaults.standard.set(address.origin, forKey: "staff.server")
+    }
     func start() async {
         guard !serverText.isEmpty else { return }
         do { try connect(); if api?.hasSession == true { await resume() } }
@@ -54,25 +60,16 @@ import Network
         loading = true; error = nil; defer { loading = false }
         do {
             try connect()
-            let result: AuthResponse = try await api!.request("auth/login", method: "POST", body: ["login": login.trimmingCharacters(in: .whitespacesAndNewlines), "password": password])
+            let result: AuthResponse = try await api!.request("auth/staff-login", method: "POST", body: ["login": login.trimmingCharacters(in: .whitespacesAndNewlines), "password": password, "installationId": try api!.staffInstallationId(), "deviceName": "iPhone сотрудника"])
             employee = result.employee; accessType = result.accessType
             try api?.activity()
             scope = "clinic"
             await refresh()
-        } catch { handle(error) }
-    }
-    func enroll(_ codeOrURL: String, name: String) async -> Bool {
-        guard !loading else { return false }
-        loading = true; error = nil; defer { loading = false }
-        do {
-            try connect()
-            let raw = codeOrURL.trimmingCharacters(in: .whitespacesAndNewlines)
-            let code = URLComponents(string: raw)?.queryItems?.first(where: { $0.name == "code" })?.value ?? raw
-            guard (20...200).contains(code.count) else { throw APIError.configuration("Введите одноразовый код из приглашения CRM.") }
-            let _: EmptyResult = try await api!.request("v1/remote-access/enroll", method: "POST", body: ["code": code, "deviceName": name])
-            banner = "Телефон привязан. Войдите со своей учётной записью CRM."
-            return true
-        } catch { handle(error); return false }
+        } catch {
+            if case APIError.server(404, _) = error { handle(APIError.configuration("Клиника ещё не подключила эту версию приложения. Вход заработает после обновления сервера CRM.")) }
+            else if case APIError.connection = error { handle(APIError.configuration("Не удалось соединиться с клиникой. Проверьте интернет и повторите вход.")) }
+            else { handle(error) }
+        }
     }
     func resume() async {
         guard let api else { return }

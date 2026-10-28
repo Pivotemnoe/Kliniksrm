@@ -39,7 +39,7 @@ for name, folder, kind, ext in targets:
     resourcePhase = obj('resources:' + name, f'isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = {items(resources) if resources else "()"}; runOnlyForDeploymentPostprocessing = 0;')
     configs = []
     for config in ['Debug', 'Release']:
-        settings = {'PRODUCT_NAME': '$(TARGET_NAME)', 'PRODUCT_BUNDLE_IDENTIFIER': 'ru.temichevvet.staff' + ('' if ext == 'app' else '.' + folder.lower()), 'SWIFT_VERSION': '5.0', 'IPHONEOS_DEPLOYMENT_TARGET': '17.0', 'TARGETED_DEVICE_FAMILY': '1', 'SDKROOT': 'iphoneos', 'SUPPORTED_PLATFORMS': 'iphoneos iphonesimulator', 'CODE_SIGN_STYLE': 'Automatic', 'CURRENT_PROJECT_VERSION': '1', 'MARKETING_VERSION': '0.1.0', 'SWIFT_EMIT_LOC_STRINGS': 'YES', 'ENABLE_USER_SCRIPT_SANDBOXING': 'YES', 'GENERATE_INFOPLIST_FILE': 'YES', 'LD_RUNPATH_SEARCH_PATHS': '$(inherited) @executable_path/Frameworks @loader_path/Frameworks', 'SWIFT_OPTIMIZATION_LEVEL': '-Onone' if config == 'Debug' else '-O', 'SWIFT_ACTIVE_COMPILATION_CONDITIONS': 'DEBUG' if config == 'Debug' else '', 'DEBUG_INFORMATION_FORMAT': 'dwarf' if config == 'Debug' else 'dwarf-with-dsym', 'ENABLE_TESTABILITY': 'YES' if config == 'Debug' else 'NO'}
+        settings = {'PRODUCT_NAME': '$(TARGET_NAME)', 'PRODUCT_BUNDLE_IDENTIFIER': 'ru.temichevvet.staff' + ('' if ext == 'app' else '.' + folder.lower()), 'SWIFT_VERSION': '5.0', 'IPHONEOS_DEPLOYMENT_TARGET': '17.0', 'TARGETED_DEVICE_FAMILY': '1', 'SDKROOT': 'iphoneos', 'SUPPORTED_PLATFORMS': 'iphoneos iphonesimulator', 'CODE_SIGN_STYLE': 'Automatic', 'CURRENT_PROJECT_VERSION': '2', 'MARKETING_VERSION': '0.1.0', 'SWIFT_EMIT_LOC_STRINGS': 'YES', 'ENABLE_USER_SCRIPT_SANDBOXING': 'YES', 'GENERATE_INFOPLIST_FILE': 'YES', 'LD_RUNPATH_SEARCH_PATHS': '$(inherited) @executable_path/Frameworks @loader_path/Frameworks', 'SWIFT_OPTIMIZATION_LEVEL': '-Onone' if config == 'Debug' else '-O', 'SWIFT_ACTIVE_COMPILATION_CONDITIONS': 'DEBUG' if config == 'Debug' else '', 'DEBUG_INFORMATION_FORMAT': 'dwarf' if config == 'Debug' else 'dwarf-with-dsym', 'ENABLE_TESTABILITY': 'YES' if config == 'Debug' else 'NO'}
         if ext == 'app':
             settings.update({'GENERATE_INFOPLIST_FILE': 'NO', 'INFOPLIST_FILE': 'Resources/Info-Debug.plist' if config == 'Debug' else 'Resources/Info.plist', 'CODE_SIGN_ENTITLEMENTS': 'Resources/Staff-Debug.entitlements' if config == 'Debug' else 'Resources/Staff.entitlements'})
             settings['ASSETCATALOG_COMPILER_APPICON_NAME'] = 'AppIcon'
@@ -75,6 +75,7 @@ for debug in [False, True]:
     current = dict(info)
     current['StaffAPNSEnvironment'] = 'SANDBOX' if debug else 'PRODUCTION'
     current['ITSAppUsesNonExemptEncryption'] = False
+    current['StaffCRMServerURL'] = 'https://staff.temichevvet.ru'
     if debug: current['NSAppTransportSecurity'] = {'NSAllowsLocalNetworking': True, 'NSExceptionDomains': {'localhost': {'NSExceptionAllowsInsecureHTTPLoads': True, 'NSIncludesSubdomains': False}, '127.0.0.1': {'NSExceptionAllowsInsecureHTTPLoads': True, 'NSIncludesSubdomains': False}}}
     (root / 'Resources' / ('Info-Debug.plist' if debug else 'Info.plist')).write_bytes(plistlib.dumps(current, sort_keys=False))
     (root / 'Resources' / ('Staff-Debug.entitlements' if debug else 'Staff.entitlements')).write_bytes(plistlib.dumps({'aps-environment': 'development' if debug else 'production'}))

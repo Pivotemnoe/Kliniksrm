@@ -25,6 +25,18 @@ for (const file of groomingManifest.files) {
   const target = new URL(file.path, backend); await mkdir(new URL('.', target), { recursive: true }); await writeFile(target, data);
 }
 const schemaURL = new URL('prisma/schema.prisma', backend);
+const passwordLogin = new URL('../ServerAdapter/password-login/', import.meta.url);
+const passwordManifest = JSON.parse(await readFile(new URL('manifest.json', passwordLogin)));
+if (passwordManifest.baseCommit !== manifest.baseCommit) throw new Error('Unreviewed password-login base');
+for (const file of passwordManifest.files) {
+  if (file.baseSha256) {
+    const base = await readFile(new URL(file.path, backend));
+    if (createHash('sha256').update(base).digest('hex') !== file.baseSha256) throw new Error('Password-login base changed: ' + file.path);
+  }
+  const data = await readFile(new URL(file.path, passwordLogin));
+  if (createHash('sha256').update(data).digest('hex') !== file.sha256) throw new Error('Password-login hash mismatch: ' + file.path);
+  const target = new URL(file.path, backend); await mkdir(new URL('.', target), { recursive: true }); await writeFile(target, data);
+}
 let schema = await readFile(schemaURL, 'utf8');
 const rule = schema.match(/model GroomingServiceRule \{[\s\S]*?\n\}/)?.[0];
 if (!rule) throw new Error('GroomingServiceRule model missing');
@@ -34,6 +46,7 @@ await writeFile(schemaURL, schema);
 for (const [target, source] of [['node_modules', root + '/node_modules'], ['apps/api/node_modules', root + '/apps/api/node_modules']]) {
   try { await symlink(source, fileURLToPath(new URL(target, backend)), 'dir'); } catch (e) { if (e.code !== 'EEXIST') throw e; }
 }
+if (process.env.STAFF_IOS_COMPOSE_ONLY === '1') process.exit(0);
 const env = Object.fromEntries(['PATH', 'HOME', 'TMPDIR', 'LANG', 'TZ'].filter(k => process.env[k]).map(k => [k, process.env[k]]));
 env.DATABASE_URL = 'postgresql://unused:unused@127.0.0.1:1/unused'; // generate only, no database connection
 let result = spawnSync(process.execPath, [root + '/node_modules/prisma/build/index.js', 'generate', '--schema', fileURLToPath(new URL('prisma/schema.prisma', backend))], { env, stdio: 'inherit', cwd: root });

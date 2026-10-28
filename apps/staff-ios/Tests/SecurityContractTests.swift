@@ -63,6 +63,26 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
         XCTAssertEqual(creds.cookies.map(\.name), ["temichevvet_remote_device"])
         try restored.forgetDevice(); XCTAssertNil(storage.data)
     }
+    func testClearingLoginDataPreservesInstallationForDeviceRevocation() throws {
+        let storage = MemorySecrets(); let api = try client(storage)
+        let installation = try api.staffInstallationId()
+        XCTAssertNotNil(UUID(uuidString: installation))
+        let restored = try client(storage)
+        XCTAssertEqual(try restored.staffInstallationId(), installation)
+        try restored.clearSession()
+        XCTAssertEqual(try client(storage).staffInstallationId(), installation)
+        try restored.forgetDevice()
+        let cleared = try client(storage)
+        XCTAssertFalse(cleared.hasSession)
+        XCTAssertEqual(try cleared.staffInstallationId(), installation)
+        XCTAssertTrue(try JSONDecoder().decode(Credentials.self, from: storage.data!).cookies.isEmpty)
+    }
+    func testPreviousBuildCredentialsDecodeBeforePhonePasswordUpgrade() throws {
+        let storage = MemorySecrets()
+        storage.data = Data("{\"origin\":\"https://staff.example.test\",\"cookies\":[],\"lastActivity\":0}".utf8)
+        let upgraded = try client(storage)
+        XCTAssertNotNil(UUID(uuidString: try upgraded.staffInstallationId()))
+    }
     func testUnauthorizedClearsSessionAndPreservesError() async throws {
         let storage = MemorySecrets(); let api = try client(storage)
         StubProtocol.handler = { _ in (200, ["Set-Cookie": "clinic_crm_session=session; Path=/; Secure; Max-Age=3600"], Data("{}".utf8)) }

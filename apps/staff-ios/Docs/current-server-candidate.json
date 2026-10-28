@@ -1,0 +1,170 @@
+{
+  "currentProductionSourceCommit": "4db748e0236b4b294bca8171550f3cefed49a8db",
+  "commonBase": "c43e0e8c8dd46de80a4616072b1a8f9d2826d1c1",
+  "groomingSpecificBase": "365ef4914b72d487be1e689360bad66f64d08c9a",
+  "changedFiles": [
+    {
+      "path": "apps/api/src/app.module.ts",
+      "currentSha256": "2fb797248c70e5b403fec490d0fcce753c6c5cb3be573aacdfd88651f6f140fe",
+      "sha256": "e9fe71cb1f1e4561890021294d9222bf13c55b8391704cc207c69bcbac2069b8"
+    },
+    {
+      "path": "apps/api/src/modules/auth/auth.controller.ts",
+      "currentSha256": "db18048554eb98b2d167cd50879d97047aa2e00e6dc5fffc75f83511ddeeb64f",
+      "sha256": "28067445d332edacb80f1f05aa9efe8f05f92f6e74c45532ff09f26e6b2caa3f"
+    },
+    {
+      "path": "apps/api/src/modules/auth/auth.service.ts",
+      "currentSha256": "7c18bfc69912a7595cdc58db09046dc51b59cbe1a94bee000da8fd04540424e8",
+      "sha256": "fc74fa466380b0992a78a43685da35216eead4a69bd665a0409a1a3fb51e7e5e"
+    },
+    {
+      "path": "apps/api/src/modules/auth/auth.types.ts",
+      "currentSha256": "171ff745e0889fdf1f62be78d09b50b885c51ea02bd87f2f93d07ce51d371a31",
+      "sha256": "aac9b0012804fbadccbe30e3e7c36f93d3957cf85681822daecf461f053ad872"
+    },
+    {
+      "path": "apps/api/src/modules/auth/decorators/passive-session-activity.decorator.ts",
+      "currentSha256": null,
+      "sha256": "7b59004b63c180ed18f832540e683e254258e6a2d38cb4fdb8cb2d363afe9996"
+    },
+    {
+      "path": "apps/api/src/modules/auth/dto/staff-login.dto.ts",
+      "currentSha256": null,
+      "sha256": "4153ffddc41df6a4979c81daf00ca8c33a2209b283655d205be93887b76c644b"
+    },
+    {
+      "path": "apps/api/src/modules/auth/session-auth.guard.ts",
+      "currentSha256": "954c61ff8b7567fcd505c743a8808cfa44f1d9168f9d7ef698a13c7cce1d991b",
+      "sha256": "c2ce726ec83c97c5ac7d388eb111de9d7ea149bb2f2604613b570089c472f600"
+    },
+    {
+      "path": "apps/api/src/modules/grooming/grooming-staff-notifications.service.ts",
+      "currentSha256": "fc4df01533d4e1bb127ad17480bcaf4504d6c99f32838005a5af9f31f1bf0ddc",
+      "sha256": "1409c0eece8b09da4733c7b4bf00decc4ed47f0a141985471f51825ce777b575"
+    },
+    {
+      "path": "apps/api/src/modules/grooming/grooming.dto.ts",
+      "currentSha256": "53c0e11849a3f48e6cb521bc832a08cec3c012bbcd7ae1f952dfa5059afe1ecb",
+      "sha256": "c5f9a98e94eb4abbfae29ada9a1449964762f49839fa9780765ebce617e63f48"
+    },
+    {
+      "path": "apps/api/src/modules/grooming/grooming.module.ts",
+      "currentSha256": "5a34e7b80fd7557361229f6ac3f7ff90e5b5bb78e17ea322331340f5d4ba4306",
+      "sha256": "cad3253f2c49d1a2db61cc26ccd92538db0ad17424b4bf1fcdcebebe06b8f929"
+    },
+    {
+      "path": "apps/api/src/modules/grooming/grooming.service.ts",
+      "currentSha256": "7906a325c50fbbf87db3f5c87b25259834b15c8ef1055357a5b72bbdf17f35b6",
+      "sha256": "85a56162c49ccd4b552fcf32966a4dbbdd0d1b6383e7339ed01109501b5a50fc"
+    },
+    {
+      "path": "apps/api/src/modules/internal-messages/dto/clinic-chat.dto.ts",
+      "currentSha256": null,
+      "sha256": "f64a8be72bead33e2f45797d04e7591513bdbace67a874856f79467206039928"
+    },
+    {
+      "path": "apps/api/src/modules/internal-messages/dto/create-internal-message.dto.ts",
+      "currentSha256": "a08976e031764d17d8c3ad29e6f57ca917644b6d418dadd52bc95447d9b31330",
+      "sha256": "a72087689fc5e541c161b59a2036a12114dd1229616989c627db490c92695dd6"
+    },
+    {
+      "path": "apps/api/src/modules/internal-messages/dto/list-internal-messages-query.dto.ts",
+      "currentSha256": "0d1253cdbca5397678024a485f4f5f1bcdfffda6facd825e3896d5532d852101",
+      "sha256": "d7f4d81987e22de7fa6f288fd8c49e3c8f581983d5d9012c6ebd5cbcd4eb6b1f"
+    },
+    {
+      "path": "apps/api/src/modules/internal-messages/dto/read-conversation.dto.ts",
+      "currentSha256": null,
+      "sha256": "2bf3510d6f69369200d5bb12cd7b43f5957e55e5920fb794ce9e6273b89a856f"
+    },
+    {
+      "path": "apps/api/src/modules/internal-messages/internal-messages.controller.ts",
+      "currentSha256": "633e607e98bd786f1905c919b9fabfb8aebfa72724563a68f280554f0867ed0f",
+      "sha256": "75ea8c774b0866eab5b5451bda2b0c8650acf56d8dffd651b59bb0f3b3ffeeb9"
+    },
+    {
+      "path": "apps/api/src/modules/internal-messages/internal-messages.module.ts",
+      "currentSha256": "44b8646b8c56d70a5209d67ff7cffaee21e64ab330861dc9ca3e2d5541a87b9e",
+      "sha256": "e7e6ec2dec498a27876ed33ea2338bdf7ae5f4dd991692812191428dcd70d598"
+    },
+    {
+      "path": "apps/api/src/modules/internal-messages/internal-messages.service.ts",
+      "currentSha256": "1fd73a4bba834dc8c13590ba466d99b66dff71f215bcf76dec5775a380bb1a10",
+      "sha256": "8da59b0a852ed9b5a97a181d3b2ef34aa5afb79f976998b0e460fd3bd8305d74"
+    },
+    {
+      "path": "apps/api/src/modules/internal-messages/staff-clinic-chat.service.ts",
+      "currentSha256": null,
+      "sha256": "a88b93c8b59ea28bee9a856e2cbc7ba8de745227977013846b76ea4b877a122d"
+    },
+    {
+      "path": "apps/api/src/modules/owners/owners.module.ts",
+      "currentSha256": "08582f786f9d3625a4a6810ebe6f6b17580bc81cc11f8cbaccd1bf3e95f56088",
+      "sha256": "0a1b69651a76fc793a6a36ed6023566549b11afade6a0aa34a6ff59238d4345b"
+    },
+    {
+      "path": "apps/api/src/modules/staff-app/staff-app.controller.ts",
+      "currentSha256": null,
+      "sha256": "ee2ab212f5e214788fb1a12725f44ca3ea54f954b0a79d5aca9696975751611a"
+    },
+    {
+      "path": "apps/api/src/modules/staff-app/staff-app.dto.ts",
+      "currentSha256": null,
+      "sha256": "a5a485f766c03a91d4251eb0588a1807ad9fb77a172a17d690676f0099b68cc8"
+    },
+    {
+      "path": "apps/api/src/modules/staff-app/staff-app.module.ts",
+      "currentSha256": null,
+      "sha256": "f279e8ee2753d68f5eb387f62bab92271910c3ac6c4f064954a25df9d0d7bcb7"
+    },
+    {
+      "path": "apps/api/src/modules/staff-app/staff-app.policy.ts",
+      "currentSha256": null,
+      "sha256": "c4d6d9ef621e561bc4f6e08521e5dc3c988aebf2e365aea192aea76dcd3fbad5"
+    },
+    {
+      "path": "apps/api/src/modules/staff-app/staff-app.service.ts",
+      "currentSha256": null,
+      "sha256": "12500c130724322aff9a2b6d9773cfb73f331cc3685b46fdc1872a05c624d931"
+    },
+    {
+      "path": "apps/api/src/modules/staff-native-push/native-push-transport.ts",
+      "currentSha256": null,
+      "sha256": "080a4e7b9422c5ce46f079601662cf7ba84bb23b2522ea3674ca53b66335c3ee"
+    },
+    {
+      "path": "apps/api/src/modules/staff-native-push/no-store.interceptor.ts",
+      "currentSha256": null,
+      "sha256": "18771d5b78f0e4055b0bc42abbf92f6f62f7ca45d897a9ee4dc8077b7bc3b263"
+    },
+    {
+      "path": "apps/api/src/modules/staff-native-push/staff-native-push.controller.ts",
+      "currentSha256": null,
+      "sha256": "1eacac6332e7f6e17564da97af691efcbc96db32f4faf70053f99f1423ef5271"
+    },
+    {
+      "path": "apps/api/src/modules/staff-native-push/staff-native-push.dto.ts",
+      "currentSha256": null,
+      "sha256": "a0c5f8754285284527e7221030f8f9b7b8283b15c64892edb55dfa4faea70e04"
+    },
+    {
+      "path": "apps/api/src/modules/staff-native-push/staff-native-push.module.ts",
+      "currentSha256": null,
+      "sha256": "3f394df08fc1e7e046eb9156ebb64fcb9609ad04724bf684033179e1a7c4065d"
+    },
+    {
+      "path": "apps/api/src/modules/staff-native-push/staff-native-push.service.ts",
+      "currentSha256": null,
+      "sha256": "7ef1f4a1d6603e86a4281484414be2a1426f1f54b2fcdf6cf56d31688478a130"
+    },
+    {
+      "path": "prisma/schema.prisma",
+      "currentSha256": "5c578a23b13281bd5ea6c8468ef65870ec032d9ef36fdd0f0d06654b9887b3b2",
+      "sha256": "f262689cefcad3d49002c7be39361fbcdd6f6f91cd4c556111584bfcdad0902b"
+    }
+  ],
+  "unresolvedConflicts": 0,
+  "productionChanged": false,
+  "runtimeVerificationRequiredBeforeDeployment": true
+}

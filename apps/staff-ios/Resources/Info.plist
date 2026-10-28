@@ -39,5 +39,7 @@
 	<string>PRODUCTION</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>StaffCRMServerURL</key>
+	<string>https://staff.temichevvet.ru</string>
 </dict>
 </plist>

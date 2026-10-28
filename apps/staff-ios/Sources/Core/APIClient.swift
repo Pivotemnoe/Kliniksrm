@@ -34,7 +34,7 @@ enum APIError: LocalizedError {
     }
 }
 struct SavedCookie: Codable { let name: String; let value: String; let path: String; let secure: Bool; let expires: Date? }
-struct Credentials: Codable { let origin: String; var cookies: [SavedCookie]; var lastActivity: Date }
+struct Credentials: Codable { let origin: String; var cookies: [SavedCookie]; var lastActivity: Date; var staffInstallationId: String? }
 final class NoRedirects: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
     func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) { completionHandler(nil) }
 }
@@ -67,8 +67,19 @@ final class NoRedirects: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
     var hasSession: Bool { credentials.cookies.contains { Self.isSession($0.name) && ($0.expires ?? .distantFuture) > Date() } }
     var lastActivity: Date { credentials.lastActivity }
     func activity() throws { credentials.lastActivity = Date(); try persist() }
+    func staffInstallationId() throws -> String {
+        if let value = credentials.staffInstallationId { return value }
+        let value = UUID().uuidString.lowercased()
+        credentials.staffInstallationId = value
+        try persist()
+        return value
+    }
     func clearSession() throws { credentials.cookies.removeAll { Self.isSession($0.name) }; try persist() }
-    func forgetDevice() throws { credentials.cookies = []; try storage.delete() }
+    func forgetDevice() throws {
+        credentials.cookies = []
+        // Clearing login data must not let the same installation evade a server-side device revocation.
+        if credentials.staffInstallationId == nil { try storage.delete() } else { try persist() }
+    }
     private func persist() throws { try storage.write(JSONEncoder().encode(credentials)) }
     static func isSession(_ name: String) -> Bool { name == "clinic_crm_session" || name == "staff_ios_qa_session" }
     static func accepted(_ name: String) -> Bool { isSession(name) || name == "temichevvet_remote_device" }

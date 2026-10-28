@@ -33,11 +33,11 @@ struct ProfileView: View {
     @State private var confirmLogout = false
     var body: some View {
         List {
-            Section { BrandView(); Text(store.employee?.fullName ?? "").font(.headline); Text(store.employee?.position ?? (store.grooming ? "Грумер" : "Сотрудник клиники")).foregroundStyle(.secondary) }
+            Section { BrandView(); Text(store.employee?.fullName ?? "").font(.headline); Text(store.employee?.roleTitle ?? "Сотрудник клиники").foregroundStyle(.secondary).accessibilityIdentifier("employee-role") }
             Section("Возможности") {
                 Label(store.profile?.canBook == true ? "Запись с телефона включена" : "Записи доступны для просмотра", systemImage: store.profile?.canBook == true ? "calendar.badge.plus" : "eye")
-                Text("Возможности и уведомления меняет уполномоченный сотрудник в CRM: Настройки → Приложение сотрудников.").font(.footnote).foregroundStyle(.secondary)
-                Label(store.accessType == "REMOTE" ? "Удалённый доступ · доверенный телефон" : "Сеанс CRM", systemImage: "lock.shield")
+                Text("Ваши рабочие права загружаются из CRM автоматически. Возможность создавать записи и получать уведомления зависит от настроек вашей учётной записи.").font(.footnote).foregroundStyle(.secondary)
+                Label(store.accessType == "REMOTE" ? "Вход с iPhone" : "Сеанс CRM", systemImage: "lock.shield")
             }
             Section("Уведомления на iPhone") {
                 Text(store.profile?.settings.notifications == true ? "Сообщения доступны внутри приложения." : "Уведомления отключены для вас в CRM.")
@@ -54,7 +54,7 @@ struct ProfileView: View {
             if let error = store.error { ProblemView(text: error, retry: { await store.refresh() }) }
         }.navigationTitle("Мой профиль").confirmationDialog("Выйти из приложения?", isPresented: $confirmLogout, titleVisibility: .visible) {
             Button("Выйти", role: .destructive) { Task { await push.disable(); await store.logout() } }
-            Button("Выйти и забыть доверие на этом iPhone", role: .destructive) { Task { await push.disable(); await store.logout(forgetDevice: true) } }
+            Button("Выйти и очистить данные входа", role: .destructive) { Task { await push.disable(); await store.logout(forgetDevice: true) } }
             Button("Отмена", role: .cancel) {}
         }
     }

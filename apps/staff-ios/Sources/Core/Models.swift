@@ -7,6 +7,13 @@ struct Employee: Codable, Identifiable {
     let roles: [String]
     let permissions: [String]
     var mustChangePassword: Bool
+    var roleTitle: String {
+        if roles.contains("director") { return "Директор" }
+        if roles.contains("groomer") { return "Грумер" }
+        if roles.contains("doctor") { return "Врач" }
+        if roles.contains("administrator") { return "Администратор" }
+        return position ?? "Сотрудник клиники"
+    }
 }
 struct AuthResponse: Decodable { let employee: Employee; let accessType: String; let expiresAt: String? }
 struct MobileSettings: Codable, Equatable {

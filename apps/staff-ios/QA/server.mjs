@@ -31,13 +31,18 @@ const messages = new InternalMessagesService(f.prisma, f.audit);
 const clinicChat = new StaffClinicChatService(f.prisma, f.audit);
 const groomingTeam = new GroomingTeamService(f.prisma, f.modules, f.audit, new PasswordService());
 const nativePush = new StaffNativePushService(f.prisma, f.auth, f.audit, f.modules);
+// This fake director models the ordinary CRM director's calendar permission.
+await f.grant(f.director.id, 'appointments.read');
 const doctor = await f.configure(f.clinical.id, { clinicBooking: false });
 const groomer = await f.configure(f.groomer.id, { groomingBooking: true });
 const colleague = await f.doctor('коллега');
+const authDoctor = await f.doctor('вход-пароль');
 const users = {};
-for (const [role, actor] of Object.entries({ doctor, groomer, colleague, otherGroomer: await f.actor(f.otherGroomer.id), director: await f.actor(f.director.id) })) {
-  const user = await f.prisma.user.update({ where: { id: actor.userId }, data: { mustChangePassword: false } });
-  users[role] = { id: actor.id, login: user.email, password: qaPassword };
+for (const [role, actor] of Object.entries({ doctor, groomer, colleague, otherGroomer: await f.actor(f.otherGroomer.id), director: await f.actor(f.director.id), authDoctor })) {
+  const phoneNormalized = '70000000' + String(100 + Object.keys(users).length);
+  const user = await f.prisma.user.update({ where: { id: actor.userId }, data: { mustChangePassword: false, phone: '+' + phoneNormalized, phoneNormalized } });
+  await f.prisma.employee.update({ where: { id: actor.id }, data: { phone: user.phone } });
+  users[role] = { id: actor.id, login: user.phone, password: qaPassword };
 }
 await f.prisma.remoteAccessPolicy.upsert({ where: { organizationId: 'grooming-qa-organization' }, create: { organizationId: 'grooming-qa-organization', enabled: true }, update: { enabled: true } });
 for (const [code, title, breeds] of [['DOG', 'Собака', ['Пудель', 'Метис']], ['CAT', 'Кошка', ['Мейн-кун', 'Метис']]]) {
@@ -70,10 +75,18 @@ app.use(async (request, response, next) => {
     if (u.pathname === '/__qa/invitation') { const actor = users[u.searchParams.get('role')]; if (!actor) return response.sendStatus(400); return response.json(await remote.createInvitation({ employeeId: actor.id, deviceName: 'iPhone · синтетическая приёмка' }, f.director.id)); }
     if (u.pathname === '/__qa/clinic-booking') { await f.configure(doctor.id, { clinicBooking: u.searchParams.get('enabled') === 'true' }); return response.json({ ok: true }); }
     if (u.pathname === '/__qa/notifications') { await f.configure(users[u.searchParams.get('role') || 'groomer'].id, { notifications: u.searchParams.get('enabled') === 'true' }); return response.json({ ok: true }); }
+    if (u.pathname === '/__qa/native-login-policy') {
+      const actor = users[u.searchParams.get('role')]; if (!actor) return response.sendStatus(400);
+      if (u.searchParams.has('appEnabled')) await f.configure(actor.id, { enabled: u.searchParams.get('appEnabled') === 'true' });
+      if (u.searchParams.has('active')) await f.prisma.employee.update({ where: { id: actor.id }, data: { status: u.searchParams.get('active') === 'true' ? 'ACTIVE' : 'BLOCKED' } });
+      if (u.searchParams.has('remoteEnabled')) await f.prisma.remoteAccessPolicy.updateMany({ where: { organizationId: 'grooming-qa-organization' }, data: { enabled: u.searchParams.get('remoteEnabled') === 'true' } });
+      return response.json({ ok: true });
+    }
     if (u.pathname === '/__qa/revoke') { await f.prisma.remoteAccessDevice.updateMany({ where: { employeeId: users[u.searchParams.get('role')].id }, data: { revokedAt: new Date() } }); return response.json({ ok: true }); }
     if (u.pathname === '/__qa/expire') { await f.prisma.session.updateMany({ where: { userId: (await f.actor(users[u.searchParams.get('role')].id)).userId }, data: { expiresAt: new Date(0) } }); return response.json({ ok: true }); }
     if (u.pathname === '/__qa/visit-started') { const id = u.searchParams.get('id'); const own = await f.prisma.groomingReservation.findFirst({ where: { id, employeeId: groomer.id } }); if (!own) return response.sendStatus(404); const start = new Date(Date.now() - 7200000); await f.prisma.groomingReservation.update({ where: { id }, data: { startsAt: start, endsAt: new Date(+start + 3600000), blockedUntil: new Date(+start + 4500000) } }); return response.json({ syntheticClockAdvanced: true }); }
     if (u.pathname === '/__qa/network') { failReads = u.searchParams.get('offline') === 'true'; loseNextMutation = u.searchParams.get('loseNextMutation') === 'true'; return response.json({ ok: true }); }
+    if (u.pathname === '/__qa/auth-state') return response.json({ users: await f.prisma.user.count(), employees: await f.prisma.employee.count(), sessions: await f.prisma.session.count(), devices: await f.prisma.remoteAccessDevice.count(), invitations: await f.prisma.remoteAccessInvitation.count() });
     if (u.pathname === '/__qa/state') return response.json({ commands, appointments: await f.prisma.appointment.count(), grooming: await f.prisma.groomingReservation.findMany({ select: { id: true, ownerId: true, animalId: true, employeeId: true, startsAt: true, endsAt: true, status: true, version: true } }), devices: await f.prisma.remoteAccessDevice.count(), messages: await f.prisma.internalMessage.count(), clinicMessages: await f.prisma.staffClinicChatMessage.count(), nativeEvents: await f.prisma.staffNativePushEvent.findMany({ select: { id: true, employeeId: true, kind: true, sourceId: true, channelId: true } }) });
     if (u.pathname.startsWith('/api/')) {
       if (failReads) return request.socket.destroy();

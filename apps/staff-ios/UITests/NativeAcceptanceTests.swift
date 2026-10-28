@@ -167,26 +167,31 @@ struct QAInfo: Decodable {
         app.buttons["agenda-refresh"].tap(); wait(app.textFields["login"])
         screenshot("09-expired-session")
     }
-    func test05RemoteTrustEnrollmentAndRevocation() async throws {
+    func test05PhonePasswordRemoteLoginAndRevocation() async throws {
         continueAfterFailure = false
-        _ = try await qa("network?offline=false")
-        info = try JSONDecoder().decode(QAInfo.self, from: await qa("info"))
-        let invitation = try JSONSerialization.jsonObject(with: await qa("invitation?role=groomer")) as! [String: Any]
-        app.launchArguments = ["--server", "http://localhost:4269", "--qa-date", info.date, "-AppleLanguages", "(ru)"]
-        app.terminate(); app.launch(); wait(app.textFields["login"])
-        let enroll = app.buttons["enroll-open"]; reveal(enroll); enroll.tap()
-        wait(app.secureTextFields["enrollment-code"]); app.secureTextFields["enrollment-code"].tap(); app.secureTextFields["enrollment-code"].typeText(invitation["code"] as! String)
-        app.buttons["enroll-submit"].tap()
-        let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.navigationBars["Доверенный телефон"])
-        XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 15), .completed)
-        wait(app.textFields["login"])
-        app.swipeDown()
-        app.textFields["login"].tap(); app.textFields["login"].typeText(info.users["groomer"]!.login)
-        app.secureTextFields["password"].tap(); app.secureTextFields["password"].typeText(info.users["groomer"]!.password); app.buttons["sign-in"].tap()
-        wait(app.tabBars.buttons["Профиль"]); app.tabBars.buttons["Профиль"].tap(); wait(app.staticTexts["Удалённый доступ · доверенный телефон"])
-        screenshot("10-trusted-remote-device")
+        try await signIn("groomer", remote: true)
+        app.tabBars.buttons["Профиль"].tap(); wait(app.staticTexts["Вход с iPhone"])
+        wait(app.staticTexts["employee-role"]); XCTAssertEqual(app.staticTexts["employee-role"].label, "Грумер")
+        screenshot("10-phone-password-remote-login")
+        app.terminate(); app.launch(); wait(app.tabBars.buttons["Профиль"])
         _ = try await qa("revoke?role=groomer")
-        reveal(app.buttons["Обновить права и данные"]); app.buttons["Обновить права и данные"].tap(); wait(app.textFields["login"])
+        // Foreground polling must revoke the open app as well; no tap on an already-dismissed profile.
+        wait(app.textFields["login"], timeout: 20)
+        XCTAssertFalse(app.buttons["enroll-open"].exists)
+        XCTAssertFalse(app.secureTextFields["enrollment-code"].exists)
+        screenshot("10b-revoked-phone-must-login")
+    }
+    func test10DirectorUsesExistingPhonePasswordWithoutInvitations() async throws {
+        continueAfterFailure = false
+        try await signIn("director", remote: true)
+        wait(app.staticTexts[info.otherAnimal])
+        app.tabBars.buttons["Профиль"].tap()
+        wait(app.staticTexts["employee-role"]); XCTAssertEqual(app.staticTexts["employee-role"].label, "Директор")
+        wait(app.staticTexts["Вход с iPhone"]); screenshot("20-director-existing-crm-account")
+        logout()
+        XCTAssertFalse(app.buttons["enroll-open"].exists)
+        XCTAssertFalse(app.textFields["server"].exists)
+        wait(app.staticTexts["Вход в CRM клиники"]); screenshot("21-simple-phone-password-login")
     }
     func test06PersonalChatDoctorGroomerAndDoctorDoctor() async throws {
         continueAfterFailure = false

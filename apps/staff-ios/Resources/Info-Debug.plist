@@ -39,6 +39,8 @@
 	<string>SANDBOX</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>StaffCRMServerURL</key>
+	<string>https://staff.temichevvet.ru</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
