@@ -29,10 +29,10 @@ Transactional outbox создаёт событие каждого сообщен
 
 ## Необходимые внешние настройки
 
-1. Подтвердить App ID `ru.temichevvet.staff`, команду и отдельное назначение приложения сотрудников. Apple-профили/ключи других приложений не применялись.
-2. Push Notifications capability и provisioning с aps-environment. Собственные Debug/Release entitlements подготовлены (development/production); физическая подпись не настроена.
+1. Для отдельного приложения сотрудников подтверждён App ID `ru.temichevvet.staff` и создана своя карточка Apple. Используется существующая команда/действующий Distribution-сертификат; другое приложение не изменяется.
+2. Push Notifications capability и App Store provisioning с production aps-environment подготовлены. Первая подписанная 0.1.0 (1) загружена в TestFlight; фактическая установка и доставка на iPhone ещё не приняты.
 3. На согласованном сервере развернуть общий API/миграции. Настроить `STAFF_NATIVE_PUSH_ENABLED`, `STAFF_NATIVE_PUSH_IOS_BUNDLE_IDS`, `STAFF_NATIVE_PUSH_ENCRYPTION_KEY_B64`, `STAFF_NATIVE_PUSH_APNS_TEAM_ID`, `STAFF_NATIVE_PUSH_APNS_KEY_ID`, `STAFF_NATIVE_PUSH_APNS_KEY_PATH`, `STAFF_NATIVE_PUSH_APNS_ENVIRONMENT`. Ключ .p8 хранить только на сервере с проверенными environment/topic scope.
-4. Отдельно разрешённая подписанная установка и приёмка настоящего iPhone. TestFlight/App Store и рабочую установку этот чат не выполняет.
+4. Установка тестировщиком и приёмка настоящего iPhone. Владелец разрешил первую TestFlight-сборку; её текущий статус — `TESTFLIGHT-RELEASE.md`. Публичная App Store-подача и рабочая установка не выполнялись.
 
 ## Доставка ещё не принята
 

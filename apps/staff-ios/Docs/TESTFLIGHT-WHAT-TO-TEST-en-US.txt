@@ -1,0 +1,7 @@
+First native CRM app for TemichevVet employees: doctors and groomers. Clinic clients continue using the PWA account.
+
+Important: the shared staff/chat API has not yet been deployed to the live server. Until it is connected, test installation, launch, CRM server setup, input fields and native UI. The workflows below passed local acceptance with synthetic data and require an available HTTPS API for on-device testing.
+
+After API setup, test CRM sign-in and one-time trusted-device enrollment; doctor clinic-wide appointments and own filter; individual booking permissions; groomer own schedule, full-phone client lookup, client/pet creation, booking, rescheduling, status and duration; personal and shared clinic messages, unread state and history after restart; foreground alerts and offline uncertainty without automatic resubmission.
+
+Background APNs delivery is not configured or verified. No finance or payroll screens.

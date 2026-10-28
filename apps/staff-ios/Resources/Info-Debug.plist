@@ -37,6 +37,8 @@
 	<string>Соединение с CRM клиники по указанному вами адресу.</string>
 	<key>StaffAPNSEnvironment</key>
 	<string>SANDBOX</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

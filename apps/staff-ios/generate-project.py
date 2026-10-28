@@ -74,6 +74,7 @@ info = {'CFBundleDevelopmentRegion': 'ru', 'CFBundleDisplayName': 'TemichevVet Ð
 for debug in [False, True]:
     current = dict(info)
     current['StaffAPNSEnvironment'] = 'SANDBOX' if debug else 'PRODUCTION'
+    current['ITSAppUsesNonExemptEncryption'] = False
     if debug: current['NSAppTransportSecurity'] = {'NSAllowsLocalNetworking': True, 'NSExceptionDomains': {'localhost': {'NSExceptionAllowsInsecureHTTPLoads': True, 'NSIncludesSubdomains': False}, '127.0.0.1': {'NSExceptionAllowsInsecureHTTPLoads': True, 'NSIncludesSubdomains': False}}}
     (root / 'Resources' / ('Info-Debug.plist' if debug else 'Info.plist')).write_bytes(plistlib.dumps(current, sort_keys=False))
     (root / 'Resources' / ('Staff-Debug.entitlements' if debug else 'Staff.entitlements')).write_bytes(plistlib.dumps({'aps-environment': 'development' if debug else 'production'}))

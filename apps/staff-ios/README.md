@@ -1,5 +1,7 @@
 # TemichevVet для сотрудников · iPhone
 
+По прямому разрешению владельца от 28 октября подготовлена отдельная первая TestFlight-версия **TemichevVet Сотрудники 0.1.0 (1)**. Это приложение сотрудников CRM; владельцы клиники используют PWA-кабинет. Фактический статус Apple и граница неразвёрнутого staff/chat API — [TestFlight release](Docs/TESTFLIGHT-RELEASE.md).
+
 Отдельное приложение на Swift/SwiftUI, iOS 17+. Основной интерфейс полностью нативный: `TabView`, `NavigationStack`, списки, формы, карточки, DatePicker и системные подтверждения. WebView и внешние зависимости отсутствуют.
 
 Исходная база: проверенный `813d2ab5a0f5f792d562d3369c51a602b2471e1b`, PWA `codex/staff-mobile-pwa`, исходная линия `c43e0e8…`. Собственная ветка `codex/staff-ios-native`; изменения ограничены `apps/staff-ios/`. Основная рабочая копия CRM и рабочий сервер не изменяются.
@@ -30,7 +32,7 @@
 
 ## Сборка
 
-Открыть `TemichevVetStaff.xcodeproj`, выбрать `TemichevVetStaff` и iPhone Simulator. Проверенная среда: Xcode 27.1, SDK 27.1, отдельный iPhone 17 Simulator с iOS 27.0. Подпись реального устройства намеренно не настроена; bundle ID `ru.temichevvet.staff` предварительный.
+Открыть `TemichevVetStaff.xcodeproj`, выбрать `TemichevVetStaff` и iPhone Simulator. Проверенная среда: Xcode 27.1, SDK 27.1, отдельный iPhone 17 Simulator с iOS 27.0. Для TestFlight подтверждён отдельный bundle ID `ru.temichevvet.staff` и подготовлена distribution-подпись. Team и provisioning profile хранятся в приватной локальной конфигурации.
 
 ```sh
 python3 apps/staff-ios/generate-project.py
@@ -39,7 +41,7 @@ xcodebuild -project apps/staff-ios/TemichevVetStaff.xcodeproj -scheme TemichevVe
   -derivedDataPath apps/staff-ios/build/DerivedData build
 ```
 
-Генератор использует только Python stdlib; созданный Xcode-проект сохранён в Git. Для физического iPhone отдельно нужны подтверждённые Team/App ID, provisioning, подпись, доступный HTTPS API с PWA-кандидатом и настоящая приёмка. Загрузка в TestFlight, публикация и рабочая установка не выполняются.
+Генератор использует только Python stdlib; созданный Xcode-проект сохранён в Git. Подписанная первая сборка загружена в отдельную карточку TestFlight по разрешению владельца. Для функциональной приёмки на iPhone остаются доступный HTTPS staff/chat API, установка тестировщиком и настоящая проверка. Публичная App Store-подача и рабочая установка не выполнялись.
 
 ## Изолированная QA
 

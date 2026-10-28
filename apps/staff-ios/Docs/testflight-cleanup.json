@@ -1,0 +1,19 @@
+{
+  "at": "2026-10-28T17:30:48.101462+00:00",
+  "removed": [
+    {
+      "path": "build/TestFlight/DerivedData",
+      "bytes": 80793004,
+      "reason": "regenerable build cache or failed automatic archive"
+    }
+  ],
+  "bytesRemoved": 80793004,
+  "preserved": [
+    "signed distribution xcarchive and dSYMs",
+    "export/upload results and private logs outside Git",
+    "installed App Store profile and original downloaded profile",
+    "all signing keys/certificates",
+    "proof JPG, receipt, notes and source files"
+  ],
+  "otherAppsOrServersChanged": false
+}
