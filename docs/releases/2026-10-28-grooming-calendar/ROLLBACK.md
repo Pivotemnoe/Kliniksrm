@@ -24,3 +24,11 @@ python3 /opt/temichevvet-owner-gateway/releases/crm-grooming-calendar-20261028-r
 - Кабинет: `/opt/temichevvet-owner-gateway/backups/crm-grooming-calendar-20261028-r1`.
 
 Состояние переключения и результаты проверок смотреть в RESULT.md и серверных release-state.json / grooming-calendar-state.json. Эти команды подготовлены для применения после успешной выкладки; наличие файла само по себе не означает, что выкладка завершилась.
+
+Отдельный откат статического сайта груминга на его сервере:
+
+```bash
+python3 /root/grooming-duration-copy-20261028-r1/publisher.py rollback --release grooming-site-20261028-start-time-r1
+```
+
+Его резервная копия: `/var/backups/temichevvet-grooming/grooming-site-20261028-start-time-r1`. Сайт зоогостиницы этим переключением не изменялся.

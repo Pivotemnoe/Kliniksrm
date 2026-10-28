@@ -1,0 +1,25 @@
+{
+  "status": "VERIFIED",
+  "releaseId": "grooming-site-20261028-start-time-r1",
+  "sourceRevision": "f551c176768db2b214e2a19909e3ab1fe6933980",
+  "site": "https://pet.temichevvet.ru/",
+  "publishedAt": "2026-10-28T15:53:24.417396+00:00",
+  "verifiedAt": "2026-10-28T15:55:12.543Z",
+  "externalFilesPassed": 134,
+  "expectedFiles": 134,
+  "oldResourcesUnchanged": 133,
+  "hotelFilesUnchanged": 33,
+  "gatewayUnchanged": {
+    "imageId": "sha256:7aee68003172b530cac3741491c6cd69836b4103faf78578b37a0e7a7d91ef7c",
+    "startedAt": "2026-10-28T15:37:40.154666768Z"
+  },
+  "publisherRuntimeUnchanged": true,
+  "liveYorkPrice": 2500,
+  "priceVersion": 2,
+  "selfBookingEnabled": true,
+  "backup": "/var/backups/temichevvet-grooming/grooming-site-20261028-start-time-r1",
+  "externalProofSha256": "1618550c4a0ad16fcbbaa62cb648b04fbd4a5b51f74b41ca5a5c95ecab86556c",
+  "protectedHostProofSha256": "e9c303111d5b774bb8c5a3d30257eefd5c3cfb76155c8bfaf2d06bf46f12bcb2",
+  "publicLoadedEntry": "assets/index-04X50Mm3.js",
+  "productionBookingSubmitted": false
+}

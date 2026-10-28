@@ -30,7 +30,7 @@ CRM API, Web и кабинет владельца выложены и незав
 
 В чаты координатора сотрудников, нативного Android, нативного iPhone, кабинета/APK/PWA и Android QA переданы правила, ошибки 404/409, версия API, подтверждение выкладки и ссылка на ветку `origin/codex/grooming-calendar-slots-20261028`. Их новые native push / staff-app / employee chats этим релизом не публиковались.
 
-Чату «Создать сайт груминга» передана подтверждённая готовность API/gateway для отдельной уже согласованной правки G-only. Её статус и receipt будут добавлены после завершения этим чатом; выкладка API/Web/gateway уже завершена независимо.
+Чат «Создать сайт груминга» завершил отдельную правку публичного сайта: `grooming-site-20261028-start-time-r1`, источник `f551c176768db2b214e2a19909e3ab1fe6933980`, публикация 15:53:24 UTC. Проверены все 134 файла через публичный HTTPS (статус, хеш и MIME); прежние 133 ресурса сохранены. Все 33 файла зоогостиницы, настройки/цены и контейнеры на момент переключения сохранены. Браузер после повторной загрузки получил новый `index-04X50Mm3.js`; прайс и корректное состояние при отсутствии смен отображаются. Реальная заявка не отправлялась. Подтверждение — `site-postflight-summary.json`.
 
 ## Резервные копии и откат
 
@@ -39,7 +39,7 @@ CRM API, Web и кабинет владельца выложены и незав
 
 Команды и границы отката — в [ROLLBACK.md](ROLLBACK.md). Прежние образы и старые хешированные ресурсы сохранены. Обычный откат возвращает приложения, сохраняя новые рабочие данные и совместимую добавленную колонку.
 
-Машинные подтверждения: `deployment-receipt.json`, `verified-clinic.json`, `verified-gateway.log`, `proof-clinic.json`, `proof-gateway.log`, `postflight-business.json`, `public-staff-release.json`, `public-owner-script.json`, `source-integrity.json`.
+Машинные подтверждения: `deployment-receipt.json`, `verified-clinic.json`, `verified-gateway.json`, `proof-clinic.json`, `proof-gateway.json`, `postflight-business.json`, `public-staff-release.json`, `public-owner-script.json`, `source-integrity.json`, `site-postflight-summary.json`.
 
 ## Очистка
 

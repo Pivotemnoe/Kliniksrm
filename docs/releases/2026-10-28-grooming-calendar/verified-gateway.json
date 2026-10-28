@@ -1,0 +1,26 @@
+{
+  "productionVerification": {
+    "status": "VERIFIED",
+    "revision": "365ef4914b72d487be1e689360bad66f64d08c9a",
+    "image": "sha256:7aee68003172b530cac3741491c6cd69836b4103faf78578b37a0e7a7d91ef7c",
+    "backup": "/opt/temichevvet-owner-gateway/backups/crm-grooming-calendar-20261028-r1",
+    "protectedServicesPreserved": true,
+    "maxConfigurationPreserved": true
+  },
+  "deploymentReceipt": {
+    "at": "2026-10-28T15:37:41.448109+00:00",
+    "revision": "365ef4914b72d487be1e689360bad66f64d08c9a",
+    "image": "sha256:7aee68003172b530cac3741491c6cd69836b4103faf78578b37a0e7a7d91ef7c",
+    "protectedServicesPreserved": true,
+    "maxConfigurationPreserved": true,
+    "recordsRestored": false
+  },
+  "currentState": {
+    "connected": true,
+    "fresh": true,
+    "selfBookingEnabled": true,
+    "services": 172,
+    "specialists": 0,
+    "customerJsSha256": "cc438f4386ceb2aca08c320ec970f7c0c555ffc331362d3eec9bcb8e04deba4d"
+  }
+}
