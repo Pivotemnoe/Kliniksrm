@@ -12,6 +12,7 @@ import { queueGroomingStaffNotices, supersedeGroomingStaffNotices } from './groo
 import { GroomingBookingDurationDto, GroomingCalendarBookingDto, GroomingServiceBookingDto, GroomingSlotsPreviewDto, GroomingPriceImportDto, GroomingScheduleBatchDto, GroomingRulesBatchDto, GroomingBookDto, GroomingCancelDto, GroomingChangeDto, GroomingLocationDto, GroomingOptionsDto, GroomingPetDto, GroomingRuleDto, GroomingServiceDto, GroomingSettingsDto, GroomingSpecialistDto, GroomingStatusDto, GroomingWorkPeriodDto, GroomingWorkplaceDto } from './grooming.dto';
 
 const minute = 60000, day = 86400000;
+const durationLabel = (minutes: number) => [Math.floor(minutes / 60) ? `${Math.floor(minutes / 60)} ч` : '', minutes % 60 ? `${minutes % 60} мин` : ''].filter(Boolean).join(' ');
 export const initialWebsiteDuration = (configured: number) => Math.max(90, Math.ceil(configured / 30) * 30);
 export const activeGroomingStatuses = ['CONFIRMED', 'ARRIVED', 'IN_PROGRESS'];
 const ruleInclude = { specialist: { include: { employee: true } }, service: true, location: true, workplace: true } satisfies Prisma.GroomingServiceRuleInclude;
@@ -541,7 +542,7 @@ export class GroomingCrmService {
       if (+endsAt === +current.endsAt) { const result = json(publicBooking(current)); await tx.groomingCommandReceipt.create({ data: { id: receiptId, fingerprint, result } }); return result; }
       await tx.groomingNotification.updateMany({ where: { reservationId: id, status: { in: ['QUEUED', 'FAILED'] } }, data: { status: 'CANCELLED', lastError: 'Длительность записи уточнена' } });
       const saved = await tx.groomingReservation.update({ where: { id }, data: { endsAt, blockedUntil, version: { increment: 1 } }, include: bookingInclude });
-      await this.queueNotifications(tx, saved, 'DURATION_CHANGED', now);
+      await this.queueNotifications(tx, saved, 'DURATION_CHANGED', now, undefined, current.endsAt);
       await this.audit.log({ actorId: actor.id, action: 'grooming.duration.adjust', entityType: 'GroomingReservation', entityId: id, metadata: { durationMinutes: input.durationMinutes, previousEndsAt: current.endsAt.toISOString(), endsAt: endsAt.toISOString() } }, tx);
       const result = json(publicBooking(saved)); await tx.groomingCommandReceipt.create({ data: { id: receiptId, fingerprint, result } }); return result;
     }, { timeout: 15000 });
@@ -616,16 +617,24 @@ export class GroomingCrmService {
       await tx.groomingCommandReceipt.create({ data: { id: receiptId, fingerprint, result } }); return result;
     });
   }
-  private async queueNotifications(tx: Prisma.TransactionClient, booking: Booking, event: string, now: Date, previousEmployeeId?: string) {
+  private async queueNotifications(tx: Prisma.TransactionClient, booking: Booking, event: string, now: Date, previousEmployeeId?: string, previousEndsAt?: Date) {
     await queueGroomingStaffNotices(tx, booking, event, now, previousEmployeeId);
     const settings = await tx.groomingSettings.findUnique({ where: { installationId: booking.installationId } });
     const specialist = await tx.groomingSpecialist.findUnique({ where: { employeeId: booking.employeeId } });
     const when = new Intl.DateTimeFormat('ru-RU', { timeZone: booking.location.timezone, dateStyle: 'long', timeStyle: 'short' }).format(booking.startsAt);
     const ends = new Intl.DateTimeFormat('ru-RU', { timeZone: booking.location.timezone, hour: '2-digit', minute: '2-digit' }).format(booking.endsAt);
-    const notificationText = (staff: boolean) => `TemichevVet · Груминг: ${event === 'CANCELLED' ? 'запись отменена' : event === 'DURATION_CHANGED' ? 'длительность уточнена' : event === 'RESCHEDULED' ? 'время записи изменено' : 'запись подтверждена'}. ${booking.animal.nickname}, ${booking.serviceTitle}, ${when}${staff ? '–' + ends : ''}. Специалист: ${specialist?.displayName || booking.employee.fullName}. Подробности в кабинете.`.slice(0, 800);
+    const notificationText = (staff: boolean) => {
+      if (event === 'DURATION_CHANGED') {
+        const currentDuration = durationLabel((+booking.endsAt - +booking.startsAt) / minute);
+        const change = previousEndsAt ? `было ${durationLabel((+previousEndsAt - +booking.startsAt) / minute)}, стало ${currentDuration}` : currentDuration;
+        const endWhen = new Intl.DateTimeFormat('ru-RU', { timeZone: booking.location.timezone, dateStyle: 'long', timeStyle: 'short' }).format(booking.endsAt);
+        return `TemichevVet · Груминг: длительность записи изменена — ${change}. Начало: ${when}. Ориентировочное окончание: ${endWhen}. ${booking.animal.nickname}, ${booking.serviceTitle}. Специалист: ${specialist?.displayName || booking.employee.fullName}. Подробности в кабинете.`.slice(0, 800);
+      }
+      return `TemichevVet · Груминг: ${event === 'CANCELLED' ? 'запись отменена' : event === 'RESCHEDULED' ? 'время записи изменено' : 'запись подтверждена'}. ${booking.animal.nickname}, ${booking.serviceTitle}, ${when}${staff ? '–' + ends : ''}. Специалист: ${specialist?.displayName || booking.employee.fullName}. Подробности в кабинете.`.slice(0, 800);
+    };
     const expiresAt = event === 'CANCELLED' || booking.endsAt <= now ? new Date(now.getTime() + day) : booking.startsAt <= now ? booking.endsAt : booking.startsAt;
     const recipients = [{ kind: 'OWNER', id: booking.ownerId }, ...[...new Set([...(settings?.administratorMaxIds || []), ...(specialist?.maxUserId ? [specialist.maxUserId] : [])])].map(id => ({ kind: 'STAFF', id }))];
-    for (const recipient of recipients.filter(r => event !== 'DURATION_CHANGED' || r.kind !== 'OWNER')) await tx.groomingNotification.create({ data: { reservationId: booking.id, reservationVersion: booking.version, event, recipientKind: recipient.kind, recipientId: recipient.id, dedupeKey: `${booking.id}:${booking.version}:${event}:${recipient.kind}:${recipient.id}`, text: `${recipient.kind === 'OWNER' ? 'Для клиента. ' : 'Для грумера / администратора. '}${notificationText(recipient.kind === 'STAFF')}`.slice(0, 800), scheduledAt: now, expiresAt } });
+    for (const recipient of recipients) await tx.groomingNotification.create({ data: { reservationId: booking.id, reservationVersion: booking.version, event, recipientKind: recipient.kind, recipientId: recipient.id, dedupeKey: `${booking.id}:${booking.version}:${event}:${recipient.kind}:${recipient.id}`, text: `${recipient.kind === 'OWNER' ? event === 'DURATION_CHANGED' ? '' : 'Для клиента. ' : 'Для грумера / администратора. '}${notificationText(recipient.kind === 'STAFF')}`.slice(0, 800), scheduledAt: now, expiresAt } });
     if (event === 'CANCELLED') return;
     for (const hours of settings?.reminderHours || [24]) {
       const scheduledAt = new Date(booking.startsAt.getTime() - hours * 3600000);

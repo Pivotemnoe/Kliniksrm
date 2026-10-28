@@ -11,6 +11,39 @@ const day = value => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Moscow
 const dateTime = (value, timezone = 'Europe/Moscow') => new Intl.DateTimeFormat('ru-RU', { timeZone: timezone, dateStyle: 'long', timeStyle: 'short' }).format(new Date(value));
 const time = (value, timezone = 'Europe/Moscow') => new Intl.DateTimeFormat('ru-RU', { timeZone: timezone, hour: '2-digit', minute: '2-digit' }).format(new Date(value));
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+const activeBookingStatuses = ['CONFIRMED', 'ARRIVED', 'IN_PROGRESS'];
+let bookingRefreshRunning = false, lastBookingRefresh = 0;
+function durationLabel(minutes) { return [Math.floor(minutes / 60) ? `${Math.floor(minutes / 60)} ч` : '', minutes % 60 ? `${minutes % 60} мин` : ''].filter(Boolean).join(' '); }
+function bookingDurationText(b) {
+  const minutes = (Date.parse(b.endsAt) - Date.parse(b.startsAt)) / 60000;
+  if (!Number.isFinite(minutes) || minutes <= 0) return '';
+  const zone = b.location.timezone, localDay = value => new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(value));
+  const end = localDay(b.startsAt) === localDay(b.endsAt) ? time(b.endsAt, zone) : dateTime(b.endsAt, zone);
+  return `Длительность: ${durationLabel(minutes)}. Ориентировочное окончание: ${end}`;
+}
+async function refreshBookingTimes() {
+  if (!state || busy || moving || selected || document.hidden || bookingRefreshRunning || sessionStorage.getItem(pendingKey) || Date.now() - lastBookingRefresh < 15000 || !array(state.bookings).some(b => activeBookingStatuses.includes(b.status) && Date.parse(b.endsAt) > Date.now())) return;
+  bookingRefreshRunning = true; lastBookingRefresh = Date.now(); const currentState = state;
+  try {
+    const fresh = await command('STATE');
+    if (state !== currentState || busy || moving || selected || document.hidden) return;
+    const changed = [];
+    for (const next of array(fresh.bookings)) {
+      const current = state.bookings.find(b => b.id === next.id);
+      if (!current || current.startsAt === next.startsAt && current.endsAt === next.endsAt) continue;
+      const oldMinutes = (Date.parse(current.endsAt) - Date.parse(current.startsAt)) / 60000;
+      const durationOnly = current.startsAt === next.startsAt;
+      Object.assign(current, next);
+      for (const element of app.querySelectorAll('[data-booking-duration]')) if (element.dataset.bookingDuration === next.id) element.textContent = bookingDurationText(next);
+      for (const element of app.querySelectorAll('[data-booking-start]')) if (element.dataset.bookingStart === next.id) element.textContent = dateTime(next.startsAt, next.location.timezone);
+      changed.push(durationOnly ? `${next.animal.nickname}: длительность записи изменена — было ${durationLabel(oldMinutes)}, стало ${durationLabel((Date.parse(next.endsAt) - Date.parse(next.startsAt)) / 60000)}.` : `${next.animal.nickname}: время записи обновлено.`);
+    }
+    const notice = document.querySelector('#booking-time-update');
+    if (changed.length && notice) { notice.textContent = changed.join(' '); notice.hidden = false; }
+  } catch { /* Keep the current booking form; its refresh button can retry. */ }
+  finally { bookingRefreshRunning = false; }
+}
+
 function lookLabel(id) { const [breedId, styleId] = id.split(':'); const breed = catalogue.find(item => item.id === breedId), style = breed?.styles.find(item => item.id === styleId); return style ? `${breed.name} · ${style.name}` : id; }
 
 async function api(path, body) {
@@ -50,7 +83,7 @@ async function start() {
   try {
     await api('/v1/portal/me');
     await recover();
-    state = await command('STATE');
+    state = await command('STATE'); lastBookingRefresh = Date.now();
     if (!catalogue.length) { try { catalogue = (await api('/v1/public/grooming/catalog')).breeds || []; } catch {} }
     const token = sessionStorage.getItem('grooming-draft-token');
     if (token) { try { draft = { ...draft, ...await api('/v1/portal/grooming/draft', { token }) }; } finally { sessionStorage.removeItem('grooming-draft-token'); } }
@@ -94,7 +127,7 @@ async function pollLogin() {
 function option(value, label, current) { return `<option value="${escape(value)}"${value === current ? ' selected' : ''}>${escape(label)}</option>`; }
 function render(message = '') {
   const future = array(state.bookings).filter(b => ['CONFIRMED', 'ARRIVED', 'IN_PROGRESS'].includes(b.status) && Date.parse(b.startsAt) > Date.now()).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
-  app.innerHTML = `${state.mode === 'qa' ? `<p class="notice">${state.qaDelivery === 'device' ? 'Проверка на телефоне · вымышленные данные · тестовые сообщения MAX.' : 'Локальная проверка · все данные вымышленные · отправка MAX отключена.'}</p>` : ''}<section class="hero"><div><p class="eyebrow">Кабинет владельца</p><h1>Груминг для моих питомцев</h1><p>${escape(state.owner.fullName)}</p></div><button id="refresh" class="button secondary">Обновить</button></section>${message ? `<p class="success" role="status">${escape(message)}</p>` : ''}<div class="workspace"><aside><section class="next-card"><p class="eyebrow">Ближайшая запись</p>${future[0] ? `<h2>${escape(dateTime(future[0].startsAt, future[0].location.timezone))}</h2><p>${escape(future[0].animal.nickname)} · ${escape(future[0].serviceTitle)}</p><p>${escape(future[0].employee.fullName)}</p><span class="badge">${escape(statuses[future[0].status])}</span>` : '<h2>Выберем удобное время?</h2><p>Предстоящих записей пока нет.</p>'}</section><section class="pet-card"><h2>Мои питомцы</h2>${array(state.animals).map(p => `<p><strong>${escape(p.nickname)}</strong><br><small>${escape(p.breed || p.species || '')}</small></p>`).join('') || '<p>Добавьте своего первого питомца.</p>'}<button class="text-button" id="add-pet">+ Добавить питомца</button><div id="pet-form-slot"></div></section></aside><div><section class="booking-card"><div class="section-heading"><div><p class="eyebrow">${moving ? 'Перенос записи' : 'Самостоятельная запись'}</p><h2>${moving ? 'Выберите новое время' : 'Кому нужен уход?'}</h2></div>${moving ? '<button id="cancel-move" class="text-button">Отменить перенос</button>' : ''}</div>${state.selfBookingEnabled ? '<p class="notice">Стрижка занимает примерно 1,5 часа. Время может меняться в зависимости от состояния животного.</p>' + bookingForm() : '<p class="notice">Сейчас самостоятельная запись закрыта. Существующие записи и история доступны ниже.</p>'}</section><section class="history"><h2>Мои записи и история ухода</h2>${array(state.bookings).map(bookingCard).join('') || '<p class="muted">Здесь появится ваша первая запись.</p>'}</section></div></div>`;
+  app.innerHTML = `${state.mode === 'qa' ? `<p class="notice">${state.qaDelivery === 'device' ? 'Проверка на телефоне · вымышленные данные · тестовые сообщения MAX.' : 'Локальная проверка · все данные вымышленные · отправка MAX отключена.'}</p>` : ''}<section class="hero"><div><p class="eyebrow">Кабинет владельца</p><h1>Груминг для моих питомцев</h1><p>${escape(state.owner.fullName)}</p></div><button id="refresh" class="button secondary">Обновить</button></section><p id="booking-time-update" class="notice" role="status" aria-live="polite" hidden></p>${message ? `<p class="success" role="status">${escape(message)}</p>` : ''}<div class="workspace"><aside><section class="next-card"><p class="eyebrow">Ближайшая запись</p>${future[0] ? `<h2 data-booking-start="${escape(future[0].id)}">${escape(dateTime(future[0].startsAt, future[0].location.timezone))}</h2><p data-booking-duration="${escape(future[0].id)}">${escape(bookingDurationText(future[0]))}</p><p>${escape(future[0].animal.nickname)} · ${escape(future[0].serviceTitle)}</p><p>${escape(future[0].employee.fullName)}</p><span class="badge">${escape(statuses[future[0].status])}</span>` : '<h2>Выберем удобное время?</h2><p>Предстоящих записей пока нет.</p>'}</section><section class="pet-card"><h2>Мои питомцы</h2>${array(state.animals).map(p => `<p><strong>${escape(p.nickname)}</strong><br><small>${escape(p.breed || p.species || '')}</small></p>`).join('') || '<p>Добавьте своего первого питомца.</p>'}<button class="text-button" id="add-pet">+ Добавить питомца</button><div id="pet-form-slot"></div></section></aside><div><section class="booking-card"><div class="section-heading"><div><p class="eyebrow">${moving ? 'Перенос записи' : 'Самостоятельная запись'}</p><h2>${moving ? 'Выберите новое время' : 'Кому нужен уход?'}</h2></div>${moving ? '<button id="cancel-move" class="text-button">Отменить перенос</button>' : ''}</div>${state.selfBookingEnabled ? '<p class="notice">Стрижка занимает примерно 1,5 часа. Время может меняться в зависимости от состояния животного.</p>' + bookingForm() : '<p class="notice">Сейчас самостоятельная запись закрыта. Существующие записи и история доступны ниже.</p>'}</section><section class="history"><h2>Мои записи и история ухода</h2>${array(state.bookings).map(bookingCard).join('') || '<p class="muted">Здесь появится ваша первая запись.</p>'}</section></div></div>`;
   document.querySelector('#refresh').onclick = async () => { await guarded(async () => { await recover(); state = await command('STATE'); render('Данные обновлены'); }); };
   document.querySelector('#add-pet').onclick = renderPetForm;
   document.querySelector('#cancel-move')?.addEventListener('click', () => { moving = null; draft = {}; offers = []; render(); });
@@ -158,7 +191,7 @@ function renderOffers(notice) {
 }
 function bookingCard(b) {
   const canChange = b.status === 'CONFIRMED' && Date.parse(b.startsAt) - Date.now() >= state.minimumCancelMinutes * 60000;
-  return `<article class="history-card"><div><span class="badge">${escape(statuses[b.status] || b.status)}</span><h3>${escape(b.animal.nickname)} · ${escape(b.serviceTitle)}</h3><p>${escape(dateTime(b.startsAt, b.location.timezone))}<br>${escape(b.employee.fullName)} · ${escape(b.location.name)}<br>${escape(b.priceLabel || b.price + ' ₽')}</p>${b.notes ? `<p class="muted">${escape(b.notes)}</p>` : ''}${array(b.looks).length ? `<p class="muted">Образы: ${array(b.looks).map(id => escape(lookLabel(id))).join('; ')}</p>` : ''}</div>${canChange ? `<div class="history-actions">${state.selfBookingEnabled ? `<button class="button secondary" data-move="${escape(b.id)}">Перенести</button>` : ''}<button class="text-button" data-cancel="${escape(b.id)}">Отменить запись</button></div>` : ''}</article>`;
+  return `<article class="history-card"><div><span class="badge">${escape(statuses[b.status] || b.status)}</span><h3>${escape(b.animal.nickname)} · ${escape(b.serviceTitle)}</h3><p><span data-booking-start="${escape(b.id)}">${escape(dateTime(b.startsAt, b.location.timezone))}</span><br><span data-booking-duration="${escape(b.id)}">${escape(bookingDurationText(b))}</span><br>${escape(b.employee.fullName)} · ${escape(b.location.name)}<br>${escape(b.priceLabel || b.price + ' ₽')}</p>${b.notes ? `<p class="muted">${escape(b.notes)}</p>` : ''}${array(b.looks).length ? `<p class="muted">Образы: ${array(b.looks).map(id => escape(lookLabel(id))).join('; ')}</p>` : ''}</div>${canChange ? `<div class="history-actions">${state.selfBookingEnabled ? `<button class="button secondary" data-move="${escape(b.id)}">Перенести</button>` : ''}<button class="text-button" data-cancel="${escape(b.id)}">Отменить запись</button></div>` : ''}</article>`;
 }
 function renderPetForm() {
   document.querySelector('#pet-form-slot').innerHTML = `<form id="new-pet"><label>Кличка<input name="nickname" required maxlength="80"></label><label>Вид<select name="species"><option value="DOG">Собака</option><option value="CAT">Кошка</option></select></label><label>Порода или тип шерсти<input name="breed" maxlength="120"></label><button class="button secondary" type="submit">Сохранить питомца</button><p id="pet-error" class="error" role="alert"></p></form>`;
@@ -176,4 +209,7 @@ async function guarded(action, errorSelector = '#action-error') {
   finally { busy = false; buttons.forEach(([button, disabled]) => { if (button.isConnected) button.disabled = disabled; }); }
 }
 document.querySelector('#logout').onclick = async () => { sessionStorage.removeItem(pendingKey); await api('/v1/portal/logout', {}); location.assign('/portal/grooming'); };
+setInterval(() => void refreshBookingTimes(), 60000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) void refreshBookingTimes(); });
+window.addEventListener('focus', () => void refreshBookingTimes());
 void start();
