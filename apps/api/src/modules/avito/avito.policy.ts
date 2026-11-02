@@ -6,13 +6,13 @@ import { administratorWorking, dutyDoctorReply, groomingAdministratorNotice, gro
 import { clinicPhoneText, clinicUrgency, currentMedicalText } from './avito-clinic-guidance';
 import { petSpecies } from './avito-service-query';
 import { petServiceAnswer, PetServiceContext } from './avito-pet-services';
-import { groomingNonPriceQuantityQuestion, groomingPriceAnswer, withGroomingPricePrefix, type GroomingPriceContext } from './avito-grooming-prices';
+import { groomingNonPriceQuantityQuestion, groomingPriceAnswer, groomingPriceQuestion, withGroomingPricePrefix, type GroomingPriceContext } from './avito-grooming-prices';
 
-export type ContactState = { groomingPriceContext?: GroomingPriceContext; bookingChoiceOffered?: boolean; bookingChannel?: 'WEBSITE' | 'CALLBACK'; name?: string; phone?: string; callbackAt?: string; callbackMessageId?: string; collecting?: boolean; reason?: string; summary?: string; serviceQuestionAsked?: boolean; awaitingServiceDetails?: boolean; serviceDetails?: string; petSpecies?: 'CAT' | 'DOG'; petAge?: string; petSexKnown?: boolean; referralKnown?: boolean };
+export type ContactState = { groomingParasites?: 'NEEDS_CLINIC' | 'TREATED'; groomingPriceContext?: GroomingPriceContext; bookingChoiceOffered?: boolean; bookingChannel?: 'WEBSITE' | 'CALLBACK'; name?: string; phone?: string; callbackAt?: string; callbackMessageId?: string; collecting?: boolean; reason?: string; summary?: string; serviceQuestionAsked?: boolean; awaitingServiceDetails?: boolean; serviceDetails?: string; petSpecies?: 'CAT' | 'DOG'; petAge?: string; petSexKnown?: boolean; referralKnown?: boolean };
 export type AdminDecision = { text: string | null; purpose: 'REPLY' | 'CRM_REPLY' | 'CONTACT' | 'SUBMITTED'; handoff: boolean; needsAttention?: boolean; createInquiry: boolean; direction: Direction | null; reason: string; contact: ContactState; prompt?: string; petServiceBooking?: boolean; petServiceChannel?: 'WEBSITE'; groomingPriceFingerprint?: string; groomingPricePrefix?: string };
-type DecisionInput = { settings: AvitoSettings; listingId: string | null; text: string; messageId: string; contact?: ContactState; mode?: string; mediaType?: string; now?: Date; crmAnswer?: CrmAnswer | null; intent?: AvitoModelIntent | null; clinicPhone?: string | null; nightNoticeDelivered?: boolean; skipAvailability?: boolean; petService?: PetServiceContext };
+type DecisionInput = { settings: AvitoSettings; listingId: string | null; text: string; contextText?: string; messageId: string; contact?: ContactState; mode?: string; mediaType?: string; now?: Date; crmAnswer?: CrmAnswer | null; intent?: AvitoModelIntent | null; clinicPhone?: string | null; nightNoticeDelivered?: boolean; skipAvailability?: boolean; petService?: PetServiceContext };
 export function decideAvitoReply(input: DecisionInput): AdminDecision {
-  let decision = applyGroomingPrice(input, decideCore(input));
+  let decision = applyGroomingCare(input, applyGroomingPrice(input, decideCore(input)));
   const finishGrooming = (d: AdminDecision) => ({ ...d, text: withGroomingPricePrefix(d.groomingPricePrefix, d.text) });
   if (!input.skipAvailability && decision.text && decision.direction === 'GROOMING' && !['URGENT', 'GROOMING_ADMINISTRATOR_HOURS'].includes(decision.reason)) {
     const window = groomingAdministratorWindow(input.settings, input.now);
@@ -45,22 +45,46 @@ export function decideAvitoReply(input: DecisionInput): AdminDecision {
 function applyGroomingPrice(input: DecisionInput, decision: AdminDecision): AdminDecision {
   if (decision.direction !== 'GROOMING' || input.petService?.direction !== 'GROOMING' || input.mode && input.mode !== 'BOT'
     || input.mediaType && input.mediaType !== 'text' || ['URGENT', 'MEDICAL', 'CONTACT_DECLINED', 'DIRECT_HUMAN_REQUEST', 'HUMAN_CONTROL', 'UNSUPPORTED_MEDIA'].includes(decision.reason)) return decision;
-  const priceIntent = input.intent?.action === 'PRICE' || input.intent?.questions?.some(question => question.kind === 'PRICE');
+  const requestText = input.contextText ?? input.text;
+  const priceIntent = input.intent?.action === 'PRICE' || input.intent?.questions?.some(question => question.kind === 'PRICE') || groomingPriceQuestion(requestText);
   const price = groomingPriceAnswer(input.petService, input.text, input.contact?.groomingPriceContext, priceIntent);
   if (!price) return decision;
   const contact = { ...decision.contact, groomingPriceContext: price.context };
-  if (!contact.collecting) contact.summary = [input.text, price.answer].filter(Boolean).join('\n').slice(0, 2000);
+  if (!contact.collecting) contact.summary = [requestText, price.answer].filter(Boolean).join('\n').slice(0, 2000);
   const priced = { ...decision, contact, groomingPriceFingerprint: price.fingerprint };
   if (decision.purpose === 'CONTACT' || decision.purpose === 'SUBMITTED' || decision.petServiceChannel === 'WEBSITE'
     || ['ASSISTANT_IDENTITY', 'GROOMING_ADMINISTRATOR_HOURS'].includes(decision.reason)) return { ...priced, groomingPricePrefix: price.answer || undefined };
-  const askedAddress = /адрес|где\s+(?:вы|наход)|как\s+(?:к вам\s+)?добраться/iu.test(input.text);
+  const askedAddress = /адрес|где\s+(?:вы|наход)|как\s+(?:к вам\s+)?добраться/iu.test(requestText);
   const address = askedAddress ? input.petService.address ? `Адрес груминга: ${input.petService.address}.` : 'Точный адрес уточнит администратор при согласовании записи.' : '';
+  const arrival = /когда.{0,40}(?:приеха|прийти|можно|свобод)|(?:приеха|прийти).{0,30}(?:сегодня|завтра)/iu.test(requestText) ? 'Точное время визита согласует администратор; запись пока не подтверждена.' : '';
   const offer = input.petService.selfBookingEnabled && price.canSelfBook
     ? petServiceAnswer(input.petService, 'Хочу записаться', true)!
     : 'Могу оформить заявку здесь, чтобы администратор уточнил детали и помог с записью. Оставим заявку?';
   if (price.question) delete contact.bookingChoiceOffered; else contact.bookingChoiceOffered = true;
-  return { ...priced, text: [price.answer, address, price.question || offer].filter(Boolean).join('\n\n'), reason: price.question ? 'GROOMING_PRICE_CLARIFY' : 'GROOMING_PRICE',
+  return { ...priced, text: [price.answer, address, arrival, price.question || offer].filter(Boolean).join('\n\n'), reason: price.question ? 'GROOMING_PRICE_CLARIFY' : 'GROOMING_PRICE',
     purpose: 'REPLY', handoff: false, needsAttention: !price.quoted && !price.question, createInquiry: false, petServiceBooking: undefined, petServiceChannel: undefined };
+}
+function applyGroomingCare(input: DecisionInput, decision: AdminDecision): AdminDecision {
+  if (decision.direction !== 'GROOMING' || !decision.text || input.mode && input.mode !== 'BOT'
+    || ['URGENT', 'HUMAN_CONTROL', 'DIRECT_HUMAN_REQUEST', 'CONTACT_DECLINED', 'UNSUPPORTED_MEDIA', 'ASSISTANT_IDENTITY'].includes(decision.reason)) return decision;
+  const text = (input.contextText ?? input.text).toLocaleLowerCase('ru-RU').replace(/ё/g, 'е');
+  const latest = input.text.toLocaleLowerCase('ru-RU').replace(/ё/g, 'е');
+  const evidence = /блох|клещ|паразит/u.test(latest) ? latest : text;
+  const mentionsParasites = /блох|клещ|паразит/u.test(evidence);
+  const negative = /без\s+блох|блох\s+нет|нет\s+блох|блох\s+не\s+обнаруж/u.test(evidence);
+  const reportedTreated = !/не\s+обработ/u.test(evidence) && /(?:уже\s+)?обработ(?:али|ан[аоы]?|ывали)|после\s+обработки/u.test(evidence);
+  if (mentionsParasites) { if (negative) delete decision.contact.groomingParasites; else decision.contact.groomingParasites = reportedTreated ? 'TREATED' : 'NEEDS_CLINIC'; }
+  if (!decision.contact.groomingParasites || !mentionsParasites && !['CONTACT', 'SUBMITTED'].includes(decision.purpose) && !/стриж|груминг|подстр|запис|приеха|когда|стоим|цена|сегодня|завтра/u.test(latest)) return decision;
+  const alreadyTreated = decision.contact.groomingParasites === 'TREATED';
+  const prep = alreadyTreated
+    ? 'Если обработка уже проведена, возможность и время визита к грумеру нужно согласовать с администратором. Подбирать или менять препарат должен врач.'
+    : `С обработкой от блох поможет врач клиники: препарат подберут на месте с учётом возраста и веса питомца${decision.contact.petAge ? ` (возраст ${decision.contact.petAge})` : ''}. Груминг после обработки нужно согласовать с администратором.`;
+  const price = decision.groomingPricePrefix || (decision.reason === 'GROOMING_PRICE' ? decision.text.split('\n\n')[0] : '');
+  const intro = [prep, price].filter(Boolean).join('\n\n');
+  if (decision.purpose === 'CONTACT' || decision.purpose === 'SUBMITTED') return { ...decision, groomingPricePrefix: intro, needsAttention: true };
+  const clarification = decision.reason === 'GROOMING_PRICE_CLARIFY' ? decision.text : '';
+  const arrival = /когда|приеха|прийти|сегодня|завтра|свободн|запис/u.test(text) ? 'Точное время приёма у грумера согласует администратор; запись пока не подтверждена.' : '';
+  return { ...decision, text: [intro, clarification, arrival, clarification ? '' : 'Можно оставить заявку здесь, в Авито, чтобы администратор уточнил стоимость и согласовал визит. Оставим заявку?'].filter(Boolean).join('\n\n'), reason: 'GROOMING_CARE_PREPARATION', groomingPricePrefix: undefined, needsAttention: true, petServiceBooking: undefined, petServiceChannel: undefined };
 }
 function decideCore(input: DecisionInput): AdminDecision {
   const { settings, listingId, text, messageId } = input;
@@ -79,7 +103,7 @@ function decideCore(input: DecisionInput): AdminDecision {
   if (age) contact.petAge = age.trim();
   if (/(?:^|[^а-я])(?:кот|кота|коту|кошка|кошку|кошке|самец|самка|мальчик|девочка|кобель|сука)(?=$|[^а-я])/u.test(normalized)) contact.petSexKnown = true;
   if (/по направлению|(?:направление|направления)\s+(?:есть|нет)|есть\s+направление|без\s+направления/u.test(normalized)) contact.referralKnown = true;
-  if (clinicUrgency(normalized)) return { ...base, handoff: true, reason: 'URGENT', text: t.urgent };
+  if (clinicUrgency((input.contextText ?? text).toLocaleLowerCase('ru-RU').replace(/ё/g, 'е'))) return { ...base, handoff: true, reason: 'URGENT', text: t.urgent };
   if (input.mediaType && input.mediaType !== 'text') return { ...base, handoff: !offHours, reason: 'UNSUPPORTED_MEDIA', text: offHours ? `Не могу надёжно разобрать это вложение. ${dutyDoctorReply(input.clinicPhone)}` : 'Передам вложение сотруднику. Уточнить детали можно здесь в переписке.' };
   const callsDeclined = /не\s+звон|без\s+телефон|не\s+хочу\s+(?:оставлять|давать|передавать)\s+(?:номер|телефон)/u.test(normalized);
   const refusesWebsiteOnly = profile.direction === 'GROOMING' && /не\s+(?:хочу|буду|надо|нужно)(?:\s+\S+){0,4}\s+(?:сайт|ссылк|онлайн)|(?:сайт|ссылк|онлайн)\S*\s+(?:мне\s+)?не\s+(?:нуж|хочу|надо)|без\s+сайт|^не\s+сайт/u.test(normalized) && !callsDeclined;

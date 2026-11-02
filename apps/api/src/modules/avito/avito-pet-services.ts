@@ -46,7 +46,8 @@ export async function loadPetServiceContext(db: Prisma.TransactionClient, organi
 export function petServiceAnswer(context: PetServiceContext, text: string, bookingIntent = false, bookingChannel?: 'WEBSITE'): string | null {
   const input = text.toLocaleLowerCase('ru-RU').replace(/ё/g, 'е');
   const price = context.direction === 'GROOMING' ? groomingPriceQuestion(input) : /цен|стоим|сколько|почем|прайс|тариф/u.test(input);
-  const booking = bookingIntent || /запис|запиш|брон|засели|свобод|места|сайт|ссылк|онлайн|оставить\s+(?:кот|кош|собак|питом)|хочу\s+(?:подстричь|груминг)/u.test(input);
+  const arrival = context.direction === 'GROOMING' && /когда.{0,40}(?:приеха|прийти|можно|свобод)|(?:приеха|прийти).{0,30}(?:сегодня|завтра)/u.test(input);
+  const booking = arrival || bookingIntent || /запис|запиш|брон|засели|свобод|места|сайт|ссылк|онлайн|оставить\s+(?:кот|кош|собак|питом)|хочу\s+(?:подстричь|груминг)/u.test(input);
   const address = /адрес|где\s+(?:вы|наход)|как\s+(?:к вам\s+)?добраться/u.test(input);
   const conditions = /услови|правил|кош|кот|собак|вес|килограмм|кг|сут|дней|выгул|заезд|выезд|время|час|принимаете/u.test(input);
   const haircut = !/когт|маникюр/u.test(input) && /стриж|подстр|постри[гж]|стри(?:чь|гут|гу)/u.test(input);
@@ -83,6 +84,7 @@ export function petServiceAnswer(context: PetServiceContext, text: string, booki
     } else if (booking) {
       parts.push(context.selfBookingEnabled
         ? 'Как вам удобнее записаться: самостоятельно на сайте или оставить заявку здесь, чтобы администратор позвонил?'
+        : arrival ? 'Точное время визита согласует администратор. Могу оставить заявку здесь, чтобы он помог выбрать день и время. Оставим заявку?'
         : 'Самостоятельная онлайн-запись пока закрыта: расписание ещё настраивается. Могу оформить заявку здесь, чтобы администратор позвонил и помог с записью. Оставим заявку на звонок?');
     } else {
       parts.push(context.selfBookingEnabled

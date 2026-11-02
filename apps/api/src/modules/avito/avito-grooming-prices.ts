@@ -10,7 +10,7 @@ export type GroomingPriceRow = {
   breedRowId: string; breedName: string; serviceName: string; condition: string; note: string;
 };
 export type GroomingPriceContext = {
-  species?: 'CAT' | 'DOG'; breedRowIds?: string[]; kind?: string;
+  species?: 'CAT' | 'DOG'; breedRowIds?: string[]; kind?: string; unlistedBreed?: string;
   condition?: 'clean' | 'matted'; extraKey?: string;
   awaiting?: 'PET' | 'BREED' | 'SERVICE' | 'CONDITION';
 };
@@ -67,6 +67,7 @@ export function parseGroomingPriceContext(value: unknown): GroomingPriceContext 
   const v = value as Record<string, unknown>, result: GroomingPriceContext = {};
   if (v.species === 'DOG' || v.species === 'CAT') result.species = v.species;
   if (Array.isArray(v.breedRowIds)) result.breedRowIds = v.breedRowIds.filter((s): s is string => typeof s === 'string' && /^[a-z0-9-]{1,80}$/.test(s)).slice(0, 8);
+  if (v.unlistedBreed === 'той-пуделя') result.unlistedBreed = v.unlistedBreed;
   if (typeof v.kind === 'string' && ['full', 'hygiene', 'dry', 'wash', 'washOnly', 'deshedWash', 'deshed'].includes(v.kind)) result.kind = v.kind;
   if (v.condition === 'clean' || v.condition === 'matted') result.condition = v.condition;
   if (typeof v.extraKey === 'string' && /^(?:extra|cat:extra):[a-z-]{1,60}$/.test(v.extraKey)) result.extraKey = v.extraKey;
@@ -143,7 +144,10 @@ export function groomingPriceAnswer(context: PetServiceContext, text: string, pr
   // An erroneous model PRICE or saved price context cannot turn time/age into money.
   if (groomingNonPriceQuantityQuestion(text)) return null;
   const t = norm(text), rows = context.groomingPrices, state = { ...(parseGroomingPriceContext(prior) ?? {}) };
-  const requested = priceIntent || groomingPriceQuestion(t), foundBreeds = breeds(rows, t), foundExtra = extra(t);
+  // Do not substitute the miniature row merely because its legacy key is poodle-toy.
+  const toyPoodle = /(?:^|[^а-яa-z])(?:той\s*пудел[а-я]*|toy\s*poodle)(?=$|[^а-яa-z])/u.test(t)
+    && !rows.some(r => /той\s*пудел|toy\s*poodle/u.test(norm(r.breedName)));
+  const requested = priceIntent || groomingPriceQuestion(t), foundBreeds = toyPoodle ? [] : breeds(rows, t), foundExtra = extra(t);
   const species = petSpecies(t), hygiene = /гигиен/u.test(t), deshed = /вычес|вычеш|расчес|расчеш|линьк/u.test(t);
   const cut = /стриж|подстр|постри[гж]|стри(?:чь|гут|гу)/u.test(t), wash = /мыть|мытье|купан|купать/u.test(t);
   const uncertainCondition = /колтун/u.test(t) && /не\s+знаю|не\s+уверен|неясно|непонятно|или\s+нет/u.test(t);
@@ -151,17 +155,18 @@ export function groomingPriceAnswer(context: PetServiceContext, text: string, pr
     : state.awaiting === 'CONDITION' && /^(?:нет|нету)[.!\s]*$/u.test(t) ? 'clean'
     : state.awaiting === 'CONDITION' && /^(?:да|есть)[.!\s]*$/u.test(t) ? 'matted' : undefined;
   const serviceMention = foundExtra || hygiene || deshed || cut || wash || /комплекс|полный|полного/u.test(t);
-  if (!requested && !(prior && (foundBreeds.length || serviceMention || species || condition))) return null;
+  if (!requested && !(prior && (toyPoodle || foundBreeds.length || serviceMention || species || condition))) return null;
   if (/узи|рентген|вакцин|привив|стерилизац|кастрац|наркоз|ультразвук|санац/u.test(t)) return null;
   const fingerprint = groomingPriceFingerprint(context);
   const result = (answer: string, question?: string, quoted = false): GroomingPriceAnswer => ({ answer, question, context: state, fingerprint, quoted });
   if (!context.available || !rows.length) return result('Сейчас точный прайс груминга недоступен. Стоимость уточнит администратор.');
-  if (species && species !== state.species) { state.species = species; delete state.breedRowIds; delete state.condition; }
+  if (species && species !== state.species) { state.species = species; delete state.breedRowIds; delete state.condition; delete state.unlistedBreed; }
   // Reuse a known breed for short service/price follow-ups only. An unmatched
   // pet description (e.g. "а для корги?") must not inherit the previous dog's price.
-  if (state.species === 'DOG' && state.breedRowIds?.length && !foundBreeds.length && !foundExtra && (requested || serviceMention || species)
+  if (state.species === 'DOG' && state.breedRowIds?.length && !foundBreeds.length && !foundExtra && (groomingPriceQuestion(t) || serviceMention || species)
     && words(t).some(w => !breedFollowupWords.has(w) && !rows.some(r => words(r.serviceName).includes(w)))) delete state.breedRowIds;
-  if (foundBreeds.length) { state.species = 'DOG'; state.breedRowIds = foundBreeds.map(r => r.breedRowId).slice(0, 8); delete state.extraKey; }
+  if (toyPoodle) { state.species = 'DOG'; state.unlistedBreed = 'той-пуделя'; delete state.breedRowIds; delete state.extraKey; }
+  if (foundBreeds.length) { state.species = 'DOG'; state.breedRowIds = foundBreeds.map(r => r.breedRowId).slice(0, 8); delete state.extraKey; delete state.unlistedBreed; }
   if (uncertainCondition) delete state.condition;
   if (condition) state.condition = condition;
   if (state.species === 'DOG' && state.kind === 'wash') state.kind = 'full';
@@ -186,6 +191,7 @@ export function groomingPriceAnswer(context: PetServiceContext, text: string, pr
   else {
     if (!state.species) { state.awaiting = 'PET'; return result('', 'Кого планируете привести — кошку или собаку? Если собаку, напишите породу.'); }
     if (state.species === 'DOG') {
+      if (state.unlistedBreed) { delete state.awaiting; return result(`Для ${state.unlistedBreed} точную стоимость ${state.kind === 'hygiene' ? 'гигиенического ухода' : 'полного комплекса'} уточнит администратор: отдельная цена для этой разновидности в прайсе не указана.`); }
       if (!state.breedRowIds?.length) { state.awaiting = 'BREED'; return result('', 'Какой породы собака? Для метиса напишите примерный вес.'); }
       const breedRows = [...new Map(rows.filter(r => state.breedRowIds!.includes(r.breedRowId)).map(r => [r.breedRowId, r])).values()];
       if (!breedRows.length) { delete state.breedRowIds; state.awaiting = 'BREED'; return result('Для этой породы стоимость уточнит администратор.'); }

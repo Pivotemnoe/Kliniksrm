@@ -59,6 +59,21 @@ test('grooming prices read the current module and validate persisted replies bef
     const op=await approve(c);await service.deliver(op.operationId);assert.equal((await service.getConversation(c.id)).outbox.find(o=>o.id===op.operationId).status,'SENT');
    }finally{await prisma.groomingService.update({where,data:{price:row.price,priceType:row.priceType,version:{increment:1}}});}
   });
+  for(const separate of [false,true])await t.test(`all unanswered grooming questions survive ${separate?'separate syncs before send':'one imported batch'}`,async()=>{
+   const id=chat('unanswered-'+separate),first='Здравствуйте! Сколько стоит стрижка и обработка от блох той пуделя? Возраст 4 месяца';
+   api.add(id,'initial-question',first);if(separate)await load(id);api.add(id,'arrival-question','И когда можно приехать?');let c=await load(id);const op=draft(c);
+   assert.equal(c.stage,'GROOMING_CARE_PREPARATION');assert.match(op.text,/врач/);assert.match(op.text,/4 месяца/);assert.match(op.text,/той-пуделя/);assert.match(op.text,/время.*администратор/isu);assert.doesNotMatch(op.text,/Какой породы|Для метиса|Пудель карликовый|600–800/);assert.equal(c.mode,'BOT');assert.equal(c.needsAttention,true);
+   if(separate)assert.equal(c.outbox.find(x=>x.triggerMessageId==='initial-question').status,'CANCELLED');
+   const approved=await approve(c);await service.deliver(approved.operationId);await service.deliver(approved.operationId);await load(id);assert.equal(api.sent.filter(x=>x.chatId===id).length,1);
+   api.add(id,'new-arrival','А завтра можно приехать?');c=await load(id);assert.match(draft(c).text,/обработк/);assert.match(draft(c).text,/администратор/);assert.doesNotMatch(draft(c).text,/Какой породы|есть свободное|записал вас/iu);
+  });
+  await t.test('model classification sees both unanswered messages while callback evidence stays bound to the original phone message',async()=>{
+   const configured=f.model.configured,classify=f.model.classify,seen=[];f.model.configured=()=>true;f.model.classify=async(_key,_profile,text)=>{seen.push(text);return{action:'OTHER',knowledgeId:null,serviceQuery:null}};
+   try{
+    const id=chat('model-pending');api.add(id,'model-pending-1','Сколько стоит полный комплекс йорку?');api.add(id,'model-pending-2','И когда можно приехать?');let c=await load(id);assert.ok(seen.some(text=>text.includes('полный комплекс йорку')&&text.includes('когда можно приехать')));assert.match(clean(draft(c).text),/2 500 ₽/);assert.match(draft(c).text,/время.*администратор/isu);
+    const phoneChat=chat('phone-batch');api.add(phoneChat,'original-phone','Хочу записать йорка, мой телефон +7 900 111-22-33');api.add(phoneChat,'later-name','Меня зовут Анна');c=await load(phoneChat);assert.equal(c.inquiries.length,1);assert.equal(c.inquiries[0].contactMessageId,'original-phone');assert.equal(c.contact.name,'Анна');assert.equal(c.contact.callbackMessageId,'original-phone');assert.equal(c.requestId,null);
+   }finally{f.model.configured=configured;f.model.classify=classify;}
+  });
   await t.test('a deliberately unspecified CRM price retains staff attention and a single reply without disabling the bot',async()=>{
    const where={installationId_catalogKey:{installationId:grooming.id,catalogKey:'dog:york:full'}},row=await prisma.groomingService.findUniqueOrThrow({where});
    try{

@@ -14,6 +14,7 @@ import { AvitoDialogueTurn, AvitoModelGatewayClient, AvitoModelIntent, boundedAv
 import { loadPetServiceContext, petServiceAnswer } from './avito-pet-services';
 import { groomingPriceFingerprint, parseGroomingPriceContext, withGroomingPricePrefix } from './avito-grooming-prices';
 import { withAvitoListingSource } from './avito-booking-source';
+import { unansweredAvitoText } from './avito-unanswered-messages';
 
 type DB = Prisma.TransactionClient;
 const safeError = (error: unknown) => error instanceof ServiceUnavailableException ? error.message : 'Операция не завершена. Проверьте соединение и конечный результат.';
@@ -97,6 +98,7 @@ export class AvitoService {
     const priceContext = parseGroomingPriceContext(contact?.groomingPriceContext);
     if (priceContext) c.groomingPriceContext = priceContext;
     if (contact?.petSpecies === 'CAT' || contact?.petSpecies === 'DOG') c.petSpecies = contact.petSpecies;
+    if (contact?.groomingParasites === 'NEEDS_CLINIC' || contact?.groomingParasites === 'TREATED') c.groomingParasites = contact.groomingParasites;
     const settings = parseAvitoSettings(integration.settings);
     const rule = settings.listings.find(l => l.id === listingId && l.enabled);
     const profile = settings.profiles.find(p => p.direction === rule?.direction && p.enabled);
@@ -264,6 +266,7 @@ export class AvitoService {
     return imported;
   }
   private async ingestCanonical(integration: Awaited<ReturnType<AvitoService['integration']>>, chat: AvitoApiChat, history: AvitoApiMessage[]) {
+    const accountId = integration.accountId!;
     const settings = parseAvitoSettings(integration.settings); const listingId = chat.context?.value?.id != null ? String(chat.context.value.id) : null;
     const mapping = settings.listings.find(l => l.id === listingId && l.enabled);
     const conversation = await this.prisma.avitoConversation.upsert({ where: { integrationId_externalChatId: { integrationId: integration.id, externalChatId: chat.id } }, update: {}, create: {
@@ -276,13 +279,21 @@ export class AvitoService {
     // written anything. It is history, not a customer request or staff takeover.
     const candidate = history.filter(message => message.type !== 'system').sort((a, b) => b.created - a.created)[0];
     const profile = settings.profiles.find(p => p.direction === mapping?.direction && p.enabled);
+    let candidateContextText = candidate?.content?.text ?? '';
+    if (mapping?.direction === 'GROOMING' && candidate?.type === 'text') {
+      const stored = await this.prisma.avitoMessage.findMany({ where: { conversationId: conversation.id, occurredAt: { lte: new Date(candidate.created * 1000) } }, orderBy: { occurredAt: 'desc' }, take: 64, select: { externalId: true, authorId: true, type: true, text: true, occurredAt: true } });
+      candidateContextText = unansweredAvitoText([
+        ...stored.map(m => ({ id: m.externalId, authorId: m.authorId ?? '', type: m.type, text: m.text, at: m.occurredAt.getTime() })),
+        ...history.map(m => ({ id: m.id, authorId: String(m.author_id), type: m.type ?? 'unknown', text: m.content?.text ?? '', at: m.created * 1000 })),
+      ], candidate.id, accountId, chat.users?.filter(u => String(u.id) !== accountId).map(u => String(u.id)) ?? [], integration.installation.enabledAt?.getTime()) || candidateContextText;
+    }
     let modelIntent: AvitoModelIntent | null = null;
     if (avitoPilotAllowsChat(chat.id) && profile && this.model.configured() && conversation.mode === 'BOT' && settings.mode !== 'MANUAL' && candidate?.type === 'text'
       && chat.users?.some(u => String(u.id) === String(candidate.author_id) && String(u.id) !== integration.accountId)
       && integration.installation.enabledAt && candidate.created * 1000 >= integration.installation.enabledAt.getTime()
       && !await this.prisma.avitoMessage.findUnique({ where: { conversationId_externalId: { conversationId: conversation.id, externalId: candidate.id } } })) {
-      const preliminary = decideAvitoReply({ settings, listingId, text: candidate.content?.text ?? '', messageId: candidate.id, contact: conversation.contact as ContactState, skipAvailability: true, now: this.now() });
-      if (avitoNeedsQuestionPlan(candidate.content?.text ?? '', preliminary.reason)) {
+      const preliminary = decideAvitoReply({ settings, listingId, text: candidate.content?.text ?? '', contextText: candidateContextText, messageId: candidate.id, contact: conversation.contact as ContactState, skipAvailability: true, now: this.now() });
+      if (avitoNeedsQuestionPlan(candidateContextText, preliminary.reason)) {
         const [stored, outgoing] = await Promise.all([
           this.prisma.avitoMessage.findMany({ where: { conversationId: conversation.id, occurredAt: { lte: new Date(candidate.created * 1000) } }, orderBy: { occurredAt: 'desc' }, take: 64, select: { externalId: true, authorId: true, type: true, text: true, occurredAt: true } }),
           this.prisma.avitoOutgoingOperation.findMany({ where: { conversationId: conversation.id, status: 'SENT', externalMessageId: { not: null } }, orderBy: { sentAt: 'desc' }, take: 32, select: { externalMessageId: true, text: true } }),
@@ -295,7 +306,7 @@ export class AvitoService {
           .sort((left, right) => left.at - right.at)
           .flatMap<AvitoDialogueTurn>(message => clients.has(message.author) ? [{ role: 'user', text: message.text }] : message.author === integration.accountId && confirmed.get(message.id) === message.text ? [{ role: 'assistant', text: message.text }] : []);
         const dialogue: AvitoDialogueTurn[] = boundedAvitoHistory(turns, (conversation.contact as ContactState).name);
-        modelIntent = await this.model.classify(`${integration.id}:${conversation.id}:${conversation.intakeCycle}:${candidate.id}:${integration.settingsVersion}`, profile, candidate.content?.text ?? '', mapping, undefined, dialogue);
+        modelIntent = await this.model.classify(`${integration.id}:${conversation.id}:${conversation.intakeCycle}:${candidate.id}:${integration.settingsVersion}:${createHash('sha256').update(candidateContextText).digest('hex').slice(0,16)}`, profile, candidateContextText, mapping, undefined, dialogue);
       }
     }
     const modelSettingsVersion = integration.settingsVersion;
@@ -345,6 +356,11 @@ export class AvitoService {
       // Import historical chats for staff visibility, never start sending into old conversations.
       if (!avitoPilotAllowsChat(chat.id) || !latest || current.mode !== 'BOT' || settings.mode === 'MANUAL' || !integration.installation.enabledAt || latest.created * 1000 < integration.installation.enabledAt.getTime()) return newCount;
       const intent = validModelVersion && candidate?.id === latest.id ? modelIntent : null;
+      let contextText: string | undefined;
+      if (mapping?.direction === 'GROOMING' && latest.type === 'text') {
+        const pending = await tx.avitoMessage.findMany({ where: { conversationId: current.id, occurredAt: { lte: new Date(latest.created * 1000) } }, orderBy: { occurredAt: 'desc' }, take: 64, select: { externalId: true, authorId: true, type: true, text: true, occurredAt: true } });
+        contextText = unansweredAvitoText(pending.map(m => ({ id: m.externalId, authorId: m.authorId ?? '', type: m.type, text: m.text, at: m.occurredAt.getTime() })), latest.id, accountId, chat.users?.filter(u => String(u.id) !== accountId).map(u => String(u.id)) ?? [], integration.installation.enabledAt.getTime());
+      }
       const crmQuery = crmIntentQuery(latest.content?.text ?? '', intent);
       const priceDetailReply = ['PROGRAMME_PRICE_CLARIFY', 'CRM_PRICE_CLARIFY'].includes(current.stage) && contact.petSpecies && !crmQuestion(crmQuery) && mapping?.crmQuery;
       const resolvedCrmQuery = priceDetailReply ? `Стоимость ${mapping.crmQuery} ${latest.content?.text ?? ''}` : crmQuery;
@@ -355,7 +371,7 @@ export class AvitoService {
       const nightNoticeDelivered = Boolean(await tx.avitoOutgoingOperation.findFirst({ where: { conversationId: current.id, status: 'SENT', sentAt: { gte: new Date(now.getTime() - 12 * 3600000) }, text: { contains: 'Сейчас клиника работает в ночном режиме' } }, select: { id: true } }));
       // The latest input was already previewed while importing history. Apply its
       // final decision to the preceding state so a service answer is not consumed twice.
-      const decision = decideAvitoReply({ settings, listingId, text: latest.content?.text ?? '', messageId: latest.id, contact: contactBeforeLatest, mediaType: latest.type, crmAnswer, intent, now, clinicPhone: clinic?.phone, nightNoticeDelivered, petService });
+      const decision = decideAvitoReply({ settings, listingId, text: latest.content?.text ?? '', contextText, messageId: latest.id, contact: contactBeforeLatest, mediaType: latest.type, crmAnswer, intent, now, clinicPhone: clinic?.phone, nightNoticeDelivered, petService });
       let requestId = current.requestId;
       if (decision.createInquiry) requestId = await this.createInquiry(tx, current, decision.contact);
       const stop = decision.createInquiry || decision.handoff && (!decision.contact.collecting || ['URGENT', 'CONTACT_DECLINED', 'UNSUPPORTED_MEDIA', 'DIRECT_HUMAN_REQUEST', 'UNMAPPED_LISTING', 'CLINIC_PHONE_UNAVAILABLE'].includes(decision.reason));
