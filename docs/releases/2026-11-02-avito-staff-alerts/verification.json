@@ -1,0 +1,57 @@
+{
+  "status": "DEPLOYED_AND_SERVER_VERIFIED",
+  "verifiedAt": "2026-11-02T15:14:06.9245063Z",
+  "api": {
+    "source": "8c645002996e982bd9876e47d6d1fd85b33389f7",
+    "image": "sha256:1aff1b3d0a7655336692fa872e05ceb8b0a834d5732c2e8f80fd796362846001",
+    "compiledFiles": 1326,
+    "packetFiles": 12,
+    "existingNativePushCodeBindingsPreserved": 3
+  },
+  "web": {
+    "source": "d35d57065b593aa88aa88b900f22b1bdeef7ee1c",
+    "image": "sha256:fe2e3ed5593ee8ab6ecf767edabd6982507f11428acd1b9361f941967a2d6aee",
+    "initialSourceBase": "6716c86b4e69619587869a9150332613c1de368b",
+    "initialChangedSourceFiles": 8,
+    "backgroundGuardChangedSourceFiles": 1,
+    "allOtherSourceFilesPreserved": true,
+    "oldHashedAssetsPreserved": true,
+    "publicAndLocalHealth": "PASS"
+  },
+  "data": {
+    "newApprovedRow": "dog:toy-poodle:full",
+    "priceRub": 2500,
+    "activeRowsBefore": 172,
+    "activeRowsAfter": 173,
+    "all172ExistingPricesUnchanged": true,
+    "settingsVersion": 6,
+    "schemaChanged": false,
+    "migrationsApplied": 0,
+    "productionDatabaseRestored": false
+  },
+  "checks": {
+    "targetedUnitTests": 49,
+    "isolatedPostgresTests": 2,
+    "nativeWindowsPublisherFaultInjectionCases": 20,
+    "readOnlyLiveQuoteReplay": "PASS",
+    "readOnlyLiveMultipartReplay": "PASS",
+    "liveAvitoAlertCandidatesObserved": 6,
+    "rolesMatchConversationAccess": true,
+    "perEmployeeAcknowledgementAndNewMessageRenewal": "PASS",
+    "sameSecondIncomingMessagesRenewAlert": "PASS",
+    "localBrowserAlertToGroomingConversation": "PASS",
+    "liveAuthenticatedBrowserAcceptance": false,
+    "liveBrowserBoundary": "Sign-in required; live verification used read-only server data and installed asset hashes.",
+    "realCustomerTestMessagesSent": 0,
+    "testBookingsCreated": 0
+  },
+  "backup": {
+    "isolatedRestoreVerified": true,
+    "tables": 158,
+    "physicalFiles": 57,
+    "activeFileReferences": 18,
+    "backgroundWebFixReusedSameVerifiedSnapshot": true,
+    "originalReleaseEvidenceUnchanged": true,
+    "qualifiedApiRollbackPreservesApprovedPriceAndCurrentWeb": true
+  }
+}

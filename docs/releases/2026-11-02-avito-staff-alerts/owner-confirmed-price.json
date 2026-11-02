@@ -1,0 +1,16 @@
+{
+  "kind": "OWNER_CONFIRMED_GROOMING_PRICE",
+  "confirmedDate": "2026-11-02",
+  "approval": "Значит, той пудель запиши 2500.",
+  "catalogKey": "dog:toy-poodle:full",
+  "breedRowId": "toy-poodle",
+  "breedName": "Той-пудель",
+  "serviceName": "Полный комплекс",
+  "washingIncluded": true,
+  "priceType": "FIXED",
+  "priceRub": 2500,
+  "additionalIncreaseRub": 0,
+  "hygienePriceConfirmed": false,
+  "durationConfirmed": false,
+  "existingMiniaturePoodlePreserved": true
+}
