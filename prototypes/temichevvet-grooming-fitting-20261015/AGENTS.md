@@ -1,3 +1,9 @@
+## Latest owner instruction — retired haircut, 2 November 2026
+
+- Owner reconfirmed that «Стрижка без мытья» is absent from the current price list and must not appear on the website or in booking. Original photographs and their archived columns are provenance, not an offer to restore this service.
+- Remove the obsolete haircut definition and ambiguous «Возможен без мытья» copy from the public price section. Filter retired haircut names in incoming booking catalogues even when legacy/manual entries lack the original catalogKey. Preserve the previously approved separate brushing and hygiene services, current prices, actual reservations and history.
+- Coordinate any separate static publication with the Avito/CRM chats so it cannot overlap their production rollout. No backend, CRM data, staff, shift or notification mutation belongs to this website change.
+
 ## Latest owner instruction — initial reservation and updated end, 28 October 2026
 
 - Latest direct correction in this chat: client-facing choices show the start time only. Remove explanations about reservations, preliminary ends and staff duration changes. The allowed estimate is: «Стрижка занимает примерно 1,5 часа. Время может меняться в зависимости от состояния животного». Keep actual server start/end/duration values and staff controls intact internally.

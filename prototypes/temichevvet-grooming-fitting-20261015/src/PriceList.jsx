@@ -1,7 +1,7 @@
 import {useEffect,useId,useState} from 'react';
 import {ArrowRight,Plus,Clock} from '@phosphor-icons/react';
 import {CLINIC_CONTACT} from './clinic-contact';
-import {CAT_PRICES,DOG_PRICES,DOG_SERVICE_DETAILS,EXTRA_SERVICES,priceText} from './pricing-data';
+import {CAT_PRICES,COAT_SERVICE_DETAILS,DOG_PRICES,DOG_SERVICE_DETAILS,EXTRA_SERVICES,priceText} from './pricing-data';
 
 const groups=[...new Set(DOG_PRICES.map(item=>item.group))];
 const byCatalogue=id=>DOG_PRICES.find(item=>item.catalogueId===id);
@@ -27,7 +27,7 @@ export function PriceList({breed,storefront,bookingPortalUrl,onShowLooks,onBook}
  useEffect(()=>{setSpecies(breed.species);if(breed.species==='dog')setSelected(byCatalogue(breed.id)?.id||'other');},[breed.id,breed.species]);
  const unlisted=breed.species==='dog'&&!byCatalogue(breed.id);
  const current=DOG_PRICES.find(item=>item.id===selected)||{id:'other',name:unlisted?breed.name:'Другая порода',catalogueId:unlisted?breed.id:null,coatCare:unlisted&&breed.defaultServiceId==='coat'};
- const services=current.coatCare?DOG_SERVICE_DETAILS.map(service=>service.key==='dry'?{...service,name:'Вычёсывание без мытья',description:'Уход за шерстью и подшёрстком.',includes:['Вычёсывание шерсти','Объём работы согласуем по состоянию подшёрстка']}:service.key==='full'?{...service,name:'Мытьё и уход за шерстью',description:'Полный уход с естественным силуэтом.',includes:['Мытьё и сушка феном','Вычёсывание шерсти','Чистка ушей и подстригание когтей','Детали ухода согласуем с вами']}:service):DOG_SERVICE_DETAILS.filter(service=>service.key!=='dry');
+ const services=current.coatCare?COAT_SERVICE_DETAILS:DOG_SERVICE_DETAILS;
  const fromModule=(key,fallback)=>{const entry=storefront?.services?.find(s=>s.catalogKey===key);if(!entry)return storefront?.connected?null:fallback;if(entry.priceType==='QUOTE')return null;if(entry.priceType==='PERCENT')return {percent:Number(entry.price)};if(entry.priceType==='UP_TO')return {kind:'upTo',max:Number(entry.maximumPrice)};return {min:Number(entry.price),max:entry.priceType==='RANGE'?Number(entry.maximumPrice):Number(entry.price)};};
  const prefix=species==='cat'?`cat:${coat}`:`dog:${current.id}`;
  const context=kind=>species==='cat'?{species:'cat',breedId:breed.species==='cat'?breed.id:'domestic-shorthair',breedName:breed.species==='cat'?breed.name:'Кошка',condition:coat,kind}:{species:'dog',breedId:current.catalogueId||current.id,breedName:current.name,rowId:current.id,kind};

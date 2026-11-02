@@ -9,9 +9,11 @@ const project=new URL('../prototypes/temichevvet-grooming-fitting-20261015/',imp
 const require=createRequire(project+'package.json');
 const React=require('react'),{renderToStaticMarkup}=require('react-dom/server');
 const temp=await mkdtemp(path.join(tmpdir(),'grooming-booking-ui-'));
-const bundle=await require('esbuild').build({entryPoints:[project+'src/SiteBooking.jsx'],bundle:true,platform:'node',format:'cjs',jsx:'automatic',write:false,plugins:[{name:'shared-react',setup(build){build.onResolve({filter:/^react(?:\/.*)?$/},args=>({path:require.resolve(args.path),external:true}));}}]});
-await writeFile(path.join(temp,'booking.cjs'),bundle.outputFiles[0].text);
+const bundle=await require('esbuild').build({entryPoints:{booking:project+'src/SiteBooking.jsx',prices:project+'src/PriceList.jsx'},outdir:temp,outExtension:{'.js':'.cjs'},bundle:true,platform:'node',format:'cjs',jsx:'automatic',write:false,plugins:[{name:'shared-react',setup(build){build.onResolve({filter:/^react(?:\/.*)?$/},args=>({path:require.resolve(args.path),external:true}));}}]});
+for(const file of bundle.outputFiles)await writeFile(file.path,file.contents);
 const {SiteBooking,BookingStart}=require(path.join(temp,'booking.cjs'));
+const {PriceList}=require(path.join(temp,'prices.cjs'));
+const catalog=require(new URL('../apps/api/src/modules/grooming/price-catalog.json',import.meta.url).pathname);
 const service={id:'example-full',title:'Полный комплекс',priceLabel:'2 500 ₽',bookable:false,catalogData:{species:'DOG',breedId:'york',breedRowId:'york',kind:'full',category:'CARE'}};
 function render(storefront,breed={id:'york',name:'Йоркширский терьер',species:'dog',size:'small'}){
  return renderToStaticMarkup(React.createElement(SiteBooking,{config:{storefront,bookingPortalUrl:'https://cabinet.temichevvet.ru/portal/grooming'},breed,notes:'',onNotes(){},lookIds:[],selectedLooks:[],onToggleLook(){},lookName:id=>id}));
@@ -46,5 +48,33 @@ test('client choices keep the real start time and omit the end when duration cha
  assert.equal(start('2026-10-29T08:30:00.000Z'),'10:00');
  assert.equal(start('2026-10-29T09:00:00.000Z'),'10:00');
  assert.equal(start('2026-10-29T10:00:00.000Z'),'10:00');
+});
+test('booking excludes retired and manually named wash-free haircuts while retaining other care',()=>{
+ const services=[
+  service,
+  {id:'legacy-dry',catalogKey:'dog:york:dry',title:'Старая услуга',catalogData:{species:'DOG'}},
+  {id:'manual-dry',title:'Йорк · Стрижка собак без мытья',catalogData:{species:'DOG'}},
+  {id:'renamed-dry',title:'Старая услуга',catalogData:{species:'DOG',serviceName:'СТРИЖКА БЕЗ\u00a0МЫТЬЯ'}},
+  {id:'hygiene',title:'Гигиенический уход',catalogData:{species:'DOG'}},
+  {id:'brushing',catalogKey:'dog:husky:dry',title:'Вычёсывание без мытья',catalogData:{species:'DOG'}},
+ ];
+ const html=render({...open,services});
+ assert.doesNotMatch(html,/legacy-dry|manual-dry|renamed-dry|Стрижка собак без мытья|СТРИЖКА БЕЗ/);
+ for(const label of ['Полный комплекс','Гигиенический уход','Вычёсывание без мытья'])assert.ok(html.includes(label),label);
+ const cat=render({...open,services:[{id:'cat-dry',catalogKey:'cat:clean:dry',title:'Старая услуга',catalogData:{species:'CAT'}},{id:'cat-wash',title:'Стрижка и мытьё',catalogData:{species:'CAT'}},{id:'cat-deshed',title:'Экспресс-линька без мытья',catalogData:{species:'CAT'}}]},{id:'cat-domestic-short',name:'Кошка',species:'cat'});
+ assert.doesNotMatch(cat,/cat-dry|Старая услуга/);
+ assert.match(cat,/Стрижка и мытьё/);
+ assert.match(cat,/Экспресс-линька без мытья/);
+});
+test('price cards never restore wash-free haircuts from the archived fallback catalogue',()=>{
+ for(const connected of [false,true])for(const row of catalog.dogs){
+  const html=renderToStaticMarkup(React.createElement(PriceList,{breed:{id:row.catalogueId||row.id,name:row.name,species:'dog',defaultServiceId:row.coatCare?'coat':'haircut'},storefront:{connected,services:[]},onBook(){},onShowLooks(){}}));
+  assert.doesNotMatch(html,/Стрижка без мытья|Возможен без мытья|Мытьё дома|Мытьё и сушка — по согласованию/,row.id);
+  assert.match(html,/Гигиенический уход/,row.id);
+  if(row.coatCare)assert.match(html,/Вычёсывание без мытья/,row.id);
+ }
+ const html=renderToStaticMarkup(React.createElement(PriceList,{breed:{id:'cat-domestic-short',name:'Кошка',species:'cat'},storefront:{connected:false,services:[]},onBook(){},onShowLooks(){}}));
+ assert.doesNotMatch(html,/Стрижка без мытья/);
+ assert.match(html,/Стрижка и мытьё/);
 });
 test.after(()=>rm(temp,{recursive:true,force:true}));

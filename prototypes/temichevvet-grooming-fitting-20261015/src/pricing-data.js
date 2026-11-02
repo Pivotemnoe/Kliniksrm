@@ -9,12 +9,18 @@ const retiredHaircuts = new Set([
  ...catalog.dogs.filter(breed => !breed.coatCare).map(breed => `dog:${breed.id}:dry`),
  'cat:clean:dry', 'cat:matted:dry',
 ]);
-export const groomingServiceOffered = service => !retiredHaircuts.has(service.catalogKey);
+const withoutWashingHaircut = /стрижк[а-яё]*[^.;]*без\s+(?:мыть[яё]|купания)/iu;
+export const groomingServiceOffered = service => !retiredHaircuts.has(service.catalogKey)
+ && ![service.title,service.catalogData?.serviceName].some(name=>withoutWashingHaircut.test(name||''));
 
 export const DOG_SERVICE_DETAILS = [
- {key:'dry',name:'Стрижка без мытья',description:'Для питомца, которого вы вымыли и расчесали дома.',includes:['Чистая шерсть без колтунов','Мытьё дома за день до визита или в день стрижки'],serviceId:'haircut'},
- {key:'hygiene',name:'Гигиенический уход',description:'Аккуратные детали. Возможен без мытья.',includes:['Мытьё и сушка — по согласованию','Чистка ушей','Окантовка морды, лап и ушей','Уход за зоной гигиены'],serviceId:'hygiene'},
+ {key:'hygiene',name:'Гигиенический уход',description:'Аккуратный уход за мордой, лапами и зоной гигиены.',includes:['Чистка ушей','Окантовка морды, лап и ушей','Уход за зоной гигиены'],serviceId:'hygiene'},
  {key:'full',name:'Полный комплекс',description:'Мытьё, уход и согласованная форма.',includes:['Мытьё и сушка феном','Чистка ушей и подстригание когтей','Стрижка с учётом породы и ваших пожеланий','Тримминг для подходящих пород — по согласованию'],serviceId:'haircut'},
+];
+
+export const COAT_SERVICE_DETAILS = [
+ {key:'dry',name:'Вычёсывание без мытья',description:'Уход за шерстью и подшёрстком.',includes:['Вычёсывание шерсти','Объём работы согласуем по состоянию подшёрстка'],serviceId:'coat'},
+ ...DOG_SERVICE_DETAILS.map(service=>service.key==='full'?{...service,name:'Мытьё и уход за шерстью',description:'Полный уход с естественным силуэтом.',includes:['Мытьё и сушка феном','Вычёсывание шерсти','Чистка ушей и подстригание когтей','Детали ухода согласуем с вами']}:service),
 ];
 
 const number = new Intl.NumberFormat('ru-RU');
