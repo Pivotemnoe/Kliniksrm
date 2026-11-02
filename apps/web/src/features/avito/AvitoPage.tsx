@@ -122,7 +122,7 @@ function Conversation({ id, overview, canOperate }: { id: string; overview: Avit
     || Date.parse(b.createdAt || b.occurredAt) - Date.parse(a.createdAt || a.occurredAt)
     || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0))[0]?.id;
   useEffect(() => {
-    if (!incomingId || !overview.installation.enabled) return;
+    if (!incomingId || !overview.installation.enabled || document.visibilityState !== 'visible') return;
     // Acknowledge exactly the displayed incoming message. A newer arrival keeps
     // its unread badge even if it races this request or a background refresh.
     void markStaffAlertRead({ key: `avito:${id}`, version: incomingId })
