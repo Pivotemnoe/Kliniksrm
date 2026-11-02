@@ -34,6 +34,13 @@ test('ordinary multi-message prices use current CRM rows and retain a later addr
  const a=ask('Сколько стоит полный комплекс йорку?');const d=ask(second,{contact:a.contact,contextText:'Сколько стоит полный комплекс йорку?\n\n'+second});
  assert.match(d.text.replace(/\s/g,' '),/2 500 ₽/);assert.match(d.text,/время.*администратор/isu);assert.doesNotMatch(d.text,/Какой породы/);
 });
+test('primary intent variations cannot erase either grooming price, preparation or arrival',()=>{
+ for(const action of ['MEDICAL','PRICE','HOURS','BOOKING','OTHER']){
+  const d=ask(second,{contact:ask(first).contact,contextText:first+'\n\n'+second,intent:{action,knowledgeId:null,serviceQuery:null}});
+  assert.match(d.text,/врач/);assert.match(d.text,/той-пуделя/);assert.match(d.text,/стоимость/);assert.match(d.text,/время.*администратор/isu);assert.doesNotMatch(d.text,/Какой породы|Пудель карликовый/);
+ }
+ assert.equal(ask('Той-пудель необработан от блох, когда можно на стрижку?').contact.groomingParasites,'NEEDS_CLINIC');
+});
 test('a current breed correction overrides older facts without quoting a toy-poodle price',()=>{
  const a=ask(first),d=ask('Я ошиблась, у нас йорк, сколько полный комплекс?',{contact:a.contact,contextText:first+'\n\nЯ ошиблась, у нас йорк, сколько полный комплекс?'});
  assert.match(d.text.replace(/\s/g,' '),/2 500 ₽/);assert.equal(d.contact.groomingPriceContext.unlistedBreed,undefined);assert.doesNotMatch(d.text,/той-пуделя/);
@@ -44,6 +51,18 @@ test('a named toy variety is retained across service follow-ups instead of selec
 test('past/negative flea statements are not treated as a current infestation',()=>{
  assert.notEqual(ask('У йорка нет блох, сколько полный комплекс?').reason,'GROOMING_CARE_PREPARATION');
  const d=ask('Той-пуделя обработали от блох неделю назад, когда можно приехать?');assert.match(d.text,/обработка уже проведена/);assert.doesNotMatch(d.text,/подожд|через неделю|Сначала/);
+});
+test('care composition retains address and the chosen website channel',()=>{
+ const petService={...source,address:'СИНТЕТИЧЕСКИЙ АДРЕС ДЛЯ QA'};const a=ask(first,{petService});
+ const address=ask('И по какому адресу приехать?',{petService,contact:a.contact,contextText:first+'\n\nИ по какому адресу приехать?'});assert.match(address.text,/СИНТЕТИЧЕСКИЙ АДРЕС ДЛЯ QA/);
+ const website=ask('Хочу записаться на сайте',{petService,contact:a.contact,contextText:first+'\n\nХочу записаться на сайте'});assert.ok(website.text.includes(source.siteUrl));assert.equal(website.contact.bookingChannel,'WEBSITE');assert.ok(website.groomingPriceFingerprint);
+});
+test('short treatment follow-ups update the existing concern and do not contaminate a different pet',()=>{
+ const a=ask(first),b=ask('Уже обработали неделю назад',{contact:a.contact});assert.equal(b.contact.groomingParasites,'TREATED');
+ const c=ask('Когда можно приехать?',{contact:b.contact});assert.match(c.text,/обработка уже проведена/);assert.doesNotMatch(c.text,/С обработкой.*поможет врач/);
+ const different=ask('А для корги сколько стоит?',{contact:a.contact,contextText:first+'\n\nА для корги сколько стоит?'});assert.doesNotMatch(different.text,/той-пуделя/);assert.equal(different.contact.groomingPriceContext.unlistedBreed,undefined);assert.equal(different.contact.groomingParasites,undefined);
+ for(const text of ['У йорка нет клещей, сколько полный комплекс?','У йорка нет паразитов, сколько полный комплекс?','У йорка блох не обнаружили, сколько полный комплекс?'])assert.notEqual(ask(text).reason,'GROOMING_CARE_PREPARATION');
+ assert.equal(ask('У йорка нет блох, но есть клещи. Сколько полный комплекс?').contact.groomingParasites,'NEEDS_CLINIC');
 });
 test('contact evidence remains tied to the current original message and survives a later name',()=>{
  const a=ask('Хочу записать йорка, мой телефон +79001234567',{messageId:'phone'});

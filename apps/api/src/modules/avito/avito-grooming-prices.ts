@@ -163,8 +163,8 @@ export function groomingPriceAnswer(context: PetServiceContext, text: string, pr
   if (species && species !== state.species) { state.species = species; delete state.breedRowIds; delete state.condition; delete state.unlistedBreed; }
   // Reuse a known breed for short service/price follow-ups only. An unmatched
   // pet description (e.g. "а для корги?") must not inherit the previous dog's price.
-  if (state.species === 'DOG' && state.breedRowIds?.length && !foundBreeds.length && !foundExtra && (groomingPriceQuestion(t) || serviceMention || species)
-    && words(t).some(w => !breedFollowupWords.has(w) && !rows.some(r => words(r.serviceName).includes(w)))) delete state.breedRowIds;
+  if (state.species === 'DOG' && (state.breedRowIds?.length || state.unlistedBreed) && !toyPoodle && !foundBreeds.length && !foundExtra && (groomingPriceQuestion(t) || serviceMention || species)
+    && words(t).some(w => !breedFollowupWords.has(w) && !rows.some(r => words(r.serviceName).includes(w)))) { delete state.breedRowIds; delete state.unlistedBreed; }
   if (toyPoodle) { state.species = 'DOG'; state.unlistedBreed = 'той-пуделя'; delete state.breedRowIds; delete state.extraKey; }
   if (foundBreeds.length) { state.species = 'DOG'; state.breedRowIds = foundBreeds.map(r => r.breedRowId).slice(0, 8); delete state.extraKey; delete state.unlistedBreed; }
   if (uncertainCondition) delete state.condition;
