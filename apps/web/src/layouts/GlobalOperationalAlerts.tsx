@@ -1,7 +1,7 @@
 import { hasPermission } from '../auth/permissions';
 import { useCurrentEmployee } from '../auth/useAuth';
 import { dismissVaccinationReminders } from '../features/animals/animals.api';
-import { ExclamationCircleOutlined, EyeOutlined, MedicineBoxOutlined } from '@ant-design/icons';
+import { ExclamationCircleOutlined, EyeOutlined, MedicineBoxOutlined, MessageOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Button, Drawer, Input, List, Modal, Space, Tag, Typography } from 'antd';
 import { useState } from 'react';
@@ -66,13 +66,14 @@ export function GlobalOperationalAlerts({
     'TODAY_VACCINATION',
     'OVERDUE_VACCINATION',
   ].includes(item.kind));
+  const avitoUnread = otherUnreadAlerts.filter(item => item.kind === 'AVITO_MESSAGE');
   const unreadConversations = (internalMessages?.items ?? [])
     .filter((conversation) => conversation.unreadCount > 0)
     .sort((left, right) => new Date(right.lastMessage.createdAt).getTime() - new Date(left.lastMessage.createdAt).getTime());
   const latestUnreadConversation = clinicalOnly ? undefined : unreadConversations[0];
 
   async function openAlert(item: StaffAlertItem) {
-    if (item.unread) await markReadMutation.mutateAsync(item.key);
+    if (item.unread) await markReadMutation.mutateAsync({ key: item.key, version: item.version });
     setVaccinationsOpen(false);
     navigate(item.href);
   }
@@ -97,6 +98,10 @@ export function GlobalOperationalAlerts({
         {remoteAccessMode && !clinicalOnly ? <Tag icon={<EyeOutlined />} className="operational-remote-mode" title={remoteAccessMode === 'director' ? 'Изменения разрешены по вашим правам и сохраняются в аудите' : 'Удалённый просмотр: изменение рабочих данных заблокировано'}>{remoteAccessMode === 'director' ? 'Удалённая работа директора' : 'Удалённый просмотр'}</Tag> : null}
         <span className="operational-focus-label">{overdueVisits.length || vaccinationAlerts.length ? 'Требуют внимания' : 'Оповещения'}</span>
         <div className="operational-focus-actions">
+          {avitoUnread.length ? <button type="button" className="operational-focus-pill" onClick={() => void openAlert(avitoUnread[0])}
+            aria-label={`Диалоги с новыми сообщениями Авито: ${avitoUnread.length}. Открыть последний диалог.`}>
+            <MessageOutlined /><span>Авито</span><strong>{avitoUnread.length}</strong>
+          </button> : null}
           {overdueVisits.length ? <button type="button" className="operational-focus-pill is-urgent" onClick={() => void openAlert(overdueVisits[0])}
             aria-label={`Незавершённые приёмы более часа: ${overdueVisits.length}. Открыть самый давний приём.`}>
             <ExclamationCircleOutlined /><span>Приёмы</span><strong>{overdueVisits.length}</strong>

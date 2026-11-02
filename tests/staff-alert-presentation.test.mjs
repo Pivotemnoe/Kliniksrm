@@ -12,13 +12,21 @@ const item = (key, kind, extra = {}) => ({ key, kind, title: key, description: '
   occurredAt: '2026-10-19T08:00:00Z', severity: 'warning', unread: true, href: '/visits/one', version: '1', readAt: null, ...extra });
 
 test('every authorized event appears in exactly one group and input is unchanged', () => {
-  const kinds = ['UNFINISHED_VISIT', 'TODAY_VACCINATION', 'OVERDUE_VACCINATION', 'FAILED_DELIVERY', 'ONLINE_REQUEST', 'UNPAID_BILL', 'BILL_OVERPAYMENT', 'PREVENTION_REPORT', 'LOW_STOCK', 'NEWS', 'DIRECTOR_BRIEFING'];
+  const kinds = ['UNFINISHED_VISIT', 'TODAY_VACCINATION', 'OVERDUE_VACCINATION', 'FAILED_DELIVERY', 'ONLINE_REQUEST', 'AVITO_MESSAGE', 'UNPAID_BILL', 'BILL_OVERPAYMENT', 'PREVENTION_REPORT', 'LOW_STOCK', 'NEWS', 'DIRECTOR_BRIEFING'];
   const items = kinds.map((kind, i) => item(String(i), kind));
   const before = structuredClone(items);
   const visible = presentStaffAlerts(items, 'all').flatMap(group => group.items);
   assert.deepEqual(visible.map(event => event.key).sort(), items.map(event => event.key).sort());
   assert.equal(new Set(visible.map(event => event.key)).size, kinds.length);
   assert.deepEqual(items, before);
+});
+
+test('Avito is visible in work alerts with a direct conversation action', () => {
+  const groups = presentStaffAlerts([item('avito', 'AVITO_MESSAGE')], 'action');
+  assert.equal(groups[0].id, 'avito');
+  assert.equal(groups[0].title, 'Сообщения Авито');
+  assert.equal(module.exports.alertActionLabel(groups[0].items[0]), 'Открыть диалог Авито');
+  assert.deepEqual(presentStaffAlerts(groups[0].items, 'information'), []);
 });
 
 test('viewing an overdue clinical event does not remove unfinished work', () => {

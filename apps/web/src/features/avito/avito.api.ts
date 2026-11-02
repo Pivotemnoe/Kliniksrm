@@ -31,7 +31,7 @@ export type AvitoConversation = {
   id: string; externalChatId: string; listingId: string | null; listingTitle: string | null; customerName: string | null; direction: string;
   mode: string; stage: string; needsAttention: boolean; version: number; requestId: string | null; lastMessageAt: string | null;
   intakeCycle: number;
-  messages: { id: string; direction: string; type: string; text: string; occurredAt: string }[];
+  messages: { id: string; direction: string; type: string; text: string; occurredAt: string; createdAt?: string }[];
   outbox?: Outgoing[]; inquiries: Inquiry[];
 };
 export type Call = { id: string; direction: string; occurredAt: string; missed: boolean; note: string | null };

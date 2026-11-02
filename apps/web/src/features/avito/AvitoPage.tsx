@@ -16,6 +16,7 @@ import { ModuleActions } from '../../shared/ui/ModuleActions';
 import { ModulePublicLink, groomingPublicUrl } from '../../shared/ui/ModulePublicLink';
 import { createOperationKey } from '../../shared/utils/operationKey';
 import { AvitoAccountListings } from './AvitoAccountListings';
+import { markStaffAlertRead } from '../staffAlerts/staffAlerts.api';
 
 const directions = Object.entries(directionLabels).filter(([value]) => value !== 'UNASSIGNED').map(([value, label]) => ({ value, label }));
 type InboxDirection = Direction | 'UNASSIGNED';
@@ -116,6 +117,18 @@ function Conversation({ id, overview, canOperate }: { id: string; overview: Avit
   const { message } = App.useApp(); const client = useQueryClient(); const navigate = useNavigate();
   const [text, setText] = useState(''); const [draft, setDraft] = useState<Outgoing>(); const [requestKey, setRequestKey] = useState(key);
   const query = useQuery({ queryKey: ['avito', 'conversation', id], queryFn: () => avitoApi.conversation(id), refetchInterval: 10000 }); const c = query.data;
+  const incomingId = c?.messages.filter(m => m.direction === 'IN' && m.type !== 'system').sort((a, b) =>
+    Date.parse(b.occurredAt) - Date.parse(a.occurredAt)
+    || Date.parse(b.createdAt || b.occurredAt) - Date.parse(a.createdAt || a.occurredAt)
+    || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0))[0]?.id;
+  useEffect(() => {
+    if (!incomingId || !overview.installation.enabled) return;
+    // Acknowledge exactly the displayed incoming message. A newer arrival keeps
+    // its unread badge even if it races this request or a background refresh.
+    void markStaffAlertRead({ key: `avito:${id}`, version: incomingId })
+      .then(() => client.invalidateQueries({ queryKey: ['staff-alerts'] }))
+      .catch(() => { void client.invalidateQueries({ queryKey: ['staff-alerts'] }); });
+  }, [id, incomingId, overview.installation.enabled, client]);
   const [params, setParams] = useSearchParams();
   useEffect(() => {
     if (c && inboxDirections.includes(c.direction as InboxDirection) && params.get('direction') !== c.direction) setParams(previous => { previous.set('direction', c.direction); return previous; }, { replace: true });

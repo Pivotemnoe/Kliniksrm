@@ -38,7 +38,7 @@ export function StaffAlertsPopover({ unreadMessages = 0, open: controlledOpen, o
 
   async function openAlert(item: StaffAlertItem) {
     try {
-      if (item.unread) await markReadMutation.mutateAsync(item.key);
+      if (item.unread) await markReadMutation.mutateAsync({ key: item.key, version: item.version });
       changeOpen(false);
       navigate(item.href);
     } catch { /* The mutation displays its error; retain the event and drawer. */ }

@@ -1,9 +1,14 @@
-import { Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import { IsOptional, IsString, MaxLength } from 'class-validator';
 import { AuthEmployee } from '../auth/auth.types';
 import { CurrentEmployee } from '../auth/decorators/current-employee.decorator';
 import { AllowRemoteMutation } from '../auth/decorators/allow-remote-mutation.decorator';
 import { StaffAlertsService } from './staff-alerts.service';
+
+class ReadStaffAlertDto {
+  @IsOptional() @IsString() @MaxLength(128) version?: string;
+}
 
 @ApiTags('staff-alerts')
 @Controller('v1/staff-alerts')
@@ -26,7 +31,7 @@ export class StaffAlertsController {
   @Post(':alertKey/read')
   @AllowRemoteMutation()
   @ApiOkResponse({ description: 'One currently visible staff alert marked as read.' })
-  markRead(@Param('alertKey') alertKey: string, @CurrentEmployee() actor: AuthEmployee) {
-    return this.staffAlertsService.markRead(alertKey, actor);
+  markRead(@Param('alertKey') alertKey: string, @CurrentEmployee() actor: AuthEmployee, @Body() body: ReadStaffAlertDto) {
+    return this.staffAlertsService.markRead(alertKey, actor, body?.version);
   }
 }

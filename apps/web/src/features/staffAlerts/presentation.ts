@@ -1,11 +1,12 @@
 import type { StaffAlertItem } from './types';
 
 export type AlertView = 'action' | 'information' | 'all';
-export type AlertGroupId = 'visits' | 'vaccinations' | 'requests' | 'delivery' | 'finance' | 'stock' | 'reports' | 'information';
+export type AlertGroupId = 'visits' | 'vaccinations' | 'requests' | 'avito' | 'delivery' | 'finance' | 'stock' | 'reports' | 'information';
 export type AlertGroup = { id: AlertGroupId; title: string; items: StaffAlertItem[]; unread: number; urgent: boolean };
 
 const groups: Record<AlertGroupId, string> = {
   visits: 'Незавершённые приёмы', vaccinations: 'Вакцинации', requests: 'Заявки клиентов',
+  avito: 'Сообщения Авито',
   delivery: 'Доставка сообщений', finance: 'Счета и оплаты', stock: 'Склад',
   reports: 'Отчёты по профилактике', information: 'Новости и сводки',
 };
@@ -16,6 +17,7 @@ export function alertGroupId(item: StaffAlertItem): AlertGroupId {
     case 'UNFINISHED_VISIT': return 'visits';
     case 'TODAY_VACCINATION': case 'OVERDUE_VACCINATION': return 'vaccinations';
     case 'ONLINE_REQUEST': return 'requests';
+    case 'AVITO_MESSAGE': return 'avito';
     case 'FAILED_DELIVERY': return 'delivery';
     case 'UNPAID_BILL': case 'BILL_OVERPAYMENT': return 'finance';
     case 'LOW_STOCK': return 'stock';
@@ -51,6 +53,7 @@ export function alertActionLabel(item: StaffAlertItem) {
     case 'UNFINISHED_VISIT': return 'Открыть приём';
     case 'TODAY_VACCINATION': case 'OVERDUE_VACCINATION': return 'Открыть пациента';
     case 'ONLINE_REQUEST': return 'Разобрать заявки';
+    case 'AVITO_MESSAGE': return 'Открыть диалог Авито';
     case 'UNPAID_BILL': case 'BILL_OVERPAYMENT': return 'Открыть счета';
     case 'LOW_STOCK': return 'Проверить остатки';
     case 'FAILED_DELIVERY': return 'Проверить доставку';

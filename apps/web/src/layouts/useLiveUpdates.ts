@@ -10,6 +10,7 @@ const scopeQueryKeys: Record<string, string[]> = {
   hospital: ['hospital', 'visits', 'bills', 'stock', 'dashboard'],
   'online-requests': ['online-requests', 'online-request-attention', 'staff-alerts', 'dashboard'],
   'internal-messages': ['internal-messages'],
+  avito: ['avito', 'staff-alerts'],
   laboratory: ['laboratory', 'visits', 'dashboard'],
   owners: ['owners', 'animals', 'visits', 'hospital'],
   'pet-hotel': ['pet-hotel'],

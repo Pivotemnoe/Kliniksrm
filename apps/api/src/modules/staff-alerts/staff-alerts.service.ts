@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
   NotificationStatus,
   OnlineRequestStatus,
@@ -16,12 +16,13 @@ import {
   VISIT_OVERDUE_THRESHOLD_MINUTES,
 } from '../visits/visit-overdue';
 import { groupVaccinationDues, resolveVaccinationDues } from '../animals/vaccination-due';
+import { avitoMessageAlerts } from './avito-message-alerts';
 
 type StaffAlertSeverity = 'info' | 'warning' | 'error';
 
 type StaffAlertCandidate = {
   key: string;
-  kind: 'UNFINISHED_VISIT' | 'TODAY_VACCINATION' | 'OVERDUE_VACCINATION' | 'FAILED_DELIVERY' | 'ONLINE_REQUEST' | 'UNPAID_BILL' | 'BILL_OVERPAYMENT' | 'PREVENTION_REPORT' | 'LOW_STOCK' | 'NEWS' | 'DIRECTOR_BRIEFING';
+  kind: 'UNFINISHED_VISIT' | 'TODAY_VACCINATION' | 'OVERDUE_VACCINATION' | 'FAILED_DELIVERY' | 'ONLINE_REQUEST' | 'AVITO_MESSAGE' | 'UNPAID_BILL' | 'BILL_OVERPAYMENT' | 'PREVENTION_REPORT' | 'LOW_STOCK' | 'NEWS' | 'DIRECTOR_BRIEFING';
   title: string;
   description: string;
   href: string;
@@ -68,10 +69,13 @@ export class StaffAlertsService {
     };
   }
 
-  async markRead(alertKey: string, actor: AuthEmployee) {
+  async markRead(alertKey: string, actor: AuthEmployee, expectedVersion?: string) {
     const alert = (await this.buildCandidates(actor)).find((item) => item.key === alertKey);
     if (!alert) {
       throw new NotFoundException('Оповещение уже неактуально или недоступно этому сотруднику');
+    }
+    if (alert.kind === 'AVITO_MESSAGE' && expectedVersion !== alert.version) {
+      throw new ConflictException('В диалоге новое сообщение. Обновите оповещения перед отметкой о прочтении.');
     }
 
     const read = await this.prisma.staffAlertRead.upsert({
@@ -135,7 +139,7 @@ export class StaffAlertsService {
       : [];
     const warehouseIds = warehouseAccesses.map((access) => access.warehouseId);
 
-    const [visits, failedDeliveries, onlineRequests, unpaidBills, stockProducts, unreadNews, vaccinationCandidates, directorBriefings, overpaidBills, preventionReports] = await Promise.all([
+    const [visits, failedDeliveries, onlineRequests, unpaidBills, stockProducts, unreadNews, vaccinationCandidates, directorBriefings, overpaidBills, preventionReports, avitoAlerts] = await Promise.all([
       this.prisma.visit.findMany({
         where: { ...buildOverdueVisitWhere(now), animal: { archivedAt: null } },
         orderBy: { startedAt: 'asc' },
@@ -237,6 +241,7 @@ export class StaffAlertsService {
       (can('reports.prevention.read') || can('reports.prevention.generate') || can('settings.read') || can('settings.manage')) ? this.loadOptionalCandidates('prevention reports', () => this.prisma.monthlyPreventionReport.findMany({
         orderBy: [{ month: 'desc' }, { revision: 'desc' }], take: 1, select: { id: true, month: true, revision: true, status: true, createdAt: true },
       })) : Promise.resolve([]),
+      avitoMessageAlerts(this.prisma, actor),
     ]);
 
     const items: StaffAlertCandidate[] = visits.map((visit) => {
@@ -391,7 +396,7 @@ export class StaffAlertsService {
       });
     }
 
-    return items;
+    return [...items, ...avitoAlerts];
   }
 
   private async loadOptionalCandidates<T>(section: string, load: () => Promise<T[]>): Promise<T[]> {

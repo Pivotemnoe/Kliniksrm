@@ -191,7 +191,7 @@ export function groomingPriceAnswer(context: PetServiceContext, text: string, pr
   else {
     if (!state.species) { state.awaiting = 'PET'; return result('', 'Кого планируете привести — кошку или собаку? Если собаку, напишите породу.'); }
     if (state.species === 'DOG') {
-      if (state.unlistedBreed) { delete state.awaiting; return result(`Для ${state.unlistedBreed} точную стоимость ${state.kind === 'hygiene' ? 'гигиенического ухода' : 'полного комплекса'} уточнит администратор: отдельная цена для этой разновидности в прайсе не указана.`); }
+      if (state.unlistedBreed) { delete state.awaiting; return result(`Для ${state.unlistedBreed} точную стоимость ${state.kind === 'hygiene' ? 'гигиенического ухода' : 'полного комплекса'} уточнит администратор.`); }
       if (!state.breedRowIds?.length) { state.awaiting = 'BREED'; return result('', 'Какой породы собака? Для метиса напишите примерный вес.'); }
       const breedRows = [...new Map(rows.filter(r => state.breedRowIds!.includes(r.breedRowId)).map(r => [r.breedRowId, r])).values()];
       if (!breedRows.length) { delete state.breedRowIds; state.awaiting = 'BREED'; return result('Для этой породы стоимость уточнит администратор.'); }
