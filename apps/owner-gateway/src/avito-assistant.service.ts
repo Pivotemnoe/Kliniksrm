@@ -4,6 +4,7 @@ import { PrismaService } from './prisma.service';
 import { AvitoAssistantModel, validateAvitoModelInput } from './avito-assistant.model';
 import { ClinicAssistantModelError } from './clinic-assistant-openai.client';
 import { validateAvitoCopyInput } from './avito-copy.contract';
+import { validateAvitoReplyInput } from './avito-reply.contract';
 
 @Injectable()
 export class AvitoAssistantService {
@@ -17,6 +18,12 @@ export class AvitoAssistantService {
     const input = { ...parsed, clientKey: createHash('sha256').update(`AD_COPY:${parsed.clientKey}`).digest('hex') };
     const prepared = this.model.prepareCopy(input);
     return this.run(input, prepared, () => this.model.copy(input, prepared));
+  }
+  async reply(raw: unknown) {
+    const parsed = validateAvitoReplyInput(raw);
+    const input = { ...parsed, clientKey: createHash('sha256').update(`DIALOGUE_REPLY:${parsed.clientKey}`).digest('hex') };
+    const prepared = this.model.prepareReply(input);
+    return this.run(input, prepared, () => this.model.reply(input, prepared));
   }
   private async run(input: { clientKey: string; direction: string }, prepared: ReturnType<AvitoAssistantModel['prepare']>, generate: () => Promise<{ result: object; chargedMicroUsd: number }>) {
     const hash = createHash('sha256').update(JSON.stringify(input)).digest('hex');

@@ -14,8 +14,8 @@ export function clinicServiceFamily(text: string): ClinicServiceFamily | null {
 }
 export function petSpecies(text: string): 'CAT' | 'DOG' | null {
   const value = normalized(text);
-  const cat = /(?:^|[^а-я])(?:кошк[а-я]*|кота?|коту|котом|котен[а-я]*|котят[а-я]*)(?=$|[^а-я])/u.test(value);
-  const dog = /(?:^|[^а-я])(?:собак[а-я]*|щен[а-я]*|пес|пса)(?=$|[^а-я])/u.test(value);
+  const cat = /(?:^|[^а-яa-z])(?:кошк[а-я]*|кошеч[а-я]*|кошат[а-я]*|киск[а-я]*|кот(?:а|у|ом|ик[а-я]*|ейк[а-я]*|ен[а-я]*|ят[а-я]*)?|cat|kitten)(?=$|[^а-яa-z])/u.test(value);
+  const dog = /(?:^|[^а-яa-z])(?:собак[а-я]*|собач[а-я]*|собац[а-я]*|щен[а-я]*|пес(?:ик[а-я]*)?|пса|псу|псом|dog|puppy)(?=$|[^а-яa-z])/u.test(value);
   return cat === dog ? null : cat ? 'CAT' : 'DOG';
 }
 export function canonicalClinicQuery(text: string) {

@@ -6,7 +6,7 @@ import { administratorWorking, dutyDoctorReply, groomingAdministratorNotice, gro
 import { clinicPhoneText, clinicUrgency, currentMedicalText } from './avito-clinic-guidance';
 import { petSpecies } from './avito-service-query';
 import { petServiceAnswer, PetServiceContext } from './avito-pet-services';
-import { groomingNonPriceQuantityQuestion, groomingPriceAnswer, groomingPriceQuestion, groomingPriceFingerprint, withGroomingPricePrefix, type GroomingPriceContext } from './avito-grooming-prices';
+import { groomingMissingDetails, groomingRequestContext, groomingNonPriceQuantityQuestion, groomingPriceAnswer, groomingPriceQuestion, groomingPriceFingerprint, withGroomingPricePrefix, type GroomingPriceContext } from './avito-grooming-prices';
 
 export type ContactState = { groomingParasites?: 'NEEDS_CLINIC' | 'TREATED'; groomingPriceContext?: GroomingPriceContext; bookingChoiceOffered?: boolean; bookingChannel?: 'WEBSITE' | 'CALLBACK'; name?: string; phone?: string; callbackAt?: string; callbackMessageId?: string; collecting?: boolean; reason?: string; summary?: string; serviceQuestionAsked?: boolean; awaitingServiceDetails?: boolean; serviceDetails?: string; petSpecies?: 'CAT' | 'DOG'; petAge?: string; petSexKnown?: boolean; referralKnown?: boolean };
 export type AdminDecision = { text: string | null; purpose: 'REPLY' | 'CRM_REPLY' | 'CONTACT' | 'SUBMITTED'; handoff: boolean; needsAttention?: boolean; createInquiry: boolean; direction: Direction | null; reason: string; contact: ContactState; prompt?: string; petServiceBooking?: boolean; petServiceChannel?: 'WEBSITE'; groomingPriceFingerprint?: string; groomingPricePrefix?: string };
@@ -47,8 +47,10 @@ function applyGroomingPrice(input: DecisionInput, decision: AdminDecision): Admi
   const mixedCarePrice = /блох|клещ|паразит/iu.test(requestText) && /стриж|подстр|груминг/iu.test(requestText);
   if (decision.direction !== 'GROOMING' || input.petService?.direction !== 'GROOMING' || input.mode && input.mode !== 'BOT'
     || input.mediaType && input.mediaType !== 'text' || decision.reason === 'MEDICAL' && !mixedCarePrice || ['URGENT', 'CONTACT_DECLINED', 'DIRECT_HUMAN_REQUEST', 'HUMAN_CONTROL', 'UNSUPPORTED_MEDIA'].includes(decision.reason)) return decision;
-  const priceIntent = input.intent?.action === 'PRICE' || input.intent?.questions?.some(question => question.kind === 'PRICE') || groomingPriceQuestion(requestText);
-  const price = groomingPriceAnswer(input.petService, input.text, input.contact?.groomingPriceContext, priceIntent);
+  const pendingPriceDetail = input.contact?.groomingPriceContext?.priceRequested && input.contact.groomingPriceContext.awaiting
+    && !groomingNonPriceQuantityQuestion(input.text) && !/^(?:спасибо|понятно|хорошо|до свидания)[.!\s]*$/iu.test(input.text.trim());
+  const priceIntent = input.intent?.action === 'PRICE' || input.intent?.questions?.some(question => question.kind === 'PRICE') || groomingPriceQuestion(requestText) || pendingPriceDetail;
+  const price = groomingPriceAnswer(input.petService, input.text, decision.contact.groomingPriceContext, priceIntent);
   if (!price) return decision;
   const contact = { ...decision.contact, groomingPriceContext: price.context };
   if (!contact.collecting) contact.summary = [requestText, price.answer].filter(Boolean).join('\n').slice(0, 2000);
@@ -60,7 +62,7 @@ function applyGroomingPrice(input: DecisionInput, decision: AdminDecision): Admi
     : 'Могу оформить заявку здесь, чтобы администратор уточнил детали и помог с записью. Оставим заявку?';
   if (price.question) delete contact.bookingChoiceOffered; else contact.bookingChoiceOffered = true;
   return { ...priced, text: [price.answer, ...groomingOrganizationalAnswers(input), price.question || offer].filter(Boolean).join('\n\n'), reason: price.question ? 'GROOMING_PRICE_CLARIFY' : 'GROOMING_PRICE',
-    purpose: 'REPLY', handoff: false, needsAttention: !price.quoted && !price.question, createInquiry: false, petServiceBooking: undefined, petServiceChannel: undefined };
+    purpose: 'REPLY', handoff: false, needsAttention: Boolean(price.context.unlistedBreed) || !price.quoted && !price.question, createInquiry: false, petServiceBooking: undefined, petServiceChannel: undefined };
 }
 function groomingOrganizationalAnswers(input: DecisionInput) {
   const text = input.contextText ?? input.text;
@@ -76,7 +78,7 @@ function applyGroomingCare(input: DecisionInput, decision: AdminDecision): Admin
   const text = (input.contextText ?? input.text).toLocaleLowerCase('ru-RU').replace(/ё/g, 'е');
   const latest = input.text.toLocaleLowerCase('ru-RU').replace(/ё/g, 'е');
   const before = input.contact?.groomingPriceContext, after = decision.contact.groomingPriceContext;
-  const petChanged = before && after && (before.species !== after.species || Boolean(before.unlistedBreed) && !after.unlistedBreed || Boolean(before.breedRowIds?.length) && before.breedRowIds?.join(',') !== after.breedRowIds?.join(','));
+  const petChanged = before && after && (before.species !== after.species || Boolean(before.unlistedBreed) && before.unlistedBreed !== after.unlistedBreed || Boolean(before.breedRowIds?.length) && before.breedRowIds?.join(',') !== after.breedRowIds?.join(','));
   if (petChanged && !/блох|клещ|паразит/u.test(latest)) delete decision.contact.groomingParasites;
   const shortTreatmentFollowup = Boolean(decision.contact.groomingParasites && !petChanged && /обработ|паразит|блох|клещ/u.test(latest));
   const evidence = petChanged || /блох|клещ|паразит/u.test(latest) || shortTreatmentFollowup ? latest : text;
@@ -104,6 +106,15 @@ function decideCore(input: DecisionInput): AdminDecision {
   const profile = rule && settings.profiles.find(p => p.direction === rule.direction && p.enabled);
   if (!profile) return { ...base, handoff: true, reason: 'UNMAPPED_LISTING' };
   base.direction = profile.direction; base.prompt = effectivePrompt(profile, rule);
+  if (profile.direction === 'GROOMING' && input.petService?.direction === 'GROOMING') {
+    const before = contact.groomingPriceContext;
+    const pending = input.contextText ? groomingRequestContext(input.petService, input.contextText, contact.groomingPriceContext) : contact.groomingPriceContext;
+    contact.groomingPriceContext = groomingRequestContext(input.petService, text, pending);
+    const after = contact.groomingPriceContext;
+    if (before && (before.species !== after.species || before.unlistedBreed !== after.unlistedBreed || before.breedRowIds?.join(',') !== after.breedRowIds?.join(',')) && !after.age) delete contact.petAge;
+    if (contact.groomingPriceContext.species) contact.petSpecies = contact.groomingPriceContext.species;
+    if (contact.groomingPriceContext.age) contact.petAge = contact.groomingPriceContext.age;
+  }
   const offHours = profile.direction === 'CLINIC' && !input.skipAvailability && !administratorWorking(settings, input.now);
   const t = settings.templates;
   const normalized = text.toLocaleLowerCase('ru-RU').replace(/ё/g, 'е').trim();
@@ -204,10 +215,14 @@ function decideCore(input: DecisionInput): AdminDecision {
     const awaiting = contact.groomingPriceContext?.awaiting;
     const knownPet = contact.groomingPriceContext?.species || contact.petSpecies;
     contact.groomingPriceContext ??= { awaiting: 'PET' };
-    const question = awaiting === 'PET' ? 'У вас кошка или собака? Если собака, напишите породу.'
+    const priceState = contact.groomingPriceContext;
+    if (knownPet && !priceState.unlistedBreed && !priceState.kind) { priceState.awaiting = 'SERVICE'; priceState.priceRequested = true; }
+    const question = priceState?.unlistedBreed ? groomingMissingDetails(priceState) || 'Спасибо, данные о собачке сохранил в диалоге. Стоимость уточнит администратор.'
+      : awaiting === 'PET' && !knownPet ? 'У вас кошка или собака? Если собака, напишите породу.'
       : awaiting === 'BREED' ? 'Какой породы собака? Для метиса напишите примерный вес.'
       : awaiting === 'SERVICE' ? 'Какая услуга нужна — полный комплекс, гигиенический уход или вычёсывание?'
       : awaiting === 'CONDITION' ? 'Подскажите, у кошки есть колтуны?'
+      : knownPet && !priceState?.kind ? 'Какая услуга нужна — полный комплекс, гигиенический уход или вычёсывание?'
       : knownPet ? 'Что ещё хотите уточнить по грумингу — стоимость, уход или запись?'
       : 'Подскажите, какой у вас питомец и какая услуга нужна — стрижка, гигиенический уход или вычёсывание?';
     const ping = /^(?:вы\s+(?:тут|здесь|на\s+связи)|кто[ -]нибудь\s+есть|ау|алло|ответьте|\?+)[\s.!?]*$/u.test(normalized);

@@ -27,7 +27,7 @@ test('activation boundary, bounded text and missing latest are handled without l
 });
 test('the two-message enquiry answers preparation, stated age, known variety and arrival without another breed question',()=>{
  const preview=ask(first),d=ask(second,{contact:preview.contact,contextText:first+'\n\n'+second});
- assert.equal(d.reason,'GROOMING_CARE_PREPARATION');assert.match(d.text,/врач|препарат/);assert.match(d.text,/4 месяца/);assert.match(d.text,/той-пуделя/);assert.match(d.text,/время.*администратор/isu);assert.match(d.text,/стоимость/);
+ assert.equal(d.reason,'GROOMING_CARE_PREPARATION');assert.match(d.text,/врач|препарат/);assert.match(d.text,/4 месяца/);assert.match(d.text,/той-пуделя/);assert.match(d.text,/время.*администратор/isu);assert.match(d.text,/стоимость/iu);
  assert.doesNotMatch(d.text,/Какой породы|Для метиса|Пудель карликовый|Пудель королевский|1\s*900|2\s*100|600–800|230|недел/);assert.equal(d.handoff,false);assert.equal(d.needsAttention,true);
 });
 test('ordinary multi-message prices use current CRM rows and retain a later address/arrival request',()=>{
@@ -37,7 +37,7 @@ test('ordinary multi-message prices use current CRM rows and retain a later addr
 test('primary intent variations cannot erase either grooming price, preparation or arrival',()=>{
  for(const action of ['MEDICAL','PRICE','HOURS','BOOKING','OTHER']){
   const d=ask(second,{contact:ask(first).contact,contextText:first+'\n\n'+second,intent:{action,knowledgeId:null,serviceQuery:null}});
-  assert.match(d.text,/врач/);assert.match(d.text,/той-пуделя/);assert.match(d.text,/стоимость/);assert.match(d.text,/время.*администратор/isu);assert.doesNotMatch(d.text,/Какой породы|Пудель карликовый/);
+  assert.match(d.text,/врач/);assert.match(d.text,/той-пуделя/);assert.match(d.text,/стоимость/iu);assert.match(d.text,/время.*администратор/isu);assert.doesNotMatch(d.text,/Какой породы|Пудель карликовый/);
  }
  assert.equal(ask('Той-пудель необработан от блох, когда можно на стрижку?').contact.groomingParasites,'NEEDS_CLINIC');
 });
@@ -60,7 +60,7 @@ test('care composition retains address and the chosen website channel',()=>{
 test('short treatment follow-ups update the existing concern and do not contaminate a different pet',()=>{
  const a=ask(first),b=ask('Уже обработали неделю назад',{contact:a.contact});assert.equal(b.contact.groomingParasites,'TREATED');
  const c=ask('Когда можно приехать?',{contact:b.contact});assert.match(c.text,/обработка уже проведена/);assert.doesNotMatch(c.text,/С обработкой.*поможет врач/);
- const different=ask('А для корги сколько стоит?',{contact:a.contact,contextText:first+'\n\nА для корги сколько стоит?'});assert.doesNotMatch(different.text,/той-пуделя/);assert.equal(different.contact.groomingPriceContext.unlistedBreed,undefined);assert.equal(different.contact.groomingParasites,undefined);
+ const different=ask('А для корги сколько стоит?',{contact:a.contact,contextText:first+'\n\nА для корги сколько стоит?'});assert.doesNotMatch(different.text,/той-пуделя/);assert.equal(different.contact.groomingPriceContext.unlistedBreed,'корги');assert.equal(different.contact.groomingParasites,undefined);
  for(const text of ['У йорка нет клещей, сколько полный комплекс?','У йорка нет паразитов, сколько полный комплекс?','У йорка блох не обнаружили, сколько полный комплекс?'])assert.notEqual(ask(text).reason,'GROOMING_CARE_PREPARATION');
  assert.equal(ask('У йорка нет блох, но есть клещи. Сколько полный комплекс?').contact.groomingParasites,'NEEDS_CLINIC');
 });

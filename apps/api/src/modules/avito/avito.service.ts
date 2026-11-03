@@ -15,6 +15,7 @@ import { loadPetServiceContext, petServiceAnswer } from './avito-pet-services';
 import { groomingPriceFingerprint, parseGroomingPriceContext, withGroomingPricePrefix } from './avito-grooming-prices';
 import { withAvitoListingSource } from './avito-booking-source';
 import { unansweredAvitoText } from './avito-unanswered-messages';
+import { avitoReplyPlan, type AvitoReplyPlan } from './avito-reply-composer';
 
 type DB = Prisma.TransactionClient;
 const safeError = (error: unknown) => error instanceof ServiceUnavailableException ? error.message : 'Операция не завершена. Проверьте соединение и конечный результат.';
@@ -377,7 +378,8 @@ export class AvitoService {
       const stop = decision.createInquiry || decision.handoff && (!decision.contact.collecting || ['URGENT', 'CONTACT_DECLINED', 'UNSUPPORTED_MEDIA', 'DIRECT_HUMAN_REQUEST', 'UNMAPPED_LISTING', 'CLINIC_PHONE_UNAVAILABLE'].includes(decision.reason));
       await tx.avitoConversation.update({ where: { id: current.id }, data: { contact: json(decision.contact), requestId, needsAttention: Boolean(decision.needsAttention || decision.handoff || decision.createInquiry), stage: decision.createInquiry ? 'TRANSFERRED' : decision.contact.collecting ? 'COLLECTING_CONTACT' : decision.reason, ...(stop ? { mode: 'HUMAN' } : {}) } });
       const petContext = decision.reason === 'PET_SERVICE_INFO' ? { petService: true, bookingIntent: decision.petServiceBooking || undefined, bookingChannel: decision.petServiceChannel } : {};
-      const replyContext = decision.direction === 'GROOMING' ? json({ ...petContext, groomingPriceFingerprint: decision.groomingPriceFingerprint, groomingPricePrefix: decision.groomingPricePrefix, groomingAdministratorWindow: groomingAdministratorWindow(settings, now) })
+      const aiPlan = this.model.configured() && typeof this.model.compose === 'function' ? avitoReplyPlan(decision, settings, now) : null;
+      const replyContext = decision.direction === 'GROOMING' ? json({ ...petContext, groomingPriceFingerprint: decision.groomingPriceFingerprint, groomingPricePrefix: decision.groomingPricePrefix, groomingAdministratorWindow: groomingAdministratorWindow(settings, now), ...(aiPlan ? { groomingAiPlan: aiPlan, groomingAiRequest: contextText || latest.content?.text || '' } : {}) })
         : decision.reason === 'PET_SERVICE_INFO' ? json(petContext)
         : clinic ? json({ administratorWorking: administratorWorking(settings, now), clinicPhone: clinic.phone, crmSuffix: decision.purpose === 'CRM_REPLY' && crmAnswer ? decision.text?.slice(crmAnswer.text.length) ?? '' : '', crmQuestions: intent?.questions ?? [] }) : undefined;
       if (decision.text) await tx.avitoOutgoingOperation.create({ data: { conversationId: current.id, triggerMessageId: latest.id, crmQuery: decision.purpose === 'CRM_REPLY' ? resolvedCrmQuery : null, replyContext, clientKey: `bot:${current.id}:${latest.id}`, text: decision.text, purpose: decision.purpose, conversationVersion: current.version, settingsVersion: integration.settingsVersion, status: settings.mode === 'AUTO' ? 'PENDING' : 'DRAFT' } });
@@ -439,6 +441,22 @@ export class AvitoService {
     if (!initial || initial.status !== 'PENDING' || initial.conversation.integrationId !== integration.id) return;
     // Observe manual answers made directly on Avito before claiming an automatic reply.
     await this.syncChat(initial.conversation.externalChatId);
+    // Model I/O is outside the transaction. The normal durable outbox and its
+    // version/price/hours checks still own delivery; a model failure uses the
+    // approved reply, never an unanswered message or a second external send.
+    const sourceContext = initial.replyContext as { groomingAiPlan?: AvitoReplyPlan; groomingAiRequest?: string; groomingAiStatus?: string } | null;
+    if (!initial.actorId && sourceContext?.groomingAiPlan && !sourceContext.groomingAiStatus && typeof this.model.compose === 'function') {
+      const current = await this.prisma.avitoOutgoingOperation.findUniqueOrThrow({ where: { id: initial.id }, include: { conversation: true } });
+      if (current.status !== 'PENDING' || current.conversation.mode !== 'BOT' || current.conversation.version !== initial.conversationVersion) return;
+      const liveSettings = parseAvitoSettings(integration.settings), profile = liveSettings.profiles.find(p => p.direction === 'GROOMING' && p.enabled);
+      const messages = await this.prisma.avitoMessage.findMany({ where: { conversationId: current.conversationId }, orderBy: [{ occurredAt: 'desc' }, { createdAt: 'desc' }], take: 32 });
+      const history: AvitoDialogueTurn[] = messages.reverse().filter(m => m.type === 'text' && m.externalId !== current.triggerMessageId && m.text !== 'Сообщение удалено')
+        .map(m => ({ role: m.direction === 'IN' ? 'user' : 'assistant', text: m.text }));
+      const text = profile ? await this.model.compose(`reply:${current.id}:${sourceContext.groomingAiPlan.sourceHash}`, profile, sourceContext.groomingAiRequest || '', sourceContext.groomingAiPlan.facts,
+        boundedAvitoHistory(history, (current.conversation.contact as ContactState).name)) : null;
+      await this.prisma.avitoOutgoingOperation.updateMany({ where: { id: current.id, status: 'PENDING', text: initial.text, conversationVersion: initial.conversationVersion },
+        data: { text: text || initial.text, replyContext: json({ ...sourceContext, groomingAiStatus: text ? 'MODEL' : 'FALLBACK', sourceReplyText: initial.text, groomingAiTextSha256: createHash('sha256').update(text || initial.text).digest('hex') }) } });
+    }
     const claimed = await this.prisma.$transaction(async tx => {
       await lockConversation(tx, initial.conversationId);
       const op = await tx.avitoOutgoingOperation.findUniqueOrThrow({ where: { id: operationId } });
@@ -450,7 +468,10 @@ export class AvitoService {
       if (!avitoPilotAllowsChat(c.externalChatId) || op.purpose === 'CONSENT' || !live.installation.enabled || c.version !== op.conversationVersion || (!op.actorId && (live.settingsVersion !== op.settingsVersion || settings.mode !== 'AUTO' || (c.mode !== 'BOT' && !allowedFinal)))) {
         await tx.avitoOutgoingOperation.update({ where: { id: op.id }, data: { status: 'CANCELLED', error: 'Диалог, режим или правила изменены' } }); return null;
       }
-      const context = op.replyContext as { petService?: boolean; bookingIntent?: boolean; bookingChannel?: 'WEBSITE'; groomingPriceFingerprint?: string; groomingPricePrefix?: string; groomingAdministratorWindow?: string; administratorWorking: boolean; clinicPhone: string | null; crmSuffix: string; crmQuestions?: AvitoCrmQuestion[] } | null;
+      const context = op.replyContext as { petService?: boolean; bookingIntent?: boolean; bookingChannel?: 'WEBSITE'; groomingPriceFingerprint?: string; groomingPricePrefix?: string; groomingAdministratorWindow?: string; sourceReplyText?: string; groomingAiTextSha256?: string; administratorWorking: boolean; clinicPhone: string | null; crmSuffix: string; crmQuestions?: AvitoCrmQuestion[] } | null;
+      if (context?.groomingAiTextSha256 && createHash('sha256').update(op.text).digest('hex') !== context.groomingAiTextSha256) {
+        await tx.avitoOutgoingOperation.update({ where: { id: op.id }, data: { status: 'CANCELLED', error: 'Сформированный ответ изменился. Нужна повторная проверка.' } }); return null;
+      }
       if (context?.groomingAdministratorWindow && context.groomingAdministratorWindow !== groomingAdministratorWindow(settings, this.now())) {
         await tx.avitoOutgoingOperation.update({ where: { id: op.id }, data: { status: 'CANCELLED', error: 'Рабочее время администратора изменилось. Нужен актуальный ответ.' } });
         await tx.avitoConversation.update({ where: { id: c.id }, data: { needsAttention: true } }); return null;
@@ -470,7 +491,7 @@ export class AvitoService {
         const source = priceSource ?? (mapping && settings.profiles.some(p => p.enabled && p.direction === mapping.direction) ? withAvitoListingSource(await loadPetServiceContext(tx, live.installation.organizationId, mapping.direction), mapping) : undefined);
         const answer = source && trigger ? petServiceAnswer(source, trigger.text, context.bookingIntent === true, context.bookingChannel === 'WEBSITE' ? 'WEBSITE' : undefined) : null;
         const currentAnswer = source?.direction === 'GROOMING' ? withGroomingPricePrefix(context.groomingPricePrefix, groomingReplyWithHours(settings, answer, this.now())) : answer;
-        if (!source || !trigger || currentAnswer !== op.text) {
+        if (!source || !trigger || currentAnswer !== (context.sourceReplyText ?? op.text)) {
           await tx.avitoOutgoingOperation.update({ where: { id: op.id }, data: { status: 'CANCELLED', error: 'Условия или доступность записи изменились. Нужен актуальный ответ.' } });
           await tx.avitoConversation.update({ where: { id: c.id }, data: { needsAttention: true } }); return null;
         }

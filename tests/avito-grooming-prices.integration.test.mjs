@@ -110,7 +110,7 @@ test('grooming prices read the current module and validate persisted replies bef
   });
   await t.test('a changed unlisted dog cannot reuse the earlier breed through persisted state',async()=>{
    const id=chat('breed-change');api.add(id,'breed-york','Сколько гигиена йорка?');let c=await load(id);assert.match(clean(draft(c).text),/2 100 ₽/);
-   api.add(id,'breed-corgi','А сколько для корги?');c=await load(id);assert.doesNotMatch(draft(c).text,/₽/);assert.equal(c.contact.groomingPriceContext.awaiting,'BREED');
+   api.add(id,'breed-corgi','А сколько для корги?');c=await load(id);assert.doesNotMatch(draft(c).text,/₽/);assert.equal(c.contact.groomingPriceContext.awaiting,'DETAILS');assert.doesNotMatch(draft(c).text,/Какой породы/);
    const sim=await service.simulate('202','Мальтезе',c.contact);assert.match(clean(sim.decision.text),/1 500 ₽/);
    api.add(id,'breed-maltese','Мальтезе');c=await load(id);assert.match(clean(draft(c).text),/1 500 ₽/);assert.equal(c.inquiries.length,0);
   });

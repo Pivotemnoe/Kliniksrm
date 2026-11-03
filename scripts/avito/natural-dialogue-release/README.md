@@ -1,0 +1,9 @@
+# Natural grooming dialogue release
+
+The bot now retains everyday pet terms and explicit unlisted breed names, collects missing weight/age without asking for already-known fields, and quotes the current catalogue rather than a similar breed. Exact catalogue names take precedence over shared adjectives; short breed and service messages survive real outgoing replies. Existing clinic/hotel and manual-takeover behavior is preserved.
+
+A new bounded `reply` operation uses the already approved model connection and its existing durable budget/cache. Instructions, facts, price selection and outgoing state remain in the clinic API on TECNO. The gateway only transports the model request. The model writes contextual prose; exact price/address/link/hours blocks come from the server. Rejected output or model unavailability falls back to the relevant approved reply. The existing durable outbox checks versions, staff takeover, prices and the administrator window after model I/O and before sending.
+
+The API publisher accepts exactly eighteen reviewed artifacts in six Avito modules, preserves the three existing native-push bindings, and changes only the API image. Prepare compares the complete running/bound-base/candidate inventories and schema, settings, prices, migrations and protected services. Use Verify after an ambiguous Apply response; do not retry Apply blindly.
+
+The gateway publisher accepts only four JavaScript artifacts. It preserves every other runtime file, credentials, startup and compose configuration, saves a private database dump and checks its archive index, and pins/recreates only the gateway service. It applies no migrations, seeding or production restoration. Separate image/configuration guards support rollback. Private plans, raw conversations and delivery receipts stay outside Git.

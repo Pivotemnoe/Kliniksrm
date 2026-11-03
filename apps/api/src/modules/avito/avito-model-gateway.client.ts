@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { CORE_ADMIN_PROMPT, DirectionProfile, ListingRule } from './avito.settings';
 import type { ListingFacts } from './avito-editor.policy';
 import type { AvitoCrmQuestion } from './avito-crm-knowledge.service';
+import { GROOMING_REPLY_PROMPT, renderAvitoModelReply, type AvitoReplyFacts } from './avito-reply-composer';
 
 export type AvitoModelIntent = { action: 'GREETING' | 'PRICE' | 'HOURS' | 'ADDRESS' | 'PHONE' | 'BOOKING' | 'MEDICAL' | 'HUMAN' | 'KNOWLEDGE' | 'OTHER'; knowledgeId: string | null; serviceQuery: string | null; questions?: AvitoCrmQuestion[] };
 const actions = ['GREETING', 'PRICE', 'HOURS', 'ADDRESS', 'PHONE', 'BOOKING', 'MEDICAL', 'HUMAN', 'KNOWLEDGE', 'OTHER'];
@@ -25,7 +26,7 @@ export function boundedAvitoHistory(history: AvitoDialogueTurn[], knownName?: st
 export class AvitoModelGatewayClient {
   enabled() { return process.env.AVITO_AI_ENABLED === 'true'; }
   configured() { try { this.configuration(); return this.enabled(); } catch { return false; } }
-  private configuration(operation: 'intent' | 'copy' = 'intent') {
+  private configuration(operation: 'intent' | 'copy' | 'reply' = 'intent') {
     const base = process.env.OWNER_GATEWAY_URL?.trim().replace(/\/+$/, ''); const secret = process.env.OWNER_GATEWAY_SYNC_SECRET?.trim();
     const url = new URL(`${base}/internal/v1/avito/${operation}`);
     const local = ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname);
@@ -50,6 +51,19 @@ export class AvitoModelGatewayClient {
         || result.serviceQuery !== null && (!['PRICE', 'HOURS'].includes(result.action) || typeof result.serviceQuery !== 'string' || !result.serviceQuery.trim() || result.serviceQuery.length > 256 || !contextText.includes(result.serviceQuery.toLocaleLowerCase('ru-RU')))
         || !validQuestionPlan(result.questions, input.text, contextText)) return null;
       return result;
+    } catch { return null; }
+  }
+  async compose(key: string, profile: DirectionProfile, text: string, facts: AvitoReplyFacts, history: AvitoDialogueTurn[] = []): Promise<string | null> {
+    if (!this.configured() || profile.direction !== 'GROOMING') return null;
+    const input = { clientKey: createHash('sha256').update(key).digest('hex'), direction: 'GROOMING', prompt: redactAvitoModelText(`${GROOMING_REPLY_PROMPT}\n\n${CORE_ADMIN_PROMPT}\n\n${profile.prompt}`).slice(0, 14000),
+      text: redactAvitoModelText(text).slice(-12000), history: boundedAvitoHistory(history), facts: JSON.parse(redactAvitoModelText(JSON.stringify(facts))) };
+    try {
+      const { url, secret } = this.configuration('reply');
+      const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Owner-Gateway-Secret': secret }, body: JSON.stringify(input), redirect: 'manual', signal: AbortSignal.timeout(18000) });
+      if (!response.ok || !response.body) return null;
+      const chunks: Uint8Array[] = []; let size = 0;
+      for await (const chunk of response.body as any) { size += chunk.length; if (size > 16384) throw Error(); chunks.push(chunk); }
+      return renderAvitoModelReply(JSON.parse(Buffer.concat(chunks).toString('utf8')), facts);
     } catch { return null; }
   }
   async generateCopy(key: string, direction: string, brief: string, rules: string, facts: ListingFacts): Promise<{ title: string; description: string } | null> {
