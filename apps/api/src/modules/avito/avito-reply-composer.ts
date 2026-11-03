@@ -46,7 +46,11 @@ export function renderAvitoModelReply(value: unknown, facts: AvitoReplyFacts): s
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).join(',') !== 'text') return null;
   const raw = (value as { text: unknown }).text;
   if (typeof raw !== 'string' || !raw.trim() || raw.length > 2200) return null;
-  let body = raw.trim();
+  let canonical = raw.trim();
+  // A model can repeat a protected paragraph literally and by its marker.
+  // Deduplicate that exact known paragraph; never alter an unverified fact.
+  for (const block of facts.requiredBlocks) if (canonical.split(`{{${block.id}}}`).length === 2 && canonical.split(block.text).length === 2) canonical = canonical.replace(block.text, '').trim();
+  let body = canonical;
   for (const block of facts.requiredBlocks) {
     const token = `{{${block.id}}}`;
     const tokens = body.split(token).length - 1, literals = body.split(block.text).length - 1;
@@ -70,7 +74,7 @@ export function renderAvitoModelReply(value: unknown, facts: AvitoReplyFacts): s
   if (facts.knownPet.age && /сколько.{0,45}(?:лет|месяц|год)|какой.{0,35}возраст|(?:уточните|подскажите).{0,35}возраст/u.test(questions)) return null;
   if (facts.missingFields.includes('WEIGHT') && !/вес/u.test(questions) || facts.missingFields.includes('AGE') && !/возраст|сколько.{0,20}(?:лет|месяц)/u.test(questions)) return null;
   if (facts.knownPet.breed && !facts.requiredBlocks.some(block => /₽|%/u.test(block.text)) && /стоим|цен/u.test(facts.approvedReply) && !/администратор/u.test(t)) return null;
-  let rendered = raw.trim();
+  let rendered = canonical;
   for (const block of facts.requiredBlocks) rendered = rendered.replace(`{{${block.id}}}`, block.text);
   if (rendered.length > 3500) return null;
   return rendered;

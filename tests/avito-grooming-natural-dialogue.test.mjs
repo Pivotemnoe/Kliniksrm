@@ -72,6 +72,7 @@ test('AI cannot invent a price, reopen the administrator, repeat known fields or
  const d=ask(original),facts=avitoReplyPlan(d,settings,at).facts,anchors=facts.requiredBlocks.map(b=>`{{${b.id}}}`).join('\n');
  const good=`${anchors}\nСтоимость для помапу уточнит администратор. Подскажите, пожалуйста, сколько весит собачка и какой у неё возраст?`;
  assert.ok(renderAvitoModelReply({text:good},facts));
+ const repeated=renderAvitoModelReply({text:good+' '+facts.requiredBlocks[0].text},facts);assert.ok(repeated);assert.equal(repeated.split(facts.requiredBlocks[0].text).length,2);
  for(const text of [good+' Стоит 2500 ₽.',good+' Сейчас администратор позвонит.',good+' Какой породы собака?',good+' Кого планируете привести?',`${anchors}\nУточните, кошка или собака?`,good.replace(' и какой у неё возраст',''),good.replace(anchors,''),good+' Вы записаны.'])assert.equal(renderAvitoModelReply({text},facts),null,text);
 });
 test('urgency, staff control and callback refusal stay outside free response generation',()=>{

@@ -55,8 +55,9 @@ export class AvitoModelGatewayClient {
   }
   async compose(key: string, profile: DirectionProfile, text: string, facts: AvitoReplyFacts, history: AvitoDialogueTurn[] = []): Promise<string | null> {
     if (!this.configured() || profile.direction !== 'GROOMING') return null;
+    const modelFacts = { ...facts, approvedReply: facts.requiredBlocks.reduce((reply, block) => reply.replace(block.text, `{{${block.id}}}`), facts.approvedReply) };
     const input = { clientKey: createHash('sha256').update(key).digest('hex'), direction: 'GROOMING', prompt: redactAvitoModelText(`${GROOMING_REPLY_PROMPT}\n\n${CORE_ADMIN_PROMPT}\n\n${profile.prompt}`).slice(0, 14000),
-      text: redactAvitoModelText(text).slice(-12000), history: boundedAvitoHistory(history), facts: JSON.parse(redactAvitoModelText(JSON.stringify(facts))) };
+      text: redactAvitoModelText(text).slice(-12000), history: boundedAvitoHistory(history), facts: JSON.parse(redactAvitoModelText(JSON.stringify(modelFacts))) };
     try {
       const { url, secret } = this.configuration('reply');
       const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Owner-Gateway-Secret': secret }, body: JSON.stringify(input), redirect: 'manual', signal: AbortSignal.timeout(18000) });
